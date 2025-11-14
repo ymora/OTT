@@ -30,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Build Next.js
-        run: npm run build
+      - name: Build & export static site
+        run: npm run export
         env:
           NEXT_PUBLIC_API_URL: https://ott-api.onrender.com
       
