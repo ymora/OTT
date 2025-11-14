@@ -210,6 +210,21 @@ function auditLog($action, $entity_type = null, $entity_id = null, $old_value = 
 
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
 $path = parse_url($uri, PHP_URL_PATH) ?? '/';
+$scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+
+// Support accès via /api.php/route (Render, Apache, etc.)
+if (!empty($scriptName)) {
+    $scriptBase = '/' . ltrim($scriptName, '/');
+    if (strpos($path, $scriptBase) === 0) {
+        $path = substr($path, strlen($scriptBase)) ?: '/';
+    }
+}
+
+// Fallback générique si /api.php est en dur dans l'URL
+if (strpos($path, '/api.php') === 0) {
+    $path = substr($path, strlen('/api.php')) ?: '/';
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 // Auth
