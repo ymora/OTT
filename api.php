@@ -1,0 +1,1102 @@
+<?php
+/**
+ * API REST V2.0 - HAPPLYZ MEDICAL OTT
+ * Version complète avec JWT, multi-users, OTA, notifications, audit
+ */
+
+// Headers CORS (DOIT être en tout premier)
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCID');
+header('Access-Control-Max-Age: 86400');
+header('Content-Type: application/json; charset=utf-8');
+
+// Répondre immédiatement aux requêtes OPTIONS (preflight)
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+// Utilise les variables d'environnement de Render (ou valeurs par défaut pour dev local)
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_NAME', getenv('DB_NAME') ?: 'ott_data');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_TYPE', getenv('DB_TYPE') ?: 'mysql'); // 'mysql' ou 'pgsql'
+
+define('JWT_SECRET', getenv('JWT_SECRET') ?: 'CHANGEZ_CE_SECRET_EN_PRODUCTION');
+define('JWT_EXPIRATION', 86400); // 24h
+
+define('SENDGRID_API_KEY', getenv('SENDGRID_API_KEY') ?: '');
+define('SENDGRID_FROM_EMAIL', getenv('SENDGRID_FROM_EMAIL') ?: 'noreply@happlyz.com');
+
+define('TWILIO_ACCOUNT_SID', getenv('TWILIO_ACCOUNT_SID') ?: '');
+define('TWILIO_AUTH_TOKEN', getenv('TWILIO_AUTH_TOKEN') ?: '');
+define('TWILIO_FROM_NUMBER', getenv('TWILIO_FROM_NUMBER') ?: '');
+
+// ============================================================================
+// CONNEXION BDD
+// ============================================================================
+
+try {
+    // Construire le DSN selon le type de base de données
+    if (DB_TYPE === 'pgsql') {
+        $dsn = "pgsql:host=" . DB_HOST . ";dbname=" . DB_NAME;
+    } else {
+        $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+    }
+    
+    $pdo = new PDO(
+        $dsn,
+        DB_USER,
+        DB_PASS,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false
+        ]
+    );
+} catch(PDOException $e) {
+    http_response_code(500);
+    die(json_encode(['success' => false, 'error' => 'Database connection failed', 'details' => $e->getMessage()]));
+}
+
+// ============================================================================
+// JWT FUNCTIONS
+// ============================================================================
+
+function base64UrlEncode($data) {
+    return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+}
+
+function base64UrlDecode($data) {
+    return base64_decode(strtr($data, '-_', '+/'));
+}
+
+function generateJWT($payload) {
+    $header = json_encode(['typ' => 'JWT', 'alg' => 'HS256']);
+    $payload['iat'] = time();
+    $payload['exp'] = time() + JWT_EXPIRATION;
+    
+    $base64UrlHeader = base64UrlEncode($header);
+    $base64UrlPayload = base64UrlEncode(json_encode($payload));
+    $signature = hash_hmac('sha256', $base64UrlHeader . '.' . $base64UrlPayload, JWT_SECRET, true);
+    $base64UrlSignature = base64UrlEncode($signature);
+    
+    return $base64UrlHeader . '.' . $base64UrlPayload . '.' . $base64UrlSignature;
+}
+
+function verifyJWT($jwt) {
+    $parts = explode('.', $jwt);
+    if (count($parts) !== 3) return false;
+    
+    list($base64UrlHeader, $base64UrlPayload, $base64UrlSignature) = $parts;
+    $signature = base64UrlDecode($base64UrlSignature);
+    $expectedSignature = hash_hmac('sha256', $base64UrlHeader . '.' . $base64UrlPayload, JWT_SECRET, true);
+    
+    if (!hash_equals($signature, $expectedSignature)) return false;
+    
+    $payload = json_decode(base64UrlDecode($base64UrlPayload), true);
+    if ($payload['exp'] < time()) return false;
+    
+    return $payload;
+}
+
+function getCurrentUser() {
+    $headers = getallheaders();
+    $authHeader = $headers['Authorization'] ?? '';
+    
+    if (empty($authHeader)) return null;
+    if (!preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) return null;
+    
+    $jwt = $matches[1];
+    $payload = verifyJWT($jwt);
+    if (!$payload) return null;
+    
+    global $pdo;
+    $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE id = :id AND is_active = 1");
+    $stmt->execute(['id' => $payload['user_id']]);
+    $user = $stmt->fetch();
+    
+    if (!$user) return null;
+    $user['permissions'] = $user['permissions'] ? explode(',', $user['permissions']) : [];
+    
+    return $user;
+}
+
+function requireAuth() {
+    $user = getCurrentUser();
+    if (!$user) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        exit();
+    }
+    return $user;
+}
+
+function requirePermission($permission) {
+    $user = requireAuth();
+    if (!in_array($permission, $user['permissions']) && $user['role_name'] !== 'admin') {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Forbidden']);
+        exit();
+    }
+    return $user;
+}
+
+function auditLog($action, $entity_type = null, $entity_id = null, $old_value = null, $new_value = null) {
+    global $pdo;
+    $user = getCurrentUser();
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO audit_logs (user_id, action, entity_type, entity_id, ip_address, user_agent, old_value, new_value)
+            VALUES (:user_id, :action, :entity_type, :entity_id, :ip_address, :user_agent, :old_value, :new_value)
+        ");
+        $stmt->execute([
+            'user_id' => $user ? $user['id'] : null,
+            'action' => $action,
+            'entity_type' => $entity_type,
+            'entity_id' => $entity_id,
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null,
+            'old_value' => $old_value ? json_encode($old_value) : null,
+            'new_value' => $new_value ? json_encode($new_value) : null
+        ]);
+    } catch(PDOException $e) {}
+}
+
+// ============================================================================
+// ROUTER
+// ============================================================================
+
+$uri = $_SERVER['REQUEST_URI'];
+$method = $_SERVER['REQUEST_METHOD'];
+
+// Auth
+if(preg_match('#/auth/login$#', $uri) && $method === 'POST') {
+    handleLogin();
+} elseif(preg_match('#/auth/me$#', $uri) && $method === 'GET') {
+    handleGetMe();
+} elseif(preg_match('#/auth/refresh$#', $uri) && $method === 'POST') {
+    handleRefreshToken();
+
+// Users
+} elseif(preg_match('#/users$#', $uri) && $method === 'GET') {
+    handleGetUsers();
+} elseif(preg_match('#/users$#', $uri) && $method === 'POST') {
+    handleCreateUser();
+} elseif(preg_match('#/users/(\d+)$#', $uri, $m) && $method === 'PUT') {
+    handleUpdateUser($m[1]);
+} elseif(preg_match('#/users/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+    handleDeleteUser($m[1]);
+
+// Roles
+} elseif(preg_match('#/roles$#', $uri) && $method === 'GET') {
+    handleGetRoles();
+} elseif(preg_match('#/permissions$#', $uri) && $method === 'GET') {
+    handleGetPermissions();
+
+// Devices (API V1 compatible + V2)
+} elseif(preg_match('#/devices$#', $uri) && $method === 'GET') {
+    handleGetDevices();
+} elseif(preg_match('#/devices/measurements$#', $uri) && $method === 'POST') {
+    handlePostMeasurement();
+} elseif(preg_match('#/devices/logs$#', $uri) && $method === 'POST') {
+    handlePostLog();
+} elseif(preg_match('#/logs$#', $uri) && $method === 'GET') {
+    handleGetLogs();
+} elseif(preg_match('#/device/(\d+)$#', $uri, $m) && $method === 'GET') {
+    handleGetDeviceHistory($m[1]);
+
+// OTA & Config
+} elseif(preg_match('#/devices/(\d+)/config$#', $uri, $m) && $method === 'GET') {
+    handleGetDeviceConfig($m[1]);
+} elseif(preg_match('#/devices/(\d+)/config$#', $uri, $m) && $method === 'PUT') {
+    handleUpdateDeviceConfig($m[1]);
+} elseif(preg_match('#/devices/(\d+)/ota$#', $uri, $m) && $method === 'POST') {
+    handleTriggerOTA($m[1]);
+} elseif(preg_match('#/firmwares$#', $uri) && $method === 'GET') {
+    handleGetFirmwares();
+} elseif(preg_match('#/firmwares$#', $uri) && $method === 'POST') {
+    handleUploadFirmware();
+
+// Notifications
+} elseif(preg_match('#/notifications/preferences$#', $uri) && $method === 'GET') {
+    handleGetNotificationPreferences();
+} elseif(preg_match('#/notifications/preferences$#', $uri) && $method === 'PUT') {
+    handleUpdateNotificationPreferences();
+} elseif(preg_match('#/notifications/test$#', $uri) && $method === 'POST') {
+    handleTestNotification();
+} elseif(preg_match('#/notifications/queue$#', $uri) && $method === 'GET') {
+    handleGetNotificationsQueue();
+
+// Audit
+} elseif(preg_match('#/audit$#', $uri) && $method === 'GET') {
+    handleGetAuditLogs();
+
+// Alerts (V1 compatible)
+} elseif(preg_match('#/alerts$#', $uri) && $method === 'GET') {
+    handleGetAlerts();
+} elseif(preg_match('#/measurements/latest$#', $uri) && $method === 'GET') {
+    handleGetLatestMeasurements();
+
+// Patients (V1 compatible)
+} elseif(preg_match('#/patients$#', $uri) && $method === 'GET') {
+    handleGetPatients();
+
+} else {
+    http_response_code(404);
+    echo json_encode(['success' => false, 'error' => 'Endpoint not found']);
+}
+
+// ============================================================================
+// HANDLERS - AUTH
+// ============================================================================
+
+function handleLogin() {
+    global $pdo;
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    $email = $input['email'] ?? '';
+    $password = $input['password'] ?? '';
+    
+    if (empty($email) || empty($password)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Email and password required']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE email = :email AND is_active = 1");
+        $stmt->execute(['email' => $email]);
+        $user = $stmt->fetch();
+        
+        if (!$user || !password_verify($password, $user['password_hash'])) {
+            auditLog('user.login_failed', 'user', null, null, ['email' => $email]);
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Invalid credentials']);
+            return;
+        }
+        
+        $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = :id")->execute(['id' => $user['id']]);
+        
+        $token = generateJWT([
+            'user_id' => $user['id'],
+            'email' => $user['email'],
+            'role' => $user['role_name']
+        ]);
+        
+        auditLog('user.login', 'user', $user['id']);
+        
+        unset($user['password_hash']);
+        $user['permissions'] = $user['permissions'] ? explode(',', $user['permissions']) : [];
+        
+        echo json_encode(['success' => true, 'token' => $token, 'user' => $user]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetMe() {
+    $user = requireAuth();
+    unset($user['password_hash']);
+    echo json_encode(['success' => true, 'user' => $user]);
+}
+
+function handleRefreshToken() {
+    $user = requireAuth();
+    $token = generateJWT(['user_id' => $user['id'], 'email' => $user['email'], 'role' => $user['role_name']]);
+    echo json_encode(['success' => true, 'token' => $token]);
+}
+
+// ============================================================================
+// HANDLERS - USERS
+// ============================================================================
+
+function handleGetUsers() {
+    global $pdo;
+    requirePermission('users.view');
+    
+    try {
+        $stmt = $pdo->query("SELECT * FROM users_with_roles ORDER BY created_at DESC");
+        echo json_encode(['success' => true, 'users' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleCreateUser() {
+    global $pdo;
+    requirePermission('users.manage');
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    if (empty($input['email']) || empty($input['password'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Missing required fields']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO users (email, password_hash, first_name, last_name, role_id)
+            VALUES (:email, :password_hash, :first_name, :last_name, :role_id)
+        ");
+        $stmt->execute([
+            'email' => $input['email'],
+            'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
+            'first_name' => $input['first_name'] ?? '',
+            'last_name' => $input['last_name'] ?? '',
+            'role_id' => $input['role_id'] ?? 4
+        ]);
+        
+        $user_id = $pdo->lastInsertId();
+        $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user_id]);
+        
+        auditLog('user.created', 'user', $user_id, null, $input);
+        echo json_encode(['success' => true, 'user_id' => $user_id]);
+        
+    } catch(PDOException $e) {
+        http_response_code($e->getCode() == 23000 ? 409 : 500);
+        echo json_encode(['success' => false, 'error' => $e->getCode() == 23000 ? 'Email exists' : 'Database error']);
+    }
+}
+
+function handleUpdateUser($user_id) {
+    global $pdo;
+    requirePermission('users.manage');
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id");
+        $stmt->execute(['id' => $user_id]);
+        $old_user = $stmt->fetch();
+        
+        if (!$old_user) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'User not found']);
+            return;
+        }
+        
+        $updates = [];
+        $params = ['id' => $user_id];
+        
+        foreach(['first_name', 'last_name', 'role_id', 'is_active'] as $field) {
+            if (isset($input[$field])) {
+                $updates[] = "$field = :$field";
+                $params[$field] = $input[$field];
+            }
+        }
+        
+        if (isset($input['password']) && !empty($input['password'])) {
+            $updates[] = "password_hash = :password_hash";
+            $params['password_hash'] = password_hash($input['password'], PASSWORD_BCRYPT);
+        }
+        
+        if (empty($updates)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No fields to update']);
+            return;
+        }
+        
+        $stmt = $pdo->prepare("UPDATE users SET " . implode(', ', $updates) . " WHERE id = :id");
+        $stmt->execute($params);
+        
+        auditLog('user.updated', 'user', $user_id, $old_user, $input);
+        echo json_encode(['success' => true]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleDeleteUser($user_id) {
+    global $pdo;
+    requirePermission('users.manage');
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id");
+        $stmt->execute(['id' => $user_id]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'User not found']);
+            return;
+        }
+        
+        $pdo->prepare("DELETE FROM users WHERE id = :id")->execute(['id' => $user_id]);
+        auditLog('user.deleted', 'user', $user_id, $user, null);
+        echo json_encode(['success' => true]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+// ============================================================================
+// HANDLERS - ROLES & PERMISSIONS
+// ============================================================================
+
+function handleGetRoles() {
+    global $pdo;
+    requireAuth();
+    
+    try {
+        $stmt = $pdo->query("
+            SELECT r.*, GROUP_CONCAT(p.code) as permissions
+            FROM roles r
+            LEFT JOIN role_permissions rp ON r.id = rp.role_id
+            LEFT JOIN permissions p ON rp.permission_id = p.id
+            GROUP BY r.id
+        ");
+        echo json_encode(['success' => true, 'roles' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetPermissions() {
+    global $pdo;
+    requirePermission('users.roles');
+    
+    try {
+        $stmt = $pdo->query("SELECT * FROM permissions ORDER BY category, code");
+        echo json_encode(['success' => true, 'permissions' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+// ============================================================================
+// HANDLERS - DEVICES (Compatible V1 + V2)
+// ============================================================================
+
+function handleGetDevices() {
+    global $pdo;
+    
+    // Permettre accès sans auth pour dispositifs IoT (rétrocompatibilité)
+    // OU avec auth JWT pour dashboard
+    $user = getCurrentUser();
+    
+    try {
+        $stmt = $pdo->query("
+            SELECT d.*, p.first_name, p.last_name, dc.firmware_version, dc.ota_pending,
+                   TIMESTAMPDIFF(DAY, d.installation_date, NOW()) as days_with_current_patient,
+                   TIMESTAMPDIFF(DAY, d.first_use_date, NOW()) as total_days_in_use,
+                   (SELECT SUM(TIMESTAMPDIFF(MINUTE, LAG(timestamp) OVER (ORDER BY timestamp), timestamp)) 
+                    FROM measurements WHERE device_id = d.id AND flowrate > 0.5) / 60.0 as total_usage_hours
+            FROM devices d
+            LEFT JOIN patients p ON d.patient_id = p.id
+            LEFT JOIN device_configurations dc ON d.id = dc.device_id
+        ");
+        echo json_encode(['success' => true, 'devices' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handlePostMeasurement() {
+    global $pdo;
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    if (!$input || !isset($input['device_sim_iccid'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid data']);
+        return;
+    }
+    
+    $iccid = $input['device_sim_iccid'];
+    $flowrate = $input['payload']['flowrate'] ?? $input['flowrate'] ?? 0;
+    $battery = $input['payload']['battery'] ?? $input['battery'] ?? 0;
+    $status = $input['status'] ?? 'TIMER';
+    
+    try {
+        $stmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :iccid");
+        $stmt->execute(['iccid' => $iccid]);
+        $device = $stmt->fetch();
+        
+        if (!$device) {
+            $pdo->prepare("INSERT INTO devices (sim_iccid, last_seen, last_battery) VALUES (:iccid, NOW(), :battery)")
+                ->execute(['iccid' => $iccid, 'battery' => $battery]);
+            $device_id = $pdo->lastInsertId();
+            $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id)")->execute(['device_id' => $device_id]);
+        } else {
+            $device_id = $device['id'];
+            $pdo->prepare("UPDATE devices SET last_seen = NOW(), last_battery = :battery WHERE id = :id")
+                ->execute(['battery' => $battery, 'id' => $device_id]);
+        }
+        
+        $pdo->prepare("
+            INSERT INTO measurements (device_id, timestamp, flowrate, battery, device_status)
+            VALUES (:device_id, NOW(), :flowrate, :battery, :status)
+        ")->execute([
+            'device_id' => $device_id,
+            'flowrate' => $flowrate,
+            'battery' => $battery,
+            'status' => $status
+        ]);
+        
+        // Alertes
+        if ($battery < 20) {
+            createAlert($pdo, $device_id, 'low_battery', 'high', "Batterie faible: $battery%");
+        }
+        
+        echo json_encode(['success' => true, 'device_id' => $device_id]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handlePostLog() {
+    global $pdo;
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    if (!$input || !isset($input['device_sim_iccid']) || !isset($input['event'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid data']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :iccid");
+        $stmt->execute(['iccid' => $input['device_sim_iccid']]);
+        $device = $stmt->fetch();
+        
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Device not found']);
+            return;
+        }
+        
+        $pdo->prepare("
+            INSERT INTO device_logs (device_id, timestamp, level, event_type, message, details)
+            VALUES (:device_id, NOW(), :level, :event_type, :message, :details)
+        ")->execute([
+            'device_id' => $device['id'],
+            'level' => $input['event']['level'] ?? 'INFO',
+            'event_type' => $input['event']['type'] ?? 'unknown',
+            'message' => $input['event']['message'] ?? '',
+            'details' => isset($input['event']['details']) ? json_encode($input['event']['details']) : null
+        ]);
+        
+        echo json_encode(['success' => true]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetLogs() {
+    global $pdo;
+    
+    $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    
+    try {
+        $sql = "
+            SELECT l.*, d.sim_iccid, d.device_name, p.first_name, p.last_name
+            FROM device_logs l
+            JOIN devices d ON l.device_id = d.id
+            LEFT JOIN patients p ON d.patient_id = p.id
+            WHERE 1=1
+        ";
+        
+        $params = [];
+        if ($device_id) {
+            $sql .= " AND l.device_id = :device_id";
+            $params['device_id'] = $device_id;
+        }
+        
+        $sql .= " ORDER BY l.timestamp DESC LIMIT :limit";
+        
+        $stmt = $pdo->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        echo json_encode(['success' => true, 'logs' => $stmt->fetchAll()]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetDeviceHistory($device_id) {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT * FROM measurements 
+            WHERE device_id = :device_id 
+            ORDER BY timestamp DESC 
+            LIMIT 1000
+        ");
+        $stmt->execute(['device_id' => $device_id]);
+        echo json_encode(['success' => true, 'measurements' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetLatestMeasurements() {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->query("
+            SELECT m.*, d.sim_iccid, d.device_name
+            FROM measurements m
+            JOIN devices d ON m.device_id = d.id
+            WHERE m.timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            ORDER BY m.timestamp DESC
+        ");
+        echo json_encode(['success' => true, 'measurements' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetAlerts() {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->query("
+            SELECT a.*, d.sim_iccid, d.device_name, p.first_name, p.last_name
+            FROM alerts a
+            JOIN devices d ON a.device_id = d.id
+            LEFT JOIN patients p ON d.patient_id = p.id
+            ORDER BY a.created_at DESC
+        ");
+        echo json_encode(['success' => true, 'alerts' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetPatients() {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->query("
+            SELECT p.*, 
+                   (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
+                   (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)) as measurements_7d
+            FROM patients p
+            ORDER BY p.last_name, p.first_name
+        ");
+        echo json_encode(['success' => true, 'patients' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function createAlert($pdo, $device_id, $type, $severity, $message) {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id FROM alerts 
+            WHERE device_id = :device_id AND type = :type AND status = 'unresolved'
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+        ");
+        $stmt->execute(['device_id' => $device_id, 'type' => $type]);
+        
+        if ($stmt->rowCount() > 0) return;
+        
+        $pdo->prepare("
+            INSERT INTO alerts (id, device_id, type, severity, message, status, created_at)
+            VALUES (:id, :device_id, :type, :severity, :message, 'unresolved', NOW())
+        ")->execute([
+            'id' => 'alert_' . uniqid(),
+            'device_id' => $device_id,
+            'type' => $type,
+            'severity' => $severity,
+            'message' => $message
+        ]);
+    } catch(PDOException $e) {}
+}
+
+// ============================================================================
+// HANDLERS - OTA & CONFIGURATION
+// ============================================================================
+
+function handleGetDeviceConfig($device_id) {
+    global $pdo;
+    
+    // Permettre dispositifs IoT (header X-Device-ICCID) OU users authentifiés
+    $headers = getallheaders();
+    $iccid = $headers['X-Device-ICCID'] ?? '';
+    
+    if (empty($iccid)) {
+        requirePermission('devices.view');
+    }
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM device_configurations WHERE device_id = :device_id");
+        $stmt->execute(['device_id' => $device_id]);
+        $config = $stmt->fetch();
+        
+        if (!$config) {
+            $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id)")->execute(['device_id' => $device_id]);
+            $stmt->execute(['device_id' => $device_id]);
+            $config = $stmt->fetch();
+        }
+        
+        $pdo->prepare("UPDATE device_configurations SET config_applied_at = NOW() WHERE device_id = :device_id")
+            ->execute(['device_id' => $device_id]);
+        
+        echo json_encode(['success' => true, 'config' => $config]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleUpdateDeviceConfig($device_id) {
+    global $pdo;
+    requirePermission('devices.configure');
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM device_configurations WHERE device_id = :device_id");
+        $stmt->execute(['device_id' => $device_id]);
+        $old_config = $stmt->fetch();
+        
+        $updates = [];
+        $params = ['device_id' => $device_id];
+        
+        foreach(['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients'] as $field) {
+            if (isset($input[$field])) {
+                $updates[] = "$field = :$field";
+                $params[$field] = is_array($input[$field]) ? json_encode($input[$field]) : $input[$field];
+            }
+        }
+        
+        $updates[] = "last_config_update = NOW()";
+        
+        if (count($updates) > 1) {
+            $stmt = $pdo->prepare("UPDATE device_configurations SET " . implode(', ', $updates) . " WHERE device_id = :device_id");
+            $stmt->execute($params);
+            
+            auditLog('device.config_updated', 'device', $device_id, $old_config, $input);
+            echo json_encode(['success' => true]);
+        } else {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No fields to update']);
+        }
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleTriggerOTA($device_id) {
+    global $pdo;
+    requirePermission('devices.ota');
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    $firmware_version = $input['firmware_version'] ?? '';
+    
+    if (empty($firmware_version)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Firmware version required']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE version = :version");
+        $stmt->execute(['version' => $firmware_version]);
+        $firmware = $stmt->fetch();
+        
+        if (!$firmware) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Firmware not found']);
+            return;
+        }
+        
+        // Construire URL complète
+        $base_url = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
+        $base_url .= $_SERVER['HTTP_HOST'];
+        $firmware_url = $base_url . '/' . $firmware['file_path'];
+        
+        $pdo->prepare("
+            UPDATE device_configurations 
+            SET target_firmware_version = :version,
+                firmware_url = :url,
+                ota_pending = TRUE,
+                ota_requested_at = NOW()
+            WHERE device_id = :device_id
+        ")->execute([
+            'version' => $firmware_version,
+            'url' => $firmware_url,
+            'device_id' => $device_id
+        ]);
+        
+        auditLog('device.ota_triggered', 'device', $device_id, null, ['firmware_version' => $firmware_version]);
+        echo json_encode(['success' => true, 'message' => 'OTA triggered']);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetFirmwares() {
+    global $pdo;
+    requirePermission('devices.ota');
+    
+    try {
+        $stmt = $pdo->query("
+            SELECT fv.*, u.email as uploaded_by_email, u.first_name, u.last_name
+            FROM firmware_versions fv
+            LEFT JOIN users u ON fv.uploaded_by = u.id
+            ORDER BY fv.created_at DESC
+        ");
+        echo json_encode(['success' => true, 'firmwares' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleUploadFirmware() {
+    global $pdo;
+    $user = requirePermission('devices.ota');
+    
+    if (!isset($_FILES['firmware'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'No file uploaded']);
+        return;
+    }
+    
+    $file = $_FILES['firmware'];
+    $version = $_POST['version'] ?? '';
+    $release_notes = $_POST['release_notes'] ?? '';
+    $is_stable = isset($_POST['is_stable']) && $_POST['is_stable'] === 'true';
+    
+    if (empty($version) || pathinfo($file['name'], PATHINFO_EXTENSION) !== 'bin') {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid version or file type']);
+        return;
+    }
+    
+    $upload_dir = __DIR__ . '/firmwares/';
+    if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+    
+    $file_path = 'firmwares/fw_ott_v' . $version . '.bin';
+    $full_path = __DIR__ . '/' . $file_path;
+    
+    if (!move_uploaded_file($file['tmp_name'], $full_path)) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Failed to save file']);
+        return;
+    }
+    
+    $checksum = hash_file('sha256', $full_path);
+    $file_size = filesize($full_path);
+    
+    try {
+        $pdo->prepare("
+            INSERT INTO firmware_versions (version, file_path, file_size, checksum, release_notes, is_stable, uploaded_by)
+            VALUES (:version, :file_path, :file_size, :checksum, :release_notes, :is_stable, :uploaded_by)
+        ")->execute([
+            'version' => $version,
+            'file_path' => $file_path,
+            'file_size' => $file_size,
+            'checksum' => $checksum,
+            'release_notes' => $release_notes,
+            'is_stable' => $is_stable ? 1 : 0,
+            'uploaded_by' => $user['id']
+        ]);
+        
+        $firmware_id = $pdo->lastInsertId();
+        auditLog('firmware.uploaded', 'firmware', $firmware_id, null, ['version' => $version, 'file_size' => $file_size]);
+        
+        echo json_encode(['success' => true, 'firmware_id' => $firmware_id, 'checksum' => $checksum]);
+        
+    } catch(PDOException $e) {
+        unlink($full_path);
+        http_response_code($e->getCode() == 23000 ? 409 : 500);
+        echo json_encode(['success' => false, 'error' => $e->getCode() == 23000 ? 'Version exists' : 'Database error']);
+    }
+}
+
+// ============================================================================
+// HANDLERS - NOTIFICATIONS
+// ============================================================================
+
+function handleGetNotificationPreferences() {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
+        $stmt->execute(['user_id' => $user['id']]);
+        $prefs = $stmt->fetch();
+        
+        if (!$prefs) {
+            $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user['id']]);
+            $stmt->execute(['user_id' => $user['id']]);
+            $prefs = $stmt->fetch();
+        }
+        
+        echo json_encode(['success' => true, 'preferences' => $prefs]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleUpdateNotificationPreferences() {
+    global $pdo;
+    $user = requireAuth();
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    try {
+        $updates = [];
+        $params = ['user_id' => $user['id']];
+        
+        $allowed = ['email_enabled', 'sms_enabled', 'push_enabled', 'phone_number',
+                    'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow',
+                    'notify_new_patient', 'quiet_hours_start', 'quiet_hours_end'];
+        
+        foreach ($allowed as $field) {
+            if (isset($input[$field])) {
+                $updates[] = "$field = :$field";
+                $params[$field] = $input[$field];
+            }
+        }
+        
+        if (empty($updates)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No fields to update']);
+            return;
+        }
+        
+        $stmt = $pdo->prepare("UPDATE user_notifications_preferences SET " . implode(', ', $updates) . " WHERE user_id = :user_id");
+        $stmt->execute($params);
+        
+        echo json_encode(['success' => true]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleTestNotification() {
+    requireAuth();
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    $type = $input['type'] ?? 'email';
+    
+    if ($type === 'email') {
+        $result = ['success' => true, 'message' => 'Email test envoyé (SendGrid à configurer)'];
+    } elseif ($type === 'sms') {
+        $result = ['success' => true, 'message' => 'SMS test envoyé (Twilio à configurer)'];
+    } else {
+        $result = ['success' => false, 'error' => 'Invalid type'];
+    }
+    
+    echo json_encode($result);
+}
+
+function handleGetNotificationsQueue() {
+    global $pdo;
+    requirePermission('settings.view');
+    
+    try {
+        $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 50;
+        
+        $stmt = $pdo->prepare("
+            SELECT nq.*, u.email, u.first_name, u.last_name
+            FROM notifications_queue nq
+            JOIN users u ON nq.user_id = u.id
+            ORDER BY nq.created_at DESC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        echo json_encode(['success' => true, 'queue' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+// ============================================================================
+// HANDLERS - AUDIT
+// ============================================================================
+
+function handleGetAuditLogs() {
+    global $pdo;
+    requirePermission('audit.view');
+    
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : null;
+    $action = isset($_GET['action']) ? $_GET['action'] : null;
+    
+    try {
+        $sql = "
+            SELECT al.*, u.email, u.first_name, u.last_name
+            FROM audit_logs al
+            LEFT JOIN users u ON al.user_id = u.id
+            WHERE 1=1
+        ";
+        
+        $params = [];
+        if ($user_id) {
+            $sql .= " AND al.user_id = :user_id";
+            $params['user_id'] = $user_id;
+        }
+        if ($action) {
+            $sql .= " AND al.action LIKE :action";
+            $params['action'] = '%' . $action . '%';
+        }
+        
+        $sql .= " ORDER BY al.created_at DESC LIMIT :limit";
+        
+        $stmt = $pdo->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        echo json_encode(['success' => true, 'logs' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+?>
+

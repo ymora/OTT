@@ -1,0 +1,51 @@
+# ================================================================================
+# .dockerignore - Fichiers à exclure du build Docker
+# ================================================================================
+# Optimise la taille de l'image Docker et accélère le build
+# ================================================================================
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README*.md
+GUIDE_*.md
+DOCUMENTATION_*.html
+COMMANDES_GIT.txt
+
+# Fichiers de développement local
+*.local.php
+.env.local
+.vscode/
+.idea/
+
+# Fichiers Windows
+Thumbs.db
+desktop.ini
+
+# Fichiers macOS
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Schemas MySQL (on utilise PostgreSQL sur Render)
+schema_v1.sql
+schema_v2.sql
+
+# Fichiers frontend (hébergés séparément)
+dashboard.html
+
+# Firmware ESP32
+fw_ott_optimized/
+
+# Plans et documentation
+Impression 3d/
+*.pdf
+
+# Backup
+*.bak
+*.backup
+

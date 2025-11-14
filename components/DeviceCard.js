@@ -1,0 +1,49 @@
+'use client'
+
+export default function DeviceCard({ device, delay = 0 }) {
+  const isOnline = () => {
+    const lastSeen = new Date(device.last_seen)
+    const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
+    return hoursSince < 2
+  }
+
+  const batteryColor = (level) => {
+    if (level > 60) return 'text-green-600'
+    if (level > 20) return 'text-orange-600'
+    return 'text-red-600'
+  }
+
+  return (
+    <div 
+      className="card group hover:scale-102 cursor-pointer animate-scale-in"
+      style={{animationDelay: `${delay}s`}}
+    >
+      {/* Status badge */}
+      <div className="flex items-center justify-between mb-3">
+        <div className={`flex items-center gap-2 ${isOnline() ? 'text-green-600' : 'text-gray-400'}`}>
+          <div className={`w-2 h-2 rounded-full ${isOnline() ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+          <span className="text-xs font-medium">{isOnline() ? 'En ligne' : 'Hors ligne'}</span>
+        </div>
+        <span className={`text-2xl ${batteryColor(device.last_battery)}`}>
+          🔋 {device.last_battery?.toFixed(0)}%
+        </span>
+      </div>
+
+      {/* Device info */}
+      <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
+        {device.device_name || `OTT-${device.sim_iccid?.substr(-8)}`}
+      </h3>
+      
+      {device.first_name && (
+        <p className="text-sm text-gray-600 mb-2">
+          👤 {device.first_name} {device.last_name}
+        </p>
+      )}
+
+      <p className="text-xs text-gray-500">
+        📍 {device.city || 'Non localisé'} | 👁️ {new Date(device.last_seen).toLocaleDateString('fr-FR')}
+      </p>
+    </div>
+  )
+}
+
