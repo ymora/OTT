@@ -27,9 +27,9 @@
 https://ymora.github.io/OTT/
 ```
 
-**Connexion:**
-- Admin: `ymora@free.fr` / `Ym120879`
-- Technicien: `maxime@happlyzmedical.com` / `MB`
+**Accès démo sécurisé**
+- Aucun identifiant n’est exposé publiquement.
+- Demander un accès temporaire via l’équipe HAPPLYZ : support@happlyz.com.
 
 ### 🔌 API Backend
 ```
@@ -88,17 +88,37 @@ git push origin main
 ### Frontend (React/Next.js)
 - `app/` - Pages Next.js (12 pages)
 - `components/` - Composants réutilisables
-- `contexts/` - AuthContext (JWT)
-- `package.json` - Dépendances Node.js
+- `contexts/` - AuthContext (JWT + refresh)
+- `package.json` - Dépendances Node.js (config via `.env.local`)
 
 ### Backend (PHP)
 - `api.php` - API REST complète (800 lignes)
-- `schema.sql` - Base PostgreSQL (14 tables)
+- `schema.sql` - Base PostgreSQL (14 tables, données anonymisées)
 - `Dockerfile` - Container pour Render
 
 ### Données & Scripts
-- `sql/demo_seed.sql` - Jeu de données prêt à l'emploi (Render PostgreSQL)
+- `sql/demo_seed.sql` - Jeu de données de démo (emails génériques)
 - `public/manifest.json` / `public/sw.js` - PWA installable
+- `hardware/` (ignoré) - dépôt externe pour firmware/CAO
+
+---
+
+## 🔐 Sécurité & Configuration
+
+1. **Variables d'environnement Next.js**
+   Créer un fichier `.env.local` à la racine contenant :
+   ```
+   NEXT_PUBLIC_API_URL=https://ott-api.onrender.com
+   NEXT_PUBLIC_REQUIRE_AUTH=true
+   ```
+
+2. **Comptes de démonstration**
+   - Les seeds utilisent `admin@example.com` / `tech@example.com` avec hashes Bcrypt fictifs.
+   - Mettez à jour via `sql/demo_seed.sql` ou `UPDATE_PASSWORDS_RENDER.sql` avec vos propres emails/mots de passe.
+
+3. **Secrets & firmware**
+   - Aucun mot de passe en clair dans la doc.
+   - Firmware + fichiers CAO déplacés dans `hardware/` (hors Git) pour limiter la surface d’exposition.
 
 ---
 

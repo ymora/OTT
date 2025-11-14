@@ -537,10 +537,10 @@ npm run build
     <p><strong>1. Accéder au dashboard :</strong> <code>https://ymora.github.io/OTT/</code></p>
     
     <p><strong>2. Se connecter avec un compte admin :</strong></p>
-    <ul>
-        <li>Email : <code>ymora@free.fr</code></li>
-        <li>Mot de passe : <code>Ym120879</code></li>
-    </ul>
+    <div class="alert alert-warning">
+        Les identifiants de démonstration ne sont plus publiés dans la documentation.<br>
+        Merci de contacter <a href="mailto:support@happlyz.com">support@happlyz.com</a> pour obtenir un accès temporaire.
+    </div>
     
     <p><strong>3. Vérifier que les données arrivent :</strong></p>
     <ul>
@@ -833,8 +833,8 @@ POST /api.php/auth/login
 Content-Type: application/json
 
 {
-  "email": "ymora@free.fr",
-  "password": "Ym120879"
+  "email": "<votre_email>",
+  "password": "<votre_mot_de_passe>"
 }
 
 → Réponse :
@@ -843,9 +843,9 @@ Content-Type: application/json
   "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
   "user": {
     "id": 1,
-    "email": "ymora@free.fr",
-    "first_name": "Yannick",
-    "last_name": "Mora",
+    "email": "admin@example.com",
+    "first_name": "Admin",
+    "last_name": "Demo",
     "role_name": "admin",
     "permissions": ["devices.view", "devices.edit", ...]
   }
@@ -1290,10 +1290,10 @@ https://ymora.github.io/OTT/
     
     <p><strong>3. Se connecter :</strong></p>
     
-    <ul>
-        <li>Email : <code>ymora@free.fr</code></li>
-        <li>Mot de passe : <code>Ym120879</code></li>
-    </ul>
+    <div class="alert alert-warning">
+        Les accès administrateurs ne sont pas diffusés publiquement.<br>
+        Contactez l’équipe HAPPLYZ pour obtenir des identifiants temporaires et personnalisez-les immédiatement après connexion.
+    </div>
     
     <p><strong>4. Uploader le firmware ESP32 :</strong></p>
     
@@ -1324,7 +1324,7 @@ https://ymora.github.io/OTT/
             <pre>
 UPDATE users 
 SET password_hash = '$2y$10$VOTRE_NOUVEAU_HASH_ICI'
-WHERE email = 'ymora@free.fr';
+WHERE email = 'admin@example.com';
             </pre>
         </li>
     </ol>
@@ -1811,12 +1811,12 @@ import ErrorBoundary from '@/components/ErrorBoundary'
         </thead>
         <tbody>
             <tr>
-                <td><code>ymora@free.fr</code></td>
+                <td><code>admin@example.com</code></td>
                 <td><strong>admin123</strong> (temporaire)</td>
                 <td>Admin</td>
             </tr>
             <tr>
-                <td><code>maxime@happlyzmedical.com</code></td>
+                <td><code>tech@example.com</code></td>
                 <td><strong>admin123</strong> (temporaire)</td>
                 <td>Technicien</td>
             </tr>
@@ -1830,7 +1830,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
     <p><strong>Aller sur :</strong> <a href="https://bcrypt-generator.com/" target="_blank">https://bcrypt-generator.com/</a></p>
     
     <ol>
-        <li>Entrer le nouveau mot de passe (ex: <code>Ym120879</code>)</li>
+        <li>Entrer votre nouveau mot de passe fort</li>
         <li>Sélectionner <strong>Rounds : 10</strong></li>
         <li>Cliquer <strong>"Generate"</strong></li>
         <li>Copier le hash (commence par <code>$2y$10$...</code>)</li>
@@ -1855,11 +1855,11 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 
 UPDATE users 
 SET password_hash = '$2y$10$VOTRE_HASH_BCRYPT_ICI'
-WHERE email = 'ymora@free.fr';
+WHERE email = 'admin@example.com';
 
 UPDATE users 
 SET password_hash = '$2y$10$VOTRE_HASH_BCRYPT_ICI'
-WHERE email = 'maxime@happlyzmedical.com';
+WHERE email = 'tech@example.com';
 
 -- Vérifier
 SELECT id, email, first_name, last_name FROM users;

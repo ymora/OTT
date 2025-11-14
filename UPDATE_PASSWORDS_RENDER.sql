@@ -5,15 +5,15 @@
 -- À exécuter dans psql (connexion Render)
 -- =====================================================
 
--- 1️⃣ ymora@free.fr (Hash fourni)
+-- 1️⃣ Admin (ex: admin@example.com)
 UPDATE users 
-SET password_hash = '$2a$10$ipRX1z7Zo1DmZXyP1N9gW.aumu6Vx8oRusI5I4KI7ns7/nJH8tnQi'
-WHERE email = 'ymora@free.fr';
+SET password_hash = '$2a$10$VOTRE_HASH_ADMIN_ICI'
+WHERE email = 'admin@example.com';
 
--- 2️⃣ maxime@happlyzmedical.com (Hash fourni)
+-- 2️⃣ Technicien (ex: tech@example.com)
 UPDATE users 
-SET password_hash = '$2a$10$spiEURMRB264ZIEQ/q54Xuxd8Gh7s30yVG9B6ZycDWZbUMD/PFnY2'
-WHERE email = 'maxime@happlyzmedical.com';
+SET password_hash = '$2a$10$VOTRE_HASH_TECH_ICI'
+WHERE email = 'tech@example.com';
 
 -- Vérification
 SELECT id, email, first_name, last_name, role_id 

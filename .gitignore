@@ -36,10 +36,13 @@ desktop.ini
 *.tmp
 temp/
 
+# Hardware / Firmware (stockés hors repo)
+hardware/
+!hardware/README.md
+
 # Firmwares - CODE SOURCE INTERDIT
 *.bin
 firmwares/*.bin
-fw_ott_optimized/
 *.ino
 *.cpp
 *.h

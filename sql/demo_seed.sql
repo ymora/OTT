@@ -79,11 +79,12 @@ VALUES
   (3, NOW() - INTERVAL '3 hours', 'ERROR', 'power', 'Batterie < 20% - Mode économie'),
   (4, NOW() - INTERVAL '1 day', 'INFO', 'sleep', 'Entrée en deep sleep planifié');
 
--- Users (hash bcrypt déjà fournis)
+# Utilisateurs démo (hash bcrypt aléatoires générés via bcrypt-generator.com)
+-- ⚠️ Remplacez ces hashes par vos propres mots de passe via variables d'environnement / scripts d'init.
 INSERT INTO users (id, email, password_hash, first_name, last_name, role_id, is_active)
 VALUES
-  (1, 'ymora@free.fr', '$2a$10$ipRX1z7Zo1DmZXyP1N9gW.aumu6Vx8oRusI5I4KI7ns7/nJH8tnQi', 'Yannick', 'Mora', 1, TRUE),
-  (2, 'maxime@happlyzmedical.com', '$2a$10$spiEURMRB264ZIEQ/q54Xuxd8Gh7s30yVG9B6ZycDWZbUMD/PFnY2', 'Maxime', 'Bertin', 3, TRUE)
+  (1, 'admin@example.com', '$2a$10$w1K9P0Irp7I7hIhQ2n9XjO2S7bpbLVi8Vb1Jr2s8eY2Nhd6Y8uR6e', 'Admin', 'Demo', 1, TRUE),
+  (2, 'tech@example.com', '$2a$10$H8i5XbX7u2oQ3qU9M7d2ieVgW0F9Q3cCjQeZfX3bqN9kR4n5lY6uS', 'Tech', 'Demo', 3, TRUE)
 ON CONFLICT (id) DO UPDATE SET
   email = EXCLUDED.email,
   password_hash = EXCLUDED.password_hash,

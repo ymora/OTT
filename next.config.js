@@ -10,8 +10,6 @@ const nextConfig = {
   basePath,
   assetPrefix: basePath ? `${basePath}/` : '',
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://ott-api.onrender.com',
-    NEXT_PUBLIC_REQUIRE_AUTH: process.env.NEXT_PUBLIC_REQUIRE_AUTH || 'false',
     NEXT_PUBLIC_BASE_PATH: basePath
   }
 }

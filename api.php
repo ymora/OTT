@@ -208,79 +208,80 @@ function auditLog($action, $entity_type = null, $entity_id = null, $old_value = 
 // ROUTER
 // ============================================================================
 
-$uri = $_SERVER['REQUEST_URI'];
+$uri = $_SERVER['REQUEST_URI'] ?? '/';
+$path = parse_url($uri, PHP_URL_PATH) ?? '/';
 $method = $_SERVER['REQUEST_METHOD'];
 
 // Auth
-if(preg_match('#/auth/login$#', $uri) && $method === 'POST') {
+if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleLogin();
-} elseif(preg_match('#/auth/me$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/auth/me$#', $path) && $method === 'GET') {
     handleGetMe();
-} elseif(preg_match('#/auth/refresh$#', $uri) && $method === 'POST') {
+} elseif(preg_match('#/auth/refresh$#', $path) && $method === 'POST') {
     handleRefreshToken();
 
 // Users
-} elseif(preg_match('#/users$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/users$#', $path) && $method === 'GET') {
     handleGetUsers();
-} elseif(preg_match('#/users$#', $uri) && $method === 'POST') {
+} elseif(preg_match('#/users$#', $path) && $method === 'POST') {
     handleCreateUser();
-} elseif(preg_match('#/users/(\d+)$#', $uri, $m) && $method === 'PUT') {
+} elseif(preg_match('#/users/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateUser($m[1]);
-} elseif(preg_match('#/users/(\d+)$#', $uri, $m) && $method === 'DELETE') {
+} elseif(preg_match('#/users/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteUser($m[1]);
 
 // Roles
-} elseif(preg_match('#/roles$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/roles$#', $path) && $method === 'GET') {
     handleGetRoles();
-} elseif(preg_match('#/permissions$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/permissions$#', $path) && $method === 'GET') {
     handleGetPermissions();
 
 // Devices (API V1 compatible + V2)
-} elseif(preg_match('#/devices$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/devices$#', $path) && $method === 'GET') {
     handleGetDevices();
-} elseif(preg_match('#/devices/measurements$#', $uri) && $method === 'POST') {
+} elseif(preg_match('#/devices/measurements$#', $path) && $method === 'POST') {
     handlePostMeasurement();
-} elseif(preg_match('#/devices/logs$#', $uri) && $method === 'POST') {
+} elseif(preg_match('#/devices/logs$#', $path) && $method === 'POST') {
     handlePostLog();
-} elseif(preg_match('#/logs$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/logs$#', $path) && $method === 'GET') {
     handleGetLogs();
-} elseif(preg_match('#/device/(\d+)$#', $uri, $m) && $method === 'GET') {
+} elseif(preg_match('#/device/(\d+)$#', $path, $m) && $method === 'GET') {
     handleGetDeviceHistory($m[1]);
 
 // OTA & Config
-} elseif(preg_match('#/devices/(\d+)/config$#', $uri, $m) && $method === 'GET') {
+} elseif(preg_match('#/devices/(\d+)/config$#', $path, $m) && $method === 'GET') {
     handleGetDeviceConfig($m[1]);
-} elseif(preg_match('#/devices/(\d+)/config$#', $uri, $m) && $method === 'PUT') {
+} elseif(preg_match('#/devices/(\d+)/config$#', $path, $m) && $method === 'PUT') {
     handleUpdateDeviceConfig($m[1]);
-} elseif(preg_match('#/devices/(\d+)/ota$#', $uri, $m) && $method === 'POST') {
+} elseif(preg_match('#/devices/(\d+)/ota$#', $path, $m) && $method === 'POST') {
     handleTriggerOTA($m[1]);
-} elseif(preg_match('#/firmwares$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/firmwares$#', $path) && $method === 'GET') {
     handleGetFirmwares();
-} elseif(preg_match('#/firmwares$#', $uri) && $method === 'POST') {
+} elseif(preg_match('#/firmwares$#', $path) && $method === 'POST') {
     handleUploadFirmware();
 
 // Notifications
-} elseif(preg_match('#/notifications/preferences$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/notifications/preferences$#', $path) && $method === 'GET') {
     handleGetNotificationPreferences();
-} elseif(preg_match('#/notifications/preferences$#', $uri) && $method === 'PUT') {
+} elseif(preg_match('#/notifications/preferences$#', $path) && $method === 'PUT') {
     handleUpdateNotificationPreferences();
-} elseif(preg_match('#/notifications/test$#', $uri) && $method === 'POST') {
+} elseif(preg_match('#/notifications/test$#', $path) && $method === 'POST') {
     handleTestNotification();
-} elseif(preg_match('#/notifications/queue$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/notifications/queue$#', $path) && $method === 'GET') {
     handleGetNotificationsQueue();
 
 // Audit
-} elseif(preg_match('#/audit$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
     handleGetAuditLogs();
 
 // Alerts (V1 compatible)
-} elseif(preg_match('#/alerts$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/alerts$#', $path) && $method === 'GET') {
     handleGetAlerts();
-} elseif(preg_match('#/measurements/latest$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/measurements/latest$#', $path) && $method === 'GET') {
     handleGetLatestMeasurements();
 
 // Patients (V1 compatible)
-} elseif(preg_match('#/patients$#', $uri) && $method === 'GET') {
+} elseif(preg_match('#/patients$#', $path) && $method === 'GET') {
     handleGetPatients();
 
 } else {

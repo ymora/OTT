@@ -5,7 +5,7 @@ import { createContext, useContext, useState, useEffect } from 'react'
 const AuthContext = createContext()
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-api.onrender.com'
-const REQUIRE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_AUTH === 'true'
+const REQUIRE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_AUTH !== 'false'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)

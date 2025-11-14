@@ -319,8 +319,8 @@ ON DUPLICATE KEY UPDATE role_id=role_id;
 -- IMPORTANT: Changer les password_hash avec de vrais hashes bcrypt
 -- Pour générer: <?php echo password_hash('VotreMotDePasse', PASSWORD_BCRYPT); ?>
 INSERT INTO users (id, email, password_hash, first_name, last_name, role_id) VALUES
-(1, 'ymora@free.fr', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Yannick', 'Mora', 1),
-(2, 'maxime@happlyzmedical.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Maxime', 'Bertin', 3)
+(1, 'admin@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Admin', 'Demo', 1),
+(2, 'tech@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Tech', 'Demo', 3)
 ON DUPLICATE KEY UPDATE email=email;
 
 -- Préférences notifications

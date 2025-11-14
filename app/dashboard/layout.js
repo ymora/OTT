@@ -6,31 +6,32 @@ import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 
+const REQUIRE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_AUTH !== 'false'
+
 function DashboardLayoutContent({ children }) {
   const router = useRouter()
   const { user, loading } = useAuth()
 
-  // ⚠️ AUTHENTIFICATION TEMPORAIREMENT DÉSACTIVÉE
-  // useEffect(() => {
-  //   if (!loading && !user) {
-  //     router.push('/')
-  //   }
-  // }, [user, loading, router])
+  useEffect(() => {
+    if (!REQUIRE_AUTH) return
+    if (!loading && !user) {
+      router.push('/')
+    }
+  }, [user, loading, router])
 
-  // if (loading) {
-  //   return (
-  //     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-  //       <div className="text-center">
-  //         <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-  //         <p className="text-gray-600">Chargement...</p>
-  //       </div>
-  //     </div>
-  //   )
-  // }
+  if (REQUIRE_AUTH && loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement...</p>
+        </div>
+      </div>
+    )
+  }
 
-  // if (!user) return null
+  if (REQUIRE_AUTH && !user) return null
 
-  // ⚠️ MODE DÉMO - ACCÈS DIRECT SANS AUTH
   return (
     <div className="min-h-screen bg-gray-50">
       <Topbar />

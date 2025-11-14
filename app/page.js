@@ -2,15 +2,22 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Login from '@/components/Login'
 
 export default function HomePage() {
   const router = useRouter()
-  
+  const requireAuth = process.env.NEXT_PUBLIC_REQUIRE_AUTH !== 'false'
+
   useEffect(() => {
-    // Redirection automatique vers le dashboard (AUTH DÉSACTIVÉE TEMPORAIREMENT)
-    router.push('/dashboard')
-  }, [router])
-  
+    if (!requireAuth) {
+      router.push('/dashboard')
+    }
+  }, [router, requireAuth])
+
+  if (requireAuth) {
+    return <Login />
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
