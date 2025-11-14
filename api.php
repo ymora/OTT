@@ -11,6 +11,13 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCI
 header('Access-Control-Max-Age: 86400');
 header('Content-Type: application/json; charset=utf-8');
 
+// Debug mode activable via variable d'environnement
+if (getenv('DEBUG_ERRORS') === 'true') {
+    ini_set('display_errors', 1);
+    ini_set('display_startup_errors', 1);
+    error_reporting(E_ALL);
+}
+
 // Répondre immédiatement aux requêtes OPTIONS (preflight)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -177,6 +184,19 @@ function requirePermission($permission) {
     if (!in_array($permission, $user['permissions']) && $user['role_name'] !== 'admin') {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'Forbidden']);
+        exit();
+    }
+    return $user;
+}
+
+function requireAdmin() {
+    $user = requireAuth();
+    if (AUTH_DISABLED) {
+        return $user;
+    }
+    if (($user['role_name'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Admin privileges required']);
         exit();
     }
     return $user;
@@ -750,7 +770,7 @@ function handleGetPendingCommands($iccid) {
 
 function handleCreateDeviceCommand($iccid) {
     global $pdo;
-    $user = requirePermission('devices.commands');
+    $user = requireAdmin();
     
     $device = getDeviceByIccid($iccid);
     if (!$device) {
@@ -842,7 +862,7 @@ function handleCreateDeviceCommand($iccid) {
 
 function handleGetDeviceCommands($iccid) {
     global $pdo;
-    requirePermission('devices.commands');
+    requireAdmin();
     
     $device = getDeviceByIccid($iccid);
     if (!$device) {
@@ -886,7 +906,7 @@ function handleGetDeviceCommands($iccid) {
 
 function handleListAllCommands() {
     global $pdo;
-    requirePermission('devices.commands');
+    requireAdmin();
     
     $statusFilter = isset($_GET['status']) ? normalizeCommandStatus($_GET['status']) : null;
     $iccidFilter = $_GET['iccid'] ?? null;
@@ -1223,7 +1243,7 @@ function handleGetDeviceConfig($device_id) {
 
 function handleUpdateDeviceConfig($device_id) {
     global $pdo;
-    requirePermission('devices.configure');
+    requireAdmin();
     
     $input = json_decode(file_get_contents('php://input'), true);
     
@@ -1314,7 +1334,7 @@ function handleTriggerOTA($device_id) {
 
 function handleGetFirmwares() {
     global $pdo;
-    requirePermission('devices.ota');
+    requireAdmin();
     
     try {
         $stmt = $pdo->query("
@@ -1332,7 +1352,7 @@ function handleGetFirmwares() {
 
 function handleUploadFirmware() {
     global $pdo;
-    $user = requirePermission('devices.ota');
+    $user = requireAdmin();
     
     if (!isset($_FILES['firmware'])) {
         http_response_code(400);

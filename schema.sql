@@ -246,6 +246,34 @@ CREATE TABLE IF NOT EXISTS firmware_versions (
     FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS device_commands (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_id INT NOT NULL,
+    command VARCHAR(64) NOT NULL COMMENT 'Ex: SET_SLEEP_SECONDS, PING, OTA_REQUEST',
+    payload JSON COMMENT 'Paramètres de la commande',
+    priority ENUM('low','normal','high','critical') DEFAULT 'normal',
+    status ENUM('pending','executing','executed','error','expired','cancelled') DEFAULT 'pending',
+    execute_after DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME,
+    requested_by INT,
+    requested_via ENUM('dashboard','api','system') DEFAULT 'dashboard',
+    lock_token VARCHAR(64),
+    locked_at DATETIME,
+    executed_at DATETIME,
+    result_status ENUM('success','error') DEFAULT NULL,
+    result_message TEXT,
+    result_payload JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
+    FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_device_status (device_id, status),
+    INDEX idx_status (status),
+    INDEX idx_priority (priority),
+    INDEX idx_schedule (execute_after)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ============================================================================
 -- DONNÉES INITIALES
 -- ============================================================================
@@ -266,6 +294,7 @@ INSERT INTO permissions (code, description, category) VALUES
 ('devices.delete', 'Supprimer dispositifs', 'devices'),
 ('devices.ota', 'Mise à jour OTA firmware', 'devices'),
 ('devices.configure', 'Configurer paramètres à distance', 'devices'),
+('devices.commands', 'Planifier et suivre les commandes descendantes', 'devices'),
 -- Patients
 ('patients.view', 'Voir liste et détails patients', 'patients'),
 ('patients.edit', 'Modifier patients', 'patients'),
@@ -303,7 +332,7 @@ ON DUPLICATE KEY UPDATE role_id=role_id;
 -- Technicien: devices + OTA + alerts
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT 3, id FROM permissions WHERE code IN (
-    'devices.view', 'devices.edit', 'devices.ota', 'devices.configure',
+    'devices.view', 'devices.edit',
     'alerts.view', 'alerts.manage', 'reports.view'
 )
 ON DUPLICATE KEY UPDATE role_id=role_id;

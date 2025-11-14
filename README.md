@@ -120,6 +120,16 @@ git push origin main
    - Aucun mot de passe en clair dans la doc.
    - Firmware + fichiers CAO déplacés dans `hardware/` (hors Git) pour limiter la surface d’exposition.
 
+4. **Contrôles d’accès critiques**
+   - Les actions sensibles (commandes bidirectionnelles, configuration distante, OTA, upload firmware) sont réservées exclusivement aux comptes **Admin**.
+   - Les autres rôles restent en lecture ou diagnostic uniquement ; toute tentative côté API retourne `403 Forbidden`.
+
+5. **Scripts d’exploitation**
+   - `scripts/db_migrate.sh [--seed]` : applique `schema.sql` (Postgres via `DATABASE_URL` ou MySQL via `DB_HOST/DB_USER/...`).
+   - `scripts/deploy_api.sh` : push rapide vers le remote Render (`RENDER_REMOTE`/`RENDER_BRANCH` configurables).
+   - `scripts/deploy_dashboard.sh` : `npm install` + build + commande de déploiement (`npm run deploy` par défaut).
+   - `scripts/flash_firmware.ps1 -Port COMx` : compile et flash `fw_ott_optimized.ino` via `arduino-cli`.
+
 ---
 
 ## ✨ Fonctionnalités Clés

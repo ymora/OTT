@@ -333,6 +333,35 @@
 </section>
 
 <!-- ============================================== -->
+<!-- 1.b SYNTHÈSE ÉTAT DU PROJET -->
+<!-- ============================================== -->
+
+<section id="etat-projet" class="section">
+    <h2>📌 État actuel & prochaines étapes</h2>
+    <div class="alert alert-info">
+        <strong>Documentation vs code réel</strong> – Cette section résume ce qui est déjà opérationnel dans la base de code et les actions restantes pour finaliser un déploiement pro.
+    </div>
+
+    <h3>✅ Réalisé / disponible</h3>
+    <ul>
+        <li>🔒 Les commandes descendantes, OTA et configurations distantes sont désormais limitées aux comptes <strong>Admin</strong> (backend + dashboard).</li>
+        <li>📡 Firmware `fw_ott_optimized.ino`: réception de commandes (SET_SLEEP_SECONDS, PING), ACK automatique, intervalle de sommeil dynamique stocké en RTC.</li>
+        <li>🗃️ Table `device_commands` + nouveaux endpoints (`POST /devices/{iccid}/commands`, `GET /devices/commands`, `POST /devices/commands/ack`).</li>
+        <li>🖥️ Page React “Commandes” (dashboard) pour planifier/visualiser les ordres, restreinte aux admins.</li>
+        <li>🧾 Documentation/README à jour (section bidirectionnelle, restrictions d’accès, endpoints exposés).</li>
+    </ul>
+
+    <h3>🧱 À finaliser / prochaines actions</h3>
+    <ul>
+        <li>🛠️ <strong>Appliquer la migration SQL</strong> (`schema.sql` +, si besoin, `sql/demo_seed.sql`) sur l’environnement PostgreSQL avant redeploiement.</li>
+        <li>🚀 Déployer l’API PHP & le dashboard mis à jour, puis flasher les dispositifs pour activer le nouveau firmware.</li>
+        <li>📦 Ajouter, si nécessaire, d’autres types d’ordres (OTA complet, changement d’APN, reset modem) et les documenter.</li>
+        <li>📊 Planifier les tests de non-régression (API + firmware) et surveiller la consommation batterie lors des modes “wake rapide”.</li>
+        <li>🎨 Debt technique mineur : extraire progressivement les styles inline de cette documentation pour supprimer les avertissements lint.</li>
+    </ul>
+</section>
+
+<!-- ============================================== -->
 <!-- 2. ARCHITECTURE -->
 <!-- ============================================== -->
 
@@ -1192,7 +1221,7 @@ git push origin main
     <h3>🗄️ Étape 2 : Créer la Base PostgreSQL sur Render</h3>
     
     <ol>
-        <li>Aller sur <a href="https://render.com" target="_blank">Render.com</a></li>
+        <li>Aller sur <a href="https://render.com" target="_blank" rel="noopener noreferrer">Render.com</a></li>
         <li>Cliquer sur <strong>"New +"</strong> → <strong>"PostgreSQL"</strong></li>
         <li>Configurer :
             <ul>
@@ -1271,6 +1300,14 @@ TWILIO_PHONE_NUMBER=+33123456789 (optionnel)
             <li>Source : <strong>GitHub Actions</strong></li>
         </ul>
     </div>
+
+    <h3>🛠️ Scripts d’automatisation</h3>
+    <ul>
+        <li><code>scripts/db_migrate.sh [--seed]</code> : applique <code>schema.sql</code> (Postgres via <code>DATABASE_URL</code> ou MySQL via <code>DB_HOST/DB_USER/DB_PASS/DB_NAME</code>).</li>
+        <li><code>scripts/deploy_api.sh</code> : push vers le remote Render (configurable via <code>RENDER_REMOTE</code> / <code>RENDER_BRANCH</code>).</li>
+        <li><code>scripts/deploy_dashboard.sh</code> : <code>npm install</code> + build + <code>npm run deploy</code> (commandes surchargées via variables <code>DASHBOARD_BUILD_CMD</code>/<code>DASHBOARD_DEPLOY_CMD</code>).</li>
+        <li><code>scripts/flash_firmware.ps1 -Port COMx</code> : compile et téléverse le firmware <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code> avec <code>arduino-cli</code>.</li>
+    </ul>
     
     <h3>✅ Étape 5 : Tester la Solution Complète</h3>
     
@@ -1316,7 +1353,7 @@ https://ymora.github.io/OTT/
     <p><strong>Méthode 1 : Générer un hash bcrypt en ligne</strong></p>
     
     <ol>
-        <li>Aller sur <a href="https://bcrypt-generator.com/" target="_blank">bcrypt-generator.com</a></li>
+        <li>Aller sur <a href="https://bcrypt-generator.com/" target="_blank" rel="noopener noreferrer">bcrypt-generator.com</a></li>
         <li>Entrer votre mot de passe</li>
         <li>Cost factor : <code>10</code></li>
         <li>Copier le hash généré</li>
@@ -1574,8 +1611,8 @@ navigator.serviceWorker.getRegistrations().then(regs => {
     
     <ul>
         <li>📧 Email : <a href="mailto:support@happlyz.com">support@happlyz.com</a></li>
-        <li>🌐 Site : <a href="https://happlyz.com" target="_blank">https://happlyz.com</a></li>
-        <li>📦 GitHub Issues : <a href="https://github.com/ymora/OTT/issues" target="_blank">github.com/ymora/OTT/issues</a></li>
+        <li>🌐 Site : <a href="https://happlyz.com" target="_blank" rel="noopener noreferrer">https://happlyz.com</a></li>
+        <li>📦 GitHub Issues : <a href="https://github.com/ymora/OTT/issues" target="_blank" rel="noopener noreferrer">github.com/ymora/OTT/issues</a></li>
     </ul>
 </section>
 
@@ -1827,7 +1864,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
     
     <h4>Étape 1️⃣ : Générer les Hash Bcrypt</h4>
     
-    <p><strong>Aller sur :</strong> <a href="https://bcrypt-generator.com/" target="_blank">https://bcrypt-generator.com/</a></p>
+    <p><strong>Aller sur :</strong> <a href="https://bcrypt-generator.com/" target="_blank" rel="noopener noreferrer">https://bcrypt-generator.com/</a></p>
     
     <ol>
         <li>Entrer votre nouveau mot de passe fort</li>
@@ -1840,7 +1877,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
     <h4>Étape 2️⃣ : Se Connecter à PostgreSQL Render</h4>
     
     <ol>
-        <li>Aller sur <a href="https://render.com/" target="_blank">Render.com</a></li>
+        <li>Aller sur <a href="https://render.com/" target="_blank" rel="noopener noreferrer">Render.com</a></li>
         <li>Se connecter à votre compte</li>
         <li>Cliquer sur <strong>ott-database</strong></li>
         <li>Onglet <strong>"Connect"</strong></li>
@@ -1916,10 +1953,69 @@ SELECT id, email, first_name, last_name FROM users;
             </tr>
         </tbody>
     </table>
+
+    <div class="alert alert-warning">
+        <strong>🔒 Contrôle d'accès renforcé :</strong><br>
+        Toutes les opérations critiques (commandes descendantes, OTA, configuration distante, upload firmware)
+        sont exclusivement réservées aux comptes <strong>Admin</strong>. Les rôles Médecin, Technicien ou Viewer
+        disposent d'un accès lecture/diagnostic mais ne peuvent déclencher d'action.
+    </div>
 </section>
 
 <!-- ============================================== -->
-<!-- 11. AMÉLIORATIONS FUTURES -->
+<!-- 11. COMMUNICATION BIDIRECTIONNELLE -->
+<!-- ============================================== -->
+
+<section id="bidirectional" class="section">
+    <h2>🔁 Communication Bidirectionnelle Intelligente</h2>
+    <p>
+        Le firmware <strong>OTT_V3.0_UNIFIED</strong> ouvre désormais une fenêtre de dialogue sécurisée
+        lors de chaque cycle de remontée. Pendant cette session LTE, il peut consulter l'API pour
+        connaître les commandes planifiées pour son ICCID, les exécuter, puis accuser réception avant
+        de repasser en deep sleep. Ce fonctionnement en <em>pull</em> évite toute connexion permanente
+        et préserve l'autonomie.
+    </p>
+
+    <h3>🎯 Cas d'usage couverts / envisagés</h3>
+    <ul>
+        <li>🛠️ <strong>Reconfiguration à distance</strong> : changer l'intervalle de mesure, activer un
+            profil d'urgence, mettre à jour les seuils d'alertes.</li>
+        <li>📡 <strong>Tests & diagnostics</strong> : demander un test modem, récupérer des journaux,
+            déclencher une mesure immédiate pour un patient précis.</li>
+        <li>🧩 <strong>Mises à jour OTA ciblées</strong> : planifier le téléchargement d'un nouveau firmware
+            (slot OTA), pousser un certificat ou un script correctif.</li>
+        <li>📥 <strong>Push de contenu</strong> : transmettre un message utilisateur, un changelog ou des
+            paramètres calibrés depuis le dashboard.</li>
+    </ul>
+
+    <h3>⚡ Impact énergétique maîtrisé</h3>
+    <p>
+        - Pas de connexion LTE maintenue en permanence.<br>
+        - Les commandes sont récupérées uniquement durant la fenêtre d'envoi des mesures.<br>
+        - Pour les actions urgentes, l'API peut demander un prochain réveil accéléré (ex : 30&nbsp;s),
+          le device revient ensuite à son cycle normal pour économiser la batterie.<br>
+        - Chaque commande porte un délai d'expiration pour éviter de bloquer l'appareil.
+    </p>
+
+    <h3>🧩 Côté Dashboard & API</h3>
+    <ul>
+        <li>📋 Console « Commandes » : création, priorité, statut (en attente, exécuté, expiré).</li>
+        <li>🔐 API REST : <code>POST /devices/{iccid}/commands</code>,
+            <code>GET /devices/{iccid}/commands/pending</code>, <code>PATCH /commands/{id}</code>.</li>
+        <li>🧾 Journalisation : chaque ordre exécuté génère un log visible dans le dashboard.</li>
+        <li>🛰️ Roadmap : support OTA complet et bundles de configurations sectorisés.</li>
+        <li>🛡️ <strong>Accès restreint</strong> : seule l'équipe Admin peut planifier, consulter ou annuler des commandes.
+    </ul>
+
+    <div class="alert alert-warning">
+        <strong>Important :</strong> ce mode bidirectionnel reste optionnel. Par défaut, l'appareil
+        continue de remonter uniquement ses mesures. L'activation des commandes descendantes se fait
+        device par device depuis le dashboard.
+    </div>
+</section>
+
+<!-- ============================================== -->
+<!-- 12. AMÉLIORATIONS FUTURES -->
 <!-- ============================================== -->
 
 <section id="roadmap" class="section">
@@ -1999,9 +2095,9 @@ SELECT id, email, first_name, last_name FROM users;
     <p>Le projet est <strong>open-source</strong> ! Les contributions sont les bienvenues :</p>
     
     <ul>
-        <li>🐛 <strong>Issues</strong> : <a href="https://github.com/ymora/OTT/issues" target="_blank">github.com/ymora/OTT/issues</a></li>
+        <li>🐛 <strong>Issues</strong> : <a href="https://github.com/ymora/OTT/issues" target="_blank" rel="noopener noreferrer">github.com/ymora/OTT/issues</a></li>
         <li>🔀 <strong>Pull Requests</strong> : Fork → Branche → PR</li>
-        <li>💬 <strong>Discussions</strong> : <a href="https://github.com/ymora/OTT/discussions" target="_blank">github.com/ymora/OTT/discussions</a></li>
+        <li>💬 <strong>Discussions</strong> : <a href="https://github.com/ymora/OTT/discussions" target="_blank" rel="noopener noreferrer">github.com/ymora/OTT/discussions</a></li>
     </ul>
     
     <div class="alert alert-info">

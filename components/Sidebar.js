@@ -10,6 +10,7 @@ const withBase = (path) => `${basePath}${path}`
 const menuItems = [
   { name: 'Vue d\'Ensemble', icon: '🏠', path: '/dashboard', permission: null },
   { name: 'Dispositifs', icon: '🔌', path: '/dashboard/devices', permission: 'devices.view' },
+  { name: 'Commandes', icon: '📡', path: '/dashboard/commands', permission: 'devices.commands' },
   { name: 'Patients', icon: '👥', path: '/dashboard/patients', permission: 'patients.view' },
   { name: 'Alertes', icon: '🔔', path: '/dashboard/alerts', permission: 'alerts.view' },
   { name: 'Carte', icon: '🗺️', path: '/dashboard/map', permission: null },

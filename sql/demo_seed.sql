@@ -79,6 +79,13 @@ VALUES
   (3, NOW() - INTERVAL '3 hours', 'ERROR', 'power', 'Batterie < 20% - Mode économie'),
   (4, NOW() - INTERVAL '1 day', 'INFO', 'sleep', 'Entrée en deep sleep planifié');
 
+-- Commandes descendantes de démonstration
+DELETE FROM device_commands WHERE device_id IN (1,2,3);
+INSERT INTO device_commands (device_id, command, payload, priority, status, execute_after, expires_at)
+VALUES
+  (1, 'SET_SLEEP_SECONDS', '{"seconds":180}', 'high', 'pending', NOW(), NOW() + INTERVAL '2 hour'),
+  (2, 'PING', '{"message":"Diag rapide"}', 'normal', 'pending', NOW(), NOW() + INTERVAL '1 hour');
+
 # Utilisateurs démo (hash bcrypt aléatoires générés via bcrypt-generator.com)
 -- ⚠️ Remplacez ces hashes par vos propres mots de passe via variables d'environnement / scripts d'init.
 INSERT INTO users (id, email, password_hash, first_name, last_name, role_id, is_active)

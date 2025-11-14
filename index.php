@@ -46,6 +46,9 @@ if ($_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '/index.php')
             'GET /api.php/devices' => 'Liste dispositifs',
             'GET /api.php/users' => 'Liste utilisateurs (auth requise)',
             'POST /api.php/devices/measurements' => 'Enregistrer mesure',
+            'POST /api.php/devices/{iccid}/commands' => 'Planifier une commande descendante',
+            'GET /api.php/devices/commands' => 'Lister les commandes (auth requise)',
+            'POST /api.php/devices/commands/ack' => 'Accusé de réception des commandes (device)',
             'GET /api.php/firmwares' => 'Liste firmwares OTA',
             'GET /api.php/audit' => 'Logs audit'
         ]
