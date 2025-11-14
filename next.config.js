@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
-const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true'
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isStaticExport ? '/OTT' : '')
+const isDev = process.env.NODE_ENV !== 'production'
+const basePath = isDev ? '' : '/OTT'
 
 const nextConfig = {
-  ...(isStaticExport ? { output: 'export' } : {}),
+  output: 'export',
   images: {
     unoptimized: true
   },
