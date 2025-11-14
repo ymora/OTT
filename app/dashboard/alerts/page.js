@@ -1,11 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
 import AlertCard from '@/components/AlertCard'
+import { demoAlerts } from '@/lib/demoData'
 
 export default function AlertsPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
@@ -18,7 +17,7 @@ export default function AlertsPage() {
     // ⚠️ MODE DÉMO - Appels API désactivés
     try {
       await new Promise(resolve => setTimeout(resolve, 300))
-      setAlerts([]) // Données vides
+      setAlerts(demoAlerts)
     } catch (error) {
       console.error('Erreur:', error)
     } finally {

@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
+import { demoAuditLogs } from '@/lib/demoData'
 
 export default function AuditPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -16,7 +15,7 @@ export default function AuditPage() {
     // ⚠️ MODE DÉMO - Appels API désactivés
     try {
       await new Promise(resolve => setTimeout(resolve, 300))
-      setLogs([]) // Données vides
+      setLogs(demoAuditLogs)
     } catch (error) {
       console.error('Erreur:', error)
     } finally {

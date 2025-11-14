@@ -6,6 +6,7 @@ import StatsCard from '@/components/StatsCard'
 import DeviceCard from '@/components/DeviceCard'
 import AlertCard from '@/components/AlertCard'
 import Chart from '@/components/Chart'
+import { demoDevices, demoAlerts, demoMeasurements } from '@/lib/demoData'
 
 export default function DashboardPage() {
   const { fetchWithAuth, API_URL } = useAuth()
@@ -21,13 +22,10 @@ export default function DashboardPage() {
   const loadData = async () => {
     // ⚠️ MODE DÉMO - Appels API désactivés temporairement
     try {
-      // Simulation chargement
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Données vides pour afficher l'interface
-      setDevices([])
-      setAlerts([])
-      setMeasurements([])
+      await new Promise(resolve => setTimeout(resolve, 300))
+      setDevices(demoDevices)
+      setAlerts(demoAlerts)
+      setMeasurements(demoMeasurements)
     } catch (error) {
       console.error('Erreur chargement:', error)
     } finally {

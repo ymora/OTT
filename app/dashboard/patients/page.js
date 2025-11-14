@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
+import { demoPatients } from '@/lib/demoData'
 
 export default function PatientsPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -16,7 +15,7 @@ export default function PatientsPage() {
     // ⚠️ MODE DÉMO - Appels API désactivés
     try {
       await new Promise(resolve => setTimeout(resolve, 300))
-      setPatients([]) // Données vides
+      setPatients(demoPatients)
     } catch (error) {
       console.error('Erreur:', error)
     } finally {

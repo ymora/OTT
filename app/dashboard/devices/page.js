@@ -1,11 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
 import DeviceCard from '@/components/DeviceCard'
+import { demoDevices } from '@/lib/demoData'
 
 export default function DevicesPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -18,7 +17,7 @@ export default function DevicesPage() {
     // ⚠️ MODE DÉMO - Appels API désactivés
     try {
       await new Promise(resolve => setTimeout(resolve, 300))
-      setDevices([]) // Données vides
+      setDevices(demoDevices)
     } catch (error) {
       console.error('Erreur:', error)
     } finally {

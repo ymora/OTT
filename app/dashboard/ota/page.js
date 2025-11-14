@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
+import { demoDevices, demoFirmwares } from '@/lib/demoData'
 
 export default function OTAPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
   const [firmwares, setFirmwares] = useState([])
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -17,8 +16,8 @@ export default function OTAPage() {
     // ⚠️ MODE DÉMO - Appels API désactivés
     try {
       await new Promise(resolve => setTimeout(resolve, 300))
-      setFirmwares([]) // Données vides
-      setDevices([]) // Données vides
+      setFirmwares(demoFirmwares)
+      setDevices(demoDevices)
     } catch (error) {
       console.error('Erreur:', error)
     } finally {
@@ -27,19 +26,7 @@ export default function OTAPage() {
   }
 
   const triggerOTA = async (deviceId, version) => {
-    if (!confirm(`Déclencher OTA v${version} sur dispositif #${deviceId} ?`)) return
-
-    try {
-      const response = await fetchWithAuth(`${API_URL}/api.php/devices/${deviceId}/ota`, {
-        method: 'POST',
-        body: JSON.stringify({ firmware_version: version })
-      })
-
-      const data = await response.json()
-      alert(data.success ? '✅ OTA déclenché!' : '❌ Erreur: ' + data.error)
-    } catch (error) {
-      alert('❌ Erreur: ' + error.message)
-    }
+    alert(`(MODE DEMO) OTA v${version} programmé pour dispositif ${deviceId}`)
   }
 
   return (

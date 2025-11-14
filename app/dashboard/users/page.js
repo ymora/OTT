@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
+import { demoUsers } from '@/lib/demoData'
 
 export default function UsersPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -16,7 +15,7 @@ export default function UsersPage() {
     // ⚠️ MODE DÉMO - Appels API désactivés
     try {
       await new Promise(resolve => setTimeout(resolve, 300))
-      setUsers([]) // Données vides
+      setUsers(demoUsers)
     } catch (error) {
       console.error('Erreur:', error)
     } finally {

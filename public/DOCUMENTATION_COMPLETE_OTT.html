@@ -1765,6 +1765,27 @@ import ErrorBoundary from '@/components/ErrorBoundary'
         <strong>🏆 Niveau SENIOR/ENTERPRISE</strong><br>
         Le code respecte tous les standards de l'industrie : Clean Architecture, DRY, SOLID, Security Best Practices.
     </div>
+
+    <h3>🧪 Mode Démonstration (sans API)</h3>
+    <p>Pour visualiser l'interface sans connexion backend, des données fictives sont injectées depuis <code>lib/demoData.js</code> :</p>
+    <ul>
+        <li>👥 <strong>Patients / Utilisateurs</strong> : Pierre, Paul, Jacques, équipe médicale</li>
+        <li>🔌 <strong>Dispositifs</strong> : OTT-Paris-001, OTT-Lyon-002, etc. (latitude/longitude incluses)</li>
+        <li>🔔 <strong>Alertes</strong> : Batterie faible, perte de transmission</li>
+        <li>📈 <strong>Mesures</strong> : Historique de débit/batterie pour alimenter les graphiques</li>
+        <li>📜 <strong>Audit</strong> : Connexions utilisateurs, modifications OTA</li>
+    </ul>
+    <p>Chaque page consomme ces jeux de données pour être entièrement navigable hors-ligne :</p>
+    <ul>
+        <li><code>app/dashboard/devices/page.js</code> → <code>demoDevices</code></li>
+        <li><code>app/dashboard/users/page.js</code> → <code>demoUsers</code></li>
+        <li><code>app/dashboard/ota/page.js</code> → <code>demoDevices</code> + <code>demoFirmwares</code></li>
+        <li><code>app/dashboard/audit/page.js</code> → <code>demoAuditLogs</code></li>
+        <li><code>app/dashboard/map/page.js</code> → <code>demoDevices</code> (marqueurs Leaflet)</li>
+    </ul>
+    <div class="alert alert-info">
+        <strong>💡 Astuce :</strong> Basculer en mode production = réactiver les appels API et enlever les fixtures du fichier <code>lib/demoData.js</code>.
+    </div>
 </section>
 
 <!-- ============================================== -->
