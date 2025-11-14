@@ -2,24 +2,28 @@
 
 import { useEffect, useState } from 'react'
 import AlertCard from '@/components/AlertCard'
-import { demoAlerts } from '@/lib/demoData'
+import { useAuth } from '@/contexts/AuthContext'
+import { fetchJson } from '@/lib/api'
 
 export default function AlertsPage() {
+  const { fetchWithAuth, API_URL } = useAuth()
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadAlerts()
   }, [])
 
   const loadAlerts = async () => {
-    // ⚠️ MODE DÉMO - Appels API désactivés
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      setAlerts(demoAlerts)
-    } catch (error) {
-      console.error('Erreur:', error)
+      setError(null)
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/alerts')
+      setAlerts(data.alerts || [])
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -47,6 +51,12 @@ export default function AlertsPage() {
           </button>
         ))}
       </div>
+
+      {error && (
+        <div className="alert alert-warning">
+          <strong>Erreur API :</strong> {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">

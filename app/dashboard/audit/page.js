@@ -1,33 +1,38 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { demoAuditLogs } from '@/lib/demoData'
+import { useAuth } from '@/contexts/AuthContext'
+import { fetchJson } from '@/lib/api'
+import { formatDateTime } from '@/lib/utils'
+
+const actionColors = {
+  'user.login': 'border-green-500 bg-green-50 text-green-700',
+  'user.created': 'border-blue-500 bg-blue-50 text-blue-700',
+  'device.config_updated': 'border-orange-500 bg-orange-50 text-orange-700',
+  'firmware.uploaded': 'border-purple-500 bg-purple-50 text-purple-700',
+}
 
 export default function AuditPage() {
+  const { fetchWithAuth, API_URL } = useAuth()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadLogs()
   }, [])
 
   const loadLogs = async () => {
-    // ⚠️ MODE DÉMO - Appels API désactivés
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      setLogs(demoAuditLogs)
-    } catch (error) {
-      console.error('Erreur:', error)
+      setError(null)
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/audit?limit=200')
+      setLogs(data.logs || [])
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
-  }
-
-  const actionColors = {
-    'user.login': 'border-green-500 bg-green-50 text-green-700',
-    'user.created': 'border-blue-500 bg-blue-50 text-blue-700',
-    'device.config_updated': 'border-orange-500 bg-orange-50 text-orange-700',
-    'firmware.uploaded': 'border-purple-500 bg-purple-50 text-purple-700',
   }
 
   return (
@@ -37,8 +42,14 @@ export default function AuditPage() {
           <h1 className="text-3xl font-bold">📜 Journal d'Audit</h1>
           <p className="text-gray-600 mt-1">Traçabilité complète des actions</p>
         </div>
-        <button onClick={loadLogs} className="btn-primary">🔄 Actualiser</button>
+        <button onClick={loadLogs} className="btn-secondary">🔄 Actualiser</button>
       </div>
+
+      {error && (
+        <div className="alert alert-warning">
+          <strong>Erreur API :</strong> {error}
+        </div>
+      )}
 
       <div className="space-y-3">
         {loading ? (
@@ -51,7 +62,7 @@ export default function AuditPage() {
             
             return (
               <div 
-                key={log.id}
+                key={log.id || i}
                 className={`border-l-4 ${colorClass} p-4 rounded-r-lg animate-slide-up hover:shadow-md transition-all`}
                 style={{animationDelay: `${i * 0.03}s`}}
               >
@@ -59,15 +70,13 @@ export default function AuditPage() {
                   <div>
                     <p className="font-semibold mb-1">{log.action}</p>
                     <p className="text-sm opacity-80">
-                      👤 {log.email || 'Système'} • 
-                      🌐 {log.ip_address} • 
-                      🕒 {new Date(log.created_at).toLocaleString('fr-FR')}
+                      👤 {log.email || 'Système'} • 🌐 {log.ip_address || 'n/a'} • 🕒 {formatDateTime(log.created_at)}
                     </p>
                     {log.entity_type && (
                       <p className="text-sm mt-1">📦 {log.entity_type} #{log.entity_id}</p>
                     )}
                   </div>
-                  <span className="badge bg-white">{log.action.split('.')[0]}</span>
+                  <span className="badge bg-white">{(log.action || '').split('.')[0]}</span>
                 </div>
               </div>
             )

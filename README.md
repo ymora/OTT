@@ -8,7 +8,7 @@
 
 ## 📖 Documentation Complète
 
-👉 **Ouvrir dans votre navigateur:** [`DOCUMENTATION_COMPLETE_OTT.html`](./DOCUMENTATION_COMPLETE_OTT.html)
+👉 **Ouvrir dans votre navigateur:** [`DOCUMENTATION_COMPLETE_OTT.html`](./public/DOCUMENTATION_COMPLETE_OTT.html)
 
 **Tout ce dont vous avez besoin :**
 - ⚡ Démarrage rapide (30 minutes)
@@ -60,15 +60,6 @@ git push origin main
 # Déploiement auto via GitHub Actions + Render
 ```
 
-### Firmware ESP32
-```
-1. Ouvrir fw_ott_optimized/fw_ott_optimized.ino
-2. Modifier SERVER_URL ligne 35
-3. Compiler et uploader (Arduino IDE)
-```
-
----
-
 ## 🏗️ Architecture
 
 ```
@@ -105,8 +96,9 @@ git push origin main
 - `schema.sql` - Base PostgreSQL (14 tables)
 - `Dockerfile` - Container pour Render
 
-### Firmware (ESP32)
-- `fw_ott_optimized/fw_ott_optimized.ino` - Firmware (600 lignes)
+### Données & Scripts
+- `sql/demo_seed.sql` - Jeu de données prêt à l'emploi (Render PostgreSQL)
+- `public/manifest.json` / `public/sw.js` - PWA installable
 
 ---
 
@@ -119,7 +111,7 @@ git push origin main
 - ✅ Transmission HTTPS sécurisée
 
 ### 🔌 API Backend
-- ✅ REST API avec JWT
+- ✅ REST API avec JWT (désactivable via `AUTH_DISABLED=true`)
 - ✅ Multi-utilisateurs (4 rôles, 19 permissions)
 - ✅ OTA firmware management
 - ✅ Notifications (Email/SMS/Push)
@@ -151,6 +143,19 @@ git push origin main
 - **Mesure capteur:** 100ms (au lieu de 5000ms)
 - **RAM:** 13% utilisée
 - **Uptime API:** 99.9% (Render Starter)
+
+---
+
+## 🗃️ Seeding & Modes
+
+- **Initialiser la base Render :**
+  ```bash
+  psql $DATABASE_URL -f sql/demo_seed.sql
+  ```
+- **Mode lecture seule (sans login) :**
+  - Render : `AUTH_DISABLED=true`
+  - Frontend : `NEXT_PUBLIC_REQUIRE_AUTH=false`
+- **Repasser en prod** : remettre les variables à `false` et réactiver la page de connexion.
 
 ---
 

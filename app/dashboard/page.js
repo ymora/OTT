@@ -6,28 +6,36 @@ import StatsCard from '@/components/StatsCard'
 import DeviceCard from '@/components/DeviceCard'
 import AlertCard from '@/components/AlertCard'
 import Chart from '@/components/Chart'
-import { demoDevices, demoAlerts, demoMeasurements } from '@/lib/demoData'
+import { fetchJson } from '@/lib/api'
+import { useRouter } from 'next/navigation'
 
 export default function DashboardPage() {
+  const router = useRouter()
   const { fetchWithAuth, API_URL } = useAuth()
   const [devices, setDevices] = useState([])
   const [alerts, setAlerts] = useState([])
   const [measurements, setMeasurements] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadData()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = async () => {
-    // ⚠️ MODE DÉMO - Appels API désactivés temporairement
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      setDevices(demoDevices)
-      setAlerts(demoAlerts)
-      setMeasurements(demoMeasurements)
-    } catch (error) {
-      console.error('Erreur chargement:', error)
+      setError(null)
+      const [devicesData, alertsData, measurementsData] = await Promise.all([
+        fetchJson(fetchWithAuth, API_URL, '/api.php/devices'),
+        fetchJson(fetchWithAuth, API_URL, '/api.php/alerts'),
+        fetchJson(fetchWithAuth, API_URL, '/api.php/measurements/latest')
+      ])
+      setDevices(devicesData.devices || [])
+      setAlerts((alertsData.alerts || []).filter(a => a.status === 'unresolved'))
+      setMeasurements(measurementsData.measurements || [])
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -63,6 +71,12 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Vue d'Ensemble</h1>
         <p className="text-gray-600">Tableau de bord en temps réel des dispositifs OTT</p>
       </div>
+
+      {error && (
+        <div className="alert alert-warning">
+          <strong>Erreur API :</strong> {error}
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -126,8 +140,18 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold mb-4">🔌 Dispositifs</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {devices.slice(0, 6).map((device, i) => (
-            <DeviceCard key={device.id} device={device} delay={i * 0.05} />
+            <DeviceCard
+              key={device.id}
+              device={device}
+              delay={i * 0.05}
+              onSelect={selected => router.push(`/dashboard/map?deviceId=${selected.id}`)}
+            />
           ))}
+        </div>
+        <div className="text-right mt-4">
+          <button className="btn-secondary" onClick={() => router.push('/dashboard/map')}>
+            Voir tous les dispositifs sur la carte →
+          </button>
         </div>
       </div>
     </div>

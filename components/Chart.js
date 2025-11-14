@@ -34,11 +34,21 @@ export default function Chart({ data = [], type }) {
     )
   }
 
+  const limitedData = [...data]
+    .sort((a, b) => new Date(a.timestamp || a.created_at || 0) - new Date(b.timestamp || b.created_at || 0))
+    .slice(-20)
+
   const chartData = {
-    labels: data.slice(0, 20).map(d => d.timestamp ? new Date(d.timestamp).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}) : ''),
+    labels: limitedData.map(d => d.timestamp || d.created_at
+      ? new Date(d.timestamp || d.created_at).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})
+      : (d.device_name || '')
+    ),
     datasets: [{
       label: type === 'flowrate' ? 'Débit (L/min)' : 'Batterie (%)',
-      data: data.slice(0, 20).map(d => type === 'flowrate' ? (d.flowrate || 0) : (d.last_battery || 0)),
+      data: limitedData.map(d => type === 'flowrate'
+        ? Number(d.flowrate ?? d.value ?? 0)
+        : Number(d.battery ?? d.last_battery ?? 0)
+      ),
       borderColor: type === 'flowrate' ? 'rgb(102, 126, 234)' : 'rgb(81, 207, 102)',
       backgroundColor: type === 'flowrate' ? 'rgba(102, 126, 234, 0.1)' : 'rgba(81, 207, 102, 0.1)',
       fill: true,

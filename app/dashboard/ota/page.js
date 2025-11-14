@@ -1,32 +1,55 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { demoDevices, demoFirmwares } from '@/lib/demoData'
+import { useAuth } from '@/contexts/AuthContext'
+import { fetchJson } from '@/lib/api'
 
 export default function OTAPage() {
+  const { fetchWithAuth, API_URL } = useAuth()
   const [firmwares, setFirmwares] = useState([])
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadData()
   }, [])
 
   const loadData = async () => {
-    // ⚠️ MODE DÉMO - Appels API désactivés
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      setFirmwares(demoFirmwares)
-      setDevices(demoDevices)
-    } catch (error) {
-      console.error('Erreur:', error)
+      setError(null)
+      const [firmwaresData, devicesData] = await Promise.all([
+        fetchJson(fetchWithAuth, API_URL, '/api.php/firmwares'),
+        fetchJson(fetchWithAuth, API_URL, '/api.php/devices')
+      ])
+      setFirmwares(firmwaresData.firmwares || [])
+      setDevices(devicesData.devices || [])
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
   }
 
   const triggerOTA = async (deviceId, version) => {
-    alert(`(MODE DEMO) OTA v${version} programmé pour dispositif ${deviceId}`)
+    try {
+      setMessage(null)
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${deviceId}/ota`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ firmware_version: version })
+        },
+        { requiresAuth: false }
+      )
+      setMessage(`OTA v${version} programmé pour le dispositif #${deviceId}`)
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   return (
@@ -39,6 +62,12 @@ export default function OTAPage() {
           <h2 className="text-xl font-semibold">📦 Firmwares Disponibles</h2>
           <button className="btn-primary">📤 Upload Firmware</button>
         </div>
+
+        {(error || message) && (
+          <div className={`alert ${error ? 'alert-warning' : 'alert-success'} mb-4`}>
+            {error ? `Erreur API : ${error}` : message}
+          </div>
+        )}
 
         {loading ? (
           <div className="animate-shimmer h-48"></div>

@@ -5,6 +5,7 @@ import { createContext, useContext, useState, useEffect } from 'react'
 const AuthContext = createContext()
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-api.onrender.com'
+const REQUIRE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_AUTH === 'true'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -53,18 +54,26 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('ott_user')
   }
 
-  const fetchWithAuth = async (url, options = {}) => {
-    if (!token) throw new Error('Non authentifié')
+  const fetchWithAuth = async (url, options = {}, config = {}) => {
+    const { requiresAuth = false } = config
+    const finalOptions = { ...options }
+    const headers = { ...(options.headers || {}) }
 
-    options.headers = {
-      ...options.headers,
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+    if (finalOptions.body && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json'
     }
 
-    const response = await fetch(url, options)
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    } else if (requiresAuth || REQUIRE_AUTH) {
+      throw new Error('Non authentifié')
+    }
 
-    if (response.status === 401) {
+    finalOptions.headers = headers
+
+    const response = await fetch(url, finalOptions)
+
+    if (response.status === 401 && token) {
       logout()
       throw new Error('Session expirée')
     }

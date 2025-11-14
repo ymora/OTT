@@ -30,6 +30,7 @@ define('DB_TYPE', getenv('DB_TYPE') ?: 'mysql'); // 'mysql' ou 'pgsql'
 
 define('JWT_SECRET', getenv('JWT_SECRET') ?: 'CHANGEZ_CE_SECRET_EN_PRODUCTION');
 define('JWT_EXPIRATION', 86400); // 24h
+define('AUTH_DISABLED', getenv('AUTH_DISABLED') === 'true');
 
 define('SENDGRID_API_KEY', getenv('SENDGRID_API_KEY') ?: '');
 define('SENDGRID_FROM_EMAIL', getenv('SENDGRID_FROM_EMAIL') ?: 'noreply@happlyz.com');
@@ -106,7 +107,37 @@ function verifyJWT($jwt) {
     return $payload;
 }
 
+function getDemoUser() {
+    static $demoUser = null;
+    if ($demoUser !== null) return $demoUser;
+    
+    global $pdo;
+    try {
+        $stmt = $pdo->query("SELECT * FROM users_with_roles ORDER BY id ASC LIMIT 1");
+        $user = $stmt->fetch();
+        if ($user) {
+            $user['permissions'] = $user['permissions'] ? explode(',', $user['permissions']) : ['*'];
+            $demoUser = $user;
+            return $demoUser;
+        }
+    } catch (PDOException $e) {}
+    
+    $demoUser = [
+        'id' => 0,
+        'email' => 'demo@ott.local',
+        'first_name' => 'Demo',
+        'last_name' => 'User',
+        'role_name' => 'admin',
+        'permissions' => ['*']
+    ];
+    return $demoUser;
+}
+
 function getCurrentUser() {
+    if (AUTH_DISABLED) {
+        return getDemoUser();
+    }
+    
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? '';
     
@@ -140,6 +171,9 @@ function requireAuth() {
 
 function requirePermission($permission) {
     $user = requireAuth();
+    if (AUTH_DISABLED) {
+        return $user;
+    }
     if (!in_array($permission, $user['permissions']) && $user['role_name'] !== 'admin') {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'Forbidden']);

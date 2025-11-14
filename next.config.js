@@ -1,15 +1,18 @@
 /** @type {import('next').NextConfig} */
+const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true'
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isStaticExport ? '/OTT' : '')
+
 const nextConfig = {
-  // output: 'export' seulement en production
-  ...(process.env.NODE_ENV === 'production' && { output: 'export' }),
+  ...(isStaticExport ? { output: 'export' } : {}),
   images: {
     unoptimized: true
   },
-  // basePath uniquement pour production (GitHub Pages)
-  basePath: process.env.NODE_ENV === 'production' ? '/OTT' : '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/OTT/' : '',
+  basePath,
+  assetPrefix: basePath ? `${basePath}/` : '',
   env: {
-    NEXT_PUBLIC_API_URL: 'http://localhost:8000'
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://ott-api.onrender.com',
+    NEXT_PUBLIC_REQUIRE_AUTH: process.env.NEXT_PUBLIC_REQUIRE_AUTH || 'false',
+    NEXT_PUBLIC_BASE_PATH: basePath
   }
 }
 

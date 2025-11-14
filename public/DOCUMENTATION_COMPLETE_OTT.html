@@ -1766,25 +1766,21 @@ import ErrorBoundary from '@/components/ErrorBoundary'
         Le code respecte tous les standards de l'industrie : Clean Architecture, DRY, SOLID, Security Best Practices.
     </div>
 
-    <h3>🧪 Mode Démonstration (sans API)</h3>
-    <p>Pour visualiser l'interface sans connexion backend, des données fictives sont injectées depuis <code>lib/demoData.js</code> :</p>
-    <ul>
-        <li>👥 <strong>Patients / Utilisateurs</strong> : Pierre, Paul, Jacques, équipe médicale</li>
-        <li>🔌 <strong>Dispositifs</strong> : OTT-Paris-001, OTT-Lyon-002, etc. (latitude/longitude incluses)</li>
-        <li>🔔 <strong>Alertes</strong> : Batterie faible, perte de transmission</li>
-        <li>📈 <strong>Mesures</strong> : Historique de débit/batterie pour alimenter les graphiques</li>
-        <li>📜 <strong>Audit</strong> : Connexions utilisateurs, modifications OTA</li>
-    </ul>
-    <p>Chaque page consomme ces jeux de données pour être entièrement navigable hors-ligne :</p>
-    <ul>
-        <li><code>app/dashboard/devices/page.js</code> → <code>demoDevices</code></li>
-        <li><code>app/dashboard/users/page.js</code> → <code>demoUsers</code></li>
-        <li><code>app/dashboard/ota/page.js</code> → <code>demoDevices</code> + <code>demoFirmwares</code></li>
-        <li><code>app/dashboard/audit/page.js</code> → <code>demoAuditLogs</code></li>
-        <li><code>app/dashboard/map/page.js</code> → <code>demoDevices</code> (marqueurs Leaflet)</li>
-    </ul>
+    <h3>🧪 Jeux de données (base Render)</h3>
+    <p>Les données de démonstration résident désormais directement dans PostgreSQL (Render). Pour initialiser la base :</p>
+    <ol>
+        <li>Cloner le fichier <code>sql/demo_seed.sql</code> vers votre machine.</li>
+        <li>Ouvrir un terminal et se connecter : <code>psql $DATABASE_URL</code></li>
+        <li>Importer : <code>\\i sql/demo_seed.sql</code></li>
+    </ol>
+    <p>Le script alimente <code>patients</code>, <code>devices</code>, <code>measurements</code>, <code>alerts</code>, <code>device_logs</code>, ainsi que les préférences notifications.</p>
     <div class="alert alert-info">
-        <strong>💡 Astuce :</strong> Basculer en mode production = réactiver les appels API et enlever les fixtures du fichier <code>lib/demoData.js</code>.
+        <strong>Modes disponibles :</strong> 
+        <ul>
+            <li><code>AUTH_DISABLED=true</code> (Render) → consommation API sans JWT.</li>
+            <li><code>NEXT_PUBLIC_REQUIRE_AUTH=false</code> (frontend) → interface accessible sans login.</li>
+            <li>Une fois l'auth réparée, repasser les deux variables à <code>true</code>.</li>
+        </ul>
     </div>
 </section>
 

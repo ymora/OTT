@@ -1,23 +1,27 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { demoPatients } from '@/lib/demoData'
+import { useAuth } from '@/contexts/AuthContext'
+import { fetchJson } from '@/lib/api'
 
 export default function PatientsPage() {
+  const { fetchWithAuth, API_URL } = useAuth()
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadPatients()
   }, [])
 
   const loadPatients = async () => {
-    // ⚠️ MODE DÉMO - Appels API désactivés
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      setPatients(demoPatients)
-    } catch (error) {
-      console.error('Erreur:', error)
+      setError(null)
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/patients')
+      setPatients(data.patients || [])
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -29,6 +33,12 @@ export default function PatientsPage() {
         <h1 className="text-3xl font-bold">👥 Patients</h1>
         <button className="btn-primary">➕ Nouveau Patient</button>
       </div>
+
+      {error && (
+        <div className="alert alert-warning">
+          <strong>Erreur API :</strong> {error}
+        </div>
+      )}
 
       <div className="card">
         {loading ? (

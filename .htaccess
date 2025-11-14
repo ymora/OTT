@@ -2,8 +2,9 @@
 # Apache Configuration - OTT API
 # ================================================================================
 
-# Activer le moteur de réécriture
+# Activer le moteur de réécriture + PATH_INFO
 RewriteEngine On
+AcceptPathInfo On
 
 # Permettre CORS
 Header set Access-Control-Allow-Origin "*"
@@ -15,8 +16,13 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^$ index.php [L]
 
-# Garder les routes api.php/... intactes
-RewriteCond %{REQUEST_URI} ^/api\.php
+# Forcer les routes api.php/... vers api.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^api\.php/(.*)$ api.php [QSA,L]
+
+# Garder les routes api.php directes intactes
+RewriteCond %{REQUEST_URI} ^/api\.php$
 RewriteRule ^ - [L]
 
 # Pour les fichiers statiques (dashboard, doc)

@@ -1,9 +1,10 @@
 'use client'
 
-export default function DeviceCard({ device, delay = 0 }) {
+export default function DeviceCard({ device, delay = 0, onSelect }) {
   const isOnline = () => {
+    if (!device.last_seen) return false
     const lastSeen = new Date(device.last_seen)
-    const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
+    const hoursSince = (Date.now() - lastSeen.getTime()) / (1000 * 60 * 60)
     return hoursSince < 2
   }
 
@@ -17,6 +18,9 @@ export default function DeviceCard({ device, delay = 0 }) {
     <div 
       className="card group hover:scale-102 cursor-pointer animate-scale-in"
       style={{animationDelay: `${delay}s`}}
+      onClick={() => onSelect?.(device)}
+      role={onSelect ? 'button' : undefined}
+      tabIndex={onSelect ? 0 : undefined}
     >
       {/* Status badge */}
       <div className="flex items-center justify-between mb-3">
@@ -41,7 +45,7 @@ export default function DeviceCard({ device, delay = 0 }) {
       )}
 
       <p className="text-xs text-gray-500">
-        📍 {device.city || 'Non localisé'} | 👁️ {new Date(device.last_seen).toLocaleDateString('fr-FR')}
+        📍 {device.city || 'Non localisé'} | 👁️ {device.last_seen ? new Date(device.last_seen).toLocaleString('fr-FR') : 'n/a'}
       </p>
     </div>
   )

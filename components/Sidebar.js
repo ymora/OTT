@@ -4,6 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+const withBase = (path) => `${basePath}${path}`
+
 const menuItems = [
   { name: 'Vue d\'Ensemble', icon: '🏠', path: '/dashboard', permission: null },
   { name: 'Dispositifs', icon: '🔌', path: '/dashboard/devices', permission: 'devices.view' },
@@ -62,7 +65,7 @@ export default function Sidebar() {
       {/* Footer Sidebar */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-gray-50 to-transparent">
         <a 
-          href="/DOCUMENTATION_COMPLETE_OTT.html" 
+          href={withBase('/DOCUMENTATION_COMPLETE_OTT.html')} 
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100 transition-all"

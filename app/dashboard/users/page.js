@@ -1,23 +1,27 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { demoUsers } from '@/lib/demoData'
+import { useAuth } from '@/contexts/AuthContext'
+import { fetchJson } from '@/lib/api'
 
 export default function UsersPage() {
+  const { fetchWithAuth, API_URL } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadUsers()
   }, [])
 
   const loadUsers = async () => {
-    // ⚠️ MODE DÉMO - Appels API désactivés
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      setUsers(demoUsers)
-    } catch (error) {
-      console.error('Erreur:', error)
+      setError(null)
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/users')
+      setUsers(data.users || [])
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -43,6 +47,11 @@ export default function UsersPage() {
       </div>
 
       <div className="card">
+        {error && (
+          <div className="alert alert-warning mb-4">
+            <strong>Erreur API :</strong> {error}
+          </div>
+        )}
         {loading ? (
           <div className="animate-shimmer h-64"></div>
         ) : (
@@ -68,7 +77,7 @@ export default function UsersPage() {
                     <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
                     <td className="py-3 px-4 text-gray-600">{user.email}</td>
                     <td className="py-3 px-4">
-                      <span className={`badge ${roleColors[user.role_name]}`}>
+                      <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
                         {user.role_name}
                       </span>
                     </td>

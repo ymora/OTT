@@ -2,24 +2,28 @@
 
 import { useEffect, useState } from 'react'
 import DeviceCard from '@/components/DeviceCard'
-import { demoDevices } from '@/lib/demoData'
+import { useAuth } from '@/contexts/AuthContext'
+import { fetchJson } from '@/lib/api'
 
 export default function DevicesPage() {
+  const { fetchWithAuth, API_URL } = useAuth()
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     loadDevices()
   }, [])
 
   const loadDevices = async () => {
-    // ⚠️ MODE DÉMO - Appels API désactivés
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      setDevices(demoDevices)
-    } catch (error) {
-      console.error('Erreur:', error)
+      setError(null)
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices')
+      setDevices(data.devices || [])
+    } catch (err) {
+      console.error(err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -28,17 +32,22 @@ export default function DevicesPage() {
   const filteredDevices = devices.filter(d => 
     d.device_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     d.sim_iccid?.includes(searchTerm) ||
-    `${d.first_name} ${d.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())
+    `${d.first_name || ''} ${d.last_name || ''}`.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Dispositifs OTT</h1>
           <p className="text-gray-600 mt-1">{devices.length} dispositif(s) total</p>
         </div>
+      {error && (
+        <div className="alert alert-warning">
+          <strong>Erreur API :</strong> {error}
+        </div>
+      )}
         <button className="btn-primary">
           ➕ Nouveau Dispositif
         </button>
