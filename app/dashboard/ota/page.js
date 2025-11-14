@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 
@@ -12,11 +12,7 @@ export default function OTAPage() {
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setError(null)
       const [firmwaresData, devicesData] = await Promise.all([
@@ -31,7 +27,11 @@ export default function OTAPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_URL, fetchWithAuth])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const triggerOTA = async (deviceId, version) => {
     try {

@@ -5,6 +5,7 @@ import Script from 'next/script'
 const inter = Inter({ subsets: ['latin'] })
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+const isProduction = process.env.NODE_ENV === 'production'
 const withBase = (path) => `${basePath}${path}`
 const manifestHref = withBase('/manifest.json')
 const swPath = withBase('/sw.js')
@@ -34,14 +35,23 @@ export default function RootLayout({ children }) {
       <body className={inter.className}>
         {children}
 
-        <Script id="sw-register" strategy="afterInteractive">
-          {`if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-              navigator.serviceWorker.register('${swPath}')
-                .catch(err => console.log('SW registration failed', err));
-            });
-          }`}
-        </Script>
+        {isProduction && (
+          <Script id="sw-register" strategy="afterInteractive">
+            {`if ('serviceWorker' in navigator) {
+              const registerSW = () => {
+                if (navigator.serviceWorker.controller) return;
+                navigator.serviceWorker.register('${swPath}').catch(err => {
+                  console.warn('SW registration failed', err);
+                });
+              };
+              if (document.readyState === 'complete') {
+                registerSW();
+              } else {
+                window.addEventListener('load', registerSW, { once: true });
+              }
+            }`}
+          </Script>
+        )}
       </body>
     </html>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AlertCard from '@/components/AlertCard'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
@@ -12,11 +12,7 @@ export default function AlertsPage() {
   const [filter, setFilter] = useState('all')
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadAlerts()
-  }, [])
-
-  const loadAlerts = async () => {
+  const loadAlerts = useCallback(async () => {
     try {
       setError(null)
       const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/alerts')
@@ -27,7 +23,11 @@ export default function AlertsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [fetchWithAuth, API_URL])
+
+  useEffect(() => {
+    loadAlerts()
+  }, [loadAlerts])
 
   const filteredAlerts = filter === 'all' 
     ? alerts 

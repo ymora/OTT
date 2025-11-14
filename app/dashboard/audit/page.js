@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { formatDateTime } from '@/lib/utils'
@@ -18,11 +18,7 @@ export default function AuditPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadLogs()
-  }, [])
-
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     try {
       setError(null)
       const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/audit?limit=200')
@@ -33,13 +29,17 @@ export default function AuditPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [fetchWithAuth, API_URL])
+
+  useEffect(() => {
+    loadLogs()
+  }, [loadLogs])
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">📜 Journal d'Audit</h1>
+          <h1 className="text-3xl font-bold">📜 Journal d&apos;Audit</h1>
           <p className="text-gray-600 mt-1">Traçabilité complète des actions</p>
         </div>
         <button onClick={loadLogs} className="btn-secondary">🔄 Actualiser</button>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import DeviceCard from '@/components/DeviceCard'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
@@ -12,11 +12,7 @@ export default function DevicesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadDevices()
-  }, [])
-
-  const loadDevices = async () => {
+  const loadDevices = useCallback(async () => {
     try {
       setError(null)
       const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices')
@@ -27,7 +23,11 @@ export default function DevicesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [fetchWithAuth, API_URL])
+
+  useEffect(() => {
+    loadDevices()
+  }, [loadDevices])
 
   const filteredDevices = devices.filter(d => 
     d.device_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 
@@ -10,11 +10,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadUsers()
-  }, [])
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       setError(null)
       const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/users')
@@ -25,7 +21,11 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_URL, fetchWithAuth])
+
+  useEffect(() => {
+    loadUsers()
+  }, [loadUsers])
 
   const roleColors = {
     admin: 'bg-purple-100 text-purple-700',

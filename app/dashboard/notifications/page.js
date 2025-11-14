@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 
@@ -13,11 +13,7 @@ export default function NotificationsPage() {
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setError(null)
       const [prefsData, queueData] = await Promise.all([
@@ -31,7 +27,11 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_URL, fetchWithAuth])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const handleToggle = (field) => {
     setPreferences(prev => ({ ...prev, [field]: !prev?.[field] }))
@@ -84,7 +84,7 @@ export default function NotificationsPage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold">📧 Notifications</h1>
-          <p className="text-gray-600 mt-1">Configurer les canaux d'alertes et préférences.</p>
+          <p className="text-gray-600 mt-1">Configurer les canaux d&apos;alertes et préférences.</p>
         </div>
         <div className="space-x-2">
           <button className="btn-secondary" onClick={() => testNotification('email')}>✉️ Test Email</button>

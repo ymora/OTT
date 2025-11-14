@@ -1,9 +1,9 @@
+'use client'
+
 /**
  * Composant Error Boundary pour capturer les erreurs React
  * @component
  */
-
-'use client'
 
 import React from 'react'
 
@@ -33,7 +33,7 @@ class ErrorBoundary extends React.Component {
                 Une erreur est survenue
               </h1>
               <p className="text-gray-600 mb-6">
-                Nous sommes désolés, une erreur inattendue s'est produite.
+                Nous sommes désolés, une erreur inattendue s&apos;est produite.
               </p>
               
               {process.env.NODE_ENV === 'development' && this.state.error && (

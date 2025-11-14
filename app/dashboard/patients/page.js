@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 
@@ -10,11 +10,7 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadPatients()
-  }, [])
-
-  const loadPatients = async () => {
+  const loadPatients = useCallback(async () => {
     try {
       setError(null)
       const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/patients')
@@ -25,7 +21,11 @@ export default function PatientsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_URL, fetchWithAuth])
+
+  useEffect(() => {
+    loadPatients()
+  }, [loadPatients])
 
   return (
     <div className="space-y-6 animate-fade-in">

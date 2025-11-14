@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import StatsCard from '@/components/StatsCard'
 import DeviceCard from '@/components/DeviceCard'
@@ -18,11 +18,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadData()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setError(null)
       const [devicesData, alertsData, measurementsData] = await Promise.all([
@@ -39,7 +35,11 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_URL, fetchWithAuth])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const stats = {
     totalDevices: devices.length,
@@ -68,7 +68,7 @@ export default function DashboardPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="animate-slide-up">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Vue d'Ensemble</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Vue d&apos;Ensemble</h1>
         <p className="text-gray-600">Tableau de bord en temps réel des dispositifs OTT</p>
       </div>
 

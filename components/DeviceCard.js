@@ -8,7 +8,10 @@ export default function DeviceCard({ device, delay = 0, onSelect }) {
     return hoursSince < 2
   }
 
+  const batteryLevel = typeof device.last_battery === 'number' ? device.last_battery : null
+
   const batteryColor = (level) => {
+    if (level === null) return 'text-gray-400'
     if (level > 60) return 'text-green-600'
     if (level > 20) return 'text-orange-600'
     return 'text-red-600'
@@ -28,8 +31,8 @@ export default function DeviceCard({ device, delay = 0, onSelect }) {
           <div className={`w-2 h-2 rounded-full ${isOnline() ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
           <span className="text-xs font-medium">{isOnline() ? 'En ligne' : 'Hors ligne'}</span>
         </div>
-        <span className={`text-2xl ${batteryColor(device.last_battery)}`}>
-          🔋 {device.last_battery?.toFixed(0)}%
+        <span className={`text-2xl ${batteryColor(batteryLevel)}`}>
+          🔋 {batteryLevel !== null ? `${batteryLevel.toFixed(0)}%` : 'N/A'}
         </span>
       </div>
 
