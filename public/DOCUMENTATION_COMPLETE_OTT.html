@@ -353,7 +353,7 @@
 
     <h3>🧱 À finaliser / prochaines actions</h3>
     <ul>
-        <li>🛠️ <strong>Appliquer la migration SQL</strong> (`schema.sql` +, si besoin, `sql/demo_seed.sql`) sur l’environnement PostgreSQL avant redeploiement.</li>
+        <li>🛠️ <strong>Appliquer la migration SQL</strong> (`sql/schema.sql` +, si besoin, `sql/demo_seed.sql`) sur l’environnement PostgreSQL avant redeploiement.</li>
         <li>🚀 Déployer l’API PHP & le dashboard mis à jour, puis flasher les dispositifs pour activer le nouveau firmware.</li>
         <li>📦 Ajouter, si nécessaire, d’autres types d’ordres (OTA complet, changement d’APN, reset modem) et les documenter.</li>
         <li>📊 Planifier les tests de non-régression (API + firmware) et surveiller la consommation batterie lors des modes “wake rapide”.</li>
@@ -445,7 +445,7 @@ maxime/
 ├── 🔌 <strong>BACKEND (PHP)</strong>
 │   ├── api.php                   # API REST complète (800 lignes)
 │   ├── index.php                 # Entry point + health check
-│   ├── schema.sql                # Base PostgreSQL (14 tables)
+│   ├── sql/schema.sql            # Base PostgreSQL (14 tables)
 │   ├── Dockerfile                # Container pour Render
 │   └── .htaccess                 # Apache rewrite rules
 │
@@ -1278,10 +1278,36 @@ EOF
     <h3>📡 Firmware OTA & Commandes</h3>
     <p>Depuis la reconstruction, le firmware ESP32 intègre nativement la bidirectionnelle décrite dans cette doc :</p>
     <ul>
-        <li>POST <code>/api.php/devices/measurements</code> (flowrate, battery, signal_dbm, iccid, device_serial)</li>
-        <li>GET <code>/api.php/devices/commands/pending?iccid=…</code> → commandes <code>SET_SLEEP_SECONDS</code>, <code>PING</code>, etc.</li>
+        <li>POST <code>/api.php/devices/measurements</code> (flowrate, battery, signal_dbm, iccid, device_serial, firmware_version)</li>
+        <li>GET <code>/api.php/devices/commands/pending?iccid=…</code> → commandes <code>SET_SLEEP_SECONDS</code>, <code>PING</code>, <code>UPDATE_CONFIG</code>, <code>UPDATE_CALIBRATION</code></li>
         <li>POST <code>/api.php/devices/commands/ack</code> pour tracer l’exécution depuis le dashboard.</li>
+        <li>POST <code>/api.php/devices/logs</code> : le firmware envoie les succès/erreurs majeures (mise à jour config, mesures KO…).</li>
     </ul>
+    <p>La commande <code>UPDATE_CONFIG</code> permet de pousser à distance les paramètres sensibles (APN, JWT, ICCID, numéro de série, PIN SIM). Le firmware enregistre ces valeurs dans la mémoire NVS (persistante) puis redémarre le modem automatiquement.</p>
+    <p>Exemple de payload (via le dashboard ou un appel API) :</p>
+    <pre>
+POST /api.php/devices/{iccid}/commands
+{
+  "command": "UPDATE_CONFIG",
+  "payload": {
+    "apn": "orange",
+    "jwt": "Bearer eyJhbGciOi...",
+    "iccid": "8933...",
+    "serial": "OTT-123",
+    "sim_pin": "0000"
+  }
+}
+
+POST /api.php/devices/{iccid}/commands
+{
+  "command": "UPDATE_CALIBRATION",
+  "payload": {
+    "a0": -6.12,
+    "a1": 0.005,
+    "a2": 0.0000012
+  }
+}
+    </pre>
     <p>Le code source complet est déplacé dans le dépôt privé <code>ott-hardware</code> (voir <code>hardware/README.md</code>). Pensez à mettre à jour <code>DEVICE_ICCID</code>, <code>DEVICE_SERIAL</code>, <code>JWT</code> et les certificats TLS avant compilation.</p>
     
     <h3>📊 Performances</h3>
@@ -1348,7 +1374,7 @@ git push origin main
         <li>Cliquer sur <strong>"Create Database"</strong></li>
         <li>Attendre 2-3 minutes que la base soit prête</li>
         <li>Copier l'<strong>Internal Database URL</strong> (format : <code>postgresql://user:pass@host/db</code>)</li>
-        <li>Se connecter via l'interface web et exécuter le contenu de <code>schema.sql</code></li>
+        <li>Se connecter via l'interface web et exécuter le contenu de <code>sql/schema.sql</code></li>
     </ol>
     
     <div class="alert alert-info">
@@ -1361,7 +1387,7 @@ git push origin main
     <pre>
 DATABASE_URL="postgresql://user:pass@host/ott_data" ./scripts/db_migrate.sh --seed
 # ou, manuellement
-psql $DATABASE_URL -f schema.sql
+psql $DATABASE_URL -f sql/schema.sql
 psql $DATABASE_URL -f sql/demo_seed.sql
     </pre>
     
@@ -1479,7 +1505,7 @@ psql $DATABASE_URL -f sql/demo_seed.sql
 
     <h3>🛠️ Scripts d’automatisation</h3>
     <ul>
-        <li><code>scripts/db_migrate.sh [--seed]</code> : applique <code>schema.sql</code> + <code>sql/demo_seed.sql</code> sur PostgreSQL (utilise <code>DATABASE_URL</code>).</li>
+        <li><code>scripts/db_migrate.sh [--seed]</code> : applique <code>sql/schema.sql</code> + <code>sql/demo_seed.sql</code> sur PostgreSQL (utilise <code>DATABASE_URL</code>).</li>
         <li><code>scripts/deploy_api.sh</code> : push vers le remote Render (configurable via <code>RENDER_REMOTE</code> / <code>RENDER_BRANCH</code>).</li>
         <li><code>scripts/deploy_dashboard.sh</code> : <code>npm install</code> + build + <code>npm run export</code>/<code>deploy</code> (commandes personnalisables via <code>DASHBOARD_BUILD_CMD</code>/<code>DASHBOARD_DEPLOY_CMD</code>).</li>
         <li><code>scripts/flash_firmware.ps1 -Port COMx</code> : compile et téléverse le firmware <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code> avec <code>arduino-cli</code>.</li>
@@ -1531,7 +1557,7 @@ https://ymora.github.io/OTT/
     
     <h3>🔧 Configuration des Mots de Passe</h3>
     
-    <p>Les comptes de démonstration créés par <code>schema.sql</code> / <code>sql/demo_seed.sql</code> contiennent des <strong>hashes bcrypt fictifs</strong> (aucun mot de passe en clair). Vous devez générer vos propres hashes avant toute mise en production.</p>
+    <p>Les comptes de démonstration créés par <code>sql/schema.sql</code> / <code>sql/demo_seed.sql</code> contiennent des <strong>hashes bcrypt fictifs</strong> (aucun mot de passe en clair). Vous devez générer vos propres hashes avant toute mise en production.</p>
     
     <p><strong>⚠️ IMPORTANT : Changer les mots de passe en production !</strong></p>
     
@@ -2034,7 +2060,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
         <tbody>
             <tr>
                 <td><code>admin@example.com</code></td>
-                <td>Créé via <code>schema.sql</code> / <code>sql/demo_seed.sql</code> (hash bcrypt fictif). Remplacez immédiatement le mot de passe via <code>UPDATE_PASSWORDS_RENDER.sql</code>.</td>
+                <td>Créé via <code>sql/schema.sql</code> / <code>sql/demo_seed.sql</code> (hash bcrypt fictif). Remplacez immédiatement le mot de passe via <code>sql/UPDATE_PASSWORDS_RENDER.sql</code>.</td>
                 <td>Admin</td>
             </tr>
             <tr>

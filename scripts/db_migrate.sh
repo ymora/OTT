@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Helper to apply schema.sql (and optionally demo_seed.sql) against the target DB.
+# Helper to apply sql/schema.sql (and optionally sql/demo_seed.sql) against the target DB.
 #
 # Usage:
 #   DB_TYPE=postgres DATABASE_URL=... ./scripts/db_migrate.sh
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCHEMA_FILE="$ROOT_DIR/schema.sql"
+SCHEMA_FILE="$ROOT_DIR/sql/schema.sql"
 SEED_FILE="$ROOT_DIR/sql/demo_seed.sql"
 
 RUN_SEED=false
@@ -27,7 +27,7 @@ fi
 DB_TYPE="${DB_TYPE:-postgres}"
 
 if [[ ! -f "$SCHEMA_FILE" ]]; then
-  echo "❌ schema.sql introuvable ($SCHEMA_FILE)" >&2
+  echo "❌ sql/schema.sql introuvable ($SCHEMA_FILE)" >&2
   exit 1
 fi
 

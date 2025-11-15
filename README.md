@@ -89,7 +89,7 @@ git push origin main
 - **Descendant** :
   - Dashboard Next.js appelle l’API (`NEXT_PUBLIC_API_URL`) pour charger stats, cartes Leaflet, notifications, OTA…
   - Les techniciens déclenchent OTA/config via `/api.php/devices/:id/ota` ou `/config`.
-  - Les dispositifs OTT se réveillent, mesurent, publient, puis récupèrent les commandes via `/devices/commands/pending`. Les ACK sont renvoyés sur `/devices/commands/ack` pour alimenter la console “Commandes”.
+  - Les dispositifs OTT se réveillent, mesurent, publient, puis récupèrent les commandes via `/devices/commands/pending`. Les ACK sont renvoyés sur `/devices/commands/ack` pour alimenter la console “Commandes”. Un verbe `UPDATE_CONFIG` permet de pousser APN/JWT/ICCID/Serial à distance (stockés en NVS après réception).
 - **Auth** : Next → `/api.php/auth/login` (JWT). Token stocké dans LocalStorage, injecté par `fetchWithAuth`. L’API vérifie JWT + permissions (rôles admin/tech/etc.).
 - **Docs / Firmware** : `public/DOCUMENTATION_COMPLETE_OTT.html` décrit la procédure complète, `hardware/firmware/...` contient les sources mais n’est pas versionné.
 
@@ -134,7 +134,7 @@ EOF
    ```bash
    DATABASE_URL="postgresql://..." ./scripts/db_migrate.sh --seed
    # ou
-   psql $DATABASE_URL -f schema.sql
+   psql $DATABASE_URL -f sql/schema.sql
    psql $DATABASE_URL -f sql/demo_seed.sql
    ```
 3. Vérifier :
@@ -142,6 +142,8 @@ EOF
    psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"
    psql $DATABASE_URL -c "SELECT * FROM users_with_roles;"
    ```
+
+> ℹ️ Tous les scripts contenus dans `sql/` sont **100 % anonymisés** (ICCID simulés, e-mails génériques, mots de passe uniquement sous forme de hash bcrypt). Aucun secret de production n’est versionné.
 
 Le jeu de données installe automatiquement :
 - 4 rôles (`admin`, `medecin`, `technicien`, `viewer`) + 19 permissions.
@@ -162,11 +164,14 @@ Le jeu de données installe automatiquement :
 
 ### Backend (PHP)
 - `api.php` - API REST complète (800 lignes)
-- `schema.sql` - Base PostgreSQL (14 tables, données anonymisées)
+- `sql/schema.sql` - Base PostgreSQL (14 tables, données anonymisées)
 - `Dockerfile` - Container pour Render
 
 ### Données & Scripts
+- `sql/schema.sql` - Schéma complet + seeds minima
 - `sql/demo_seed.sql` - Jeu de données de démo (emails génériques)
+- `sql/create_demo_user.sql` - Création utilisateur `demo@example.com`
+- `sql/UPDATE_PASSWORDS_RENDER.sql` - Rotation de mots de passe Render
 - `public/manifest.json` / `public/sw.js` - PWA installable
 - `hardware/` (ignoré) - dépôt externe pour firmware/CAO
 
@@ -183,8 +188,9 @@ Le jeu de données installe automatiquement :
    - `AUTH_DISABLED=false` en production (sinon accès libre).
 
 3. **Comptes de démonstration**  
-   - `schema.sql` + `sql/demo_seed.sql` créent `admin@example.com` / `tech@example.com` avec hashes fictifs.  
-   - Exécuter `UPDATE_PASSWORDS_RENDER.sql` ou `psql ... -c "UPDATE users SET password_hash = password_hash(...);"` avant mise en prod.
+   - `sql/schema.sql` + `sql/demo_seed.sql` créent `admin@example.com` / `tech@example.com` avec hashes fictifs.  
+   - `sql/create_demo_user.sql` ajoute un compte viewer `demo@example.com` (`Demo1234!`) pour les démonstrations rapides.  
+   - Exécuter `sql/UPDATE_PASSWORDS_RENDER.sql` ou `psql ... -c "UPDATE users SET password_hash = crypt(...);"` avant mise en prod.
 
 4. **Surface sensible réduite**  
    - Firmware + CAO déplacés dans `hardware/` (hors Git).  
@@ -195,7 +201,8 @@ Le jeu de données installe automatiquement :
    - Les autres rôles restent lecture/diagnostic ; l’API retourne `403 Forbidden` si la permission manque.
 
 6. **Scripts utiles**  
-   - `scripts/db_migrate.sh --seed` : applique `schema.sql` + `sql/demo_seed.sql` sur Postgres (`DATABASE_URL=...`).  
+   - `scripts/db_migrate.sh --seed` : applique `sql/schema.sql` + `sql/demo_seed.sql` sur Postgres (`DATABASE_URL=...`).  
+   - `psql $DATABASE_URL -f sql/create_demo_user.sql` : crée/active `demo@example.com` (role viewer).  
    - `scripts/deploy_api.sh` / `scripts/deploy_dashboard.sh` : automatisent Render + GitHub Pages.  
    - `scripts/flash_firmware.ps1 -Port COMx` : compil/flash Arduino CLI.
 
@@ -204,10 +211,11 @@ Le jeu de données installe automatiquement :
 ## ✨ Fonctionnalités Clés
 
 ### 🔧 Firmware
-- ✅ Mesure débit oxygène (MPXV7007DP) + calibration polynomiale
-- ✅ Bidirectionnel complet (TinyGSM SIM7600, commandes SET_SLEEP_SECONDS/PING)
+- ✅ Mesure débit oxygène (MPXV7007DP) + calibration polynomiale (override possible via `UPDATE_CALIBRATION`)
+- ✅ Bidirectionnel complet (TinyGSM SIM7600, commandes `SET_SLEEP_SECONDS`, `PING`, `UPDATE_CONFIG`, `UPDATE_CALIBRATION`)
 - ✅ Deep sleep dynamique (5 min par défaut, override via dashboard)
-- ✅ Publication HTTPS sécurisée (Bearer JWT, endpoints `/devices/measurements`, `/devices/commands/*`)
+- ✅ Publication HTTPS sécurisée (Bearer JWT, endpoints `/devices/measurements`, `/devices/commands/*`, `/devices/logs`)
+- ✅ Reconfiguration distante des secrets APN/JWT/ICCID/serial/PIN SIM (sauvegarde NVS)
 
 ### 🔌 API Backend
 - ✅ REST API avec JWT (désactivable via `AUTH_DISABLED=true`)
@@ -287,3 +295,4 @@ Le jeu de données installe automatiquement :
 ---
 
 **© 2025 HAPPLYZ MEDICAL SAS** | Version 3.0 - React + Next.js + Render Cloud
+
