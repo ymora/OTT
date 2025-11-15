@@ -1191,7 +1191,7 @@ npm run build
             <tr>
                 <td><code>NEXT_STATIC_EXPORT</code></td>
                 <td>Active <code>output: 'export'</code> lors des builds GitHub Pages</td>
-                <td><code>true</code> uniquement pendant <code>npm run export</code></td>
+                <td>piloté automatiquement par <code>npm run export</code></td>
             </tr>
         </tbody>
     </table>
@@ -1204,7 +1204,7 @@ npm run build
 cat &gt; .env.local &lt;&lt;'EOF'
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
 NEXT_PUBLIC_REQUIRE_AUTH=true
-# NEXT_STATIC_EXPORT ne doit être positionné à true que pour npm run export
+# Cette variable est positionnée automatiquement par <code>npm run export</code>
 EOF
     </pre>
     
@@ -1516,7 +1516,7 @@ psql $DATABASE_URL -f sql/demo_seed.sql
     <ul>
         <li><code>scripts/db_migrate.sh [--seed]</code> : applique <code>sql/schema.sql</code> + <code>sql/demo_seed.sql</code> sur PostgreSQL (utilise <code>DATABASE_URL</code>).</li>
         <li><code>scripts/deploy_api.sh</code> : push vers le remote Render (configurable via <code>RENDER_REMOTE</code> / <code>RENDER_BRANCH</code>).</li>
-        <li><code>scripts/deploy_dashboard.sh</code> : <code>npm install</code> + build + <code>npm run export</code>/<code>deploy</code> (commandes personnalisables via <code>DASHBOARD_BUILD_CMD</code>/<code>DASHBOARD_DEPLOY_CMD</code>).</li>
+        <li><code>scripts/deploy_dashboard.sh</code> : <code>npm install</code> + build + <code>npm run export</code> (commandes personnalisables via <code>DASHBOARD_BUILD_CMD</code>/<code>DASHBOARD_DEPLOY_CMD</code>).</li>
         <li><code>scripts/flash_firmware.ps1 -Port COMx</code> : compile et téléverse le firmware <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code> avec <code>arduino-cli</code>.</li>
     </ul>
     
@@ -1525,7 +1525,7 @@ psql $DATABASE_URL -f sql/demo_seed.sql
         <li><strong>Backend Render</strong> : toutes les variables <code>DB_*</code> + <code>JWT_SECRET</code> renseignées, dernier déploiement Docker réussi.</li>
         <li><strong>Base PostgreSQL</strong> : <code>psql $DATABASE_URL -c "SELECT COUNT(*) FROM measurements;"</code> → &gt;0 ; <code>SELECT * FROM users_with_roles;</code> retourne les comptes attendus.</li>
         <li><strong>Frontend local</strong> : <code>.env.local</code> pointant sur l’API Render, <code>npm run lint</code> + <code>npm run build</code> passent.</li>
-        <li><strong>Frontend GitHub Pages</strong> : build export statique avec <code>NEXT_STATIC_EXPORT=true</code> puis <code>git push</code> → vérifier <code>https://ymora.github.io/OTT/</code> (CSS + login).</li>
+        <li><strong>Frontend GitHub Pages</strong> : lancer <code>npm run export</code> (which positionne <code>NEXT_STATIC_EXPORT=true</code>) puis <code>git push</code> → vérifier <code>https://ymora.github.io/OTT/</code> (CSS + login).</li>
         <li><strong>Tests manuels</strong> : connexion avec <code>admin@example.com</code>/<code>tech@example.com</code> (mots de passe définis par vos soins) et appel <code>curl https://ott-jbln.onrender.com/api.php/auth/login</code>.</li>
     </ol>
     

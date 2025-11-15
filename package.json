@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "export": "cross-env NEXT_STATIC_EXPORT=true NEXT_PUBLIC_BASE_PATH=/OTT next build && next export",
+    "export": "cross-env NEXT_STATIC_EXPORT=true NEXT_PUBLIC_BASE_PATH=/OTT next build",
     "deploy": "npm run export",
     "lint": "next lint"
   },

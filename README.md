@@ -103,7 +103,7 @@ git push origin main
 |----------|-------------|--------------------|
 | `NEXT_PUBLIC_API_URL` | URL publique de l’API PHP | `https://ott-jbln.onrender.com` |
 | `NEXT_PUBLIC_REQUIRE_AUTH` | Forcer la page de connexion | `true` en prod, `false` pour une démo readonly |
-| `NEXT_STATIC_EXPORT` | Utilisé pendant `npm run export` | `true` uniquement lors du build GitHub Pages |
+| `NEXT_STATIC_EXPORT` | Activé automatiquement par `npm run export` | *(géré par le script)* |
 
 ```bash
 cat > .env.local <<'EOF'
@@ -309,7 +309,7 @@ Le jeu de données installe automatiquement :
    - `.env.local` pointe vers `https://ott-jbln.onrender.com`.
    - `npm run lint && npm run build` passent.
 4. **Frontend GitHub Pages**
-   - `NEXT_STATIC_EXPORT=true npm run export` avant `git push`.
+   - `npm run export` avant `git push`.
    - Vérifier https://ymora.github.io/OTT/ (CSS + login) juste après le déploiement.
 
 ---
