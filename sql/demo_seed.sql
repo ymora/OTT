@@ -86,12 +86,12 @@ VALUES
   (1, 'SET_SLEEP_SECONDS', '{"seconds":180}', 'high', 'pending', NOW(), NOW() + INTERVAL '2 hour'),
   (2, 'PING', '{"message":"Diag rapide"}', 'normal', 'pending', NOW(), NOW() + INTERVAL '1 hour');
 
-# Utilisateurs démo (hash bcrypt aléatoires générés via bcrypt-generator.com)
+-- Utilisateurs demo (hash bcrypt generes via bcrypt-generator.com)
 -- ⚠️ Remplacez ces hashes par vos propres mots de passe via variables d'environnement / scripts d'init.
 INSERT INTO users (id, email, password_hash, first_name, last_name, role_id, is_active)
 VALUES
-  (1, 'admin@example.com', '$2a$10$w1K9P0Irp7I7hIhQ2n9XjO2S7bpbLVi8Vb1Jr2s8eY2Nhd6Y8uR6e', 'Admin', 'Demo', 1, TRUE),
-  (2, 'tech@example.com', '$2a$10$H8i5XbX7u2oQ3qU9M7d2ieVgW0F9Q3cCjQeZfX3bqN9kR4n5lY6uS', 'Tech', 'Demo', 3, TRUE)
+  (1, 'admin@example.com', '$2y$10$w1K9P0IJhES2YwwHGwEk2Oq91Fv2R9DyCPr6Z0SqnX5nGooy2cS3m', 'Admin', 'Demo', 1, TRUE),
+  (2, 'tech@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Tech', 'Demo', 3, TRUE)
 ON CONFLICT (id) DO UPDATE SET
   email = EXCLUDED.email,
   password_hash = EXCLUDED.password_hash,
