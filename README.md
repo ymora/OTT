@@ -116,15 +116,16 @@ EOF
 
 | Variable | Rôle | Exemple |
 |----------|------|---------|
+| `DB_TYPE` (optionnel) | SGBD (`pgsql` par défaut) | `pgsql` |
 | `DB_HOST` / `DB_NAME` / `DB_USER` / `DB_PASS` | Secrets Render Postgres | valeurs Render (`dpg-...`, `ott_data`, etc.) |
-| `DB_PORT` (optionnel) | Port Postgres | `5432` |
-| `DATABASE_URL` (optionnel) | URL complète Postgres (scripts + healthcheck) | `postgresql://user:pass@host/ott_data` |
+| `DB_PORT` (optionnel) | Port associé au SGBD | `5432` |
+| `DATABASE_URL` (optionnel) | URL complète (scripts + migrations) | `postgresql://user:pass@host/ott_data` |
 | `JWT_SECRET` | Clé HMAC pour signer les tokens | générer via `openssl rand -hex 32` |
 | `AUTH_DISABLED` | Bypass login (demo) | `false` en prod |
 | `SENDGRID_*`, `TWILIO_*` | Clés notification | laisser vide si non utilisées |
 | `CORS_ALLOWED_ORIGINS` | Origines additionnelles autorisées (CSV) | `https://mon-dashboard.com,https://foo.app` |
 
-> Astuce : `DATABASE_URL` reste pratique pour les scripts (`scripts/db_migrate.sh`) et le healthcheck (`index.php`), mais l’API lit avant tout `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASS`. Gardez ces cinq variables alignées avec votre instance Postgres.
+> Astuce : le healthcheck et l’API partagent désormais la même résolution de configuration. Renseignez au minimum `DB_HOST/DB_NAME/DB_USER/DB_PASS` (et `DB_PORT` si besoin). `DATABASE_URL` reste utile pour les scripts (`scripts/db_migrate.sh`) ou pour forcer une configuration complète, mais n’est plus obligatoire pour obtenir `database: "connected"`.
 
 ---
 
@@ -242,7 +243,7 @@ Le jeu de données installe automatiquement :
 - ✅ Watchdog applicatif + instrumentation série (flux/batterie/RSSI, compte commandes, progression OTA)
 - ✅ Mesure paramétrable (passes, échantillons, délais) + timeouts modem/OTA ajustables à chaud
 - ✅ OTA primaire/fallback avec vérification MD5, rollback possible via `OTA_REQUEST`
-- ✅ Configuration par défaut embarquée (ICCID/APN/SIM PIN + JWT optionnel via macros `OTT_DEFAULT_*`) pour boîtiers prêts à l’emploi sans commande distante
+- ✅ Configuration par défaut embarquée (ICCID/APN/SIM PIN=1234 + JWT optionnel via macros `OTT_DEFAULT_*`) pour boîtiers prêts à l’emploi sans commande distante
 - ✅ Protocoles API alignés : headers `X-Device-ICCID`, payload `device_sim_iccid` + `payload{flowrate,battery,signal_*}`, prise en charge des réponses `/devices/{iccid}/commands/pending`
 - ✅ Reconfiguration distante des secrets APN/JWT/ICCID/serial/PIN SIM et paramètres runtime (watchdog, OTA, mesures) stockés en NVS
 

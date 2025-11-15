@@ -4,6 +4,8 @@
  * HAPPLYZ MEDICAL SAS
  */
 
+require_once __DIR__ . '/bootstrap/database.php';
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -15,21 +17,20 @@ if ($_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '/index.php')
     // Test connexion BDD
     $db_status = 'unknown';
     try {
-        $db_url = getenv('DATABASE_URL');
-        if ($db_url) {
+        $dbConfig = ott_database_config(false);
+        if ($dbConfig === null) {
+            $db_status = 'not_configured';
+        } else {
             $db_status = 'configured';
-            // Tenter connexion
-            $db = parse_url($db_url);
             $pdo = new PDO(
-                "pgsql:host=" . $db['host'] . ";port=" . ($db['port'] ?? 5432) . ";dbname=" . ltrim($db['path'], '/'),
-                $db['user'],
-                $db['pass']
+                $dbConfig['dsn'],
+                $dbConfig['user'],
+                $dbConfig['pass'],
+                ott_pdo_options($dbConfig['type'])
             );
             $db_status = 'connected';
-        } else {
-            $db_status = 'not_configured';
         }
-    } catch(Exception $e) {
+    } catch(Throwable $e) {
         $db_status = 'error: ' . $e->getMessage();
     }
     

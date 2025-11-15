@@ -4,6 +4,8 @@
  * Version complète avec JWT, multi-users, OTA, notifications, audit
  */
 
+require_once __DIR__ . '/bootstrap/database.php';
+
 // Headers CORS (DOIT être en tout premier)
 $defaultAllowedOrigins = [
     'https://ymora.github.io',
@@ -45,12 +47,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // CONFIGURATION
 // ============================================================================
 
-// Utilise les variables d'environnement de Render (ou valeurs par défaut pour dev local)
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_PORT', getenv('DB_PORT') ?: '5432');
-define('DB_NAME', getenv('DB_NAME') ?: 'ott_data');
-define('DB_USER', getenv('DB_USER') ?: 'postgres');
-define('DB_PASS', getenv('DB_PASS') ?: '');
+// Configuration base de données partagée avec le healthcheck
+$dbConfig = ott_database_config();
+if ($dbConfig === null) {
+    http_response_code(500);
+    die(json_encode(['success' => false, 'error' => 'Database configuration missing']));
+}
+
+define('DB_TYPE', $dbConfig['type']);
+define('DB_HOST', $dbConfig['host']);
+define('DB_PORT', $dbConfig['port']);
+define('DB_NAME', $dbConfig['name']);
+define('DB_USER', $dbConfig['user']);
+define('DB_PASS', $dbConfig['pass']);
 
 define('JWT_SECRET', getenv('JWT_SECRET') ?: 'CHANGEZ_CE_SECRET_EN_PRODUCTION');
 define('JWT_EXPIRATION', 86400); // 24h
@@ -68,35 +77,11 @@ define('TWILIO_FROM_NUMBER', getenv('TWILIO_FROM_NUMBER') ?: '');
 // ============================================================================
 
 try {
-    $dbHost = DB_HOST;
-    $dbPort = DB_PORT;
-    $dbName = DB_NAME;
-    $dbUser = DB_USER;
-    $dbPass = DB_PASS;
-
-    $databaseUrl = getenv('DATABASE_URL');
-    if ($databaseUrl) {
-        $parts = parse_url($databaseUrl);
-        if ($parts !== false) {
-            $dbHost = $parts['host'] ?? $dbHost;
-            $dbPort = $parts['port'] ?? $dbPort;
-            $dbName = isset($parts['path']) ? ltrim($parts['path'], '/') : $dbName;
-            $dbUser = $parts['user'] ?? $dbUser;
-            $dbPass = $parts['pass'] ?? $dbPass;
-        }
-    }
-
-    $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $dbHost, $dbPort, $dbName);
-
     $pdo = new PDO(
-        $dsn,
-        $dbUser,
-        $dbPass,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false
-        ]
+        $dbConfig['dsn'],
+        $dbConfig['user'],
+        $dbConfig['pass'],
+        ott_pdo_options($dbConfig['type'])
     );
 } catch(PDOException $e) {
     http_response_code(500);
