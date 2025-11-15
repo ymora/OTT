@@ -196,6 +196,7 @@ Le jeu de données installe automatiquement :
 - `sql/UPDATE_PASSWORDS_RENDER.sql` - Rotation de mots de passe Render
 - `public/manifest.json` / `public/sw.js` - PWA installable
 - `hardware/` (ignoré) - dépôt externe pour firmware/CAO
+- `external/` → déplacé dans le dépôt privé `ott-hardware/firmware/external` (libs TinyGSM et patchs modem)
 
 ---
 

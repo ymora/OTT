@@ -1269,14 +1269,31 @@ EOF
     <div class="alert alert-info">
         <strong>Checklist backend :</strong> toutes les variables <code>DB_*</code> remplies, <code>JWT_SECRET</code> unique, <code>AUTH_DISABLED=false</code> avant mise en production.
     </div>
+
+    <h4>Base PostgreSQL locale (Docker Compose)</h4>
+    <ol>
+        <li><code>docker compose up -d db</code> (fichier racine) pour lancer Postgres 15.</li>
+        <li>Exporter les variables reconnues par l’API :
+            <pre>
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_NAME=ott_data
+export DB_USER=postgres
+export DB_PASS=postgres
+            </pre>
+        </li>
+        <li>Appliquer schéma + seeds : <code>./scripts/db_migrate.sh --seed</code>.</li>
+        <li>Réinitialiser totalement : <code>docker compose down -v</code>.</li>
+    </ol>
+    <p><strong>Note :</strong> la compatibilité MySQL/PDO a été retirée. Toutes les installations (Render ou locales) doivent désormais utiliser PostgreSQL.</p>
     
     <h3>📡 Firmware OTA & Commandes</h3>
-    <p>Depuis la reconstruction, le firmware ESP32 intègre nativement la bidirectionnelle décrite dans cette doc :</p>
+    <p>Le firmware ESP32 applique désormais strictement les contrats API suivants (HTTPS, header <code>X-Device-ICCID</code>) :</p>
     <ul>
-        <li>POST <code>/api.php/devices/measurements</code> (flowrate, battery, signal_dbm, iccid, device_serial, firmware_version)</li>
-        <li>GET <code>/api.php/devices/commands/pending?iccid=…</code> → commandes <code>SET_SLEEP_SECONDS</code>, <code>PING</code>, <code>UPDATE_CONFIG</code>, <code>UPDATE_CALIBRATION</code></li>
-        <li>POST <code>/api.php/devices/commands/ack</code> pour tracer l’exécution depuis le dashboard.</li>
-        <li>POST <code>/api.php/devices/logs</code> : le firmware envoie les succès/erreurs majeures (mise à jour config, mesures KO…).</li>
+        <li>POST <code>/api.php/devices/measurements</code> avec <code>device_sim_iccid</code>, <code>device_serial</code>, <code>firmware_version</code> et un bloc <code>payload</code> (<code>flowrate</code>, <code>battery</code>, <code>signal_strength</code>/<code>signal_dbm</code>).</li>
+        <li>GET <code>/api.php/devices/{iccid}/commands/pending?limit=5</code> pour récupérer les commandes <code>SET_SLEEP_SECONDS</code>, <code>PING</code>, <code>UPDATE_CONFIG</code>, <code>UPDATE_CALIBRATION</code>.</li>
+        <li>POST <code>/api.php/devices/commands/ack</code> (champs <code>device_sim_iccid</code>, <code>command_id</code>, <code>status</code>, <code>message</code>) afin d’auditer l’exécution côté dashboard.</li>
+        <li>POST <code>/api.php/devices/logs</code> avec <code>device_sim_iccid</code> + <code>event{level,type,message}</code>. Un tampon NVS de 10 entrées vide les logs dès que le modem retrouve le réseau.</li>
     </ul>
     <p>La commande <code>UPDATE_CONFIG</code> permet de pousser à distance les paramètres sensibles (APN, JWT, ICCID, numéro de série, PIN SIM). Le firmware enregistre ces valeurs dans la mémoire NVS (persistante) puis redémarre le modem automatiquement.</p>
     <p>Exemple de payload (via le dashboard ou un appel API) :</p>
@@ -1303,7 +1320,8 @@ POST /api.php/devices/{iccid}/commands
   }
 }
     </pre>
-    <p>Le code source complet est déplacé dans le dépôt privé <code>ott-hardware</code> (voir <code>hardware/README.md</code>). Pensez à mettre à jour <code>DEVICE_ICCID</code>, <code>DEVICE_SERIAL</code>, <code>JWT</code> et les certificats TLS avant compilation.</p>
+    <p><strong>Configuration par défaut embarquée :</strong> les macros <code>OTT_DEFAULT_SIM_PIN</code>, <code>OTT_DEFAULT_APN</code>, <code>OTT_DEFAULT_ICCID</code>, <code>OTT_DEFAULT_SERIAL</code>, <code>OTT_DEFAULT_JWT</code> garantissent qu’un boîtier neuf démarre et poste des mesures même avant réception d’une commande <code>UPDATE_CONFIG</code>. Adaptez-les au besoin lors du build.</p>
+    <p>Le code source complet (firmware, librairies <code>external/*</code>, docs modem comme <code>SIM7600_AT.pdf</code>) est stocké dans le dépôt privé <code>ott-hardware</code> : consultez <code>hardware/README.md</code> pour l’organisation et les scripts (`firmware/external` et `docs/`). Pensez à mettre à jour <code>DEVICE_ICCID</code>, <code>DEVICE_SERIAL</code>, le JWT (Bearer) et les certificats TLS avant compilation.</p>
     
     <h3>📊 Performances</h3>
     

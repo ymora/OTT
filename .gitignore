@@ -55,3 +55,6 @@ backup_*.sql
 # Fichiers temporaires
 *.tmp
 temp/
+
+# Bibliothèques firmware déplacées (dépot privé)
+external/
