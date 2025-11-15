@@ -59,13 +59,17 @@ ON CONFLICT DO NOTHING;
 INSERT INTO users (id, email, password_hash, first_name, last_name, role_id, is_active)
 VALUES
   (1, 'admin@example.com', '$2y$10$w1K9P0IJhES2YwwHGwEk2Oq91Fv2R9DyCPr6Z0SqnX5nGooy2cS3m', 'Admin', 'Demo', 1, TRUE),
-  (2, 'tech@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Tech', 'Demo', 3, TRUE)
+  (2, 'tech@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Tech', 'Demo', 3, TRUE),
+  (3, 'medecin@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Dr', 'Girard', 2, TRUE),
+  (4, 'viewer@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Claire', 'Observatrice', 4, TRUE)
 ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
 
 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, phone_number)
 VALUES
   (1, TRUE, TRUE, '+33612345678'),
-  (2, TRUE, FALSE, '+33612345679')
+  (2, TRUE, FALSE, '+33612345679'),
+  (3, TRUE, TRUE, '+33698765432'),
+  (4, TRUE, FALSE, '+33655554444')
 ON CONFLICT (user_id) DO UPDATE SET email_enabled = EXCLUDED.email_enabled;
 
 INSERT INTO patients (id, first_name, last_name, phone, city, postal_code, birth_date)
@@ -79,14 +83,16 @@ INSERT INTO devices (id, sim_iccid, device_serial, device_name, patient_id, inst
 VALUES
   (1, '89330123456789012345', 'OTT-PIERRE-001', 'OTT Pierre Paris', 1, NOW() - INTERVAL '45 days', NOW() - INTERVAL '120 days', NOW(), 85.5, 48.8566, 2.3522),
   (2, '89330123456789012346', 'OTT-PAUL-002', 'OTT Paul Lyon', 2, NOW() - INTERVAL '30 days', NOW() - INTERVAL '90 days', NOW() - INTERVAL '2 hours', 72.3, 45.7640, 4.8357),
-  (3, '89330123456789012347', 'OTT-JACQUES-003', 'OTT Jacques Marseille', 3, NOW() - INTERVAL '60 days', NOW() - INTERVAL '150 days', NOW() - INTERVAL '5 hours', 68.9, 43.2965, 5.3698)
+  (3, '89330123456789012347', 'OTT-JACQUES-003', 'OTT Jacques Marseille', 3, NOW() - INTERVAL '60 days', NOW() - INTERVAL '150 days', NOW() - INTERVAL '5 hours', 68.9, 43.2965, 5.3698),
+  (4, '89330123456789019999', 'OTT-STOCK-004', 'OTT Stock Bordeaux', NULL, NULL, NULL, NOW() - INTERVAL '1 day', 55.0, 44.8378, -0.5792)
 ON CONFLICT (id) DO UPDATE SET device_name = EXCLUDED.device_name;
 
 INSERT INTO device_configurations (device_id, firmware_version, sleep_minutes, measurement_duration_ms, calibration_coefficients)
 VALUES
   (1, '3.0.0', 30, 100, '[0,1,0]'::jsonb),
   (2, '3.0.0', 30, 100, '[0,1,0]'::jsonb),
-  (3, '3.0.0', 30, 100, '[0,1,0]'::jsonb)
+  (3, '3.0.0', 30, 100, '[0,1,0]'::jsonb),
+  (4, '3.0.0', 30, 100, '[0,1,0]'::jsonb)
 ON CONFLICT (device_id) DO UPDATE SET firmware_version = EXCLUDED.firmware_version;
 
 INSERT INTO firmware_versions (version, file_path, file_size, is_stable, release_notes, uploaded_by)
@@ -100,6 +106,14 @@ VALUES
   (1, NOW() - INTERVAL '90 minutes', 3.67, 86.0, 'TIMER'),
   (2, NOW() - INTERVAL '2 hours', 4.12, 72.3, 'TIMER'),
   (2, NOW() - INTERVAL '3 hours', 4.35, 73.1, 'TIMER'),
-  (3, NOW() - INTERVAL '5 hours', 2.15, 68.9, 'TIMER')
+  (3, NOW() - INTERVAL '5 hours', 2.15, 68.9, 'TIMER'),
+  (4, NOW() - INTERVAL '6 hours', 0.00, 55.0, 'IDLE')
 ON CONFLICT DO NOTHING;
+
+INSERT INTO alerts (id, device_id, type, severity, message, status, created_at)
+VALUES
+  ('ALERT-001', 1, 'low_battery', 'medium', 'Batterie en dessous de 20% pour OTT Pierre Paris', 'unresolved', NOW() - INTERVAL '15 minutes'),
+  ('ALERT-002', 2, 'device_offline', 'high', 'Dispositif OTT Paul Lyon hors ligne depuis 3h', 'unresolved', NOW() - INTERVAL '2 hours'),
+  ('ALERT-003', 4, 'device_offline', 'medium', 'Boîtier en stock sans patient, vérification requise', 'unresolved', NOW() - INTERVAL '1 day')
+ON CONFLICT (id) DO NOTHING;
 

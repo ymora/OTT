@@ -1,19 +1,44 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
+
+const defaultFormState = {
+  first_name: '',
+  last_name: '',
+  email: '',
+  password: '',
+  role_id: ''
+}
 
 export default function UsersPage() {
   const { fetchWithAuth, API_URL } = useAuth()
   const [users, setUsers] = useState([])
+  const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [formData, setFormData] = useState(defaultFormState)
+  const [formError, setFormError] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [editForm, setEditForm] = useState({
+    first_name: '',
+    last_name: '',
+    role_id: '',
+    is_active: true,
+    password: ''
+  })
+  const [editError, setEditError] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const loadUsers = useCallback(async () => {
     try {
       setError(null)
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/users')
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/users', {}, { requiresAuth: true })
       setUsers(data.users || [])
     } catch (err) {
       console.error(err)
@@ -23,9 +48,19 @@ export default function UsersPage() {
     }
   }, [API_URL, fetchWithAuth])
 
+  const loadRoles = useCallback(async () => {
+    try {
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/roles', {}, { requiresAuth: true })
+      setRoles(data.roles || [])
+    } catch (err) {
+      console.error(err)
+    }
+  }, [API_URL, fetchWithAuth])
+
   useEffect(() => {
     loadUsers()
-  }, [loadUsers])
+    loadRoles()
+  }, [loadUsers, loadRoles])
 
   const roleColors = {
     admin: 'bg-purple-100 text-purple-700',
@@ -34,14 +69,158 @@ export default function UsersPage() {
     viewer: 'bg-gray-100 text-gray-700',
   }
 
+  const canSubmit = useMemo(() => {
+    return (
+      formData.first_name.trim().length > 1 &&
+      formData.last_name.trim().length > 1 &&
+      /\S+@\S+\.\S+/.test(formData.email) &&
+      formData.password.length >= 6 &&
+      Boolean(formData.role_id)
+    )
+  }, [formData])
+
+  const openModal = () => {
+    setFormData(defaultFormState)
+    setFormError(null)
+    setShowCreateModal(true)
+  }
+
+  const closeModal = () => {
+    if (saving) return
+    setShowCreateModal(false)
+    setFormError(null)
+  }
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault()
+    if (!canSubmit) return
+    setSaving(true)
+    setFormError(null)
+    try {
+      const payload = {
+        ...formData,
+        role_id: parseInt(formData.role_id, 10)
+      }
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        '/api.php/users',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        },
+        { requiresAuth: true }
+      )
+      setShowCreateModal(false)
+      setFormData(defaultFormState)
+      await loadUsers()
+    } catch (err) {
+      setFormError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const openEditModal = (user) => {
+    setEditingUser(user)
+    setEditForm({
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      role_id: roles.find(r => r.name === user.role_name)?.id || '',
+      is_active: Boolean(user.is_active),
+      password: ''
+    })
+    setEditError(null)
+    setShowEditModal(true)
+  }
+
+  const closeEditModal = () => {
+    if (editSaving || deleteLoading) return
+    setShowEditModal(false)
+    setEditingUser(null)
+    setEditError(null)
+  }
+
+  const handleEditInputChange = (e) => {
+    const { name, value, type, checked } = e.target
+    setEditForm(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }))
+  }
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault()
+    if (!editingUser) return
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      const payload = {
+        first_name: editForm.first_name,
+        last_name: editForm.last_name,
+        role_id: editForm.role_id ? parseInt(editForm.role_id, 10) : undefined,
+        is_active: editForm.is_active
+      }
+      if (editForm.password.trim().length >= 6) {
+        payload.password = editForm.password
+      }
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/users/${editingUser.id}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        },
+        { requiresAuth: true }
+      )
+      setShowEditModal(false)
+      setEditingUser(null)
+      await loadUsers()
+    } catch (err) {
+      setEditError(err.message)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const handleDeleteUser = async () => {
+    if (!editingUser) return
+    const confirmed = window.confirm(`Supprimer définitivement ${editingUser.first_name} ${editingUser.last_name} ?`)
+    if (!confirmed) return
+    setDeleteLoading(true)
+    setEditError(null)
+    try {
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/users/${editingUser.id}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      setShowEditModal(false)
+      setEditingUser(null)
+      await loadUsers()
+    } catch (err) {
+      setEditError(err.message)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold">👥 Utilisateurs</h1>
           <p className="text-gray-600 mt-1">Gestion des accès et permissions</p>
         </div>
-        <button className="btn-primary">
+        <button className="btn-primary" onClick={openModal}>
           ➕ Nouvel Utilisateur
         </button>
       </div>
@@ -92,7 +271,9 @@ export default function UsersPage() {
                       {user.last_login ? new Date(user.last_login).toLocaleString('fr-FR') : 'Jamais'}
                     </td>
                     <td className="py-3 px-4">
-                      <button className="btn-secondary text-sm">✏️ Modifier</button>
+                      <button className="btn-secondary text-sm" onClick={() => openEditModal(user)}>
+                        ✏️ Modifier
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -101,6 +282,210 @@ export default function UsersPage() {
           </div>
         )}
       </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold">Nouvel utilisateur</h2>
+                <p className="text-sm text-gray-500">Créer un accès avec un rôle défini</p>
+              </div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={closeModal} disabled={saving}>
+                ✕
+              </button>
+            </div>
+            <form className="space-y-4" onSubmit={handleCreateUser}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="text-sm font-medium text-gray-700">
+                  Prénom
+                  <input
+                    type="text"
+                    name="first_name"
+                    value={formData.first_name}
+                    onChange={handleInputChange}
+                    className="input mt-1"
+                    required
+                  />
+                </label>
+                <label className="text-sm font-medium text-gray-700">
+                  Nom
+                  <input
+                    type="text"
+                    name="last_name"
+                    value={formData.last_name}
+                    onChange={handleInputChange}
+                    className="input mt-1"
+                    required
+                  />
+                </label>
+              </div>
+              <label className="text-sm font-medium text-gray-700 w-full">
+                Email
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="input mt-1"
+                  required
+                />
+              </label>
+              <label className="text-sm font-medium text-gray-700 w-full">
+                Mot de passe (6+ caractères)
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="input mt-1"
+                  required
+                  minLength={6}
+                />
+              </label>
+              <label className="text-sm font-medium text-gray-700 w-full">
+                Rôle
+                <select
+                  name="role_id"
+                  value={formData.role_id}
+                  onChange={handleInputChange}
+                  className="input mt-1"
+                  required
+                >
+                  <option value="">Choisir un rôle…</option>
+                  {roles.map(role => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {formError && (
+                <div className="alert alert-error">
+                  <strong>Erreur :</strong> {formError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button type="button" className="btn-secondary" onClick={closeModal} disabled={saving}>
+                  Annuler
+                </button>
+                <button type="submit" className="btn-primary" disabled={!canSubmit || saving}>
+                  {saving ? 'Création…' : 'Créer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditModal && editingUser && (
+        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold">Modifier l’utilisateur</h2>
+                <p className="text-sm text-gray-500">{editingUser.email}</p>
+              </div>
+              <button className="text-gray-500 hover:text-gray-700" onClick={closeEditModal} disabled={editSaving || deleteLoading}>
+                ✕
+              </button>
+            </div>
+            <form className="space-y-4" onSubmit={handleEditSubmit}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="text-sm font-medium text-gray-700">
+                  Prénom
+                  <input
+                    type="text"
+                    name="first_name"
+                    value={editForm.first_name}
+                    onChange={handleEditInputChange}
+                    className="input mt-1"
+                    required
+                  />
+                </label>
+                <label className="text-sm font-medium text-gray-700">
+                  Nom
+                  <input
+                    type="text"
+                    name="last_name"
+                    value={editForm.last_name}
+                    onChange={handleEditInputChange}
+                    className="input mt-1"
+                    required
+                  />
+                </label>
+              </div>
+              <label className="text-sm font-medium text-gray-700 w-full">
+                Rôle
+                <select
+                  name="role_id"
+                  value={editForm.role_id}
+                  onChange={handleEditInputChange}
+                  className="input mt-1"
+                  required
+                >
+                  <option value="">Choisir un rôle…</option>
+                  {roles.map(role => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-3 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  name="is_active"
+                  checked={editForm.is_active}
+                  onChange={handleEditInputChange}
+                  className="form-checkbox h-4 w-4 text-primary-600"
+                />
+                Compte actif
+              </label>
+
+              <label className="text-sm font-medium text-gray-700 w-full">
+                Nouveau mot de passe (optionnel, 6+ caractères)
+                <input
+                  type="password"
+                  name="password"
+                  value={editForm.password}
+                  onChange={handleEditInputChange}
+                  className="input mt-1"
+                  minLength={6}
+                />
+              </label>
+
+              {editError && (
+                <div className="alert alert-error">
+                  <strong>Erreur :</strong> {editError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  className="text-red-600 hover:text-red-700 text-sm font-semibold"
+                  onClick={handleDeleteUser}
+                  disabled={editSaving || deleteLoading}
+                >
+                  {deleteLoading ? 'Suppression…' : '🗑️ Supprimer'}
+                </button>
+                <div className="flex items-center gap-3">
+                  <button type="button" className="btn-secondary" onClick={closeEditModal} disabled={editSaving || deleteLoading}>
+                    Annuler
+                  </button>
+                  <button type="submit" className="btn-primary" disabled={editSaving || deleteLoading}>
+                    {editSaving ? 'Enregistrement…' : 'Enregistrer'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

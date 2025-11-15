@@ -9,6 +9,7 @@ export default function DeviceCard({ device, delay = 0, onSelect }) {
   }
 
   const batteryLevel = typeof device.last_battery === 'number' ? device.last_battery : null
+  const isAssigned = Boolean(device.patient_id && (device.first_name || device.last_name))
 
   const batteryColor = (level) => {
     if (level === null) return 'text-gray-400'
@@ -37,14 +38,25 @@ export default function DeviceCard({ device, delay = 0, onSelect }) {
       </div>
 
       {/* Device info */}
-      <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-primary-600 transition-colors">
-        {device.device_name || `OTT-${device.sim_iccid?.substr(-8)}`}
-      </h3>
-      
-      {device.first_name && (
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+          {device.device_name || `OTT-${device.sim_iccid?.substr(-8)}`}
+        </h3>
+        <span
+          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+            isAssigned ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
+          }`}
+        >
+          {isAssigned ? 'Assigné' : 'Non assigné'}
+        </span>
+      </div>
+
+      {isAssigned ? (
         <p className="text-sm text-gray-600 mb-2">
           👤 {device.first_name} {device.last_name}
         </p>
+      ) : (
+        <p className="text-sm text-amber-600 mb-2">👤 Aucun patient associé</p>
       )}
 
       <p className="text-xs text-gray-500">

@@ -304,6 +304,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 // Devices (API V1 compatible + V2)
 } elseif(preg_match('#/devices$#', $path) && $method === 'GET') {
     handleGetDevices();
+} elseif(preg_match('#/devices$#', $path) && $method === 'POST') {
+    handleCreateDevice();
 } elseif(preg_match('#/devices/measurements$#', $path) && $method === 'POST') {
     handlePostMeasurement();
 } elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'POST') {
@@ -322,6 +324,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleGetLogs();
 } elseif(preg_match('#/device/(\d+)$#', $path, $m) && $method === 'GET') {
     handleGetDeviceHistory($m[1]);
+} elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PUT') {
+    handleUpdateDevice($m[1]);
 
 // OTA & Config
 } elseif(preg_match('#/devices/(\d+)/config$#', $path, $m) && $method === 'GET') {
@@ -638,6 +642,138 @@ function handleGetDevices() {
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
         ");
         echo json_encode(['success' => true, 'devices' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleCreateDevice() {
+    global $pdo;
+    requirePermission('devices.edit');
+
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    $sim_iccid = trim($input['sim_iccid'] ?? '');
+    $device_name = trim($input['device_name'] ?? '');
+    $device_serial = trim($input['device_serial'] ?? '');
+    $patient_id = $input['patient_id'] ?? null;
+
+    if (strlen($sim_iccid) < 10) {
+        http_response_code(422);
+        echo json_encode(['success' => false, 'error' => 'SIM ICCID invalide']);
+        return;
+    }
+
+    $patientParam = null;
+    if ($patient_id !== null && $patient_id !== '') {
+        $patientParam = (int)$patient_id;
+        $stmt = $pdo->prepare("SELECT id FROM patients WHERE id = :id");
+        $stmt->execute(['id' => $patientParam]);
+        if (!$stmt->fetch()) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'error' => 'Patient inexistant']);
+            return;
+        }
+    }
+
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO devices (sim_iccid, device_serial, device_name, patient_id, status, installation_date, first_use_date)
+            VALUES (:sim_iccid, :device_serial, :device_name, :patient_id, :status, :installation_date, :first_use_date)
+            RETURNING *
+        ");
+        $stmt->execute([
+            'sim_iccid' => $sim_iccid,
+            'device_serial' => $device_serial ?: null,
+            'device_name' => $device_name ?: null,
+            'patient_id' => $patientParam,
+            'status' => $input['status'] ?? 'inactive',
+            'installation_date' => $input['installation_date'] ?? null,
+            'first_use_date' => $input['first_use_date'] ?? null,
+        ]);
+        $device = $stmt->fetch();
+
+        $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id)")
+            ->execute(['device_id' => $device['id']]);
+
+        auditLog('device.created', 'device', $device['id'], null, $device);
+        echo json_encode(['success' => true, 'device' => $device]);
+    } catch(PDOException $e) {
+        if ($e->getCode() === '23505') {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'error' => 'SIM ICCID déjà utilisé']);
+        } else {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Database error']);
+        }
+    }
+}
+
+function handleUpdateDevice($device_id) {
+    global $pdo;
+    requirePermission('devices.edit');
+
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM devices WHERE id = :id");
+        $stmt->execute(['id' => $device_id]);
+        $device = $stmt->fetch();
+
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Device not found']);
+            return;
+        }
+
+        $fields = ['device_name', 'status', 'installation_date', 'first_use_date', 'latitude', 'longitude'];
+        $updates = [];
+        $params = ['id' => $device_id];
+
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $input)) {
+                $updates[] = "$field = :$field";
+                $params[$field] = $input[$field];
+            }
+        }
+
+        if (array_key_exists('patient_id', $input)) {
+            if ($input['patient_id'] === null || $input['patient_id'] === '') {
+                $updates[] = "patient_id = NULL";
+            } else {
+                $patientId = (int)$input['patient_id'];
+                $patientCheck = $pdo->prepare("SELECT id FROM patients WHERE id = :id");
+                $patientCheck->execute(['id' => $patientId]);
+                if (!$patientCheck->fetch()) {
+                    http_response_code(422);
+                    echo json_encode(['success' => false, 'error' => 'Patient not found']);
+                    return;
+                }
+                $updates[] = "patient_id = :patient_id";
+                $params['patient_id'] = $patientId;
+            }
+        }
+
+        if (empty($updates)) {
+            echo json_encode(['success' => true, 'device' => $device]);
+            return;
+        }
+
+        $sql = "UPDATE devices SET " . implode(', ', $updates) . ", updated_at = NOW() WHERE id = :id";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+
+        $stmt = $pdo->prepare("
+            SELECT d.*, p.first_name, p.last_name
+            FROM devices d
+            LEFT JOIN patients p ON d.patient_id = p.id
+            WHERE d.id = :id
+        ");
+        $stmt->execute(['id' => $device_id]);
+        $updated = $stmt->fetch();
+
+        auditLog('device.updated', 'device', $device_id, $device, $updated);
+        echo json_encode(['success' => true, 'device' => $updated]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
