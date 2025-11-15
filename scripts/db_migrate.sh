@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# Helper to apply sql/schema.sql (and optionally sql/demo_seed.sql) against the target DB.
+# Helper to apply sql/schema.sql (and optionally sql/demo_seed.sql) against the target Postgres DB.
 #
 # Usage:
-#   DB_TYPE=postgres DATABASE_URL=... ./scripts/db_migrate.sh
-#   DB_TYPE=mysql DB_HOST=... DB_USER=... DB_PASS=... DB_NAME=... ./scripts/db_migrate.sh --seed
+#   DATABASE_URL=postgresql://... ./scripts/db_migrate.sh --seed
+#   # ou, sans URL complète :
+#   DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASS=postgres DB_NAME=ott_data ./scripts/db_migrate.sh
 #
 # Environment variables:
-#   DB_TYPE       : postgres (par défaut) ou mysql
-#   DATABASE_URL  : URL complète Render/Heroku (pour Postgres)
-#   DB_HOST/DB_USER/DB_PASS/DB_NAME : requis si DB_TYPE=mysql
+#   DATABASE_URL  : URL complète PostgreSQL (prioritaire si définie)
+#   DB_HOST       : hôte Postgres (défaut: localhost)
+#   DB_PORT       : port Postgres (défaut: 5432)
+#   DB_USER       : utilisateur Postgres (défaut: postgres)
+#   DB_PASS       : mot de passe Postgres (obligatoire si pas de DATABASE_URL)
+#   DB_NAME       : base de données cible (défaut: ott_data)
 #
 # Arguments:
 #   --seed        : exécute également sql/demo_seed.sql
@@ -24,38 +28,33 @@ if [[ "${1:-}" == "--seed" ]]; then
   RUN_SEED=true
 fi
 
-DB_TYPE="${DB_TYPE:-postgres}"
-
 if [[ ! -f "$SCHEMA_FILE" ]]; then
   echo "❌ sql/schema.sql introuvable ($SCHEMA_FILE)" >&2
   exit 1
 fi
 
-echo "📦 Application de $SCHEMA_FILE (DB_TYPE=$DB_TYPE)"
+DB_HOST="${DB_HOST:-localhost}"
+DB_PORT="${DB_PORT:-5432}"
+DB_USER="${DB_USER:-postgres}"
+DB_PASS="${DB_PASS:-postgres}"
+DB_NAME="${DB_NAME:-ott_data}"
 
-if [[ "$DB_TYPE" == "postgres" ]]; then
-  if [[ -z "${DATABASE_URL:-}" ]]; then
-    echo "❌ Veuillez définir DATABASE_URL pour Postgres (ex: export DATABASE_URL=...)" >&2
-    exit 1
+echo "📦 Application de $SCHEMA_FILE (PostgreSQL)"
+
+run_psql() {
+  if [[ -n "${DATABASE_URL:-}" ]]; then
+    psql "$DATABASE_URL" "$@"
+  else
+    : "${DB_PASS:?Définir DB_PASS ou DATABASE_URL}"
+    PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" "$@"
   fi
-  psql "$DATABASE_URL" -f "$SCHEMA_FILE"
-  if $RUN_SEED; then
-    echo "🌱 Injection des données de démo ($SEED_FILE)"
-    psql "$DATABASE_URL" -f "$SEED_FILE"
-  fi
-elif [[ "$DB_TYPE" == "mysql" ]]; then
-  : "${DB_HOST:?Définir DB_HOST}"
-  : "${DB_USER:?Définir DB_USER}"
-  : "${DB_PASS:?Définir DB_PASS}"
-  : "${DB_NAME:?Définir DB_NAME}"
-  mysql -h "$DB_HOST" -u "$DB_USER" "-p${DB_PASS}" "$DB_NAME" < "$SCHEMA_FILE"
-  if $RUN_SEED; then
-    echo "🌱 Injection des données de démo ($SEED_FILE)"
-    mysql -h "$DB_HOST" -u "$DB_USER" "-p${DB_PASS}" "$DB_NAME" < "$SEED_FILE"
-  fi
-else
-  echo "❌ DB_TYPE non supporté: $DB_TYPE" >&2
-  exit 1
+}
+
+run_psql -f "$SCHEMA_FILE"
+
+if $RUN_SEED; then
+  echo "🌱 Injection des données de démo ($SEED_FILE)"
+  run_psql -f "$SEED_FILE"
 fi
 
 echo "✅ Migration terminée"

@@ -135,7 +135,7 @@ export default function Login() {
 
         {/* Version badge */}
         <div className="text-center mt-6 text-white/80 text-sm">
-          Version 2.0.0 Enterprise | © 2025 HAPPLYZ MEDICAL
+          Version 3.0.0 Enterprise | © 2025 HAPPLYZ MEDICAL
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@
 # Dockerfile - OTT API Backend
 # ================================================================================
 # HAPPLYZ MEDICAL SAS
-# Image PHP 8.2 avec extensions PostgreSQL et MySQL
+# Image PHP 8.2 avec extension PostgreSQL
 # ================================================================================
 
 FROM php:8.2-apache
@@ -10,18 +10,21 @@ FROM php:8.2-apache
 # Installer extensions PHP requises
 RUN apt-get update && apt-get install -y \
     libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql pdo_mysql \
+    && docker-php-ext-install pdo pdo_pgsql \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 
 # Configuration Apache pour PHP
 RUN echo "ServerName ott-api" >> /etc/apache2/apache2.conf
 
-# Copier les fichiers de l'application
-COPY . /var/www/html/
+# Copier uniquement les fichiers backend nécessaires
+COPY api.php /var/www/html/
+COPY index.php /var/www/html/
+COPY sql /var/www/html/sql
+COPY public/DOCUMENTATION_COMPLETE_OTT.html /var/www/html/public/DOCUMENTATION_COMPLETE_OTT.html
 
-# Vérifier que index.php existe et fonctionne
-RUN ls -la /var/www/html/ && cat /var/www/html/index.php | head -5
+# Vérifier que les fichiers critiques sont bien copiés
+RUN ls -la /var/www/html/ && head -5 /var/www/html/index.php
 
 # Permissions
 RUN chown -R www-data:www-data /var/www/html \

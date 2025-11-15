@@ -137,7 +137,7 @@ CREATE INDEX idx_device_logs_device_time ON device_logs(device_id, timestamp DES
 
 CREATE TABLE IF NOT EXISTS device_configurations (
   device_id INT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
-  firmware_version VARCHAR(20) DEFAULT '2.0.0',
+  firmware_version VARCHAR(20) DEFAULT '3.0.0',
   target_firmware_version VARCHAR(20),
   firmware_url TEXT,
   sleep_minutes INT DEFAULT 30,
@@ -367,13 +367,13 @@ ON CONFLICT (id) DO UPDATE SET device_name = EXCLUDED.device_name;
 
 INSERT INTO device_configurations (device_id, firmware_version, sleep_minutes, measurement_duration_ms, calibration_coefficients)
 VALUES
-  (1, '2.0.0', 30, 100, '[0,1,0]'::jsonb),
-  (2, '2.0.0', 30, 100, '[0,1,0]'::jsonb),
-  (3, '2.0.0', 30, 100, '[0,1,0]'::jsonb)
+  (1, '3.0.0', 30, 100, '[0,1,0]'::jsonb),
+  (2, '3.0.0', 30, 100, '[0,1,0]'::jsonb),
+  (3, '3.0.0', 30, 100, '[0,1,0]'::jsonb)
 ON CONFLICT (device_id) DO UPDATE SET firmware_version = EXCLUDED.firmware_version;
 
 INSERT INTO firmware_versions (version, file_path, file_size, is_stable, release_notes, uploaded_by)
-VALUES ('2.0.0', 'firmwares/fw_ott_v2.0.0.bin', 925000, TRUE, 'Version 2.0 stable avec OTA + JWT + Notifications', 1)
+VALUES ('3.0.0', 'firmwares/fw_ott_v3.0.0.bin', 925000, TRUE, 'Version 3.0 stable avec OTA + JWT + Notifications', 1)
 ON CONFLICT (version) DO UPDATE SET file_path = EXCLUDED.file_path;
 
 INSERT INTO measurements (device_id, timestamp, flowrate, battery, device_status)

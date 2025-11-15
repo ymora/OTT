@@ -1224,11 +1224,6 @@ EOF
         </thead>
         <tbody>
             <tr>
-                <td><code>DB_TYPE</code></td>
-                <td>Driver PDO utilisé par l’API</td>
-                <td><code>pgsql</code></td>
-            </tr>
-            <tr>
                 <td><code>DB_HOST</code></td>
                 <td>Host Render (ex : <code>dpg-xxxxx</code>)</td>
                 <td><code>dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com</code></td>
@@ -1272,7 +1267,7 @@ EOF
     </table>
     
     <div class="alert alert-info">
-        <strong>Checklist backend :</strong> <code>DB_TYPE=pgsql</code>, toutes les variables <code>DB_*</code> remplies, <code>JWT_SECRET</code> unique, <code>AUTH_DISABLED=false</code> avant mise en production.
+        <strong>Checklist backend :</strong> toutes les variables <code>DB_*</code> remplies, <code>JWT_SECRET</code> unique, <code>AUTH_DISABLED=false</code> avant mise en production.
     </div>
     
     <h3>📡 Firmware OTA & Commandes</h3>
@@ -1422,10 +1417,6 @@ psql $DATABASE_URL -f sql/demo_seed.sql
                 </thead>
                 <tbody>
                     <tr>
-                        <td><code>DB_TYPE</code></td>
-                        <td><code>pgsql</code></td>
-                    </tr>
-                    <tr>
                         <td><code>DB_HOST</code></td>
                         <td>Host Render (ex : <code>dpg-...frankfurt-postgres.render.com</code>)</td>
                     </tr>
@@ -1513,7 +1504,7 @@ psql $DATABASE_URL -f sql/demo_seed.sql
     
     <h3>✅ Vérifications avant mise en production</h3>
     <ol>
-        <li><strong>Backend Render</strong> : <code>DB_TYPE=pgsql</code>, toutes les variables <code>DB_*</code> + <code>JWT_SECRET</code> renseignées, dernier déploiement Docker réussi.</li>
+        <li><strong>Backend Render</strong> : toutes les variables <code>DB_*</code> + <code>JWT_SECRET</code> renseignées, dernier déploiement Docker réussi.</li>
         <li><strong>Base PostgreSQL</strong> : <code>psql $DATABASE_URL -c "SELECT COUNT(*) FROM measurements;"</code> → &gt;0 ; <code>SELECT * FROM users_with_roles;</code> retourne les comptes attendus.</li>
         <li><strong>Frontend local</strong> : <code>.env.local</code> pointant sur l’API Render, <code>npm run lint</code> + <code>npm run build</code> passent.</li>
         <li><strong>Frontend GitHub Pages</strong> : build export statique avec <code>NEXT_STATIC_EXPORT=true</code> puis <code>git push</code> → vérifier <code>https://ymora.github.io/OTT/</code> (CSS + login).</li>

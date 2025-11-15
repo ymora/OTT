@@ -35,6 +35,7 @@ desktop.ini
 # Temp
 *.tmp
 temp/
+tmp/
 
 # Hardware / Firmware (stockés hors repo)
 hardware/

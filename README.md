@@ -116,15 +116,15 @@ EOF
 
 | Variable | Rôle | Exemple |
 |----------|------|---------|
-| `DB_TYPE` | Choix du driver PDO | `pgsql` |
 | `DB_HOST` / `DB_NAME` / `DB_USER` / `DB_PASS` | Secrets Render Postgres | valeurs Render (`dpg-...`, `ott_data`, etc.) |
 | `DB_PORT` (optionnel) | Port Postgres | `5432` |
+| `DATABASE_URL` (optionnel) | URL complète Postgres (scripts + healthcheck) | `postgresql://user:pass@host/ott_data` |
 | `JWT_SECRET` | Clé HMAC pour signer les tokens | générer via `openssl rand -hex 32` |
 | `AUTH_DISABLED` | Bypass login (demo) | `false` en prod |
 | `SENDGRID_*`, `TWILIO_*` | Clés notification | laisser vide si non utilisées |
 | `CORS_ALLOWED_ORIGINS` | Origines additionnelles autorisées (CSV) | `https://mon-dashboard.com,https://foo.app` |
 
-> Astuce : Render fournit aussi `DATABASE_URL`. Gardez-le pour les scripts/health-checks (`index.php` l’utilise), mais l’API lit surtout `DB_*`/`DB_TYPE`. Pensez à les définir **tous** pour éviter un fallback MySQL local.
+> Astuce : `DATABASE_URL` reste pratique pour les scripts (`scripts/db_migrate.sh`) et le healthcheck (`index.php`), mais l’API lit avant tout `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASS`. Gardez ces cinq variables alignées avec votre instance Postgres.
 
 ---
 
@@ -142,6 +142,27 @@ EOF
    ```bash
    psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"
    psql $DATABASE_URL -c "SELECT * FROM users_with_roles;"
+   ```
+
+### Base PostgreSQL locale (Docker Compose)
+
+1. Lancer l’instance : `docker compose up -d db`
+2. Exporter (ou définir dans `.env`) les variables attendues par l’API :
+   ```bash
+   export DB_HOST=localhost
+   export DB_PORT=5432
+   export DB_NAME=ott_data
+   export DB_USER=postgres
+   export DB_PASS=postgres
+   ```
+3. Initialiser les données : `./scripts/db_migrate.sh --seed`
+4. Réinitialiser complètement : `docker compose down -v`
+5. Visualiser la base dans un navigateur :
+   ```bash
+   docker run -d --name ott-db-viewer -p 8081:8081 ^
+     -e PGWEB_DATABASE_URL="postgres://postgres:postgres@host.docker.internal:55432/ott_data?sslmode=disable" ^
+     sosedoff/pgweb
+   # Ouvrir http://localhost:8081 (stopper via: docker stop ott-db-viewer)
    ```
 
 > ℹ️ Tous les scripts contenus dans `sql/` sont **100 % anonymisés** (ICCID simulés, e-mails génériques, mots de passe uniquement sous forme de hash bcrypt). Aucun secret de production n’est versionné.
@@ -185,7 +206,7 @@ Le jeu de données installe automatiquement :
 
 2. **Secrets backend obligatoires**  
    - `JWT_SECRET` doit être régénéré par projet (`openssl rand -hex 32`).  
-   - `DB_TYPE=pgsql` + `DB_HOST/NAME/USER/PASS` = secrets Render Postgres.  
+   - `DB_HOST/NAME/USER/PASS` = secrets Render Postgres (ou Docker Compose).  
    - `AUTH_DISABLED=false` en production (sinon accès libre).
 
 3. **Comptes de démonstration**  
@@ -216,6 +237,8 @@ Le jeu de données installe automatiquement :
 - ✅ Bidirectionnel complet (TinyGSM SIM7600, commandes `SET_SLEEP_SECONDS`, `PING`, `UPDATE_CONFIG`, `UPDATE_CALIBRATION`)
 - ✅ Deep sleep dynamique (5 min par défaut, override via dashboard)
 - ✅ Publication HTTPS sécurisée (Bearer JWT, endpoints `/devices/measurements`, `/devices/commands/*`, `/devices/logs`)
+- ✅ Configuration par défaut embarquée (ICCID/APN/SIM PIN + JWT optionnel via macros `OTT_DEFAULT_*`) pour boîtiers prêts à l’emploi sans commande distante
+- ✅ Protocoles API alignés : headers `X-Device-ICCID`, payload `device_sim_iccid` + `payload{flowrate,battery,signal_*}`, prise en charge des réponses `/devices/{iccid}/commands/pending`
 - ✅ Reconfiguration distante des secrets APN/JWT/ICCID/serial/PIN SIM (sauvegarde NVS)
 
 ### 🔌 API Backend
@@ -272,7 +295,7 @@ Le jeu de données installe automatiquement :
 ## 🔁 Check-list alignement Local ↔ Web ↔ Render
 
 1. **Backend Render**
-   - `DB_TYPE=pgsql` + secrets Render Postgres OK.
+   - `DB_HOST/PORT/NAME/USER/PASS` renseignés avec les valeurs Render/Postgres.
    - `JWT_SECRET` renseigné, `AUTH_DISABLED=false`.
    - Dernier Docker image déployé (`Manual Deploy` si doute).
 2. **Base de données**

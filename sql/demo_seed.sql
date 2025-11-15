@@ -25,8 +25,8 @@ SELECT setval('patients_id_seq', (SELECT MAX(id) FROM patients));
 -- Devices
 INSERT INTO devices (id, sim_iccid, device_serial, device_name, firmware_version, status, patient_id, installation_date, first_use_date, last_seen, last_battery, latitude, longitude)
 VALUES
-  (1, '893301230000000001', 'OTT-PAR-001', 'OTT-Paris-001', '2.0.0', 'active', 1, NOW() - INTERVAL '30 days', NOW() - INTERVAL '90 days', NOW() - INTERVAL '10 minutes', 82.5, 48.8566, 2.3522),
-  (2, '893301230000000002', 'OTT-LYO-002', 'OTT-Lyon-002', '2.0.0', 'active', 2, NOW() - INTERVAL '20 days', NOW() - INTERVAL '45 days', NOW() - INTERVAL '45 minutes', 56.2, 45.7640, 4.8357),
+  (1, '893301230000000001', 'OTT-PAR-001', 'OTT-Paris-001', '3.0.0', 'active', 1, NOW() - INTERVAL '30 days', NOW() - INTERVAL '90 days', NOW() - INTERVAL '10 minutes', 82.5, 48.8566, 2.3522),
+  (2, '893301230000000002', 'OTT-LYO-002', 'OTT-Lyon-002', '3.0.0', 'active', 2, NOW() - INTERVAL '20 days', NOW() - INTERVAL '45 days', NOW() - INTERVAL '45 minutes', 56.2, 45.7640, 4.8357),
   (3, '893301230000000003', 'OTT-MRS-003', 'OTT-Marseille-003', '1.9.5', 'maintenance', 3, NOW() - INTERVAL '10 days', NOW() - INTERVAL '30 days', NOW() - INTERVAL '12 hours', 24.4, 43.2965, 5.3698),
   (4, '893301230000000004', 'OTT-LIL-004', 'OTT-Lille-004', '1.8.0', 'inactive', NULL, NULL, NOW() - INTERVAL '180 days', NOW() - INTERVAL '4 days', 5.1, 50.6292, 3.0573)
 ON CONFLICT (id) DO UPDATE SET

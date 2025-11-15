@@ -1,3 +1,20 @@
+# Exclure tout ce qui n'est pas nécessaire au backend PHP
+.git
+node_modules
+out
+tmp
+hardware
+external
+app
+components
+contexts
+hooks
+lib
+public
+!public/DOCUMENTATION_COMPLETE_OTT.html
+scripts
+package-lock.json
+package.json
 # ================================================================================
 # .dockerignore - Fichiers à exclure du build Docker
 # ================================================================================

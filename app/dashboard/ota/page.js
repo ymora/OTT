@@ -118,7 +118,7 @@ export default function OTAPage() {
           {devices.map((d, i) => (
             <div key={d.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all animate-scale-in" style={{animationDelay: `${i * 0.03}s`}}>
               <p className="font-semibold mb-2">{d.device_name || d.sim_iccid?.substr(-8)}</p>
-              <p className="text-sm text-gray-600 mb-2">Firmware: v{d.firmware_version || '2.0.0'}</p>
+              <p className="text-sm text-gray-600 mb-2">Firmware: v{d.firmware_version || '3.0.0'}</p>
               <button className="btn-secondary w-full text-sm">⚙️ Configurer</button>
             </div>
           ))}

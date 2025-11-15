@@ -47,10 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // Utilise les variables d'environnement de Render (ou valeurs par défaut pour dev local)
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_PORT', getenv('DB_PORT') ?: '5432');
 define('DB_NAME', getenv('DB_NAME') ?: 'ott_data');
-define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_USER', getenv('DB_USER') ?: 'postgres');
 define('DB_PASS', getenv('DB_PASS') ?: '');
-define('DB_TYPE', getenv('DB_TYPE') ?: 'mysql'); // 'mysql' ou 'pgsql'
 
 define('JWT_SECRET', getenv('JWT_SECRET') ?: 'CHANGEZ_CE_SECRET_EN_PRODUCTION');
 define('JWT_EXPIRATION', 86400); // 24h
@@ -68,17 +68,30 @@ define('TWILIO_FROM_NUMBER', getenv('TWILIO_FROM_NUMBER') ?: '');
 // ============================================================================
 
 try {
-    // Construire le DSN selon le type de base de données
-    if (DB_TYPE === 'pgsql') {
-        $dsn = "pgsql:host=" . DB_HOST . ";dbname=" . DB_NAME;
-    } else {
-        $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+    $dbHost = DB_HOST;
+    $dbPort = DB_PORT;
+    $dbName = DB_NAME;
+    $dbUser = DB_USER;
+    $dbPass = DB_PASS;
+
+    $databaseUrl = getenv('DATABASE_URL');
+    if ($databaseUrl) {
+        $parts = parse_url($databaseUrl);
+        if ($parts !== false) {
+            $dbHost = $parts['host'] ?? $dbHost;
+            $dbPort = $parts['port'] ?? $dbPort;
+            $dbName = isset($parts['path']) ? ltrim($parts['path'], '/') : $dbName;
+            $dbUser = $parts['user'] ?? $dbUser;
+            $dbPass = $parts['pass'] ?? $dbPass;
+        }
     }
-    
+
+    $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $dbHost, $dbPort, $dbName);
+
     $pdo = new PDO(
         $dsn,
-        DB_USER,
-        DB_PASS,
+        $dbUser,
+        $dbPass,
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -592,10 +605,21 @@ function handleGetDevices() {
     try {
         $stmt = $pdo->query("
             SELECT d.*, p.first_name, p.last_name, dc.firmware_version, dc.ota_pending,
-                   TIMESTAMPDIFF(DAY, d.installation_date, NOW()) as days_with_current_patient,
-                   TIMESTAMPDIFF(DAY, d.first_use_date, NOW()) as total_days_in_use,
-                   (SELECT SUM(TIMESTAMPDIFF(MINUTE, LAG(timestamp) OVER (ORDER BY timestamp), timestamp)) 
-                    FROM measurements WHERE device_id = d.id AND flowrate > 0.5) / 60.0 as total_usage_hours
+                   CASE 
+                     WHEN d.installation_date IS NULL THEN NULL
+                     ELSE EXTRACT(DAY FROM NOW() - d.installation_date)
+                   END as days_with_current_patient,
+                   CASE 
+                     WHEN d.first_use_date IS NULL THEN NULL
+                     ELSE EXTRACT(DAY FROM NOW() - d.first_use_date)
+                   END as total_days_in_use,
+                   (
+                     SELECT SUM(
+                       EXTRACT(EPOCH FROM (m.timestamp - LAG(m.timestamp) OVER (ORDER BY m.timestamp))) / 60.0
+                     )
+                     FROM measurements m
+                     WHERE m.device_id = d.id AND m.flowrate > 0.5
+                   ) as total_usage_hours
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
@@ -1151,7 +1175,7 @@ function handleGetLatestMeasurements() {
             SELECT m.*, d.sim_iccid, d.device_name
             FROM measurements m
             JOIN devices d ON m.device_id = d.id
-            WHERE m.timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            WHERE m.timestamp >= NOW() - INTERVAL '24 HOURS'
             ORDER BY m.timestamp DESC
         ");
         echo json_encode(['success' => true, 'measurements' => $stmt->fetchAll()]);
@@ -1186,7 +1210,7 @@ function handleGetPatients() {
         $stmt = $pdo->query("
             SELECT p.*, 
                    (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
-                   (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)) as measurements_7d
+                   (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d
             FROM patients p
             ORDER BY p.last_name, p.first_name
         ");
@@ -1202,7 +1226,7 @@ function createAlert($pdo, $device_id, $type, $severity, $message) {
         $stmt = $pdo->prepare("
             SELECT id FROM alerts 
             WHERE device_id = :device_id AND type = :type AND status = 'unresolved'
-            AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+            AND created_at >= NOW() - INTERVAL '1 HOUR'
         ");
         $stmt->execute(['device_id' => $device_id, 'type' => $type]);
         

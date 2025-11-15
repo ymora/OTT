@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '/index.php')
     echo json_encode([
         'success' => true,
         'service' => 'OTT API',
-        'version' => '2.0.0',
+        'version' => '3.0.0',
         'status' => 'online',
         'php_version' => PHP_VERSION,
         'database' => $db_status,

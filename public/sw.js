@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ott-dashboard-v3.2'
+const CACHE_NAME = 'ott-dashboard-v3.0.0'
 const BASE_PATH = self.location.pathname.replace(/\/sw\.js$/, '')
 
 const withBase = (path) => {

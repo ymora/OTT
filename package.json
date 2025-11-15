@@ -1,13 +1,13 @@
 {
   "name": "ott-dashboard",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "export": "cross-env NEXT_STATIC_EXPORT=true NEXT_PUBLIC_BASE_PATH=/OTT next build",
-    "deploy": "npm run build",
+    "export": "cross-env NEXT_STATIC_EXPORT=true NEXT_PUBLIC_BASE_PATH=/OTT next build && next export",
+    "deploy": "npm run export",
     "lint": "next lint"
   },
   "dependencies": {
