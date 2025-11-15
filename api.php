@@ -174,7 +174,7 @@ function getCurrentUser() {
     if (!$payload) return null;
     
     global $pdo;
-    $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE id = :id AND is_active = 1");
+    $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE id = :id AND is_active = TRUE");
     $stmt->execute(['id' => $payload['user_id']]);
     $user = $stmt->fetch();
     
@@ -386,7 +386,7 @@ function handleLogin() {
     }
     
     try {
-        $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE email = :email AND is_active = 1");
+        $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE email = :email AND is_active = TRUE");
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch();
         
