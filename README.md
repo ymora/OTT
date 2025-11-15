@@ -122,6 +122,7 @@ EOF
 | `JWT_SECRET` | Clé HMAC pour signer les tokens | générer via `openssl rand -hex 32` |
 | `AUTH_DISABLED` | Bypass login (demo) | `false` en prod |
 | `SENDGRID_*`, `TWILIO_*` | Clés notification | laisser vide si non utilisées |
+| `CORS_ALLOWED_ORIGINS` | Origines additionnelles autorisées (CSV) | `https://mon-dashboard.com,https://foo.app` |
 
 > Astuce : Render fournit aussi `DATABASE_URL`. Gardez-le pour les scripts/health-checks (`index.php` l’utilise), mais l’API lit surtout `DB_*`/`DB_TYPE`. Pensez à les définir **tous** pour éviter un fallback MySQL local.
 

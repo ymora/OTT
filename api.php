@@ -5,8 +5,25 @@
  */
 
 // Headers CORS (DOIT être en tout premier)
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+$defaultAllowedOrigins = [
+    'https://ymora.github.io',
+    'http://localhost:3000',
+    'http://localhost:5173'
+];
+
+$extraOrigins = array_filter(array_map('trim', explode(',', getenv('CORS_ALLOWED_ORIGINS') ?: '')));
+$allowedOrigins = array_unique(array_merge($defaultAllowedOrigins, $extraOrigins));
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+if ($origin && in_array($origin, $allowedOrigins, true)) {
+    header("Access-Control-Allow-Origin: {$origin}");
+    header('Access-Control-Allow-Credentials: true');
+} elseif (empty($origin)) {
+    header('Access-Control-Allow-Origin: *');
+}
+
+header('Vary: Origin');
+header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCID');
 header('Access-Control-Max-Age: 86400');
 header('Content-Type: application/json; charset=utf-8');
@@ -20,7 +37,7 @@ if (getenv('DEBUG_ERRORS') === 'true') {
 
 // Répondre immédiatement aux requêtes OPTIONS (preflight)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
+    http_response_code(204);
     exit();
 }
 
