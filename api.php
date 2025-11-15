@@ -72,6 +72,9 @@ define('TWILIO_ACCOUNT_SID', getenv('TWILIO_ACCOUNT_SID') ?: '');
 define('TWILIO_AUTH_TOKEN', getenv('TWILIO_AUTH_TOKEN') ?: '');
 define('TWILIO_FROM_NUMBER', getenv('TWILIO_FROM_NUMBER') ?: '');
 
+define('ENABLE_DEMO_RESET', getenv('ENABLE_DEMO_RESET') === 'true');
+define('SQL_BASE_DIR', __DIR__ . '/sql');
+
 // ============================================================================
 // CONNEXION BDD
 // ============================================================================
@@ -239,6 +242,18 @@ function auditLog($action, $entity_type = null, $entity_id = null, $old_value = 
     } catch(PDOException $e) {}
 }
 
+function runSqlFile(PDO $pdo, $filename) {
+    $path = SQL_BASE_DIR . '/' . ltrim($filename, '/');
+    if (!file_exists($path)) {
+        throw new RuntimeException("SQL file not found: {$filename}");
+    }
+    $sql = file_get_contents($path);
+    if ($sql === false) {
+        throw new RuntimeException("Unable to read SQL file: {$filename}");
+    }
+    $pdo->exec($sql);
+}
+
 // ============================================================================
 // ROUTER
 // ============================================================================
@@ -329,6 +344,10 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleTestNotification();
 } elseif(preg_match('#/notifications/queue$#', $path) && $method === 'GET') {
     handleGetNotificationsQueue();
+
+// Admin tools
+} elseif(preg_match('#/admin/reset-demo$#', $path) && $method === 'POST') {
+    handleResetDemo();
 
 // Audit
 } elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
@@ -1052,6 +1071,63 @@ function handleAcknowledgeCommand() {
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleResetDemo() {
+    global $pdo;
+    $user = requireAdmin();
+
+    if (!ENABLE_DEMO_RESET) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Demo reset disabled on this instance']);
+        return;
+    }
+
+    $tables = [
+        'audit_logs',
+        'notifications_queue',
+        'device_commands',
+        'device_logs',
+        'alerts',
+        'measurements',
+        'firmware_versions',
+        'device_configurations',
+        'devices',
+        'patients',
+        'user_notifications_preferences',
+        'users',
+        'role_permissions',
+        'permissions',
+        'roles'
+    ];
+
+    $startedAt = microtime(true);
+
+    try {
+        $pdo->exec('TRUNCATE TABLE ' . implode(', ', $tables) . ' RESTART IDENTITY CASCADE');
+        runSqlFile($pdo, 'base_seed.sql');
+        runSqlFile($pdo, 'demo_seed.sql');
+
+        $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+        auditLog('admin.reset_demo', 'system', null, null, ['duration_ms' => $durationMs]);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Base de démo réinitialisée',
+            'meta' => [
+                'duration_ms' => $durationMs,
+                'tables_reset' => count($tables),
+                'actor' => $user['email'] ?? null
+            ]
+        ]);
+    } catch(Throwable $e) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Demo reset failed',
+            'details' => $e->getMessage()
+        ]);
     }
 }
 

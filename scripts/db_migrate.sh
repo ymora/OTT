@@ -21,6 +21,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEMA_FILE="$ROOT_DIR/sql/schema.sql"
+BASE_SEED_FILE="$ROOT_DIR/sql/base_seed.sql"
 SEED_FILE="$ROOT_DIR/sql/demo_seed.sql"
 
 RUN_SEED=false
@@ -28,10 +29,12 @@ if [[ "${1:-}" == "--seed" ]]; then
   RUN_SEED=true
 fi
 
-if [[ ! -f "$SCHEMA_FILE" ]]; then
-  echo "❌ sql/schema.sql introuvable ($SCHEMA_FILE)" >&2
-  exit 1
-fi
+for required in "$SCHEMA_FILE" "$BASE_SEED_FILE"; do
+  if [[ ! -f "$required" ]]; then
+    echo "❌ Fichier SQL introuvable ($required)" >&2
+    exit 1
+  fi
+done
 
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
@@ -51,6 +54,8 @@ run_psql() {
 }
 
 run_psql -f "$SCHEMA_FILE"
+echo "🔧 Injection des données de base ($BASE_SEED_FILE)"
+run_psql -f "$BASE_SEED_FILE"
 
 if $RUN_SEED; then
   echo "🌱 Injection des données de démo ($SEED_FILE)"

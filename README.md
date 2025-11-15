@@ -109,6 +109,7 @@ git push origin main
 cat > .env.local <<'EOF'
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
 NEXT_PUBLIC_REQUIRE_AUTH=true
+NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 EOF
 ```
 
@@ -122,10 +123,11 @@ EOF
 | `DATABASE_URL` (optionnel) | URL complète (scripts + migrations) | `postgresql://user:pass@host/ott_data` |
 | `JWT_SECRET` | Clé HMAC pour signer les tokens | générer via `openssl rand -hex 32` |
 | `AUTH_DISABLED` | Bypass login (demo) | `false` en prod |
+| `ENABLE_DEMO_RESET` | Autoriser `/admin/reset-demo` | `false` |
 | `SENDGRID_*`, `TWILIO_*` | Clés notification | laisser vide si non utilisées |
 | `CORS_ALLOWED_ORIGINS` | Origines additionnelles autorisées (CSV) | `https://mon-dashboard.com,https://foo.app` |
 
-> Astuce : le healthcheck et l’API partagent désormais la même résolution de configuration. Renseignez au minimum `DB_HOST/DB_NAME/DB_USER/DB_PASS` (et `DB_PORT` si besoin). `DATABASE_URL` reste utile pour les scripts (`scripts/db_migrate.sh`) ou pour forcer une configuration complète, mais n’est plus obligatoire pour obtenir `database: "connected"`.
+> Astuce : le healthcheck et l’API partagent désormais la même résolution de configuration. Renseignez au minimum `DB_HOST/DB_NAME/DB_USER/DB_PASS` (et `DB_PORT` si besoin). `DATABASE_URL` reste utile pour les scripts (`scripts/db_migrate.sh`) ou pour forcer une configuration complète, mais n’est plus obligatoire pour obtenir `database: "connected"`. Pour autoriser la réinitialisation complète depuis le dashboard admin, définissez `ENABLE_DEMO_RESET=true` côté backend et `NEXT_PUBLIC_ENABLE_DEMO_RESET=true` côté frontend.
 
 ---
 
@@ -173,6 +175,15 @@ Le jeu de données installe automatiquement :
 - 3 patients et 3 dispositifs reliés pour les pages Dashboard.
 - Des mesures/alertes/logs réalistes pour vérifier les graphiques.
 
+### Réinitialiser la base de démo via le dashboard
+
+1. Activer la fonctionnalité : `ENABLE_DEMO_RESET=true` côté API et `NEXT_PUBLIC_ENABLE_DEMO_RESET=true` côté frontend.
+2. Se connecter avec un compte **admin** puis ouvrir `Dashboard → Administration`.
+3. Cliquer sur **Réinitialiser la base de démo**. L’API tronque les principales tables puis rejoue `sql/base_seed.sql` + `sql/demo_seed.sql`.
+4. En 2‑3 secondes, la base Render revient à l’état documenté ci-dessus.
+
+> ⚠️ Cette action supprime définitivement les données réelles (patients, commandes, journaux). À utiliser uniquement sur des environnements de démonstration.
+
 ---
 
 ---
@@ -192,6 +203,7 @@ Le jeu de données installe automatiquement :
 
 ### Données & Scripts
 - `sql/schema.sql` - Schéma complet + seeds minima
+- `sql/base_seed.sql` - Données de base (rôles, utilisateurs, config)
 - `sql/demo_seed.sql` - Jeu de données de démo (emails génériques)
 - `sql/create_demo_user.sql` - Création utilisateur `demo@example.com`
 - `sql/UPDATE_PASSWORDS_RENDER.sql` - Rotation de mots de passe Render

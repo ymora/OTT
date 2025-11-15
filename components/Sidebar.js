@@ -21,6 +21,7 @@ const menuItems = [
   { name: 'Notifications', icon: '📧', path: '/dashboard/notifications', permission: null },
   { name: 'OTA', icon: '🔄', path: '/dashboard/ota', permission: 'devices.ota' },
   { name: 'Audit', icon: '📜', path: '/dashboard/audit', permission: 'audit.view' },
+  { name: 'Administration', icon: '🛠️', path: '/dashboard/admin', permission: 'settings.edit' },
 ]
 
 export default function Sidebar() {

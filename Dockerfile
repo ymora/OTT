@@ -20,6 +20,7 @@ RUN echo "ServerName ott-api" >> /etc/apache2/apache2.conf
 # Copier uniquement les fichiers backend nécessaires
 COPY api.php /var/www/html/
 COPY index.php /var/www/html/
+COPY bootstrap /var/www/html/bootstrap
 COPY sql /var/www/html/sql
 COPY public/DOCUMENTATION_COMPLETE_OTT.html /var/www/html/public/DOCUMENTATION_COMPLETE_OTT.html
 
