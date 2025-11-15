@@ -272,6 +272,7 @@ SELECT
   u.email,
   u.first_name,
   u.last_name,
+  u.password_hash,
   u.is_active,
   u.last_login,
   r.name AS role_name,
