@@ -530,7 +530,7 @@ cd OTT
     </ol>
     
     <div class="alert alert-success">
-        Une fois déployé, votre API sera accessible à : <code>https://ott-api.onrender.com</code>
+        Une fois déployé, votre API sera accessible à : <code>https://ott-jbln.onrender.com</code>
     </div>
     
     <h3>Étape 3️⃣ : Déployer le Dashboard React</h3>
@@ -555,7 +555,7 @@ npm run build
     <ol>
         <li>Ouvrir <code>fw_ott_optimized/fw_ott_optimized.ino</code> dans Arduino IDE</li>
         <li>Modifier la ligne 35 avec votre URL API :
-            <pre>#define SERVER_URL "https://ott-api.onrender.com"</pre>
+            <pre>#define SERVER_URL "https://ott-jbln.onrender.com"</pre>
         </li>
         <li>Sélectionner la carte : <strong>ESP32 Dev Module</strong></li>
         <li>Compiler et téléverser via USB</li>
@@ -647,7 +647,7 @@ ESP32 GND     ←→ MPXV7007DP (GND)
     
     <pre>
 // Configuration réseau
-#define SERVER_URL "https://ott-api.onrender.com"  // URL de votre API
+#define SERVER_URL "https://ott-jbln.onrender.com"  // URL de votre API
 #define SIM_APN    "free"                            // APN de votre opérateur
 #define SIM_USER   ""                                // Utilisateur (vide pour Free)
 #define SIM_PASS   ""                                // Mot de passe (vide pour Free)
@@ -1162,7 +1162,7 @@ npm run build
     <p>L'URL de l'API est configurée dans <code>contexts/AuthContext.js</code> :</p>
     
     <pre>
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-api.onrender.com'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
     </pre>
     
     <p>Pour le développement local avec API locale, créer un fichier <code>.env.local</code> :</p>
@@ -1268,7 +1268,7 @@ TWILIO_PHONE_NUMBER=+33123456789 (optionnel)
         </li>
         <li>Cliquer sur <strong>"Create Web Service"</strong></li>
         <li>Attendre 5-10 minutes que le build Docker se termine</li>
-        <li>Vérifier que l'API fonctionne : <code>https://ott-api.onrender.com/</code></li>
+        <li>Vérifier que l'API fonctionne : <code>https://ott-jbln.onrender.com/</code></li>
     </ol>
     
     <div class="alert alert-success">
@@ -1314,7 +1314,7 @@ TWILIO_PHONE_NUMBER=+33123456789 (optionnel)
     <p><strong>1. Vérifier l'API :</strong></p>
     
     <pre>
-curl https://ott-api.onrender.com/
+curl https://ott-jbln.onrender.com/
 
 → Devrait retourner : { "status": "online", "version": "2.0", ... }
     </pre>
@@ -1335,7 +1335,7 @@ https://ymora.github.io/OTT/
     <p><strong>4. Uploader le firmware ESP32 :</strong></p>
     
     <ul>
-        <li>Modifier <code>SERVER_URL</code> dans le firmware : <code>"https://ott-api.onrender.com"</code></li>
+        <li>Modifier <code>SERVER_URL</code> dans le firmware : <code>"https://ott-jbln.onrender.com"</code></li>
         <li>Compiler et téléverser</li>
         <li>Vérifier que les données arrivent dans le dashboard</li>
     </ul>
@@ -1478,7 +1478,7 @@ Content-Type: application/json
     <p><strong>Solutions :</strong></p>
     
     <ul>
-        <li>Vérifier que l'API est bien déployée : <code>https://ott-api.onrender.com/</code></li>
+        <li>Vérifier que l'API est bien déployée : <code>https://ott-jbln.onrender.com/</code></li>
         <li>L'API Render (plan gratuit) se met en veille après 15 min : attendre 30s au 1er appel</li>
         <li>Vérifier les logs Render : Dashboard → ott-api → Logs</li>
     </ul>
@@ -1530,7 +1530,7 @@ Content-Type: application/json
     <p><strong>Solutions :</strong></p>
     
     <ul>
-        <li>Vérifier que l'API est bien en ligne : <code>https://ott-api.onrender.com/</code></li>
+        <li>Vérifier que l'API est bien en ligne : <code>https://ott-jbln.onrender.com/</code></li>
         <li>Vérifier les headers CORS dans <code>api.php</code> (lignes 8-18)</li>
         <li>Si API Render en veille : attendre 30 secondes et réessayer</li>
     </ul>
@@ -1702,7 +1702,7 @@ const { alerts, unresolvedCount, criticalCount } = useAlerts({
     <pre>
 // API URLs et endpoints
 export const API_CONFIG = {
-  BASE_URL: 'https://ott-api.onrender.com',
+  BASE_URL: 'https://ott-jbln.onrender.com',
   ENDPOINTS: {
     AUTH_LOGIN: '/api.php/auth/login',
     DEVICES: '/api.php/devices',
@@ -2114,7 +2114,7 @@ SELECT id, email, first_name, last_name FROM users;
     <p style="margin-top: 1rem; font-size: 0.9rem;">
         📖 <a href="https://github.com/ymora/OTT" style="color: white; text-decoration: underline;">GitHub Repository</a> | 
         🌐 <a href="https://ymora.github.io/OTT/" style="color: white; text-decoration: underline;">Dashboard Live</a> | 
-        🔌 <a href="https://ott-api.onrender.com" style="color: white; text-decoration: underline;">API Status</a>
+        🔌 <a href="https://ott-jbln.onrender.com" style="color: white; text-decoration: underline;">API Status</a>
     </p>
 </div>
 

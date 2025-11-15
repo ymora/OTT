@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-api.onrender.com'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
 
 export default function Login() {
   const router = useRouter()
