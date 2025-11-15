@@ -121,9 +121,6 @@ export default function DevicesPage() {
             <strong>Erreur API :</strong> {error}
           </div>
         )}
-        <button className="btn-primary" disabled>
-          ➕ Nouveau Dispositif
-        </button>
       </div>
 
       <div className="flex flex-wrap gap-2">

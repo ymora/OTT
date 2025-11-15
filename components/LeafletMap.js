@@ -81,7 +81,7 @@ function computeBatteryMeta(value) {
   return { label: `${value.toFixed(0)}%`, status: 'ok' }
 }
 
-function DeviceMarkers({ devices, focusDeviceId }) {
+function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
   const map = useMap()
 
   useEffect(() => {
@@ -116,6 +116,9 @@ function DeviceMarkers({ devices, focusDeviceId }) {
           key={device.id}
           position={[device.latitude, device.longitude]}
           icon={buildIcon(device.connectionStatus)}
+          eventHandlers={{
+            click: () => onSelect?.(device)
+          }}
         >
           <Popup>
             <div className="space-y-2">
@@ -149,7 +152,7 @@ function DeviceMarkers({ devices, focusDeviceId }) {
   )
 }
 
-export default function LeafletMap({ devices = [], focusDeviceId }) {
+export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
   const center = useMemo(() => {
     if (devices.length === 0) {
       return [46.2276, 2.2137]
@@ -165,7 +168,7 @@ export default function LeafletMap({ devices = [], focusDeviceId }) {
         attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <DeviceMarkers devices={devices} focusDeviceId={focusDeviceId} />
+      <DeviceMarkers devices={devices} focusDeviceId={focusDeviceId} onSelect={onSelect} />
     </MapContainer>
   )
 }

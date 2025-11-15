@@ -114,6 +114,23 @@ INSERT INTO alerts (id, device_id, type, severity, message, status, created_at)
 VALUES
   ('ALERT-001', 1, 'low_battery', 'medium', 'Batterie en dessous de 20% pour OTT Pierre Paris', 'unresolved', NOW() - INTERVAL '15 minutes'),
   ('ALERT-002', 2, 'device_offline', 'high', 'Dispositif OTT Paul Lyon hors ligne depuis 3h', 'unresolved', NOW() - INTERVAL '2 hours'),
-  ('ALERT-003', 4, 'device_offline', 'medium', 'Boîtier en stock sans patient, vérification requise', 'unresolved', NOW() - INTERVAL '1 day')
+  ('ALERT-003', 4, 'device_offline', 'medium', 'Boîtier en stock sans patient, vérification requise', 'unresolved', NOW() - INTERVAL '1 day'),
+  ('ALERT-004', 3, 'abnormal_flowrate', 'critical', 'Variation de débit anormale détectée', 'unresolved', NOW() - INTERVAL '45 minutes'),
+  ('ALERT-005', 2, 'low_battery', 'low', 'Batterie revenue à 30% - alerte clôturée', 'resolved', NOW() - INTERVAL '1 day')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO device_logs (id, device_id, timestamp, level, event_type, message)
+VALUES
+  (1, 1, NOW() - INTERVAL '1 hour', 'INFO', 'wake', 'Réveil planifié'),
+  (2, 1, NOW() - INTERVAL '50 minutes', 'WARN', 'low_battery', 'Batterie 19%'),
+  (3, 2, NOW() - INTERVAL '3 hours', 'ERROR', 'offline', 'Perte réseau prolongée'),
+  (4, 4, NOW() - INTERVAL '2 hours', 'INFO', 'inventory_check', 'Boîtier stock testé en atelier')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, old_value, new_value, created_at)
+VALUES
+  (1, 1, 'user.created', 'user', '3', NULL, json_build_object('email','medecin@example.com'), NOW() - INTERVAL '2 days'),
+  (2, 1, 'device.updated', 'device', '2', json_build_object('patient_id',2), json_build_object('patient_id',2,'status','active'), NOW() - INTERVAL '12 hours'),
+  (3, 2, 'device.updated', 'device', '4', NULL, json_build_object('status','maintenance'), NOW() - INTERVAL '1 day')
+ON CONFLICT DO NOTHING;
 
