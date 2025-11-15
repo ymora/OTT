@@ -1165,19 +1165,124 @@ npm run build
 # Prêt pour GitHub Pages ou n'importe quel hébergeur statique
     </pre>
     
-    <h3>⚙️ Configuration API</h3>
+    <h3>⚙️ Configuration API & fichier <code>.env.local</code></h3>
     
-    <p>L'URL de l'API est configurée dans <code>contexts/AuthContext.js</code> :</p>
+    <p>Le dashboard lit systématiquement les variables <code>NEXT_PUBLIC_*</code> (exposées côté navigateur). Définissez-les dans un fichier <code>.env.local</code> (non versionné) :</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Variable</th>
+                <th>Description</th>
+                <th>Valeur recommandée</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>NEXT_PUBLIC_API_URL</code></td>
+                <td>URL publique de l’API PHP</td>
+                <td><code>https://ott-jbln.onrender.com</code></td>
+            </tr>
+            <tr>
+                <td><code>NEXT_PUBLIC_REQUIRE_AUTH</code></td>
+                <td>Forcer l’écran de connexion</td>
+                <td><code>true</code> en prod / <code>false</code> pour une démo readonly</td>
+            </tr>
+            <tr>
+                <td><code>NEXT_STATIC_EXPORT</code></td>
+                <td>Active <code>output: 'export'</code> lors des builds GitHub Pages</td>
+                <td><code>true</code> uniquement pendant <code>npm run export</code></td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div class="alert alert-warning">
+        <strong>Ne jamais commiter le fichier <code>.env.local</code></strong> : il contient des URLs internes ou des options de déverrouillage (mode démo).
+    </div>
     
     <pre>
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
+cat &gt; .env.local &lt;&lt;'EOF'
+NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
+NEXT_PUBLIC_REQUIRE_AUTH=true
+# NEXT_STATIC_EXPORT ne doit être positionné à true que pour npm run export
+EOF
     </pre>
     
-    <p>Pour le développement local avec API locale, créer un fichier <code>.env.local</code> :</p>
+    <p>Dans le code, l’URL reste lue via <code>process.env.NEXT_PUBLIC_API_URL</code> (voir <code>contexts/AuthContext.js</code>). En local, vous pouvez toujours viser une API hébergée en <code>http://localhost</code>.</p>
     
-    <pre>
-NEXT_PUBLIC_API_URL=http://localhost:80
-    </pre>
+    <h3>🔐 Variables Render (Backend API)</h3>
+    
+    <p>Le conteneur PHP (Render) s’appuie sur les variables ci-dessous. Récupérez les valeurs depuis l’onglet <em>Connect</em> de la base Postgres :</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Variable</th>
+                <th>Utilité</th>
+                <th>Exemple</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>DB_TYPE</code></td>
+                <td>Driver PDO utilisé par l’API</td>
+                <td><code>pgsql</code></td>
+            </tr>
+            <tr>
+                <td><code>DB_HOST</code></td>
+                <td>Host Render (ex : <code>dpg-xxxxx</code>)</td>
+                <td><code>dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com</code></td>
+            </tr>
+            <tr>
+                <td><code>DB_PORT</code></td>
+                <td>Port Postgres</td>
+                <td><code>5432</code></td>
+            </tr>
+            <tr>
+                <td><code>DB_NAME</code></td>
+                <td>Nom de la base</td>
+                <td><code>ott_data</code></td>
+            </tr>
+            <tr>
+                <td><code>DB_USER</code> / <code>DB_PASS</code></td>
+                <td>Identifiants Render</td>
+                <td><code>ott_data_user</code> / mot de passe généré</td>
+            </tr>
+            <tr>
+                <td><code>JWT_SECRET</code></td>
+                <td>Clé HMAC pour signer les tokens</td>
+                <td><code>openssl rand -hex 32</code></td>
+            </tr>
+            <tr>
+                <td><code>AUTH_DISABLED</code></td>
+                <td>Passer en mode lecture seule (sans login)</td>
+                <td><code>false</code> en prod</td>
+            </tr>
+            <tr>
+                <td><code>DATABASE_URL</code></td>
+                <td>URL Postgres complète (utilisée par <code>scripts/db_migrate.sh</code> et <code>index.php</code>)</td>
+                <td><code>postgresql://...</code></td>
+            </tr>
+            <tr>
+                <td><code>SENDGRID_* / TWILIO_*</code></td>
+                <td>Clés notification (optionnel)</td>
+                <td><em>Laisser vide si non utilisé</em></td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div class="alert alert-info">
+        <strong>Checklist backend :</strong> <code>DB_TYPE=pgsql</code>, toutes les variables <code>DB_*</code> remplies, <code>JWT_SECRET</code> unique, <code>AUTH_DISABLED=false</code> avant mise en production.
+    </div>
+    
+    <h3>📡 Firmware OTA & Commandes</h3>
+    <p>Depuis la reconstruction, le firmware ESP32 intègre nativement la bidirectionnelle décrite dans cette doc :</p>
+    <ul>
+        <li>POST <code>/api.php/devices/measurements</code> (flowrate, battery, signal_dbm, iccid, device_serial)</li>
+        <li>GET <code>/api.php/devices/commands/pending?iccid=…</code> → commandes <code>SET_SLEEP_SECONDS</code>, <code>PING</code>, etc.</li>
+        <li>POST <code>/api.php/devices/commands/ack</code> pour tracer l’exécution depuis le dashboard.</li>
+    </ul>
+    <p>Le code source complet est déplacé dans le dépôt privé <code>ott-hardware</code> (voir <code>hardware/README.md</code>). Pensez à mettre à jour <code>DEVICE_ICCID</code>, <code>DEVICE_SERIAL</code>, <code>JWT</code> et les certificats TLS avant compilation.</p>
     
     <h3>📊 Performances</h3>
     
@@ -1250,6 +1355,23 @@ git push origin main
         <strong>💡 Astuce :</strong> Render fournit un client psql en ligne. Cliquez sur "Connect" puis "External Connection" pour obtenir les credentials.
     </div>
     
+    <h4>🗄️ Appliquer le schéma + données de démo</h4>
+    <p>Une fois la base créée, exécuter le script suivant depuis votre poste (PowerShell / bash) :</p>
+    
+    <pre>
+DATABASE_URL="postgresql://user:pass@host/ott_data" ./scripts/db_migrate.sh --seed
+# ou, manuellement
+psql $DATABASE_URL -f schema.sql
+psql $DATABASE_URL -f sql/demo_seed.sql
+    </pre>
+    
+    <p>Contrôles rapides :</p>
+    <ul>
+        <li><code>psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"</code> → doit retourner <strong>2</strong> (admin + technicien de démo).</li>
+        <li><code>psql $DATABASE_URL -c "SELECT COUNT(*) FROM devices;"</code> → doit retourner <strong>3</strong>.</li>
+        <li><code>psql $DATABASE_URL -c "SELECT * FROM users_with_roles;"</code> pour vérifier les permissions agrégées.</li>
+    </ul>
+    
     <h3>🚀 Étape 3 : Déployer l'API sur Render</h3>
     
     <ol>
@@ -1265,14 +1387,60 @@ git push origin main
             </ul>
         </li>
         <li>Ajouter les <strong>variables d'environnement</strong> :
-            <pre>
-DATABASE_URL=postgresql://ott_user:xxxxx@dpg-xxxxx-a/ott_db
-JWT_SECRET=your-secret-key-min-32-chars
-SENDGRID_API_KEY=SG.xxxxx (optionnel)
-TWILIO_ACCOUNT_SID=ACxxxxx (optionnel)
-TWILIO_AUTH_TOKEN=xxxxx (optionnel)
-TWILIO_PHONE_NUMBER=+33123456789 (optionnel)
-            </pre>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Clé</th>
+                        <th>Valeur</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>DB_TYPE</code></td>
+                        <td><code>pgsql</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>DB_HOST</code></td>
+                        <td>Host Render (ex : <code>dpg-...frankfurt-postgres.render.com</code>)</td>
+                    </tr>
+                    <tr>
+                        <td><code>DB_PORT</code></td>
+                        <td><code>5432</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>DB_NAME</code></td>
+                        <td><code>ott_data</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>DB_USER</code></td>
+                        <td><code>ott_data_user</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>DB_PASS</code></td>
+                        <td>Mot de passe généré par Render</td>
+                    </tr>
+                    <tr>
+                        <td><code>DATABASE_URL</code></td>
+                        <td>Copier/coller l’URL complète (utilisée par <code>index.php</code> + scripts)</td>
+                    </tr>
+                    <tr>
+                        <td><code>JWT_SECRET</code></td>
+                        <td>Résultat de <code>openssl rand -hex 32</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>AUTH_DISABLED</code></td>
+                        <td><code>false</code> (mettre <code>true</code> pour les démos sans login)</td>
+                    </tr>
+                    <tr>
+                        <td><code>SENDGRID_API_KEY</code></td>
+                        <td>Optionnel (laisser vide si non configuré)</td>
+                    </tr>
+                    <tr>
+                        <td><code>TWILIO_ACCOUNT_SID</code> / <code>TWILIO_AUTH_TOKEN</code> / <code>TWILIO_PHONE_NUMBER</code></td>
+                        <td>Optionnel – SMS en cas d’alerte</td>
+                    </tr>
+                </tbody>
+            </table>
         </li>
         <li>Cliquer sur <strong>"Create Web Service"</strong></li>
         <li>Attendre 5-10 minutes que le build Docker se termine</li>
@@ -1311,11 +1479,20 @@ TWILIO_PHONE_NUMBER=+33123456789 (optionnel)
 
     <h3>🛠️ Scripts d’automatisation</h3>
     <ul>
-        <li><code>scripts/db_migrate.sh [--seed]</code> : applique <code>schema.sql</code> (Postgres via <code>DATABASE_URL</code> ou MySQL via <code>DB_HOST/DB_USER/DB_PASS/DB_NAME</code>).</li>
+        <li><code>scripts/db_migrate.sh [--seed]</code> : applique <code>schema.sql</code> + <code>sql/demo_seed.sql</code> sur PostgreSQL (utilise <code>DATABASE_URL</code>).</li>
         <li><code>scripts/deploy_api.sh</code> : push vers le remote Render (configurable via <code>RENDER_REMOTE</code> / <code>RENDER_BRANCH</code>).</li>
-        <li><code>scripts/deploy_dashboard.sh</code> : <code>npm install</code> + build + <code>npm run deploy</code> (commandes surchargées via variables <code>DASHBOARD_BUILD_CMD</code>/<code>DASHBOARD_DEPLOY_CMD</code>).</li>
+        <li><code>scripts/deploy_dashboard.sh</code> : <code>npm install</code> + build + <code>npm run export</code>/<code>deploy</code> (commandes personnalisables via <code>DASHBOARD_BUILD_CMD</code>/<code>DASHBOARD_DEPLOY_CMD</code>).</li>
         <li><code>scripts/flash_firmware.ps1 -Port COMx</code> : compile et téléverse le firmware <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code> avec <code>arduino-cli</code>.</li>
     </ul>
+    
+    <h3>✅ Vérifications avant mise en production</h3>
+    <ol>
+        <li><strong>Backend Render</strong> : <code>DB_TYPE=pgsql</code>, toutes les variables <code>DB_*</code> + <code>JWT_SECRET</code> renseignées, dernier déploiement Docker réussi.</li>
+        <li><strong>Base PostgreSQL</strong> : <code>psql $DATABASE_URL -c "SELECT COUNT(*) FROM measurements;"</code> → &gt;0 ; <code>SELECT * FROM users_with_roles;</code> retourne les comptes attendus.</li>
+        <li><strong>Frontend local</strong> : <code>.env.local</code> pointant sur l’API Render, <code>npm run lint</code> + <code>npm run build</code> passent.</li>
+        <li><strong>Frontend GitHub Pages</strong> : build export statique avec <code>NEXT_STATIC_EXPORT=true</code> puis <code>git push</code> → vérifier <code>https://ymora.github.io/OTT/</code> (CSS + login).</li>
+        <li><strong>Tests manuels</strong> : connexion avec <code>admin@example.com</code>/<code>tech@example.com</code> (mots de passe définis par vos soins) et appel <code>curl https://ott-jbln.onrender.com/api.php/auth/login</code>.</li>
+    </ol>
     
     <h3>✅ Étape 5 : Tester la Solution Complète</h3>
     
@@ -1354,7 +1531,7 @@ https://ymora.github.io/OTT/
     
     <h3>🔧 Configuration des Mots de Passe</h3>
     
-    <p>Les mots de passe initiaux dans <code>schema.sql</code> utilisent un hash temporaire (<code>admin123</code>).</p>
+    <p>Les comptes de démonstration créés par <code>schema.sql</code> / <code>sql/demo_seed.sql</code> contiennent des <strong>hashes bcrypt fictifs</strong> (aucun mot de passe en clair). Vous devez générer vos propres hashes avant toute mise en production.</p>
     
     <p><strong>⚠️ IMPORTANT : Changer les mots de passe en production !</strong></p>
     
@@ -1840,8 +2017,8 @@ import ErrorBoundary from '@/components/ErrorBoundary'
     
     <div class="alert alert-danger">
         <strong>🚨 CRITIQUE - Action Immédiate Requise</strong><br>
-        Les mots de passe par défaut sont <code>admin123</code> pour TOUS les comptes.<br>
-        <strong>À changer AVANT la mise en production !</strong>
+        Les comptes de démonstration fournis par les seeds utilisent des <strong>hashes bcrypt génériques</strong> (même secret pour tout le monde).<br>
+        <strong>Remplacez-les par vos propres mots de passe AVANT la mise en production !</strong>
     </div>
     
     <h4>📋 Comptes par Défaut</h4>
@@ -1849,20 +2026,20 @@ import ErrorBoundary from '@/components/ErrorBoundary'
     <table>
         <thead>
             <tr>
-                <th>Email</th>
-                <th>Mot de passe actuel</th>
+                <th>Compte</th>
+                <th>Initialisation</th>
                 <th>Rôle</th>
             </tr>
         </thead>
         <tbody>
             <tr>
                 <td><code>admin@example.com</code></td>
-                <td><strong>admin123</strong> (temporaire)</td>
+                <td>Créé via <code>schema.sql</code> / <code>sql/demo_seed.sql</code> (hash bcrypt fictif). Remplacez immédiatement le mot de passe via <code>UPDATE_PASSWORDS_RENDER.sql</code>.</td>
                 <td>Admin</td>
             </tr>
             <tr>
                 <td><code>tech@example.com</code></td>
-                <td><strong>admin123</strong> (temporaire)</td>
+                <td>Créé via les seeds (hash bcrypt). À personnaliser avant mise en production.</td>
                 <td>Technicien</td>
             </tr>
         </tbody>

@@ -89,9 +89,66 @@ git push origin main
 - **Descendant** :
   - Dashboard Next.js appelle l’API (`NEXT_PUBLIC_API_URL`) pour charger stats, cartes Leaflet, notifications, OTA…
   - Les techniciens déclenchent OTA/config via `/api.php/devices/:id/ota` ou `/config`.
-  - Les devices récupèrent leurs OTA/config en GET sur les mêmes endpoints.
+  - Les dispositifs OTT se réveillent, mesurent, publient, puis récupèrent les commandes via `/devices/commands/pending`. Les ACK sont renvoyés sur `/devices/commands/ack` pour alimenter la console “Commandes”.
 - **Auth** : Next → `/api.php/auth/login` (JWT). Token stocké dans LocalStorage, injecté par `fetchWithAuth`. L’API vérifie JWT + permissions (rôles admin/tech/etc.).
 - **Docs / Firmware** : `public/DOCUMENTATION_COMPLETE_OTT.html` décrit la procédure complète, `hardware/firmware/...` contient les sources mais n’est pas versionné.
+
+---
+
+## 🛠️ Préparation Environnement
+
+### Frontend – `.env.local`
+
+| Variable | Description | Valeur recommandée |
+|----------|-------------|--------------------|
+| `NEXT_PUBLIC_API_URL` | URL publique de l’API PHP | `https://ott-jbln.onrender.com` |
+| `NEXT_PUBLIC_REQUIRE_AUTH` | Forcer la page de connexion | `true` en prod, `false` pour une démo readonly |
+| `NEXT_STATIC_EXPORT` | Utilisé pendant `npm run export` | `true` uniquement lors du build GitHub Pages |
+
+```bash
+cat > .env.local <<'EOF'
+NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
+NEXT_PUBLIC_REQUIRE_AUTH=true
+EOF
+```
+
+### Backend – variables Render (Docker service)
+
+| Variable | Rôle | Exemple |
+|----------|------|---------|
+| `DB_TYPE` | Choix du driver PDO | `pgsql` |
+| `DB_HOST` / `DB_NAME` / `DB_USER` / `DB_PASS` | Secrets Render Postgres | valeurs Render (`dpg-...`, `ott_data`, etc.) |
+| `DB_PORT` (optionnel) | Port Postgres | `5432` |
+| `JWT_SECRET` | Clé HMAC pour signer les tokens | générer via `openssl rand -hex 32` |
+| `AUTH_DISABLED` | Bypass login (demo) | `false` en prod |
+| `SENDGRID_*`, `TWILIO_*` | Clés notification | laisser vide si non utilisées |
+
+> Astuce : Render fournit aussi `DATABASE_URL`. Gardez-le pour les scripts/health-checks (`index.php` l’utilise), mais l’API lit surtout `DB_*`/`DB_TYPE`. Pensez à les définir **tous** pour éviter un fallback MySQL local.
+
+---
+
+## 🗄️ Base PostgreSQL (schema + seeds)
+
+1. Récupérer l’URL Render (`postgresql://.../ott_data`).
+2. Appliquer la structure + données anonymisées :
+   ```bash
+   DATABASE_URL="postgresql://..." ./scripts/db_migrate.sh --seed
+   # ou
+   psql $DATABASE_URL -f schema.sql
+   psql $DATABASE_URL -f sql/demo_seed.sql
+   ```
+3. Vérifier :
+   ```bash
+   psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"
+   psql $DATABASE_URL -c "SELECT * FROM users_with_roles;"
+   ```
+
+Le jeu de données installe automatiquement :
+- 4 rôles (`admin`, `medecin`, `technicien`, `viewer`) + 19 permissions.
+- 3 patients et 3 dispositifs reliés pour les pages Dashboard.
+- Des mesures/alertes/logs réalistes pour vérifier les graphiques.
+
+---
 
 ---
 
@@ -117,40 +174,40 @@ git push origin main
 
 ## 🔐 Sécurité & Configuration
 
-1. **Variables d'environnement Next.js**
-   Créer un fichier `.env.local` à la racine contenant :
-   ```
-   NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
-   NEXT_PUBLIC_REQUIRE_AUTH=true
-   ```
+1. **.env.local (Frontend)**  
+   - Voir tableau ci-dessus. Toute valeur absente retombe sur les defaults (`localhost`, auth désactivée), donc **ne pas commiter** le fichier.
 
-2. **Comptes de démonstration**
-   - Les seeds utilisent `admin@example.com` / `tech@example.com` avec hashes Bcrypt fictifs.
-   - Mettez à jour via `sql/demo_seed.sql` ou `UPDATE_PASSWORDS_RENDER.sql` avec vos propres emails/mots de passe.
+2. **Secrets backend obligatoires**  
+   - `JWT_SECRET` doit être régénéré par projet (`openssl rand -hex 32`).  
+   - `DB_TYPE=pgsql` + `DB_HOST/NAME/USER/PASS` = secrets Render Postgres.  
+   - `AUTH_DISABLED=false` en production (sinon accès libre).
 
-3. **Secrets & firmware**
-   - Aucun mot de passe en clair dans la doc.
-   - Firmware + fichiers CAO déplacés dans `hardware/` (hors Git) pour limiter la surface d’exposition.
+3. **Comptes de démonstration**  
+   - `schema.sql` + `sql/demo_seed.sql` créent `admin@example.com` / `tech@example.com` avec hashes fictifs.  
+   - Exécuter `UPDATE_PASSWORDS_RENDER.sql` ou `psql ... -c "UPDATE users SET password_hash = password_hash(...);"` avant mise en prod.
 
-4. **Contrôles d’accès critiques**
-   - Les actions sensibles (commandes bidirectionnelles, configuration distante, OTA, upload firmware) sont réservées exclusivement aux comptes **Admin**.
-   - Les autres rôles restent en lecture ou diagnostic uniquement ; toute tentative côté API retourne `403 Forbidden`.
+4. **Surface sensible réduite**  
+   - Firmware + CAO déplacés dans `hardware/` (hors Git).  
+   - Aucun mot de passe/jeton n’apparaît dans la doc, ni dans `public/*`.
 
-5. **Scripts d’exploitation**
-   - `scripts/db_migrate.sh [--seed]` : applique `schema.sql` (Postgres via `DATABASE_URL` ou MySQL via `DB_HOST/DB_USER/...`).
-   - `scripts/deploy_api.sh` : push rapide vers le remote Render (`RENDER_REMOTE`/`RENDER_BRANCH` configurables).
-   - `scripts/deploy_dashboard.sh` : `npm install` + build + commande de déploiement (`npm run deploy` par défaut).
-   - `scripts/flash_firmware.ps1 -Port COMx` : compile et flash `fw_ott_optimized.ino` via `arduino-cli`.
+5. **Contrôles d’accès**  
+   - OTA, commandes descendantes, configuration distante : rôle **Admin** uniquement.  
+   - Les autres rôles restent lecture/diagnostic ; l’API retourne `403 Forbidden` si la permission manque.
+
+6. **Scripts utiles**  
+   - `scripts/db_migrate.sh --seed` : applique `schema.sql` + `sql/demo_seed.sql` sur Postgres (`DATABASE_URL=...`).  
+   - `scripts/deploy_api.sh` / `scripts/deploy_dashboard.sh` : automatisent Render + GitHub Pages.  
+   - `scripts/flash_firmware.ps1 -Port COMx` : compil/flash Arduino CLI.
 
 ---
 
 ## ✨ Fonctionnalités Clés
 
 ### 🔧 Firmware
-- ✅ Mesure débit oxygène (MPXV7007DP)
-- ✅ Deep sleep optimisé (111j autonomie)
-- ✅ Watchdog anti-freeze
-- ✅ Transmission HTTPS sécurisée
+- ✅ Mesure débit oxygène (MPXV7007DP) + calibration polynomiale
+- ✅ Bidirectionnel complet (TinyGSM SIM7600, commandes SET_SLEEP_SECONDS/PING)
+- ✅ Deep sleep dynamique (5 min par défaut, override via dashboard)
+- ✅ Publication HTTPS sécurisée (Bearer JWT, endpoints `/devices/measurements`, `/devices/commands/*`)
 
 ### 🔌 API Backend
 - ✅ REST API avec JWT (désactivable via `AUTH_DISABLED=true`)
@@ -190,14 +247,34 @@ git push origin main
 
 ## 🗃️ Seeding & Modes
 
-- **Initialiser la base Render :**
+- **Initialiser / réinitialiser la base Render :**
   ```bash
+  DATABASE_URL="postgresql://..." ./scripts/db_migrate.sh --seed
+  # ou, pour rejouer seulement les seeds
   psql $DATABASE_URL -f sql/demo_seed.sql
   ```
 - **Mode lecture seule (sans login) :**
-  - Render : `AUTH_DISABLED=true`
+  - Backend : `AUTH_DISABLED=true`
   - Frontend : `NEXT_PUBLIC_REQUIRE_AUTH=false`
-- **Repasser en prod** : remettre les variables à `false` et réactiver la page de connexion.
+- **Repasser en prod** : remettre les variables précédentes à `false`, purger LocalStorage et relancer `npm run dev`.
+
+---
+
+## 🔁 Check-list alignement Local ↔ Web ↔ Render
+
+1. **Backend Render**
+   - `DB_TYPE=pgsql` + secrets Render Postgres OK.
+   - `JWT_SECRET` renseigné, `AUTH_DISABLED=false`.
+   - Dernier Docker image déployé (`Manual Deploy` si doute).
+2. **Base de données**
+   - `psql $DATABASE_URL -c "SELECT COUNT(*) FROM measurements;"` retourne > 0.
+   - `psql ... -c "SELECT * FROM users_with_roles;"` liste les comptes attendus.
+3. **Frontend local**
+   - `.env.local` pointe vers `https://ott-jbln.onrender.com`.
+   - `npm run lint && npm run build` passent.
+4. **Frontend GitHub Pages**
+   - `NEXT_STATIC_EXPORT=true npm run export` avant `git push`.
+   - Vérifier https://ymora.github.io/OTT/ (CSS + login) juste après le déploiement.
 
 ---
 
