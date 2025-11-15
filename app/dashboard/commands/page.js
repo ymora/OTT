@@ -7,6 +7,9 @@ import { fetchJson } from '@/lib/api'
 const commandOptions = [
   { value: 'SET_SLEEP_SECONDS', label: 'Modifier intervalle de sommeil' },
   { value: 'PING', label: 'Ping / Diagnostic rapide' },
+  { value: 'UPDATE_CONFIG', label: 'Mettre à jour la configuration' },
+  { value: 'UPDATE_CALIBRATION', label: 'Recalibrer le capteur' },
+  { value: 'OTA_REQUEST', label: 'Déclencher une mise à jour OTA' },
 ]
 
 const priorityOptions = [
@@ -41,6 +44,29 @@ export default function CommandsPage() {
     message: '',
     priority: 'normal',
     expiresInMinutes: 60,
+    configApn: '',
+    configJwt: '',
+    configIccid: '',
+    configSerial: '',
+    configSimPin: '',
+    configSleepMinutes: '',
+    configAirflowPasses: '',
+    configAirflowSamples: '',
+    configAirflowDelay: '',
+    configWatchdogSeconds: '',
+    configModemBootTimeout: '',
+    configSimReadyTimeout: '',
+    configNetworkAttachTimeout: '',
+    configModemReboots: '',
+    configOtaPrimaryUrl: '',
+    configOtaFallbackUrl: '',
+    configOtaMd5: '',
+    calA0: '',
+    calA1: '',
+    calA2: '',
+    otaUrl: '',
+    otaChannel: 'primary',
+    otaMd5: '',
   })
 
   const loadData = useCallback(async () => {
@@ -77,10 +103,68 @@ export default function CommandsPage() {
       return
     }
 
-    const payload =
-      form.command === 'SET_SLEEP_SECONDS'
-        ? { seconds: Number(form.sleepSeconds) || 300 }
-        : { message: form.message || 'PING' }
+    const payload = {}
+    if (form.command === 'SET_SLEEP_SECONDS') {
+      payload.seconds = Number(form.sleepSeconds) || 300
+    } else if (form.command === 'PING') {
+      payload.message = form.message?.trim() || 'PING'
+    } else if (form.command === 'UPDATE_CONFIG') {
+      const addString = (key, value) => {
+        const trimmed = (value ?? '').trim()
+        if (trimmed) payload[key] = trimmed
+      }
+      const addNumber = (key, value) => {
+        if (value === '' || value === null || value === undefined) return
+        const num = Number(value)
+        if (Number.isFinite(num)) {
+          payload[key] = num
+        }
+      }
+      addString('apn', form.configApn)
+      addString('jwt', form.configJwt)
+      addString('iccid', form.configIccid)
+      addString('serial', form.configSerial)
+      addString('sim_pin', form.configSimPin)
+      addNumber('sleep_minutes_default', form.configSleepMinutes)
+      addNumber('airflow_passes', form.configAirflowPasses)
+      addNumber('airflow_samples_per_pass', form.configAirflowSamples)
+      addNumber('airflow_delay_ms', form.configAirflowDelay)
+      addNumber('watchdog_seconds', form.configWatchdogSeconds)
+      addNumber('modem_boot_timeout_ms', form.configModemBootTimeout)
+      addNumber('sim_ready_timeout_ms', form.configSimReadyTimeout)
+      addNumber('network_attach_timeout_ms', form.configNetworkAttachTimeout)
+      addNumber('modem_max_reboots', form.configModemReboots)
+      addString('ota_primary_url', form.configOtaPrimaryUrl)
+      addString('ota_fallback_url', form.configOtaFallbackUrl)
+      addString('ota_md5', form.configOtaMd5)
+
+      if (Object.keys(payload).length === 0) {
+        setError('Veuillez renseigner au moins un champ de configuration')
+        return
+      }
+    } else if (form.command === 'UPDATE_CALIBRATION') {
+      if (form.calA0 === '' || form.calA1 === '' || form.calA2 === '') {
+        setError('Veuillez fournir les coefficients a0, a1 et a2')
+        return
+      }
+      payload.a0 = Number(form.calA0)
+      payload.a1 = Number(form.calA1)
+      payload.a2 = Number(form.calA2)
+      if ([payload.a0, payload.a1, payload.a2].some((value) => Number.isNaN(value))) {
+        setError('Les coefficients doivent être numériques')
+        return
+      }
+    } else if (form.command === 'OTA_REQUEST') {
+      payload.channel = form.otaChannel
+      const trimmedUrl = form.otaUrl?.trim()
+      if (trimmedUrl) {
+        payload.url = trimmedUrl
+      }
+      const trimmedMd5 = form.otaMd5?.trim()
+      if (trimmedMd5) {
+        payload.md5 = trimmedMd5
+      }
+    }
 
     const body = {
       command: form.command,
@@ -272,6 +356,216 @@ export default function CommandsPage() {
                   value={form.message}
                   onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
                 />
+              </div>
+            )}
+
+            {form.command === 'UPDATE_CONFIG' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500">
+                  Remplir uniquement les champs à modifier. Les valeurs numériques sont optionnelles.
+                </p>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Identité & secrets</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      className="input"
+                      placeholder="APN"
+                      value={form.configApn}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configApn: e.target.value }))}
+                    />
+                    <input
+                      className="input"
+                      placeholder="JWT Bearer..."
+                      value={form.configJwt}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configJwt: e.target.value }))}
+                    />
+                    <input
+                      className="input"
+                      placeholder="ICCID"
+                      value={form.configIccid}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configIccid: e.target.value }))}
+                    />
+                    <input
+                      className="input"
+                      placeholder="Numéro de série"
+                      value={form.configSerial}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configSerial: e.target.value }))}
+                    />
+                    <input
+                      className="input"
+                      placeholder="PIN SIM"
+                      value={form.configSimPin}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configSimPin: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Mesures & sommeil</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      type="number"
+                      min={1}
+                      className="input"
+                      placeholder="Sommeil par défaut (minutes)"
+                      value={form.configSleepMinutes}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configSleepMinutes: e.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      className="input"
+                      placeholder="Passes capteur"
+                      value={form.configAirflowPasses}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configAirflowPasses: e.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      className="input"
+                      placeholder="Échantillons / passe"
+                      value={form.configAirflowSamples}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configAirflowSamples: e.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      className="input"
+                      placeholder="Délai échantillons (ms)"
+                      value={form.configAirflowDelay}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configAirflowDelay: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Watchdog & modem</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      type="number"
+                      min={5}
+                      className="input"
+                      placeholder="Watchdog (secondes)"
+                      value={form.configWatchdogSeconds}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configWatchdogSeconds: e.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      min={1000}
+                      className="input"
+                      placeholder="Timeout boot modem (ms)"
+                      value={form.configModemBootTimeout}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configModemBootTimeout: e.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      min={1000}
+                      className="input"
+                      placeholder="Timeout SIM prête (ms)"
+                      value={form.configSimReadyTimeout}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configSimReadyTimeout: e.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      min={1000}
+                      className="input"
+                      placeholder="Timeout attache réseau (ms)"
+                      value={form.configNetworkAttachTimeout}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configNetworkAttachTimeout: e.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      className="input"
+                      placeholder="Redémarrages modem max"
+                      value={form.configModemReboots}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configModemReboots: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">OTA par défaut</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      className="input"
+                      placeholder="URL primaire"
+                      value={form.configOtaPrimaryUrl}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configOtaPrimaryUrl: e.target.value }))}
+                    />
+                    <input
+                      className="input"
+                      placeholder="URL fallback"
+                      value={form.configOtaFallbackUrl}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configOtaFallbackUrl: e.target.value }))}
+                    />
+                    <input
+                      className="input md:col-span-2"
+                      placeholder="MD5 attendu (optionnel)"
+                      value={form.configOtaMd5}
+                      onChange={(e) => setForm((prev) => ({ ...prev, configOtaMd5: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {form.command === 'UPDATE_CALIBRATION' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {['a0', 'a1', 'a2'].map((coef) => (
+                  <div key={coef}>
+                    <label className="label">Coefficient {coef.toUpperCase()}</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input"
+                      value={form[`cal${coef.toUpperCase()}`]}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          [`cal${coef.toUpperCase()}`]: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {form.command === 'OTA_REQUEST' && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">
+                  Laisser l’URL vide pour utiliser la valeur primaire/fallback stockée dans le boîtier.
+                </p>
+                <div>
+                  <label className="label">Canal</label>
+                  <select
+                    className="input"
+                    value={form.otaChannel}
+                    onChange={(e) => setForm((prev) => ({ ...prev, otaChannel: e.target.value }))}
+                  >
+                    <option value="primary">Primaire</option>
+                    <option value="fallback">Fallback</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">URL binaire (optionnel)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={form.otaUrl}
+                    onChange={(e) => setForm((prev) => ({ ...prev, otaUrl: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label">MD5 attendu (optionnel)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={form.otaMd5}
+                    onChange={(e) => setForm((prev) => ({ ...prev, otaMd5: e.target.value }))}
+                  />
+                </div>
               </div>
             )}
 

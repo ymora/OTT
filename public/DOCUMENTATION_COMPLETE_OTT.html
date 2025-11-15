@@ -345,7 +345,7 @@
     <h3>✅ Réalisé / disponible</h3>
     <ul>
         <li>🔒 Les commandes descendantes, OTA et configurations distantes sont désormais limitées aux comptes <strong>Admin</strong> (backend + dashboard).</li>
-        <li>📡 Firmware `fw_ott_optimized.ino`: réception de commandes (SET_SLEEP_SECONDS, PING), ACK automatique, intervalle de sommeil dynamique stocké en RTC.</li>
+        <li>📡 Firmware `fw_ott_optimized.ino`: réception de commandes (SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST), ACK automatique, intervalle de sommeil dynamique stocké en RTC.</li>
         <li>🗃️ Table `device_commands` + nouveaux endpoints (`POST /devices/{iccid}/commands`, `GET /devices/commands`, `POST /devices/commands/ack`).</li>
         <li>🖥️ Page React “Commandes” (dashboard) pour planifier/visualiser les ordres, restreinte aux admins.</li>
         <li>🧾 Documentation/README à jour (section bidirectionnelle, restrictions d’accès, endpoints exposés).</li>
@@ -1291,7 +1291,7 @@ export DB_PASS=postgres
     <p>Le firmware ESP32 applique désormais strictement les contrats API suivants (HTTPS, header <code>X-Device-ICCID</code>) :</p>
     <ul>
         <li>POST <code>/api.php/devices/measurements</code> avec <code>device_sim_iccid</code>, <code>device_serial</code>, <code>firmware_version</code> et un bloc <code>payload</code> (<code>flowrate</code>, <code>battery</code>, <code>signal_strength</code>/<code>signal_dbm</code>).</li>
-        <li>GET <code>/api.php/devices/{iccid}/commands/pending?limit=5</code> pour récupérer les commandes <code>SET_SLEEP_SECONDS</code>, <code>PING</code>, <code>UPDATE_CONFIG</code>, <code>UPDATE_CALIBRATION</code>.</li>
+        <li>GET <code>/api.php/devices/{iccid}/commands/pending?limit=5</code> pour récupérer les commandes <code>SET_SLEEP_SECONDS</code>, <code>PING</code>, <code>UPDATE_CONFIG</code>, <code>UPDATE_CALIBRATION</code>, <code>OTA_REQUEST</code>.</li>
         <li>POST <code>/api.php/devices/commands/ack</code> (champs <code>device_sim_iccid</code>, <code>command_id</code>, <code>status</code>, <code>message</code>) afin d’auditer l’exécution côté dashboard.</li>
         <li>POST <code>/api.php/devices/logs</code> avec <code>device_sim_iccid</code> + <code>event{level,type,message}</code>. Un tampon NVS de 10 entrées vide les logs dès que le modem retrouve le réseau.</li>
     </ul>

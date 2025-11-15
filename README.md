@@ -235,12 +235,15 @@ Le jeu de données installe automatiquement :
 
 ### 🔧 Firmware
 - ✅ Mesure débit oxygène (MPXV7007DP) + calibration polynomiale (override possible via `UPDATE_CALIBRATION`)
-- ✅ Bidirectionnel complet (TinyGSM SIM7600, commandes `SET_SLEEP_SECONDS`, `PING`, `UPDATE_CONFIG`, `UPDATE_CALIBRATION`)
-- ✅ Deep sleep dynamique (5 min par défaut, override via dashboard)
+- ✅ Bidirectionnel complet (TinyGSM SIM7600, commandes `SET_SLEEP_SECONDS`, `PING`, `UPDATE_CONFIG`, `UPDATE_CALIBRATION`, `OTA_REQUEST`)
+- ✅ Deep sleep dynamique (5 min par défaut, override via dashboard + configuration distante)
 - ✅ Publication HTTPS sécurisée (Bearer JWT, endpoints `/devices/measurements`, `/devices/commands/*`, `/devices/logs`)
+- ✅ Watchdog applicatif + instrumentation série (flux/batterie/RSSI, compte commandes, progression OTA)
+- ✅ Mesure paramétrable (passes, échantillons, délais) + timeouts modem/OTA ajustables à chaud
+- ✅ OTA primaire/fallback avec vérification MD5, rollback possible via `OTA_REQUEST`
 - ✅ Configuration par défaut embarquée (ICCID/APN/SIM PIN + JWT optionnel via macros `OTT_DEFAULT_*`) pour boîtiers prêts à l’emploi sans commande distante
 - ✅ Protocoles API alignés : headers `X-Device-ICCID`, payload `device_sim_iccid` + `payload{flowrate,battery,signal_*}`, prise en charge des réponses `/devices/{iccid}/commands/pending`
-- ✅ Reconfiguration distante des secrets APN/JWT/ICCID/serial/PIN SIM (sauvegarde NVS)
+- ✅ Reconfiguration distante des secrets APN/JWT/ICCID/serial/PIN SIM et paramètres runtime (watchdog, OTA, mesures) stockés en NVS
 
 ### 🔌 API Backend
 - ✅ REST API avec JWT (désactivable via `AUTH_DISABLED=true`)
