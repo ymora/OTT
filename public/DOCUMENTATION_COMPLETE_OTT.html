@@ -1270,6 +1270,12 @@ EOF
         <strong>Checklist backend :</strong> toutes les variables <code>DB_*</code> remplies, <code>JWT_SECRET</code> unique, <code>AUTH_DISABLED=false</code> avant mise en production.
     </div>
 
+    <div class="rounded-xl border border-primary/20 bg-primary/5 p-4 mt-4">
+        <p class="text-sm text-primary-900">
+            <strong>Nouveau :</strong> la page <code>/diagnostics</code> du dashboard interroge automatiquement l&rsquo;API (endpoint <code>index.php</code>) pour afficher le statut service, la connexion Postgres et les variables front exposées. Utilisez-la lors des tests locaux ou après un déploiement.
+        </p>
+    </div>
+
     <h4>Base PostgreSQL locale (Docker Compose)</h4>
     <ol>
         <li><code>docker compose up -d db</code> (fichier racine) pour lancer Postgres 15.</li>

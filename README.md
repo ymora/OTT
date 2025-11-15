@@ -228,6 +228,7 @@ Le jeu de données installe automatiquement :
    - `psql $DATABASE_URL -f sql/create_demo_user.sql` : crée/active `demo@example.com` (role viewer).  
    - `scripts/deploy_api.sh` / `scripts/deploy_dashboard.sh` : automatisent Render + GitHub Pages.  
    - `scripts/flash_firmware.ps1 -Port COMx` : compil/flash Arduino CLI.
+   - Page `/diagnostics` : teste en un clic l’API (`index.php`), affiche version, statut base Postgres et variables `NEXT_PUBLIC_*`.
 
 ---
 
