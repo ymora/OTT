@@ -264,12 +264,17 @@ Le jeu de données installe automatiquement :
 - ✅ Multi-utilisateurs (4 rôles, 19 permissions)
 - ✅ OTA firmware management
 - ✅ Notifications (Email/SMS/Push)
+- ✅ CRUD Patients (`GET/POST/PUT /patients`) avec audit automatique
+- ✅ Endpoint `/reports/overview` (agrégats débit/batterie, top dispositifs, répartition des alertes)
 
 ### ⚛️ Dashboard React
 - ✅ 12 pages complètes
 - ✅ Animations modernes et fluides
 - ✅ PWA installable
 - ✅ Responsive mobile-first
+- ✅ Modale “Nouveau patient” reliée aux permissions `patients.edit`
+- ✅ Page Rapports interactive (cartes + graphiques Chart.js + exports)
+- ✅ Alertes contextualisées (patient + dispositif + liens carte)
 
 ---
 

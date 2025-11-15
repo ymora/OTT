@@ -362,6 +362,14 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 // Patients (V1 compatible)
 } elseif(preg_match('#/patients$#', $path) && $method === 'GET') {
     handleGetPatients();
+} elseif(preg_match('#/patients$#', $path) && $method === 'POST') {
+    handleCreatePatient();
+} elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PUT') {
+    handleUpdatePatient($m[1]);
+
+// Reports
+} elseif(preg_match('#/reports/overview$#', $path) && $method === 'GET') {
+    handleGetReportsOverview();
 
 } else {
     http_response_code(404);
@@ -1277,6 +1285,148 @@ function handleGetPatients() {
             ORDER BY p.last_name, p.first_name
         ");
         echo json_encode(['success' => true, 'patients' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleCreatePatient() {
+    global $pdo;
+    requirePermission('patients.edit');
+
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+
+    $first_name = trim($input['first_name'] ?? '');
+    $last_name = trim($input['last_name'] ?? '');
+    if (empty($first_name) || empty($last_name)) {
+        http_response_code(422);
+        echo json_encode(['success' => false, 'error' => 'Prénom et nom sont requis']);
+        return;
+    }
+
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO patients (first_name, last_name, birth_date, phone, email, city, postal_code)
+            VALUES (:first_name, :last_name, :birth_date, :phone, :email, :city, :postal_code)
+            RETURNING *
+        ");
+        $stmt->execute([
+            'first_name' => $first_name,
+            'last_name' => $last_name,
+            'birth_date' => $input['birth_date'] ?? null,
+            'phone' => $input['phone'] ?? null,
+            'email' => $input['email'] ?? null,
+            'city' => $input['city'] ?? null,
+            'postal_code' => $input['postal_code'] ?? null
+        ]);
+        $patient = $stmt->fetch();
+        auditLog('patient.created', 'patient', $patient['id'], null, $patient);
+        echo json_encode(['success' => true, 'patient' => $patient]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleUpdatePatient($patient_id) {
+    global $pdo;
+    requirePermission('patients.edit');
+
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id");
+        $stmt->execute(['id' => $patient_id]);
+        $patient = $stmt->fetch();
+
+        if (!$patient) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Patient introuvable']);
+            return;
+        }
+
+        $fields = ['first_name','last_name','birth_date','phone','email','city','postal_code','address','notes'];
+        $updates = [];
+        $params = ['id' => $patient_id];
+
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $input)) {
+                $updates[] = "$field = :$field";
+                $params[$field] = $input[$field];
+            }
+        }
+
+        if (empty($updates)) {
+            echo json_encode(['success' => true, 'patient' => $patient]);
+            return;
+        }
+
+        $pdo->prepare("
+            UPDATE patients SET " . implode(',', $updates) . ", updated_at = NOW()
+            WHERE id = :id
+        ")->execute($params);
+
+        $stmt->execute(['id' => $patient_id]);
+        $updated = $stmt->fetch();
+        auditLog('patient.updated', 'patient', $patient_id, $patient, $updated);
+        echo json_encode(['success' => true, 'patient' => $updated]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetReportsOverview() {
+    global $pdo;
+    requirePermission('reports.view');
+
+    try {
+        $stats = [
+            'devices_total' => (int)$pdo->query("SELECT COUNT(*) FROM devices")->fetchColumn(),
+            'devices_active' => (int)$pdo->query("SELECT COUNT(*) FROM devices WHERE status = 'active'")->fetchColumn(),
+            'alerts_unresolved' => (int)$pdo->query("SELECT COUNT(*) FROM alerts WHERE status = 'unresolved'")->fetchColumn(),
+            'measurements_24h' => (int)$pdo->query("SELECT COUNT(*) FROM measurements WHERE timestamp >= NOW() - INTERVAL '24 HOURS'")->fetchColumn(),
+            'avg_flowrate_24h' => round((float)$pdo->query("SELECT AVG(flowrate) FROM measurements WHERE timestamp >= NOW() - INTERVAL '24 HOURS'")->fetchColumn(), 2),
+            'avg_battery_24h' => round((float)$pdo->query("SELECT AVG(battery) FROM measurements WHERE battery IS NOT NULL AND timestamp >= NOW() - INTERVAL '24 HOURS'")->fetchColumn(), 2)
+        ];
+
+        $trendStmt = $pdo->query("
+            SELECT DATE(timestamp) AS day,
+                   ROUND(AVG(flowrate)::numeric, 2) AS avg_flowrate,
+                   ROUND(AVG(battery)::numeric, 2) AS avg_battery
+            FROM measurements
+            WHERE timestamp >= NOW() - INTERVAL '7 DAYS'
+            GROUP BY day
+            ORDER BY day
+        ");
+
+        $topDevicesStmt = $pdo->query("
+            SELECT d.id, d.device_name, d.sim_iccid, d.latitude, d.longitude, d.status,
+                   ROUND(AVG(m.flowrate)::numeric, 2) AS avg_flowrate,
+                   ROUND(AVG(m.battery)::numeric, 2) AS avg_battery,
+                   MAX(m.timestamp) AS last_measurement
+            FROM devices d
+            LEFT JOIN measurements m ON m.device_id = d.id
+            GROUP BY d.id
+            ORDER BY last_measurement DESC NULLS LAST
+            LIMIT 5
+        ");
+
+        $severityStmt = $pdo->query("
+            SELECT severity, COUNT(*) AS count
+            FROM alerts
+            WHERE status = 'unresolved'
+            GROUP BY severity
+        ");
+
+        echo json_encode([
+            'success' => true,
+            'overview' => $stats,
+            'trend' => $trendStmt->fetchAll(),
+            'top_devices' => $topDevicesStmt->fetchAll(),
+            'severity_breakdown' => $severityStmt->fetchAll()
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);

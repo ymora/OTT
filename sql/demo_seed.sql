@@ -106,7 +106,8 @@ SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled, phone_number)
 VALUES
   (1, TRUE, FALSE, TRUE, '+33611223344'),
-  (2, TRUE, TRUE, TRUE, '+33655667788')
+  (2, TRUE, TRUE, TRUE, '+33655667788'),
+  (3, TRUE, FALSE, TRUE, '+33777889911')
 ON CONFLICT (user_id) DO UPDATE SET
   email_enabled = EXCLUDED.email_enabled,
   sms_enabled = EXCLUDED.sms_enabled,
@@ -117,11 +118,13 @@ ON CONFLICT (user_id) DO UPDATE SET
 INSERT INTO notifications_queue (user_id, type, priority, subject, message)
 VALUES
   (1, 'email', 'medium', 'Rapport quotidien', 'Résumé des événements du 14/11'),
-  (2, 'sms', 'high', 'Alerte batterie', 'Le dispositif OTT-Marseille-003 est en batterie critique')
+  (2, 'sms', 'high', 'Alerte batterie', 'Le dispositif OTT-Marseille-003 est en batterie critique'),
+  (3, 'push', 'low', 'Nouveau patient assigné', 'Le patient Jacques Bernard est désormais suivi')
 ON CONFLICT DO NOTHING;
 
 -- Audit logs de démonstration
 INSERT INTO audit_logs (user_id, action, entity_type, entity_id, ip_address, old_value, new_value)
 VALUES
   (1, 'device.config_updated', 'device', '1', '192.168.0.12', NULL, '{"sleep_interval":300}'),
-  (2, 'user.login', 'user', '2', '192.168.0.45', NULL, NULL);
+  (2, 'user.login', 'user', '2', '192.168.0.45', NULL, NULL),
+  (3, 'patient.created', 'patient', '3', '10.0.0.23', NULL, '{"first_name":"Jacques"}');

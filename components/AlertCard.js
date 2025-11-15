@@ -17,11 +17,19 @@ export default function AlertCard({ alert, delay = 0 }) {
     >
       <div className="flex items-start gap-3">
         <span className="text-2xl">{config.icon}</span>
-        <div className="flex-1">
+        <div className="flex-1 space-y-1">
           <p className={`font-semibold ${config.textColor}`}>{alert.message}</p>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="text-sm text-gray-600">
             {new Date(alert.created_at).toLocaleString('fr-FR')}
           </p>
+          <div className="text-sm text-gray-700">
+            {alert.device_name && (
+              <p>📟 <span className="font-medium">{alert.device_name}</span> ({alert.sim_iccid})</p>
+            )}
+            {(alert.first_name || alert.last_name) && (
+              <p>🧑 {`${alert.first_name ?? ''} ${alert.last_name ?? ''}`.trim() || 'Patient non assigné'}</p>
+            )}
+          </div>
         </div>
         <span className={`badge ${config.textColor} bg-white`}>{alert.severity}</span>
       </div>

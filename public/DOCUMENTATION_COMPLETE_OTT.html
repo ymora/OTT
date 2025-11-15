@@ -935,6 +935,12 @@ GET    /api.php/alerts/:id               # Détails d'une alerte
 PUT    /api.php/alerts/:id               # Modifier une alerte (résoudre)
     </pre>
     
+    <h4>📊 Rapports</h4>
+    
+    <pre>
+GET    /api.php/reports/overview         # KPI débit/batterie, top dispositifs, histogramme alertes
+    </pre>
+    
     <h4>👤 Utilisateurs (admin only)</h4>
     
     <pre>
@@ -1043,13 +1049,13 @@ TWILIO_PHONE_NUMBER=+33123456789
                 <td>3</td>
                 <td><strong>Patients</strong></td>
                 <td><code>/dashboard/patients</code></td>
-                <td>Liste, ajout, modification, historique</td>
+                <td>Liste + modale création patient (permissions patients.edit)</td>
             </tr>
             <tr>
                 <td>4</td>
                 <td><strong>Alertes</strong></td>
                 <td><code>/dashboard/alerts</code></td>
-                <td>Filtres par sévérité, résolution, export</td>
+                <td>Cartes contextualisées (patient/device) + filtres</td>
             </tr>
             <tr>
                 <td>5</td>
@@ -1062,6 +1068,12 @@ TWILIO_PHONE_NUMBER=+33123456789
                 <td><strong>Historique</strong></td>
                 <td><code>/dashboard/history</code></td>
                 <td>Graphiques temporels, export CSV/PDF</td>
+            </tr>
+            <tr>
+                <td>7</td>
+                <td><strong>Rapports</strong></td>
+                <td><code>/dashboard/reports</code></td>
+                <td>KPI, graphiques Chart.js, top dispositifs, alerte breakdown</td>
             </tr>
             <tr>
                 <td>7</td>
