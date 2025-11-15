@@ -394,6 +394,14 @@
 └─────────────────┘     • Animations modernes
     </pre>
     
+    <h3>🔁 Flux de données</h3>
+    <ul>
+        <li><strong>Montant (device → cloud)</strong> : le firmware mesure (débit, batterie) toutes les 5 min, propage via HTTPS/JSON vers <code>/api.php/devices/measurements</code> et <code>/logs</code>. Les OTA/configs sont récupérées en GET sur <code>/devices/:id/ota</code>.</li>
+        <li><strong>Persisté</strong> : l’API Docker (Render) écrit en PostgreSQL (tables <code>devices</code>, <code>measurements</code>, <code>alerts</code>, <code>audit_logs</code>…), via PDO.</li>
+        <li><strong>Descendant</strong> : le Dashboard Next.js (GitHub Pages) appelle l’API (<code>NEXT_PUBLIC_API_URL</code>) pour stats, cartes, notifications, OTA. Les techniciens déclenchent OTA/config depuis l’UI ; l’API enregistre l’action + écrit en DB.</li>
+        <li><strong>Auth</strong> : Next.js poste sur <code>/api.php/auth/login</code>, stocke le JWT (LocalStorage) et <code>fetchWithAuth</code> ajoute <code>Authorization: Bearer ...</code> à chaque requête.</li>
+    </ul>
+    
     <h3>📁 Structure du Projet</h3>
     
     <div class="file-tree">

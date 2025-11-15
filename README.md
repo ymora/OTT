@@ -33,7 +33,7 @@ https://ymora.github.io/OTT/
 
 ### 🔌 API Backend
 ```
-https://ott-api.onrender.com
+https://ott-jbln.onrender.com
 ```
 
 ### 📦 GitHub Repository
@@ -61,25 +61,37 @@ git push origin main
 ```
 
 ## 🏗️ Architecture
+```
+ ┌────────────────────────────┐
+ │  Firmware ESP32 + SIM7600  │
+ │  capteur MPXV7007 + OTA    │
+ └─────────────┬──────────────┘
+               │ HTTPS (POST JSON mesures/logs, OTA GET)
+               ▼
+ ┌────────────────────────────┐        ┌────────────────────────────┐
+ │  API PHP (Render Docker)   │ <────> │  PostgreSQL (Render DB)    │
+ │  - auth JWT / rôles        │        │  - tables devices, alerts │
+ │  - endpoints REST / OTA    │        │  - audit + notifications  │
+ └─────────────┬──────────────┘        └─────────────┬──────────────┘
+               │ REST (JSON)                         │ via PDO
+               ▼                                     │
+ ┌────────────────────────────┐                      │
+ │  Dashboard Next.js (PWA)   │◀─────────────────────┘
+ │  - hébergé sur GitHub Pages│
+ │  - AuthContext → JWT       │
+ │  - compos Santés, maps…    │
+ └────────────────────────────┘
+```
 
-```
-┌─────────────┐
-│   ESP32     │  ← Firmware C++ (mesure + 4G)
-│  + SIM7600  │     111 jours autonomie !
-└──────┬──────┘
-       │ HTTPS
-       ↓
-┌─────────────┐
-│ API PHP     │  ← Render.com (7€/mois)
-│ PostgreSQL  │     JWT + Multi-users + OTA
-└──────┬──────┘
-       │ REST
-       ↓
-┌─────────────┐
-│  Dashboard  │  ← Next.js/React (GitHub Pages)
-│  React PWA  │     12 pages + Animations modernes
-└─────────────┘
-```
+### Flux global
+- **Montant (devices → cloud)** : le firmware capture débit/batterie toutes les 5 min, ouvre le modem 4G, poste sur `/api.php/devices/measurements` (JSON + Bearer token quand auth active). Les logs et alertes utilisent `/api.php/devices/logs` et `/api.php/alerts`.
+- **Persisté** : l’API écrit dans PostgreSQL (tables `devices`, `measurements`, `alerts`, `audit_logs`, etc.). Les requêtes utilisent PDO (pgsql) et auditent chaque action.
+- **Descendant** :
+  - Dashboard Next.js appelle l’API (`NEXT_PUBLIC_API_URL`) pour charger stats, cartes Leaflet, notifications, OTA…
+  - Les techniciens déclenchent OTA/config via `/api.php/devices/:id/ota` ou `/config`.
+  - Les devices récupèrent leurs OTA/config en GET sur les mêmes endpoints.
+- **Auth** : Next → `/api.php/auth/login` (JWT). Token stocké dans LocalStorage, injecté par `fetchWithAuth`. L’API vérifie JWT + permissions (rôles admin/tech/etc.).
+- **Docs / Firmware** : `public/DOCUMENTATION_COMPLETE_OTT.html` décrit la procédure complète, `hardware/firmware/...` contient les sources mais n’est pas versionné.
 
 ---
 
@@ -108,7 +120,7 @@ git push origin main
 1. **Variables d'environnement Next.js**
    Créer un fichier `.env.local` à la racine contenant :
    ```
-   NEXT_PUBLIC_API_URL=https://ott-api.onrender.com
+   NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
    NEXT_PUBLIC_REQUIRE_AUTH=true
    ```
 
