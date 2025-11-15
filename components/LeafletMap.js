@@ -11,6 +11,15 @@ const statusColors = {
   offline: '#ef4444'
 }
 
+const statusBadges = {
+  online: 'text-green-700 bg-green-50 border-green-100',
+  warning: 'text-amber-700 bg-amber-50 border-amber-100',
+  offline: 'text-red-700 bg-red-50 border-red-100'
+}
+
+const ONLINE_THRESHOLD_HOURS = 2
+const WARNING_THRESHOLD_HOURS = 6
+
 function buildIcon(status = 'online') {
   const color = statusColors[status] || statusColors.online
   return L.divIcon({
@@ -30,6 +39,48 @@ function buildIcon(status = 'online') {
   })
 }
 
+function hoursSince(timestamp) {
+  if (!timestamp) return Number.POSITIVE_INFINITY
+  const last = new Date(timestamp).getTime()
+  if (Number.isNaN(last)) return Number.POSITIVE_INFINITY
+  return (Date.now() - last) / (1000 * 60 * 60)
+}
+
+function computeConnectionStatus(device) {
+  const hours = hoursSince(device.last_seen)
+  if (!Number.isFinite(hours)) {
+    return { status: 'offline', label: 'Jamais vu', lastSeenLabel: 'Jamais' }
+  }
+  if (hours < ONLINE_THRESHOLD_HOURS) {
+    return {
+      status: 'online',
+      label: 'En ligne',
+      lastSeenLabel: new Date(device.last_seen).toLocaleString('fr-FR')
+    }
+  }
+  if (hours < WARNING_THRESHOLD_HOURS) {
+    return {
+      status: 'warning',
+      label: 'Inactif récent',
+      lastSeenLabel: new Date(device.last_seen).toLocaleString('fr-FR')
+    }
+  }
+  return {
+    status: 'offline',
+    label: 'Hors ligne',
+    lastSeenLabel: new Date(device.last_seen).toLocaleString('fr-FR')
+  }
+}
+
+function computeBatteryMeta(value) {
+  if (typeof value !== 'number') {
+    return { label: 'N/A', status: 'unknown' }
+  }
+  if (value < 20) return { label: `${value.toFixed(0)}%`, status: 'critical' }
+  if (value < 50) return { label: `${value.toFixed(0)}%`, status: 'low' }
+  return { label: `${value.toFixed(0)}%`, status: 'ok' }
+}
+
 function DeviceMarkers({ devices, focusDeviceId }) {
   const map = useMap()
 
@@ -41,22 +92,54 @@ function DeviceMarkers({ devices, focusDeviceId }) {
     }
   }, [focusDeviceId, devices, map])
 
+  const enrichedDevices = useMemo(
+    () =>
+      devices.map(device => {
+        const connection = computeConnectionStatus(device)
+        const battery = computeBatteryMeta(device.last_battery)
+        return {
+          ...device,
+          connectionStatus: connection.status,
+          connectionLabel: connection.label,
+          lastSeenLabel: connection.lastSeenLabel,
+          batteryLabel: battery.label,
+          batteryStatus: battery.status
+        }
+      }),
+    [devices]
+  )
+
   return (
     <>
-      {devices.map(device => (
+      {enrichedDevices.map(device => (
         <Marker
           key={device.id}
           position={[device.latitude, device.longitude]}
-          icon={buildIcon(device.status)}
+          icon={buildIcon(device.connectionStatus)}
         >
           <Popup>
-            <div className="space-y-1">
-              <p className="font-semibold">{device.device_name}</p>
-              <p className="text-sm text-gray-600">{device.city || 'Ville inconnue'}</p>
-              <p className="text-sm">Batterie: {device.last_battery ?? 'N/A'}%</p>
-              <p className="text-sm">Etat: {device.status}</p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold text-sm">{device.device_name || device.sim_iccid}</p>
+                <span
+                  className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                    statusBadges[device.connectionStatus] || statusBadges.online
+                  }`}
+                >
+                  {device.connectionLabel}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600">{device.city || 'Localisation inconnue'}</p>
+              <p className="text-sm">
+                🔋 Batterie&nbsp;: {device.batteryLabel}{' '}
+                {device.batteryStatus === 'critical' && <span className="text-red-600 font-semibold">(critique)</span>}
+                {device.batteryStatus === 'low' && <span className="text-amber-600 font-semibold">(basse)</span>}
+              </p>
+              <p className="text-sm">🕒 Dernier contact&nbsp;: {device.lastSeenLabel}</p>
               {device.first_name && (
-                <p className="text-sm">Patient: {device.first_name} {device.last_name}</p>
+                <p className="text-sm text-gray-700">
+                  👤 {device.first_name} {device.last_name}
+                </p>
               )}
             </div>
           </Popup>
