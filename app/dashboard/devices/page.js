@@ -394,16 +394,14 @@ export default function DevicesPage() {
                           >
                             <span className="text-lg">👤</span>
                           </button>
-                          {isAdmin && (
-                            <button
-                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                              onClick={() => handleOTA(device)}
-                              disabled={otaLoading[device.id]}
-                              title="Lancer mise à jour OTA"
-                            >
-                              <span className="text-lg">{otaLoading[device.id] ? '⏳' : '🔄'}</span>
-                            </button>
-                          )}
+                          <button
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                            onClick={() => handleOTA(device)}
+                            disabled={!isAdmin || otaLoading[device.id]}
+                            title={isAdmin ? "Lancer mise à jour OTA" : "OTA réservé aux administrateurs"}
+                          >
+                            <span className="text-lg">{otaLoading[device.id] ? '⏳' : '🔄'}</span>
+                          </button>
                           {device.latitude && device.longitude && (
                             <button
                               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"

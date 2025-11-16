@@ -72,15 +72,14 @@ export default function AuditPage() {
           <h1 className="text-3xl font-bold">📜 Journal d&apos;Audit</h1>
           <p className="text-gray-600 mt-1">Traçabilité complète des actions</p>
         </div>
-        {isAdmin && (
-          <button
-            onClick={handleClearLogs}
-            disabled={clearing}
-            className="btn-danger"
-          >
-            {clearing ? '⏳ Réinitialisation...' : '🗑️ RAZ Journal'}
-          </button>
-        )}
+        <button
+          onClick={handleClearLogs}
+          disabled={!isAdmin || clearing}
+          className="btn-danger"
+          title={isAdmin ? "Réinitialiser le journal d'audit" : "Réservé aux administrateurs"}
+        >
+          {clearing ? '⏳ Réinitialisation...' : '🗑️ RAZ Journal'}
+        </button>
       </div>
 
       {error && (

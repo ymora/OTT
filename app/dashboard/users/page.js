@@ -14,7 +14,7 @@ const defaultFormState = {
 }
 
 export default function UsersPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
+  const { fetchWithAuth, API_URL, user } = useAuth()
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -313,7 +313,12 @@ export default function UsersPage() {
           <h1 className="text-3xl font-bold">👥 Utilisateurs</h1>
           <p className="text-gray-600 mt-1">Gestion des accès et permissions</p>
         </div>
-        <button className="btn-primary" onClick={openModal}>
+        <button 
+          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" 
+          onClick={openModal}
+          disabled={user?.role_name !== 'admin'}
+          title={user?.role_name === 'admin' ? "Créer un nouvel utilisateur" : "Réservé aux administrateurs"}
+        >
           ➕ Nouvel Utilisateur
         </button>
       </div>
@@ -769,9 +774,10 @@ export default function UsersPage() {
               <div className="flex items-center justify-between pt-2">
                 <button
                   type="button"
-                  className="text-red-600 hover:text-red-700 text-sm font-semibold"
+                  className="text-red-600 hover:text-red-700 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleDeleteUser}
-                  disabled={editSaving || deleteLoading}
+                  disabled={editSaving || deleteLoading || user?.role_name !== 'admin'}
+                  title={user?.role_name === 'admin' ? "Supprimer l'utilisateur" : "Réservé aux administrateurs"}
                 >
                   {deleteLoading ? 'Suppression…' : '🗑️ Supprimer'}
                 </button>

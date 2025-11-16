@@ -462,11 +462,19 @@ function handleGetUsers() {
     global $pdo;
     requirePermission('users.view');
     
+    // Pagination
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    
     try {
-        // Utiliser directement la requête complète pour éviter les problèmes de vue
-        $stmt = $pdo->query("
+        // Compter le total
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM users");
+        $total = $countStmt->fetchColumn();
+        
+        // Requête avec pagination
+        $stmt = $pdo->prepare("
             SELECT 
-                u.id, u.email, u.first_name, u.last_name, u.password_hash,
+                u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
                 u.is_active, u.last_login, u.created_at,
                 r.name AS role_name,
                 r.description AS role_description,
@@ -475,12 +483,26 @@ function handleGetUsers() {
             JOIN roles r ON u.role_id = r.id
             LEFT JOIN role_permissions rp ON r.id = rp.role_id
             LEFT JOIN permissions p ON rp.permission_id = p.id
-            GROUP BY u.id, u.email, u.first_name, u.last_name, u.password_hash,
+            GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
                      u.is_active, u.last_login, u.created_at, r.name, r.description
             ORDER BY u.created_at DESC
+            LIMIT :limit OFFSET :offset
         ");
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
         $users = $stmt->fetchAll();
-        echo json_encode(['success' => true, 'users' => $users]);
+        
+        echo json_encode([
+            'success' => true, 
+            'users' => $users,
+            'pagination' => [
+                'total' => intval($total),
+                'limit' => $limit,
+                'offset' => $offset,
+                'has_more' => ($offset + $limit) < $total
+            ]
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
@@ -1442,26 +1464,81 @@ function handleGetLatestMeasurements() {
 function handleGetAlerts() {
     global $pdo;
     
+    // Pagination et filtres
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $status = isset($_GET['status']) ? $_GET['status'] : null;
+    $severity = isset($_GET['severity']) ? $_GET['severity'] : null;
+    
     try {
-        $stmt = $pdo->query("
+        // Construire la requête avec filtres
+        $sql = "
             SELECT a.*, d.sim_iccid, d.device_name, p.first_name, p.last_name
             FROM alerts a
             JOIN devices d ON a.device_id = d.id
             LEFT JOIN patients p ON d.patient_id = p.id
-            ORDER BY a.created_at DESC
-        ");
-        echo json_encode(['success' => true, 'alerts' => $stmt->fetchAll()]);
+            WHERE 1=1
+        ";
+        $params = [];
+        
+        if ($status && in_array($status, ['unresolved', 'resolved', 'acknowledged'])) {
+            $sql .= " AND a.status = :status";
+            $params['status'] = $status;
+        }
+        
+        if ($severity && in_array($severity, ['low', 'medium', 'high', 'critical'])) {
+            $sql .= " AND a.severity = :severity";
+            $params['severity'] = $severity;
+        }
+        
+        // Compter le total
+        $countSql = "SELECT COUNT(*) FROM (" . $sql . ") AS count_query";
+        $countStmt = $pdo->prepare($countSql);
+        $countStmt->execute($params);
+        $total = $countStmt->fetchColumn();
+        
+        // Requête avec pagination
+        $sql .= " ORDER BY a.created_at DESC LIMIT :limit OFFSET :offset";
+        $stmt = $pdo->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        echo json_encode([
+            'success' => true, 
+            'alerts' => $stmt->fetchAll(),
+            'pagination' => [
+                'total' => intval($total),
+                'limit' => $limit,
+                'offset' => $offset,
+                'has_more' => ($offset + $limit) < $total
+            ]
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleGetAlerts] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
 function handleGetPatients() {
     global $pdo;
     
+    // Pagination
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    
     try {
-        $stmt = $pdo->query("
+        // Compter le total
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM patients");
+        $total = $countStmt->fetchColumn();
+        
+        // Requête optimisée avec pagination
+        $stmt = $pdo->prepare("
             SELECT p.*, 
                    (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
                    (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d,
@@ -1470,11 +1547,27 @@ function handleGetPatients() {
                    (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid
             FROM patients p
             ORDER BY p.last_name, p.first_name
+            LIMIT :limit OFFSET :offset
         ");
-        echo json_encode(['success' => true, 'patients' => $stmt->fetchAll()]);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        echo json_encode([
+            'success' => true, 
+            'patients' => $stmt->fetchAll(),
+            'pagination' => [
+                'total' => intval($total),
+                'limit' => $limit,
+                'offset' => $offset,
+                'has_more' => ($offset + $limit) < $total
+            ]
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleGetPatients] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 

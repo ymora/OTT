@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documentation OTT V3.1 - HAPPLYZ MEDICAL</title>
+    <title>Documentation OTT V3.2 - HAPPLYZ MEDICAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -230,7 +230,7 @@
 <div class="header">
     <h1>🏥 OTT - Dispositif Médical IoT</h1>
     <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
-    <div class="version-badge">Version 3.1 - React + Next.js + Render Cloud</div>
+    <div class="version-badge">Version 3.2 - React + Next.js + Render Cloud</div>
     <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
 </div>
 
@@ -310,7 +310,10 @@
                 <td><strong>API Backend</strong></td>
                 <td>
                     • REST API avec authentification JWT<br>
-                    • Multi-utilisateurs (4 rôles, 19 permissions)<br>
+                    • Multi-utilisateurs (3 rôles : admin, technicien, médecin)<br>
+                    • Permissions granulaires (19 permissions)<br>
+                    • Interface unifiée (même UI pour tous, actions contrôlées par permissions)<br>
+                    • Pagination API (limite 500 par requête)<br>
                     • <strong>CRUD Utilisateurs</strong> : GET/POST/PUT/DELETE /api.php/users<br>
                     • <strong>Gestion Dispositifs</strong> : PUT /api.php/devices/{id} pour assignation patients<br>
                     • OTA firmware management<br>

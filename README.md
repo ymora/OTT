@@ -1,6 +1,6 @@
 # 🏥 OTT - Dispositif Médical IoT
 
-**Version 3.1 Enterprise** - Solution Cloud Complète
+**Version 3.2 Enterprise** - Solution Cloud Complète
 
 **HAPPLYZ MEDICAL SAS**
 
@@ -185,8 +185,22 @@ EOF
 > ℹ️ Tous les scripts contenus dans `sql/` sont **100 % anonymisés** (ICCID simulés, e-mails génériques, mots de passe uniquement sous forme de hash bcrypt). Aucun secret de production n’est versionné.
 
 Le jeu de données installe automatiquement :
-- 4 rôles (`admin`, `medecin`, `technicien`, `viewer`) + 19 permissions.
+- 3 rôles principaux (`admin`, `medecin`, `technicien`) + 19 permissions.
 - 3 patients et 3 dispositifs reliés pour les pages Dashboard.
+
+### 🔐 Rôles et Permissions
+
+**Voir la documentation complète :** [`docs/ROLES_PERMISSIONS.md`](./docs/ROLES_PERMISSIONS.md)
+
+**Rôles disponibles :**
+- **Admin** : Accès complet (2 max : Maxime, Yann)
+- **Technicien** : Maintenance dispositifs, OTA, commandes (3 max)
+- **Médecin** : Consultation patients, suivi médical (2 max)
+
+**Migration des permissions :**
+```bash
+psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
+```
 - Des mesures/alertes/logs réalistes pour vérifier les graphiques.
 
 ### Réinitialiser la base de démo via le dashboard
