@@ -188,41 +188,28 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Section Activité Récente - Aperçu uniquement */}
-      {alerts.length > 0 && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">🔔 Activité Récente</h2>
-            <button className="btn-secondary text-xs" onClick={() => router.push('/dashboard/alerts')}>
-              Voir toutes les alertes →
-            </button>
+      {/* Section Activité Récente - Aperçu uniquement (sans les alertes critiques déjà affichées) */}
+      {(() => {
+        // Exclure les alertes critiques/high déjà affichées dans "Actions Requises"
+        const criticalAlertIds = new Set(criticalItems.map(a => a.id))
+        const recentAlerts = alerts.filter(a => !criticalAlertIds.has(a.id)).slice(0, 3)
+        
+        return recentAlerts.length > 0 ? (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">🔔 Activité Récente</h2>
+              <button className="btn-secondary text-xs" onClick={() => router.push('/dashboard/alerts')}>
+                Voir toutes les alertes →
+              </button>
+            </div>
+            <div className="space-y-2">
+              {recentAlerts.map((alert, i) => (
+                <AlertCard key={alert.id} alert={alert} delay={i * 0.05} />
+              ))}
+            </div>
           </div>
-          <div className="space-y-2">
-            {alerts.slice(0, 3).map((alert, i) => (
-              <AlertCard key={alert.id} alert={alert} delay={i * 0.05} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Actions rapides */}
-      <div className="card">
-        <h2 className="text-lg font-semibold mb-4">🚀 Accès Rapide</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button className="btn-primary text-sm" onClick={() => router.push('/dashboard/map')}>
-            📍 Carte
-          </button>
-          <button className="btn-primary text-sm" onClick={() => router.push('/dashboard/devices')}>
-            🔌 Dispositifs
-          </button>
-          <button className="btn-primary text-sm" onClick={() => router.push('/dashboard/patients')}>
-            👥 Patients
-          </button>
-          <button className="btn-primary text-sm" onClick={() => router.push('/dashboard/alerts')}>
-            🔔 Alertes
-          </button>
-        </div>
-      </div>
+        ) : null
+      })()}
     </div>
   )
 }

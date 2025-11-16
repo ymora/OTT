@@ -59,6 +59,27 @@ const menuStructure = [
     description: 'Logs d\'audit'
   },
   {
+    name: 'OTA',
+    icon: '🔄',
+    path: '/dashboard/ota',
+    permission: 'devices.edit',
+    description: 'Gestion des firmwares et mises à jour OTA'
+  },
+  {
+    name: 'Notifications',
+    icon: '📧',
+    path: '/dashboard/notifications',
+    permission: 'users.view',
+    description: 'Queue des notifications et tests'
+  },
+  {
+    name: 'Diagnostics',
+    icon: '🔍',
+    path: '/diagnostics',
+    permission: null,
+    description: 'Statut API et base de données'
+  },
+  {
     name: 'Paramètres',
     icon: '⚙️',
     path: '/dashboard/admin',

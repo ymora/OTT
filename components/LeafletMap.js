@@ -99,15 +99,21 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
         const battery = computeBatteryMeta(device.last_battery)
         
         // Si pas de coordonnées, utiliser une position par défaut (centre France) avec un offset pour éviter superposition
-        let lat = device.latitude
-        let lng = device.longitude
-        if (!lat || !lng) {
+        let lat = typeof device.latitude === 'number' ? device.latitude : parseFloat(device.latitude)
+        let lng = typeof device.longitude === 'number' ? device.longitude : parseFloat(device.longitude)
+        
+        // Vérifier que les coordonnées sont valides
+        const hasValidCoords = !isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng) &&
+                               lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+        
+        if (!hasValidCoords) {
           // Position par défaut : centre de la France avec offset basé sur l'ID pour éviter superposition
           const baseLat = 46.2276
           const baseLng = 2.2137
           // Créer un offset circulaire pour mieux répartir les dispositifs
-          const angle = (device.id * 137.508) % 360 // Angle doré pour répartition uniforme
-          const radius = 0.05 + ((device.id % 5) * 0.02) // Rayon variable
+          const deviceId = device.id || 0
+          const angle = (deviceId * 137.508) % 360 // Angle doré pour répartition uniforme
+          const radius = 0.05 + ((deviceId % 5) * 0.02) // Rayon variable
           const rad = (angle * Math.PI) / 180
           lat = baseLat + (radius * Math.cos(rad))
           lng = baseLng + (radius * Math.sin(rad))
@@ -216,20 +222,46 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
     if (devices.length === 0) {
       return [46.2276, 2.2137] // Centre de la France par défaut
     }
-    // Calculer le centre en incluant tous les dispositifs (même ceux sans coordonnées réelles)
-    const devicesWithCoords = devices.filter(d => d.latitude && d.longitude)
+    // Calculer le centre en incluant tous les dispositifs avec coordonnées valides
+    const devicesWithCoords = devices.filter(d => {
+      const lat = typeof d.latitude === 'number' ? d.latitude : parseFloat(d.latitude)
+      const lng = typeof d.longitude === 'number' ? d.longitude : parseFloat(d.longitude)
+      return !isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng) && 
+             lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+    })
+    
     if (devicesWithCoords.length > 0) {
       // Si on a des coordonnées réelles, utiliser leur moyenne
-      const avgLat = devicesWithCoords.reduce((sum, d) => sum + d.latitude, 0) / devicesWithCoords.length
-      const avgLng = devicesWithCoords.reduce((sum, d) => sum + d.longitude, 0) / devicesWithCoords.length
-      return [avgLat, avgLng]
+      const validLats = devicesWithCoords.map(d => {
+        const lat = typeof d.latitude === 'number' ? d.latitude : parseFloat(d.latitude)
+        return isNaN(lat) ? null : lat
+      }).filter(lat => lat !== null)
+      
+      const validLngs = devicesWithCoords.map(d => {
+        const lng = typeof d.longitude === 'number' ? d.longitude : parseFloat(d.longitude)
+        return isNaN(lng) ? null : lng
+      }).filter(lng => lng !== null)
+      
+      if (validLats.length > 0 && validLngs.length > 0) {
+        const avgLat = validLats.reduce((sum, lat) => sum + lat, 0) / validLats.length
+        const avgLng = validLngs.reduce((sum, lng) => sum + lng, 0) / validLngs.length
+        // Vérifier que les valeurs finales sont valides
+        if (!isNaN(avgLat) && !isNaN(avgLng) && isFinite(avgLat) && isFinite(avgLng)) {
+          return [avgLat, avgLng]
+        }
+      }
     }
     // Sinon, centre de la France (où seront positionnés les dispositifs sans coordonnées)
     return [46.2276, 2.2137]
   }, [devices])
   
   const zoom = useMemo(() => {
-    const devicesWithCoords = devices.filter(d => d.latitude && d.longitude)
+    const devicesWithCoords = devices.filter(d => {
+      const lat = typeof d.latitude === 'number' ? d.latitude : parseFloat(d.latitude)
+      const lng = typeof d.longitude === 'number' ? d.longitude : parseFloat(d.longitude)
+      return !isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng) &&
+             lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+    })
     if (devicesWithCoords.length === 0) return 5.5 // Zoom France entière
     if (devicesWithCoords.length === 1) return 9 // Zoom sur un seul dispositif
     return 6 // Zoom intermédiaire pour plusieurs dispositifs

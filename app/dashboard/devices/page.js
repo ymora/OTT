@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import Chart from '@/components/Chart'
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
 
@@ -22,6 +23,7 @@ export default function DevicesPage() {
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [deviceDetails, setDeviceDetails] = useState(null)
   const [deviceLogs, setDeviceLogs] = useState([])
+  const [deviceMeasurements, setDeviceMeasurements] = useState([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   
@@ -85,12 +87,15 @@ export default function DevicesPage() {
     setLoadingDetails(true)
     setDeviceDetails(null)
     setDeviceLogs([])
+    setDeviceMeasurements([])
     
     try {
-      const [logsData] = await Promise.all([
-        fetchJson(fetchWithAuth, API_URL, `/api.php/logs?device_id=${device.id}&limit=50`, {}, { requiresAuth: true }).catch(() => ({ logs: [] }))
+      const [logsData, historyData] = await Promise.all([
+        fetchJson(fetchWithAuth, API_URL, `/api.php/logs?device_id=${device.id}&limit=50`, {}, { requiresAuth: true }).catch(() => ({ logs: [] })),
+        fetchJson(fetchWithAuth, API_URL, `/api.php/device/${device.id}`, {}, { requiresAuth: true }).catch(() => ({ measurements: [] }))
       ])
       setDeviceLogs(logsData.logs || [])
+      setDeviceMeasurements(historyData.measurements || [])
       setDeviceDetails(device)
     } catch (err) {
       console.error(err)
@@ -386,6 +391,7 @@ export default function DevicesPage() {
                   setSelectedDevice(null)
                   setDeviceDetails(null)
                   setDeviceLogs([])
+                  setDeviceMeasurements([])
                 }}
               >
                 ✖
@@ -420,6 +426,27 @@ export default function DevicesPage() {
                     <div className="card">
                       <h3 className="text-lg font-semibold mb-2">👤 Patient assigné</h3>
                       <p className="font-medium">{selectedDevice.first_name} {selectedDevice.last_name}</p>
+                    </div>
+                  )}
+
+                  {/* Historique - Graphiques */}
+                  {deviceMeasurements.length > 0 && (
+                    <div className="card">
+                      <h3 className="text-lg font-semibold mb-4">📈 Historique (72h)</h3>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-600 mb-2">Débit</h4>
+                          <div className="h-48">
+                            <Chart data={deviceMeasurements} type="flowrate" />
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-600 mb-2">Batterie</h4>
+                          <div className="h-48">
+                            <Chart data={deviceMeasurements.map(m => ({ ...m, last_battery: m.battery }))} type="battery" />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
