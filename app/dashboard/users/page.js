@@ -8,6 +8,7 @@ const defaultFormState = {
   first_name: '',
   last_name: '',
   email: '',
+  phone: '',
   password: '',
   role_id: ''
 }
@@ -29,8 +30,20 @@ export default function UsersPage() {
     last_name: '',
     role_id: '',
     is_active: true,
-    password: ''
+    password: '',
+    phone: ''
   })
+  const [notificationPrefs, setNotificationPrefs] = useState({
+    email_enabled: true,
+    sms_enabled: false,
+    push_enabled: true,
+    phone_number: '',
+    notify_battery_low: true,
+    notify_device_offline: true,
+    notify_abnormal_flow: true,
+    notify_new_patient: false
+  })
+  const [loadingNotifPrefs, setLoadingNotifPrefs] = useState(false)
   const [editError, setEditError] = useState(null)
   const [editSaving, setEditSaving] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -126,17 +139,54 @@ export default function UsersPage() {
     }
   }
 
-  const openEditModal = (user) => {
+  const openEditModal = async (user) => {
     setEditingUser(user)
     setEditForm({
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       role_id: roles.find(r => r.name === user.role_name)?.id || '',
       is_active: Boolean(user.is_active),
-      password: ''
+      password: '',
+      phone: user.phone || ''
     })
     setEditError(null)
     setShowEditModal(true)
+    
+    // Charger les préférences de notifications
+    try {
+      setLoadingNotifPrefs(true)
+      const data = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/users/${user.id}/notifications`,
+        {},
+        { requiresAuth: true }
+      )
+      setNotificationPrefs(data.preferences || {
+        email_enabled: true,
+        sms_enabled: false,
+        push_enabled: true,
+        phone_number: user.phone || '',
+        notify_battery_low: true,
+        notify_device_offline: true,
+        notify_abnormal_flow: true,
+        notify_new_patient: false
+      })
+    } catch (err) {
+      // Si pas de préférences, utiliser les valeurs par défaut
+      setNotificationPrefs({
+        email_enabled: true,
+        sms_enabled: false,
+        push_enabled: true,
+        phone_number: user.phone || '',
+        notify_battery_low: true,
+        notify_device_offline: true,
+        notify_abnormal_flow: true,
+        notify_new_patient: false
+      })
+    } finally {
+      setLoadingNotifPrefs(false)
+    }
   }
 
   const closeEditModal = () => {
@@ -160,11 +210,13 @@ export default function UsersPage() {
     setEditSaving(true)
     setEditError(null)
     try {
+      // Sauvegarder les données utilisateur
       const payload = {
         first_name: editForm.first_name,
         last_name: editForm.last_name,
         role_id: editForm.role_id ? parseInt(editForm.role_id, 10) : undefined,
-        is_active: editForm.is_active
+        is_active: editForm.is_active,
+        phone: editForm.phone || null
       }
       if (editForm.password.trim().length >= 6) {
         payload.password = editForm.password
@@ -179,6 +231,24 @@ export default function UsersPage() {
         },
         { requiresAuth: true }
       )
+      
+      // Sauvegarder les préférences de notifications
+      try {
+        await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/users/${editingUser.id}/notifications`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(notificationPrefs)
+          },
+          { requiresAuth: true }
+        )
+      } catch (notifErr) {
+        console.warn('Erreur sauvegarde notifications:', notifErr)
+        // Ne pas bloquer la sauvegarde si les notifications échouent
+      }
+      
       setShowEditModal(false)
       setEditingUser(null)
       await loadUsers()
@@ -332,6 +402,17 @@ export default function UsersPage() {
                 />
               </label>
               <label className="text-sm font-medium text-gray-700 w-full">
+                Téléphone (optionnel, pour SMS)
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone || ''}
+                  onChange={handleInputChange}
+                  className="input mt-1"
+                  placeholder="+33612345678"
+                />
+              </label>
+              <label className="text-sm font-medium text-gray-700 w-full">
                 Mot de passe (6+ caractères)
                 <input
                   type="password"
@@ -381,8 +462,8 @@ export default function UsersPage() {
       )}
 
       {showEditModal && editingUser && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4 animate-scale-in">
+        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">Modifier l’utilisateur</h2>
@@ -447,6 +528,18 @@ export default function UsersPage() {
               </label>
 
               <label className="text-sm font-medium text-gray-700 w-full">
+                Téléphone (pour SMS)
+                <input
+                  type="tel"
+                  name="phone"
+                  value={editForm.phone}
+                  onChange={handleEditInputChange}
+                  className="input mt-1"
+                  placeholder="+33612345678"
+                />
+              </label>
+
+              <label className="text-sm font-medium text-gray-700 w-full">
                 Nouveau mot de passe (optionnel, 6+ caractères)
                 <input
                   type="password"
@@ -463,6 +556,108 @@ export default function UsersPage() {
                   <strong>Erreur :</strong> {editError}
                 </div>
               )}
+
+              {/* Section Notifications */}
+              <div className="border-t pt-4 mt-4">
+                <h3 className="text-lg font-semibold mb-3">📧 Notifications</h3>
+                
+                {loadingNotifPrefs ? (
+                  <div className="text-sm text-gray-500">Chargement des préférences...</div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Canaux de notification */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Canaux activés</label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.email_enabled}
+                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, email_enabled: e.target.checked }))}
+                            className="form-checkbox"
+                          />
+                          <span className="text-sm">✉️ Email</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.sms_enabled}
+                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, sms_enabled: e.target.checked }))}
+                            className="form-checkbox"
+                          />
+                          <span className="text-sm">📱 SMS</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.push_enabled}
+                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, push_enabled: e.target.checked }))}
+                            className="form-checkbox"
+                          />
+                          <span className="text-sm">🔔 Push</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Numéro SMS */}
+                    {notificationPrefs.sms_enabled && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Numéro SMS</label>
+                        <input
+                          type="tel"
+                          value={notificationPrefs.phone_number || editForm.phone || ''}
+                          onChange={(e) => setNotificationPrefs(prev => ({ ...prev, phone_number: e.target.value }))}
+                          className="input text-sm"
+                          placeholder="+33612345678"
+                        />
+                      </div>
+                    )}
+
+                    {/* Types d'alertes */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Types d'alertes</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.notify_battery_low}
+                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_battery_low: e.target.checked }))}
+                            className="form-checkbox"
+                          />
+                          🔋 Batterie faible
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.notify_device_offline}
+                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_device_offline: e.target.checked }))}
+                            className="form-checkbox"
+                          />
+                          📴 Dispositif hors ligne
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.notify_abnormal_flow}
+                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_abnormal_flow: e.target.checked }))}
+                            className="form-checkbox"
+                          />
+                          ⚠️ Débit anormal
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.notify_new_patient}
+                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_new_patient: e.target.checked }))}
+                            className="form-checkbox"
+                          />
+                          👤 Nouveau patient
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex items-center justify-between pt-2">
                 <button

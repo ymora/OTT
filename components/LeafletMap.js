@@ -97,8 +97,27 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
       devices.map(device => {
         const connection = computeConnectionStatus(device)
         const battery = computeBatteryMeta(device.last_battery)
+        
+        // Si pas de coordonnées, utiliser une position par défaut (centre France) avec un offset pour éviter superposition
+        let lat = device.latitude
+        let lng = device.longitude
+        if (!lat || !lng) {
+          // Position par défaut : centre de la France avec offset basé sur l'ID pour éviter superposition
+          const baseLat = 46.2276
+          const baseLng = 2.2137
+          // Créer un offset circulaire pour mieux répartir les dispositifs
+          const angle = (device.id * 137.508) % 360 // Angle doré pour répartition uniforme
+          const radius = 0.05 + ((device.id % 5) * 0.02) // Rayon variable
+          const rad = (angle * Math.PI) / 180
+          lat = baseLat + (radius * Math.cos(rad))
+          lng = baseLng + (radius * Math.sin(rad))
+        }
+        
         return {
           ...device,
+          latitude: lat,
+          longitude: lng,
+          hasRealCoordinates: !!(device.latitude && device.longitude),
           connectionStatus: connection.status,
           connectionLabel: connection.label,
           lastSeenLabel: connection.lastSeenLabel,
@@ -120,30 +139,70 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
             click: () => onSelect?.(device)
           }}
         >
-          <Popup>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-sm">{device.device_name || device.sim_iccid}</p>
+          <Popup maxWidth={280}>
+            <div className="space-y-2 p-1">
+              <div className="flex items-center justify-between gap-2 border-b pb-2">
+                <p className="font-semibold text-base">{device.device_name || device.sim_iccid}</p>
                 <span
-                  className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                  className={`text-xs font-medium px-2 py-1 rounded-full border ${
                     statusBadges[device.connectionStatus] || statusBadges.online
                   }`}
                 >
                   {device.connectionLabel}
                 </span>
               </div>
-              <p className="text-xs text-gray-600">{device.city || 'Localisation inconnue'}</p>
-              <p className="text-sm">
-                🔋 Batterie&nbsp;: {device.batteryLabel}{' '}
-                {device.batteryStatus === 'critical' && <span className="text-red-600 font-semibold">(critique)</span>}
-                {device.batteryStatus === 'low' && <span className="text-amber-600 font-semibold">(basse)</span>}
-              </p>
-              <p className="text-sm">🕒 Dernier contact&nbsp;: {device.lastSeenLabel}</p>
-              {device.first_name && (
-                <p className="text-sm text-gray-700">
-                  👤 {device.first_name} {device.last_name}
-                </p>
+              
+              {!device.hasRealCoordinates && (
+                <div className="bg-amber-50 border border-amber-200 rounded p-2 mb-2">
+                  <p className="text-xs text-amber-800 font-medium">⚠️ Position estimée (pas de coordonnées GPS)</p>
+                </div>
               )}
+              
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">📍 Localisation:</span>
+                  <span className="font-medium">{device.city || 'Non localisé'}</span>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">🔋 Batterie:</span>
+                  <span className={`font-semibold ${
+                    device.batteryStatus === 'critical' ? 'text-red-600' :
+                    device.batteryStatus === 'low' ? 'text-amber-600' :
+                    'text-green-600'
+                  }`}>
+                    {device.batteryLabel}
+                    {device.batteryStatus === 'critical' && ' ⚠️'}
+                    {device.batteryStatus === 'low' && ' ⚡'}
+                  </span>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">🕒 Dernier contact:</span>
+                  <span className="font-medium text-xs">{device.lastSeenLabel}</span>
+                </div>
+                
+                {device.first_name && (
+                  <div className="flex items-center justify-between border-t pt-1.5 mt-1.5">
+                    <span className="text-gray-600">👤 Patient:</span>
+                    <span className="font-medium">{device.first_name} {device.last_name}</span>
+                  </div>
+                )}
+                
+                {device.sim_iccid && (
+                  <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t">
+                    <span>ICCID:</span>
+                    <span className="font-mono">{device.sim_iccid}</span>
+                  </div>
+                )}
+                
+                {device.firmware_version && (
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>Firmware:</span>
+                    <span className="font-mono">{device.firmware_version}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </Popup>
         </Marker>
@@ -155,15 +214,29 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
 export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
   const center = useMemo(() => {
     if (devices.length === 0) {
-      return [46.2276, 2.2137]
+      return [46.2276, 2.2137] // Centre de la France par défaut
     }
-    const avgLat = devices.reduce((sum, d) => sum + (d.latitude || 0), 0) / devices.length
-    const avgLng = devices.reduce((sum, d) => sum + (d.longitude || 0), 0) / devices.length
-    return [avgLat, avgLng]
+    // Calculer le centre en incluant tous les dispositifs (même ceux sans coordonnées réelles)
+    const devicesWithCoords = devices.filter(d => d.latitude && d.longitude)
+    if (devicesWithCoords.length > 0) {
+      // Si on a des coordonnées réelles, utiliser leur moyenne
+      const avgLat = devicesWithCoords.reduce((sum, d) => sum + d.latitude, 0) / devicesWithCoords.length
+      const avgLng = devicesWithCoords.reduce((sum, d) => sum + d.longitude, 0) / devicesWithCoords.length
+      return [avgLat, avgLng]
+    }
+    // Sinon, centre de la France (où seront positionnés les dispositifs sans coordonnées)
+    return [46.2276, 2.2137]
+  }, [devices])
+  
+  const zoom = useMemo(() => {
+    const devicesWithCoords = devices.filter(d => d.latitude && d.longitude)
+    if (devicesWithCoords.length === 0) return 5.5 // Zoom France entière
+    if (devicesWithCoords.length === 1) return 9 // Zoom sur un seul dispositif
+    return 6 // Zoom intermédiaire pour plusieurs dispositifs
   }, [devices])
 
   return (
-    <MapContainer center={center} zoom={5.5} style={{ height: 600, width: '100%' }} scrollWheelZoom>
+    <MapContainer center={center} zoom={zoom} style={{ height: 600, width: '100%' }} scrollWheelZoom>
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

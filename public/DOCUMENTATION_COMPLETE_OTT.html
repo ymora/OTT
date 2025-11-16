@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documentation OTT V3.0 - HAPPLYZ MEDICAL</title>
+    <title>Documentation OTT V3.1 - HAPPLYZ MEDICAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -230,7 +230,7 @@
 <div class="header">
     <h1>🏥 OTT - Dispositif Médical IoT</h1>
     <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
-    <div class="version-badge">Version 3.0 - React + Next.js + Render Cloud</div>
+    <div class="version-badge">Version 3.1 - React + Next.js + Render Cloud</div>
     <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
 </div>
 
@@ -271,7 +271,21 @@
         <li>✅ <strong>Mise à jour OTA</strong> (Over-The-Air) du firmware</li>
     </ul>
     
-    <h3>🏆 Fonctionnalités Clés V3.0</h3>
+    <h3>🆕 Améliorations V3.1</h3>
+    <div class="alert alert-info">
+        <strong>Nouvelles fonctionnalités</strong>
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li><strong>Menu optimisé</strong> : regroupement logique en sections déroulantes (Dispositifs, Patients & Alertes, Administration)</li>
+            <li><strong>Vue d'ensemble réorganisée</strong> : section "Actions Requises" pour alertes critiques, batteries faibles, boîtiers non assignés</li>
+            <li><strong>Gestion utilisateurs complète</strong> : création, édition, suppression avec permissions</li>
+            <li><strong>Gestion dispositifs</strong> : assignation aux patients, filtres (assignés/non assignés)</li>
+            <li><strong>Détails patients</strong> : modale complète avec dispositif associé, statistiques, alertes, graphiques</li>
+            <li><strong>Carte interactive</strong> : visualisation des dispositifs avec statut (batterie, en ligne/hors ligne)</li>
+            <li><strong>Indicateurs intelligents</strong> : "Batterie Faible" (compteur <30%) au lieu de moyenne</li>
+        </ul>
+    </div>
+    
+    <h3>🏆 Fonctionnalités Clés V3.1</h3>
     
     <table>
         <thead>
@@ -297,8 +311,11 @@
                 <td>
                     • REST API avec authentification JWT<br>
                     • Multi-utilisateurs (4 rôles, 19 permissions)<br>
+                    • <strong>CRUD Utilisateurs</strong> : GET/POST/PUT/DELETE /api.php/users<br>
+                    • <strong>Gestion Dispositifs</strong> : PUT /api.php/devices/{id} pour assignation patients<br>
                     • OTA firmware management<br>
-                    • Notifications (Email/SMS/Push)
+                    • Notifications (Email/SMS/Push)<br>
+                    • <strong>Correction requêtes SQL</strong> : optimisation des jointures
                 </td>
                 <td>PHP 8.2, PostgreSQL</td>
             </tr>
@@ -306,6 +323,9 @@
                 <td><strong>Dashboard React</strong></td>
                 <td>
                     • 12 pages complètes<br>
+                    • <strong>Menu réorganisé</strong> : 5 sections avec sous-menus déroulants<br>
+                    • <strong>Vue d'ensemble optimisée</strong> : actions requises, indicateurs intelligents<br>
+                    • <strong>Gestion complète</strong> : utilisateurs, dispositifs, patients avec détails<br>
                     • Animations modernes et fluides<br>
                     • PWA installable<br>
                     • Responsive mobile-first
@@ -347,8 +367,14 @@
         <li>🔒 Les commandes descendantes, OTA et configurations distantes sont désormais limitées aux comptes <strong>Admin</strong> (backend + dashboard).</li>
         <li>📡 Firmware `fw_ott_optimized.ino`: réception de commandes (SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST), ACK automatique, intervalle de sommeil dynamique stocké en RTC.</li>
         <li>🗃️ Table `device_commands` + nouveaux endpoints (`POST /devices/{iccid}/commands`, `GET /devices/commands`, `POST /devices/commands/ack`).</li>
-        <li>🖥️ Page React “Commandes” (dashboard) pour planifier/visualiser les ordres, restreinte aux admins.</li>
-        <li>🧾 Documentation/README à jour (section bidirectionnelle, restrictions d’accès, endpoints exposés).</li>
+        <li>🖥️ Page React "Commandes" (dashboard) pour planifier/visualiser les ordres, restreinte aux admins.</li>
+        <li>🎨 <strong>Menu optimisé V3.1</strong> : regroupement en sections déroulantes (Dispositifs, Patients & Alertes, Administration).</li>
+        <li>📊 <strong>Vue d'ensemble réorganisée</strong> : section "Actions Requises", indicateurs intelligents (batterie faible au lieu de moyenne).</li>
+        <li>👤 <strong>Gestion utilisateurs complète</strong> : CRUD avec création, édition, suppression depuis le dashboard.</li>
+        <li>🔌 <strong>Gestion dispositifs améliorée</strong> : assignation patients, filtres, badges visuels.</li>
+        <li>👥 <strong>Détails patients</strong> : modale complète avec dispositif, statistiques, alertes, graphiques.</li>
+        <li>🗺️ <strong>Carte interactive</strong> : statut dynamique, informations détaillées, sélection dispositifs.</li>
+        <li>🧾 Documentation/README à jour (section bidirectionnelle, restrictions d'accès, endpoints exposés, améliorations V3.1).</li>
     </ul>
 
     <h3>🧱 À finaliser / prochaines actions</h3>
@@ -1384,7 +1410,7 @@ POST /api.php/devices/{iccid}/commands
     
     <pre>
 git add .
-git commit -m "Deploy OTT V3.0"
+git commit -m "Deploy OTT V3.1"
 git push origin main
     </pre>
     
@@ -1859,7 +1885,7 @@ navigator.serviceWorker.getRegistrations().then(regs => {
 <!-- ============================================== -->
 
 <section id="quality" class="section">
-    <h2>✨ Qualité du Code V3.0</h2>
+    <h2>✨ Qualité du Code V3.1</h2>
     
     <h3>🎯 Améliorations Architecturales</h3>
     
@@ -2348,7 +2374,7 @@ SELECT id, email, first_name, last_name FROM users;
 
 <div class="footer">
     <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
-    <p>OTT - Version 3.0 Enterprise | Documentation Complète</p>
+    <p>OTT - Version 3.1 Enterprise | Documentation Complète</p>
     <p style="margin-top: 1rem; font-size: 0.9rem;">
         📖 <a href="https://github.com/ymora/OTT" style="color: white; text-decoration: underline;">GitHub Repository</a> | 
         🌐 <a href="https://ymora.github.io/OTT/" style="color: white; text-decoration: underline;">Dashboard Live</a> | 

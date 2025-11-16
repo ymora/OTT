@@ -1,6 +1,6 @@
 # 🏥 OTT - Dispositif Médical IoT
 
-**Version 3.0 Enterprise** - Solution Cloud Complète
+**Version 3.1 Enterprise** - Solution Cloud Complète
 
 **HAPPLYZ MEDICAL SAS**
 
@@ -259,6 +259,39 @@ Le jeu de données installe automatiquement :
 
 ---
 
+## 🆕 Améliorations Récentes (v3.1)
+
+### Interface Utilisateur
+- **Menu réorganisé** : passage de 14 onglets à 5 sections principales avec sous-menus déroulants
+  - Dispositifs (Liste, Carte, Commandes, Historique, Journal, OTA)
+  - Patients & Alertes (Patients, Alertes)
+  - Administration (Utilisateurs, Notifications, Audit, Paramètres)
+- **Vue d'ensemble optimisée** :
+  - Section "Actions Requises" regroupant alertes critiques, batteries faibles, boîtiers non assignés
+  - Indicateur "Batterie Faible" (compteur <30%) remplace la moyenne peu actionnable
+  - Graphiques regroupés dans une section dédiée
+  - Accès rapide aux pages principales
+
+### Gestion des Utilisateurs
+- **CRUD complet** : création, édition, suppression d'utilisateurs depuis le dashboard
+- **Permissions** : gestion des rôles et activation/désactivation des comptes
+- **Correction API** : requête SQL optimisée pour éviter les erreurs de vue `users_with_roles`
+
+### Gestion des Dispositifs
+- **Assignation patients** : modal pour rattacher/détacher un dispositif à un patient
+- **Filtres** : vue "Tous", "Assignés", "Non assignés"
+- **Badges visuels** : indication claire des dispositifs non assignés
+
+### Détails Patients
+- **Modale complète** : informations patient, dispositif associé, statistiques, alertes récentes
+- **Graphiques** : visualisation des mesures de débit sur les dernières 24h
+- **Lien carte** : accès direct à la localisation du dispositif depuis les détails patient
+
+### Carte Interactive
+- **Statut dynamique** : marqueurs colorés selon l'état (en ligne, attention, hors ligne)
+- **Informations détaillées** : batterie, dernière connexion, patient associé dans les popups
+- **Sélection** : clic sur un marqueur affiche les détails complets du dispositif
+
 ## ✨ Fonctionnalités Clés
 
 ### 🔧 Firmware
@@ -276,19 +309,29 @@ Le jeu de données installe automatiquement :
 ### 🔌 API Backend
 - ✅ REST API avec JWT (désactivable via `AUTH_DISABLED=true`)
 - ✅ Multi-utilisateurs (4 rôles, 19 permissions)
+- ✅ **CRUD Utilisateurs** : `GET/POST/PUT/DELETE /api.php/users` avec gestion des permissions
+- ✅ **Gestion Dispositifs** : `PUT /api.php/devices/{id}` pour assignation patients, mise à jour statut/coordonnées
 - ✅ OTA firmware management
 - ✅ Notifications (Email/SMS/Push)
 - ✅ CRUD Patients (`GET/POST/PUT /patients`) avec audit automatique
-- ✅ Endpoint `/reports/overview` (agrégats débit/batterie, top dispositifs, répartition des alertes)
+- ✅ Endpoint `/reports/overview` (agrégats débit/batterie, top dispositifs, répartition des alertes, assignations)
+- ✅ **Correction requêtes SQL** : optimisation des jointures pour éviter les erreurs de vue
 
 ### ⚛️ Dashboard React
 - ✅ 12 pages complètes
 - ✅ Animations modernes et fluides
 - ✅ PWA installable
 - ✅ Responsive mobile-first
-- ✅ Modale “Nouveau patient” reliée aux permissions `patients.edit`
+- ✅ **Menu optimisé** : regroupement logique en sections déroulantes (Dispositifs, Patients & Alertes, Administration)
+- ✅ **Vue d'ensemble réorganisée** : section "Actions Requises" pour alertes critiques, batteries faibles, boîtiers non assignés
+- ✅ **Gestion utilisateurs** : création, édition, suppression avec permissions
+- ✅ **Gestion dispositifs** : assignation aux patients, filtres (assignés/non assignés)
+- ✅ **Détails patients** : modale complète avec dispositif associé, statistiques, alertes, graphiques
+- ✅ **Carte interactive** : visualisation des dispositifs avec statut (batterie, en ligne/hors ligne)
+- ✅ Modale "Nouveau patient" reliée aux permissions `patients.edit`
 - ✅ Page Rapports interactive (cartes + graphiques Chart.js + exports)
 - ✅ Alertes contextualisées (patient + dispositif + liens carte)
+- ✅ **Indicateurs intelligents** : "Batterie Faible" (compteur <30%) au lieu de moyenne
 
 ---
 
@@ -355,5 +398,5 @@ Le jeu de données installe automatiquement :
 
 ---
 
-**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.0 - React + Next.js + Render Cloud
+**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.1 - React + Next.js + Render Cloud
 

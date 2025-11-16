@@ -26,6 +26,16 @@ export default function PatientsPage() {
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [patientDetails, setPatientDetails] = useState(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
+  const [patientNotifPrefs, setPatientNotifPrefs] = useState({
+    email_enabled: true,
+    sms_enabled: false,
+    push_enabled: false,
+    notify_battery_low: true,
+    notify_device_offline: true,
+    notify_abnormal_flow: true,
+    notify_alert_critical: true
+  })
+  const [savingNotifPrefs, setSavingNotifPrefs] = useState(false)
 
   const loadPatients = useCallback(async () => {
     try {
@@ -75,16 +85,52 @@ export default function PatientsPage() {
     }
   }
 
+  const savePatientNotifications = async () => {
+    if (!selectedPatient) return
+    try {
+      setSavingNotifPrefs(true)
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/patients/${selectedPatient.id}/notifications`,
+        { method: 'PUT', body: JSON.stringify(patientNotifPrefs) },
+        { requiresAuth: true }
+      )
+      setSuccess('Préférences de notifications enregistrées')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingNotifPrefs(false)
+    }
+  }
+
   const handleShowDetails = async (patient) => {
     setSelectedPatient(patient)
     setLoadingDetails(true)
     setPatientDetails(null)
     try {
-      const [devicesData, alertsData, measurementsData] = await Promise.all([
+      const [devicesData, alertsData, measurementsData, notifData] = await Promise.all([
         fetchJson(fetchWithAuth, API_URL, '/api.php/devices'),
         fetchJson(fetchWithAuth, API_URL, '/api.php/alerts'),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/measurements/latest')
+        fetchJson(fetchWithAuth, API_URL, '/api.php/measurements/latest'),
+        fetchJson(fetchWithAuth, API_URL, `/api.php/patients/${patient.id}/notifications`).catch(() => ({ preferences: null }))
       ])
+      
+      // Charger les préférences de notifications
+      if (notifData.preferences) {
+        setPatientNotifPrefs(notifData.preferences)
+      } else {
+        // Valeurs par défaut
+        setPatientNotifPrefs({
+          email_enabled: !!patient.email,
+          sms_enabled: !!patient.phone,
+          push_enabled: false,
+          notify_battery_low: true,
+          notify_device_offline: true,
+          notify_abnormal_flow: true,
+          notify_alert_critical: true
+        })
+      }
       
       const patientDevice = (devicesData.devices || []).find(d => 
         d.patient_id === patient.id || (d.first_name === patient.first_name && d.last_name === patient.last_name)
@@ -287,6 +333,101 @@ export default function PatientsPage() {
                           </p>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Notifications */}
+                  <div className="card">
+                    <h3 className="text-lg font-semibold mb-4">📧 Notifications</h3>
+                    <div className="space-y-4">
+                      {/* Canaux de notification */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Canaux activés</label>
+                        <div className="grid grid-cols-3 gap-3">
+                          <label className={`flex items-center gap-2 p-2 rounded ${selectedPatient.email ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
+                            <input
+                              type="checkbox"
+                              checked={patientNotifPrefs.email_enabled && !!selectedPatient.email}
+                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, email_enabled: e.target.checked }))}
+                              disabled={!selectedPatient.email}
+                              className="form-checkbox"
+                            />
+                            <span className="text-sm">✉️ Email</span>
+                            {!selectedPatient.email && <span className="text-xs text-gray-400">(non renseigné)</span>}
+                          </label>
+                          <label className={`flex items-center gap-2 p-2 rounded ${selectedPatient.phone ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
+                            <input
+                              type="checkbox"
+                              checked={patientNotifPrefs.sms_enabled && !!selectedPatient.phone}
+                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, sms_enabled: e.target.checked }))}
+                              disabled={!selectedPatient.phone}
+                              className="form-checkbox"
+                            />
+                            <span className="text-sm">📱 SMS</span>
+                            {!selectedPatient.phone && <span className="text-xs text-gray-400">(non renseigné)</span>}
+                          </label>
+                          <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                            <input
+                              type="checkbox"
+                              checked={patientNotifPrefs.push_enabled}
+                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, push_enabled: e.target.checked }))}
+                              className="form-checkbox"
+                            />
+                            <span className="text-sm">🔔 Push</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Types d'alertes */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Types d'alertes</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={patientNotifPrefs.notify_battery_low}
+                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, notify_battery_low: e.target.checked }))}
+                              className="form-checkbox"
+                            />
+                            🔋 Batterie faible
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={patientNotifPrefs.notify_device_offline}
+                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, notify_device_offline: e.target.checked }))}
+                              className="form-checkbox"
+                            />
+                            📴 Dispositif hors ligne
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={patientNotifPrefs.notify_abnormal_flow}
+                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, notify_abnormal_flow: e.target.checked }))}
+                              className="form-checkbox"
+                            />
+                            ⚠️ Débit anormal
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={patientNotifPrefs.notify_alert_critical}
+                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, notify_alert_critical: e.target.checked }))}
+                              className="form-checkbox"
+                            />
+                            🚨 Alerte critique
+                          </label>
+                        </div>
+                      </div>
+
+                      <button
+                        className="btn-primary text-sm"
+                        onClick={savePatientNotifications}
+                        disabled={savingNotifPrefs}
+                      >
+                        {savingNotifPrefs ? 'Enregistrement...' : '💾 Enregistrer les préférences'}
+                      </button>
                     </div>
                   </div>
 

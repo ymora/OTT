@@ -51,7 +51,9 @@ export default function MapPage() {
     )
   }
 
-  const mappableDevices = devices.filter(d => d.latitude && d.longitude)
+  const mappableDevices = devices // Afficher tous les dispositifs (même sans coordonnées)
+  const devicesWithCoords = devices.filter(d => d.latitude && d.longitude)
+  const devicesWithoutCoords = devices.filter(d => !d.latitude || !d.longitude)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -62,7 +64,15 @@ export default function MapPage() {
             Visualisation en direct des dispositifs (positions, batterie, statut transmission)
           </p>
         </div>
-        <span className="text-sm text-gray-500">{mappableDevices.length} dispositif(s) localisés</span>
+        <div className="flex flex-col items-end gap-1 text-sm">
+          <span className="text-gray-700 font-medium">{mappableDevices.length} dispositif(s) au total</span>
+          {devicesWithCoords.length > 0 && (
+            <span className="text-green-600">✓ {devicesWithCoords.length} avec coordonnées GPS</span>
+          )}
+          {devicesWithoutCoords.length > 0 && (
+            <span className="text-amber-600">⚠ {devicesWithoutCoords.length} position estimée</span>
+          )}
+        </div>
       </div>
 
       {error && (
