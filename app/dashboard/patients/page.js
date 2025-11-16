@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import Chart from '@/components/Chart'
+import { useRouter } from 'next/navigation'
 
 export default function PatientsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
+  const router = useRouter()
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -186,8 +188,9 @@ export default function PatientsPage() {
                   <th className="text-left py-3 px-4">Nom</th>
                   <th className="text-left py-3 px-4">Date Naissance</th>
                   <th className="text-left py-3 px-4">Téléphone</th>
+                  <th className="text-left py-3 px-4">Email</th>
                   <th className="text-left py-3 px-4">Dispositif</th>
-                  <th className="text-left py-3 px-4">Actions</th>
+                  <th className="text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -196,24 +199,36 @@ export default function PatientsPage() {
                     <td className="py-3 px-4 font-medium">{p.first_name} {p.last_name}</td>
                     <td className="py-3 px-4">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
                     <td className="py-3 px-4">{p.phone || '-'}</td>
+                    <td className="py-3 px-4">{p.email || '-'}</td>
                     <td className="py-3 px-4">
                       {p.device_name ? (
                         <div className="space-y-1">
                           <p className="font-medium">{p.device_name}</p>
-                          <p className="text-xs text-gray-500">ICCID : {p.sim_iccid}</p>
-                          <span className="badge badge-success">1 boîtier</span>
+                          <p className="text-xs text-gray-500 font-mono">{p.sim_iccid}</p>
                         </div>
                       ) : (
-                        <div className="text-sm text-amber-600">Aucun dispositif attribué</div>
+                        <span className="text-sm text-amber-600">Non assigné</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <button 
-                        className="btn-secondary text-sm" 
-                        onClick={() => handleShowDetails(p)}
-                      >
-                        👁️ Détails
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          onClick={() => handleShowDetails(p)}
+                          title="Voir détails"
+                        >
+                          <span className="text-lg">👁️</span>
+                        </button>
+                        {p.device_name && (
+                          <button
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => router.push(`/dashboard/map?deviceId=${p.device_id}`)}
+                            title="Voir sur la carte"
+                          >
+                            <span className="text-lg">📍</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

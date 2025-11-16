@@ -311,9 +311,10 @@ export default function UsersPage() {
                   <th className="text-left py-3 px-4">Nom</th>
                   <th className="text-left py-3 px-4">Email</th>
                   <th className="text-left py-3 px-4">Rôle</th>
+                  <th className="text-left py-3 px-4">Téléphone</th>
                   <th className="text-left py-3 px-4">Statut</th>
                   <th className="text-left py-3 px-4">Dernière connexion</th>
-                  <th className="text-left py-3 px-4">Actions</th>
+                  <th className="text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -330,6 +331,9 @@ export default function UsersPage() {
                         {user.role_name}
                       </span>
                     </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {user.phone || '-'}
+                    </td>
                     <td className="py-3 px-4">
                       {user.is_active ? (
                         <span className="badge badge-success">✅ Actif</span>
@@ -338,12 +342,23 @@ export default function UsersPage() {
                       )}
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-600">
-                      {user.last_login ? new Date(user.last_login).toLocaleString('fr-FR') : 'Jamais'}
+                      {user.last_login ? new Date(user.last_login).toLocaleString('fr-FR', { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      }) : 'Jamais'}
                     </td>
                     <td className="py-3 px-4">
-                      <button className="btn-secondary text-sm" onClick={() => openEditModal(user)}>
-                        ✏️ Modifier
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          onClick={() => openEditModal(user)}
+                          title="Modifier l'utilisateur"
+                        >
+                          <span className="text-lg">✏️</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

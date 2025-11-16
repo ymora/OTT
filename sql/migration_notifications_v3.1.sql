@@ -43,8 +43,27 @@ ALTER TABLE notifications_queue
 CREATE INDEX IF NOT EXISTS idx_notifications_queue_patient ON notifications_queue(patient_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_queue_user_patient ON notifications_queue(user_id, patient_id);
 
--- 4. Mettre à jour user_notifications_preferences pour utiliser phone de users
--- (on garde phone_number pour rétrocompatibilité mais on peut utiliser users.phone)
+-- 4. Mettre à jour la vue users_with_roles pour inclure phone
+CREATE OR REPLACE VIEW users_with_roles AS
+SELECT 
+  u.id,
+  u.email,
+  u.first_name,
+  u.last_name,
+  u.phone,
+  u.password_hash,
+  u.is_active,
+  u.last_login,
+  u.created_at,
+  r.name AS role_name,
+  r.description AS role_description,
+  STRING_AGG(p.code, ',') AS permissions
+FROM users u
+JOIN roles r ON u.role_id = r.id
+LEFT JOIN role_permissions rp ON r.id = rp.role_id
+LEFT JOIN permissions p ON rp.permission_id = p.id
+GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash, 
+         u.is_active, u.last_login, u.created_at, r.name, r.description;
 
 COMMENT ON TABLE patient_notifications_preferences IS 'Préférences de notifications pour les patients (email, SMS, push)';
 COMMENT ON COLUMN users.phone IS 'Numéro de téléphone pour SMS (médecins, techniciens, etc.)';
