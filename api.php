@@ -294,6 +294,10 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleUpdateUser($m[1]);
 } elseif(preg_match('#/users/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteUser($m[1]);
+} elseif(preg_match('#/users/(\d+)/notifications$#', $path, $m) && $method === 'GET') {
+    handleGetUserNotifications($m[1]);
+} elseif(preg_match('#/users/(\d+)/notifications$#', $path, $m) && $method === 'PUT') {
+    handleUpdateUserNotifications($m[1]);
 
 // Roles
 } elseif(preg_match('#/roles$#', $path) && $method === 'GET') {
@@ -370,6 +374,10 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleCreatePatient();
 } elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdatePatient($m[1]);
+} elseif(preg_match('#/patients/(\d+)/notifications$#', $path, $m) && $method === 'GET') {
+    handleGetPatientNotifications($m[1]);
+} elseif(preg_match('#/patients/(\d+)/notifications$#', $path, $m) && $method === 'PUT') {
+    handleUpdatePatientNotifications($m[1]);
 
 // Reports
 } elseif(preg_match('#/reports/overview$#', $path) && $method === 'GET') {
@@ -1932,9 +1940,10 @@ function handleGetNotificationsQueue() {
         $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 50;
         
         $stmt = $pdo->prepare("
-            SELECT nq.*, u.email, u.first_name, u.last_name
+            SELECT nq.*, u.email, u.first_name, u.last_name, p.first_name as patient_first_name, p.last_name as patient_last_name
             FROM notifications_queue nq
-            JOIN users u ON nq.user_id = u.id
+            LEFT JOIN users u ON nq.user_id = u.id
+            LEFT JOIN patients p ON nq.patient_id = p.id
             ORDER BY nq.created_at DESC
             LIMIT :limit
         ");
@@ -1942,6 +1951,158 @@ function handleGetNotificationsQueue() {
         $stmt->execute();
         
         echo json_encode(['success' => true, 'queue' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetUserNotifications($user_id) {
+    global $pdo;
+    requirePermission('users.view');
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
+        $stmt->execute(['user_id' => $user_id]);
+        $prefs = $stmt->fetch();
+        
+        if (!$prefs) {
+            // Créer des préférences par défaut
+            $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user_id]);
+            $stmt->execute(['user_id' => $user_id]);
+            $prefs = $stmt->fetch();
+        }
+        
+        echo json_encode(['success' => true, 'preferences' => $prefs]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleUpdateUserNotifications($user_id) {
+    global $pdo;
+    requirePermission('users.edit');
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    try {
+        // Vérifier que l'utilisateur existe
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :user_id");
+        $stmt->execute(['user_id' => $user_id]);
+        if (!$stmt->fetch()) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'User not found']);
+            return;
+        }
+        
+        // Vérifier/créer les préférences
+        $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
+        $stmt->execute(['user_id' => $user_id]);
+        if (!$stmt->fetch()) {
+            $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user_id]);
+        }
+        
+        $updates = [];
+        $params = ['user_id' => $user_id];
+        
+        $allowed = ['email_enabled', 'sms_enabled', 'push_enabled', 'phone_number',
+                    'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow',
+                    'notify_new_patient', 'quiet_hours_start', 'quiet_hours_end'];
+        
+        foreach ($allowed as $field) {
+            if (isset($input[$field])) {
+                $updates[] = "$field = :$field";
+                $params[$field] = $input[$field];
+            }
+        }
+        
+        if (empty($updates)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No fields to update']);
+            return;
+        }
+        
+        $stmt = $pdo->prepare("UPDATE user_notifications_preferences SET " . implode(', ', $updates) . " WHERE user_id = :user_id");
+        $stmt->execute($params);
+        
+        echo json_encode(['success' => true]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetPatientNotifications($patient_id) {
+    global $pdo;
+    requirePermission('patients.view');
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM patient_notifications_preferences WHERE patient_id = :patient_id");
+        $stmt->execute(['patient_id' => $patient_id]);
+        $prefs = $stmt->fetch();
+        
+        if (!$prefs) {
+            // Créer des préférences par défaut
+            $pdo->prepare("INSERT INTO patient_notifications_preferences (patient_id) VALUES (:patient_id)")->execute(['patient_id' => $patient_id]);
+            $stmt->execute(['patient_id' => $patient_id]);
+            $prefs = $stmt->fetch();
+        }
+        
+        echo json_encode(['success' => true, 'preferences' => $prefs]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleUpdatePatientNotifications($patient_id) {
+    global $pdo;
+    requirePermission('patients.edit');
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    try {
+        // Vérifier que le patient existe
+        $stmt = $pdo->prepare("SELECT id FROM patients WHERE id = :patient_id");
+        $stmt->execute(['patient_id' => $patient_id]);
+        if (!$stmt->fetch()) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Patient not found']);
+            return;
+        }
+        
+        // Vérifier/créer les préférences
+        $stmt = $pdo->prepare("SELECT * FROM patient_notifications_preferences WHERE patient_id = :patient_id");
+        $stmt->execute(['patient_id' => $patient_id]);
+        if (!$stmt->fetch()) {
+            $pdo->prepare("INSERT INTO patient_notifications_preferences (patient_id) VALUES (:patient_id)")->execute(['patient_id' => $patient_id]);
+        }
+        
+        $updates = [];
+        $params = ['patient_id' => $patient_id];
+        
+        $allowed = ['email_enabled', 'sms_enabled', 'push_enabled',
+                    'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow',
+                    'notify_alert_critical', 'quiet_hours_start', 'quiet_hours_end'];
+        
+        foreach ($allowed as $field) {
+            if (isset($input[$field])) {
+                $updates[] = "$field = :$field";
+                $params[$field] = $input[$field];
+            }
+        }
+        
+        if (empty($updates)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No fields to update']);
+            return;
+        }
+        
+        $stmt = $pdo->prepare("UPDATE patient_notifications_preferences SET " . implode(', ', $updates) . " WHERE patient_id = :patient_id");
+        $stmt->execute($params);
+        
+        echo json_encode(['success' => true]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
