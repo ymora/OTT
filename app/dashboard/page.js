@@ -17,17 +17,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const [report, setReport] = useState(null)
+
   const loadData = useCallback(async () => {
     try {
       setError(null)
-      const [devicesData, alertsData, measurementsData] = await Promise.all([
+      const [devicesData, alertsData, measurementsData, reportData] = await Promise.all([
         fetchJson(fetchWithAuth, API_URL, '/api.php/devices'),
         fetchJson(fetchWithAuth, API_URL, '/api.php/alerts'),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/measurements/latest')
+        fetchJson(fetchWithAuth, API_URL, '/api.php/measurements/latest'),
+        fetchJson(fetchWithAuth, API_URL, '/api.php/reports/overview', {}, { requiresAuth: true }).catch(() => null)
       ])
       setDevices(devicesData.devices || [])
       setAlerts((alertsData.alerts || []).filter(a => a.status === 'unresolved'))
       setMeasurements(measurementsData.measurements || [])
+      setReport(reportData)
     } catch (err) {
       console.error(err)
       setError(err.message)
@@ -114,7 +118,7 @@ export default function DashboardPage() {
       )}
 
       {/* Stats Cards - Indicateurs clés */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         <StatsCard
           title="Dispositifs Totaux"
           value={stats.totalDevices}
@@ -143,6 +147,24 @@ export default function DashboardPage() {
           color={stats.lowBatteryDevices > 0 ? "orange" : "green"}
           delay={0.3}
         />
+        {report?.overview && (
+          <>
+            <StatsCard
+              title="Mesures 24h"
+              value={report.overview.measurements_24h || 0}
+              icon="📈"
+              color="blue"
+              delay={0.4}
+            />
+            <StatsCard
+              title="Débit Moyen"
+              value={`${report.overview.avg_flowrate_24h || 0} L/min`}
+              icon="💧"
+              color="green"
+              delay={0.5}
+            />
+          </>
+        )}
       </div>
 
       {/* Section Actions Requises */}
@@ -263,23 +285,132 @@ export default function DashboardPage() {
       </div>
 
       {/* Section Données - Graphiques */}
-      <div className="card">
-        <h2 className="text-lg font-semibold mb-4">📊 Données Récentes</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
-            <h3 className="text-sm font-medium text-gray-600 mb-2">Débits (24h)</h3>
-            <div className="h-48">
-              <Chart data={measurements} type="flowrate" />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-4">📊 Données Récentes (24h)</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-sm font-medium text-gray-600 mb-2">Débits</h3>
+              <div className="h-48">
+                <Chart data={measurements} type="flowrate" />
+              </div>
             </div>
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-600 mb-2">Batteries</h3>
-            <div className="h-48">
-              <Chart data={devices} type="battery" />
+            <div>
+              <h3 className="text-sm font-medium text-gray-600 mb-2">Batteries</h3>
+              <div className="h-48">
+                <Chart data={devices} type="battery" />
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Tendance 7 jours */}
+        {report?.trend && report.trend.length > 0 && (
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">📈 Tendance 7 Jours</h2>
+            <div className="h-64">
+              <Chart 
+                data={report.trend.map(day => ({
+                  ...day,
+                  timestamp: day.day,
+                  flowrate: day.avg_flowrate,
+                  battery: day.avg_battery
+                }))} 
+                type="flowrate" 
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Répartition des alertes */}
+        {report?.severity_breakdown && report.severity_breakdown.length > 0 && (
+          <div className="card">
+            <h2 className="text-lg font-semibold mb-4">🚨 Répartition des Alertes</h2>
+            <div className="space-y-3">
+              {report.severity_breakdown.map(item => (
+                <div key={item.severity} className="flex items-center justify-between border rounded-lg p-3">
+                  <span className="font-medium capitalize">{item.severity}</span>
+                  <span className="text-lg font-bold">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Top dispositifs surveillés */}
+      {report?.top_devices && report.top_devices.length > 0 && (
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-4">⭐ Top Dispositifs Surveillés</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left border-b">
+                  <th className="py-2">Dispositif</th>
+                  <th className="py-2">Débit moyen</th>
+                  <th className="py-2">Batterie moyenne</th>
+                  <th className="py-2">Dernière mesure</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.top_devices.map(device => (
+                  <tr key={device.id} className="border-b hover:bg-gray-50">
+                    <td className="py-2">
+                      <p className="font-medium">{device.device_name || device.sim_iccid}</p>
+                      <p className="text-xs text-gray-500">{device.status}</p>
+                    </td>
+                    <td className="py-2">{device.avg_flowrate ?? '—'} L/min</td>
+                    <td className="py-2">{device.avg_battery ?? '—'}%</td>
+                    <td className="py-2 text-sm text-gray-600">
+                      {device.last_measurement ? new Date(device.last_measurement).toLocaleString('fr-FR') : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Patients & dispositifs associés */}
+      {report?.assignments && report.assignments.length > 0 && (
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-4">👥 Patients & Dispositifs Associés</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left border-b">
+                  <th className="py-2">Patient</th>
+                  <th className="py-2">Dispositif</th>
+                  <th className="py-2">Statut</th>
+                  <th className="py-2">Dernier contact</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.assignments.map((row) => (
+                  <tr key={row.patient_id} className="border-b hover:bg-gray-50">
+                    <td className="py-2 font-medium">{row.first_name} {row.last_name}</td>
+                    <td className="py-2">
+                      {row.device_name ? (
+                        <>
+                          <p className="font-medium">{row.device_name}</p>
+                          <p className="text-xs text-gray-500">{row.sim_iccid}</p>
+                        </>
+                      ) : (
+                        <span className="text-amber-600 text-sm">Aucun boîtier</span>
+                      )}
+                    </td>
+                    <td className="py-2">{row.status || '—'}</td>
+                    <td className="py-2 text-sm text-gray-600">
+                      {row.last_seen ? new Date(row.last_seen).toLocaleString('fr-FR') : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Actions rapides */}
       <div className="card">

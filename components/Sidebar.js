@@ -45,13 +45,6 @@ const menuStructure = [
     description: 'Commandes dispositifs'
   },
   {
-    name: 'Rapports',
-    icon: '📊',
-    path: '/dashboard/reports',
-    permission: 'reports.view',
-    description: 'Statistiques et analyses'
-  },
-  {
     name: 'Utilisateurs',
     icon: '👤',
     path: '/dashboard/users',

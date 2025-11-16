@@ -647,14 +647,13 @@ function handleGetDevices() {
     $user = getCurrentUser();
     
     try {
-        // Requête simplifiée et robuste
+        // Requête simplifiée et robuste - éviter duplication firmware_version
         $stmt = $pdo->query("
             SELECT 
                 d.id,
                 d.sim_iccid,
                 d.device_serial,
                 d.device_name,
-                d.firmware_version,
                 d.status,
                 d.patient_id,
                 d.installation_date,
@@ -666,7 +665,7 @@ function handleGetDevices() {
                 d.created_at,
                 d.updated_at,
                 p.first_name, 
-                p.last_name, 
+                p.last_name,
                 COALESCE(dc.firmware_version, d.firmware_version) as firmware_version,
                 COALESCE(dc.ota_pending, FALSE) as ota_pending
             FROM devices d
