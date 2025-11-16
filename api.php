@@ -452,11 +452,29 @@ function handleGetUsers() {
     requirePermission('users.view');
     
     try {
-        $stmt = $pdo->query("SELECT * FROM users_with_roles ORDER BY created_at DESC");
-        echo json_encode(['success' => true, 'users' => $stmt->fetchAll()]);
+        // Utiliser directement la requête complète pour éviter les problèmes de vue
+        $stmt = $pdo->query("
+            SELECT 
+                u.id, u.email, u.first_name, u.last_name, u.password_hash,
+                u.is_active, u.last_login, u.created_at,
+                r.name AS role_name,
+                r.description AS role_description,
+                COALESCE(STRING_AGG(p.code, ','), '') AS permissions
+            FROM users u
+            JOIN roles r ON u.role_id = r.id
+            LEFT JOIN role_permissions rp ON r.id = rp.role_id
+            LEFT JOIN permissions p ON rp.permission_id = p.id
+            GROUP BY u.id, u.email, u.first_name, u.last_name, u.password_hash,
+                     u.is_active, u.last_login, u.created_at, r.name, r.description
+            ORDER BY u.created_at DESC
+        ");
+        $users = $stmt->fetchAll();
+        echo json_encode(['success' => true, 'users' => $users]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleGetUsers] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
