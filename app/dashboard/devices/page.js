@@ -10,9 +10,8 @@ import Chart from '@/components/Chart'
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
 
 // Import dynamique des pages pour les onglets
-const AlertsPage = dynamic(() => import('../alerts/page'), { ssr: false })
+const EventsPage = dynamic(() => import('../events/page'), { ssr: false })
 const CommandsPage = dynamic(() => import('../commands/page'), { ssr: false })
-const LogsPage = dynamic(() => import('../logs/page'), { ssr: false })
 const OTAPage = dynamic(() => import('../ota/page'), { ssr: false })
 
 export default function DevicesPage() {
@@ -44,6 +43,13 @@ export default function DevicesPage() {
   
   // OTA
   const [otaLoading, setOtaLoading] = useState({})
+  const [otaModalOpen, setOtaModalOpen] = useState(false)
+  const [otaDevice, setOtaDevice] = useState(null)
+  const [firmwares, setFirmwares] = useState([])
+  const [selectedFirmware, setSelectedFirmware] = useState('')
+  
+  // Focus sur la carte
+  const [focusDeviceId, setFocusDeviceId] = useState(null)
 
   const loadDevices = useCallback(async () => {
     try {
@@ -67,10 +73,20 @@ export default function DevicesPage() {
     }
   }, [fetchWithAuth, API_URL])
 
+  const loadFirmwares = useCallback(async () => {
+    try {
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/firmwares', {}, { requiresAuth: true })
+      setFirmwares(data.firmwares || [])
+    } catch (err) {
+      console.error(err)
+    }
+  }, [fetchWithAuth, API_URL])
+
   useEffect(() => {
     loadDevices()
     loadPatients()
-  }, [loadDevices, loadPatients])
+    loadFirmwares()
+  }, [loadDevices, loadPatients, loadFirmwares])
 
   const filteredDevices = useMemo(() => {
     const needle = searchTerm.toLowerCase()
@@ -182,24 +198,53 @@ export default function DevicesPage() {
     }
   }
 
-  const handleOTA = async (device) => {
-    if (!confirm(`Lancer une mise à jour OTA pour ${device.device_name || device.sim_iccid} ?`)) return
-    
-    setOtaLoading(prev => ({ ...prev, [device.id]: true }))
+  const handleOTA = (device) => {
+    setOtaDevice(device)
+    setSelectedFirmware('')
+    setOtaModalOpen(true)
+  }
+
+  const closeOTAModal = () => {
+    setOtaModalOpen(false)
+    setOtaDevice(null)
+    setSelectedFirmware('')
+  }
+
+  const confirmOTA = async () => {
+    if (!otaDevice || !selectedFirmware) {
+      alert('Veuillez sélectionner un firmware')
+      return
+    }
+
+    const currentFirmware = otaDevice.firmware_version || 'N/A'
+    const confirmMessage = `⚠️ ATTENTION : Mise à jour OTA\n\n` +
+      `Dispositif: ${otaDevice.device_name || otaDevice.sim_iccid}\n` +
+      `Firmware actuel: ${currentFirmware}\n` +
+      `Firmware cible: ${selectedFirmware}\n\n` +
+      `Cette opération peut planter le dispositif si le firmware est incompatible.\n` +
+      `Êtes-vous sûr de vouloir continuer ?`
+
+    if (!confirm(confirmMessage)) return
+
+    setOtaLoading(prev => ({ ...prev, [otaDevice.id]: true }))
     try {
       await fetchJson(
         fetchWithAuth,
         API_URL,
-        `/api.php/devices/${device.id}/ota`,
-        { method: 'POST', body: JSON.stringify({}) },
+        `/api.php/devices/${otaDevice.id}/ota`,
+        { 
+          method: 'POST', 
+          body: JSON.stringify({ firmware_version: selectedFirmware }) 
+        },
         { requiresAuth: true }
       )
-      alert('Mise à jour OTA lancée avec succès')
+      alert(`✅ Mise à jour OTA v${selectedFirmware} programmée avec succès`)
       await loadDevices()
+      closeOTAModal()
     } catch (err) {
-      alert(`Erreur OTA: ${err.message}`)
+      alert(`❌ Erreur OTA: ${err.message}`)
     } finally {
-      setOtaLoading(prev => ({ ...prev, [device.id]: false }))
+      setOtaLoading(prev => ({ ...prev, [otaDevice.id]: false }))
     }
   }
 
@@ -225,10 +270,9 @@ export default function DevicesPage() {
 
   const tabs = [
     { id: 'list', label: '📋 Liste', icon: '📋' },
-    { id: 'ota', label: '🔄 OTA', icon: '🔄', permission: 'devices.edit' },
+    { id: 'ota', label: '⬆️ Mise à jour', icon: '⬆️', permission: 'devices.edit' },
     { id: 'commands', label: '📡 Commandes', icon: '📡', permission: 'devices.commands' },
-    { id: 'logs', label: '📝 Logs', icon: '📝', permission: 'devices.view' },
-    { id: 'alerts', label: '🔔 Alertes', icon: '🔔', permission: 'alerts.view' },
+    { id: 'events', label: '📊 Événements', icon: '📊', permission: 'devices.view' },
   ]
 
   const hasPermission = (permission) => {
@@ -290,6 +334,7 @@ export default function DevicesPage() {
           <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
             <LeafletMap
               devices={devices}
+              focusDeviceId={focusDeviceId}
               onSelect={(device) => {
                 const found = devices.find(d => d.id === device.id)
                 if (found) handleShowDetails(found)
@@ -346,13 +391,12 @@ export default function DevicesPage() {
                 <th className="text-left py-3 px-4">Batterie</th>
                 <th className="text-left py-3 px-4">Dernier contact</th>
                 <th className="text-left py-3 px-4">Firmware</th>
-                <th className="text-right py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredDevices.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-8 text-center text-gray-500">
+                  <td colSpan="6" className="py-8 text-center text-gray-500">
                     Aucun dispositif trouvé
                   </td>
                 </tr>
@@ -363,7 +407,8 @@ export default function DevicesPage() {
                   return (
                     <tr 
                       key={device.id} 
-                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => handleShowDetails(device)}
                     >
                       <td className="py-3 px-4">
                         <div>
@@ -403,41 +448,6 @@ export default function DevicesPage() {
                           <span className="badge badge-warning text-xs ml-2">OTA en attente</span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            onClick={() => handleShowDetails(device)}
-                            title="Voir détails et journal"
-                          >
-                            <span className="text-lg">👁️</span>
-                          </button>
-                          <button
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            onClick={() => handleAssign(device)}
-                            title="Assigner à un patient"
-                          >
-                            <span className="text-lg">👤</span>
-                          </button>
-                          <button
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                            onClick={() => handleOTA(device)}
-                            disabled={!isAdmin || otaLoading[device.id]}
-                            title={isAdmin ? "Lancer mise à jour OTA" : "OTA réservé aux administrateurs"}
-                          >
-                            <span className="text-lg">{otaLoading[device.id] ? '⏳' : '🔄'}</span>
-                          </button>
-                          {device.latitude && device.longitude && (
-                            <button
-                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                              onClick={() => router.push(`/dashboard/map?deviceId=${device.id}`)}
-                              title="Voir sur la carte"
-                            >
-                              <span className="text-lg">📍</span>
-                            </button>
-                          )}
-                        </div>
-                      </td>
                     </tr>
                   )
                 })
@@ -451,8 +461,7 @@ export default function DevicesPage() {
 
       {activeTab === 'ota' && <OTAPage />}
       {activeTab === 'commands' && <CommandsPage />}
-      {activeTab === 'logs' && <LogsPage />}
-      {activeTab === 'alerts' && <AlertsPage />}
+      {activeTab === 'events' && <EventsPage />}
 
       {/* Modal Détails & Journal - accessible depuis tous les onglets */}
       {showDetailsModal && selectedDevice && (
@@ -619,6 +628,92 @@ export default function DevicesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal OTA */}
+      {otaModalOpen && otaDevice && (
+        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold">⬆️ Mise à jour Firmware OTA</h2>
+                <p className="text-sm text-gray-500">
+                  {otaDevice.device_name || otaDevice.sim_iccid}
+                </p>
+                <p className="text-xs text-amber-600 mt-1">
+                  Firmware actuel: <span className="font-mono font-semibold">{otaDevice.firmware_version || 'N/A'}</span>
+                </p>
+              </div>
+              <button 
+                className="text-gray-500 hover:text-gray-700" 
+                onClick={closeOTAModal} 
+                disabled={otaLoading[otaDevice.id]}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded">
+              <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ Attention</p>
+              <p className="text-xs text-amber-700">
+                Une mise à jour OTA avec un firmware incompatible peut planter le dispositif de manière irréversible. 
+                Assurez-vous que le firmware sélectionné est compatible avec ce modèle de dispositif.
+              </p>
+            </div>
+
+            <label className="text-sm font-medium text-gray-700 w-full">
+              Firmware cible
+              <select
+                className="input mt-1"
+                value={selectedFirmware}
+                onChange={(e) => setSelectedFirmware(e.target.value)}
+                disabled={otaLoading[otaDevice.id]}
+              >
+                <option value="">— Sélectionner un firmware —</option>
+                {firmwares
+                  .filter(fw => fw.version !== otaDevice.firmware_version)
+                  .sort((a, b) => {
+                    // Trier par version (décroissant) - versions stables en premier
+                    if (a.is_stable !== b.is_stable) return b.is_stable - a.is_stable
+                    return b.version.localeCompare(a.version, undefined, { numeric: true })
+                  })
+                  .map(firmware => (
+                    <option key={firmware.id} value={firmware.version}>
+                      {firmware.version} {firmware.is_stable ? '✅ Stable' : '⚠️ Beta'} 
+                      {firmware.release_notes ? ` - ${firmware.release_notes.substring(0, 50)}` : ''}
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            {selectedFirmware && (
+              <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                <p className="text-xs text-blue-800">
+                  <strong>Mise à jour prévue :</strong> {otaDevice.firmware_version || 'N/A'} → {selectedFirmware}
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={closeOTAModal} 
+                disabled={otaLoading[otaDevice.id]}
+              >
+                Annuler
+              </button>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={confirmOTA}
+                disabled={!selectedFirmware || otaLoading[otaDevice.id]}
+              >
+                {otaLoading[otaDevice.id] ? 'Envoi en cours…' : 'Lancer la mise à jour'}
+              </button>
+            </div>
           </div>
         </div>
       )}

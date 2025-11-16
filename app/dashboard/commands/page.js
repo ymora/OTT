@@ -216,16 +216,11 @@ export default function CommandsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Commandes descendantes</h1>
-          <p className="text-gray-600 mt-1">
-            {commands.length} commande(s) enregistrées – {stats.pending} en attente
-          </p>
-        </div>
-        <button className="btn-primary" onClick={() => setRefreshTick((tick) => tick + 1)}>
-          🔄 Rafraîchir
-        </button>
+      <div>
+        <h1 className="text-3xl font-bold">📡 Commandes Dispositifs</h1>
+        <p className="text-gray-600 mt-1">
+          Envoyer des commandes aux dispositifs et consulter l'historique
+        </p>
       </div>
 
       {error && (
@@ -249,103 +244,51 @@ export default function CommandsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="card lg:col-span-2 overflow-x-auto">
-          <h2 className="text-xl font-semibold mb-4">Historique des commandes</h2>
-          {loading ? (
-            <p className="text-gray-500">Chargement...</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b">
-                  <th className="py-2">Commande</th>
-                  <th className="py-2">Dispositif</th>
-                  <th className="py-2">Patient</th>
-                  <th className="py-2">Priorité</th>
-                  <th className="py-2">Statut</th>
-                  <th className="py-2">Créée</th>
-                </tr>
-              </thead>
-              <tbody>
-                {commands.map((cmd) => (
-                  <tr key={cmd.id} className="border-b last:border-0">
-                    <td className="py-2 font-medium">{cmd.command}</td>
-                    <td className="py-2 text-gray-600">
-                      <div>{cmd.device_name || '—'}</div>
-                      <div className="text-xs text-gray-500">{cmd.sim_iccid}</div>
-                    </td>
-                    <td className="py-2 text-gray-600">
-                      {cmd.patient_first_name || cmd.patient_last_name ? (
-                        <div>
-                          {cmd.patient_first_name} {cmd.patient_last_name}
-                        </div>
-                      ) : (
-                        <span className="text-amber-600 text-sm">Non attribué</span>
-                      )}
-                    </td>
-                    <td className="py-2 capitalize">{cmd.priority}</td>
-                    <td className="py-2">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          statusColors[cmd.status] || 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {cmd.status}
-                      </span>
-                    </td>
-                    <td className="py-2 text-gray-500">
-                      {new Date(cmd.created_at ?? cmd.execute_after).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-                {commands.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-gray-500">
-                      Aucune commande enregistrée
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-4">Nouvelle commande</h2>
-          <form className="space-y-4" onSubmit={handleCreate}>
-            <div>
-              <label className="label">Dispositif</label>
-              <select
-                className="input"
-                value={form.iccid}
-                onChange={(e) => setForm((prev) => ({ ...prev, iccid: e.target.value }))}
-              >
-                {devices.map((device) => (
-                  <option key={device.sim_iccid} value={device.sim_iccid}>
-                    {(device.device_name || device.sim_iccid) + (device.first_name ? ` · ${device.first_name} ${device.last_name || ''}` : ' · Non assigné')}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="label">Commande</label>
-              <select
-                className="input"
-                value={form.command}
-                onChange={(e) => setForm((prev) => ({ ...prev, command: e.target.value }))}
-              >
-                {commandOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {form.command === 'SET_SLEEP_SECONDS' && (
+      {/* Formulaire de commande - Simplifié et plus clair */}
+      <div className="card">
+        <h2 className="text-xl font-semibold mb-4">📡 Envoyer une commande</h2>
+        <form className="space-y-4" onSubmit={handleCreate}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="label">Intervalle sommeil (secondes)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Dispositif *</label>
+                <select
+                  className="input"
+                  value={form.iccid}
+                  onChange={(e) => setForm((prev) => ({ ...prev, iccid: e.target.value }))}
+                  required
+                >
+                  <option value="">— Sélectionner un dispositif —</option>
+                  {devices.map((device) => (
+                    <option key={device.sim_iccid} value={device.sim_iccid}>
+                      {device.device_name || device.sim_iccid} {device.first_name ? `(${device.first_name} ${device.last_name || ''})` : '(Non assigné)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Type de commande *</label>
+                <select
+                  className="input"
+                  value={form.command}
+                  onChange={(e) => setForm((prev) => ({ ...prev, command: e.target.value }))}
+                  required
+                >
+                  {commandOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Paramètres spécifiques selon le type de commande */}
+            {form.command === 'SET_SLEEP_SECONDS' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Intervalle de sommeil (secondes) *
+                </label>
                 <input
                   type="number"
                   min={30}
@@ -353,29 +296,39 @@ export default function CommandsPage() {
                   className="input"
                   value={form.sleepSeconds}
                   onChange={(e) => setForm((prev) => ({ ...prev, sleepSeconds: e.target.value }))}
+                  required
                 />
+                <p className="text-xs text-gray-500 mt-1">Valeur entre 30 et 7200 secondes</p>
               </div>
             )}
 
             {form.command === 'PING' && (
-              <div>
-                <label className="label">Message (optionnel)</label>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Message de diagnostic (optionnel)
+                </label>
                 <input
                   type="text"
                   className="input"
+                  placeholder="Ex: Test de connexion"
                   value={form.message}
                   onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
                 />
+                <p className="text-xs text-gray-500 mt-1">Message qui sera renvoyé par le dispositif</p>
               </div>
             )}
 
             {form.command === 'UPDATE_CONFIG' && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500">
-                  Remplir uniquement les champs à modifier. Les valeurs numériques sont optionnelles.
-                </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-4">
+                <div className="bg-amber-100 border-l-4 border-amber-500 p-3 rounded">
+                  <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ Configuration avancée</p>
+                  <p className="text-xs text-amber-700">
+                    Remplir uniquement les champs à modifier. Les valeurs vides seront ignorées.
+                  </p>
+                </div>
+                
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Identité & secrets</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-3">🔐 Identité & Réseau</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input
                       className="input"
@@ -411,7 +364,7 @@ export default function CommandsPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Mesures & sommeil</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-3">📊 Mesures & Sommeil</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input
                       type="number"
@@ -449,7 +402,7 @@ export default function CommandsPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Watchdog & modem</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-3">⚙️ Watchdog & Modem</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input
                       type="number"
@@ -495,7 +448,7 @@ export default function CommandsPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">OTA par défaut</p>
+                  <p className="text-sm font-semibold text-gray-700 mb-3">⬆️ OTA par défaut</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input
                       className="input"
@@ -521,34 +474,44 @@ export default function CommandsPage() {
             )}
 
             {form.command === 'UPDATE_CALIBRATION' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {['a0', 'a1', 'a2'].map((coef) => (
-                  <div key={coef}>
-                    <label className="label">Coefficient {coef.toUpperCase()}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      className="input"
-                      value={form[`cal${coef.toUpperCase()}`]}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          [`cal${coef.toUpperCase()}`]: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                ))}
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <p className="text-sm font-semibold text-gray-700 mb-3">📐 Coefficients de calibration</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {['a0', 'a1', 'a2'].map((coef) => (
+                    <div key={coef}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Coefficient {coef.toUpperCase()} *
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        className="input"
+                        placeholder={`Valeur ${coef.toUpperCase()}`}
+                        value={form[`cal${coef.toUpperCase()}`]}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            [`cal${coef.toUpperCase()}`]: e.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
             {form.command === 'OTA_REQUEST' && (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-500">
-                  Laisser l’URL vide pour utiliser la valeur primaire/fallback stockée dans le boîtier.
-                </p>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-3">
+                <div className="bg-orange-100 border-l-4 border-orange-500 p-3 rounded">
+                  <p className="text-sm font-semibold text-orange-800 mb-1">⚠️ Mise à jour OTA</p>
+                  <p className="text-xs text-orange-700">
+                    Laisser l'URL vide pour utiliser la configuration stockée dans le dispositif.
+                  </p>
+                </div>
                 <div>
-                  <label className="label">Canal</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Canal OTA</label>
                   <select
                     className="input"
                     value={form.otaChannel}
@@ -559,19 +522,21 @@ export default function CommandsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="label">URL binaire (optionnel)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">URL du firmware (optionnel)</label>
                   <input
                     type="text"
                     className="input"
+                    placeholder="https://..."
                     value={form.otaUrl}
                     onChange={(e) => setForm((prev) => ({ ...prev, otaUrl: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="label">MD5 attendu (optionnel)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">MD5 attendu (optionnel)</label>
                   <input
                     type="text"
                     className="input"
+                    placeholder="Hash MD5 du firmware"
                     value={form.otaMd5}
                     onChange={(e) => setForm((prev) => ({ ...prev, otaMd5: e.target.value }))}
                   />
@@ -579,37 +544,120 @@ export default function CommandsPage() {
               </div>
             )}
 
-            <div>
-              <label className="label">Priorité</label>
-              <select
-                className="input"
-                value={form.priority}
-                onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))}
-              >
-                {priorityOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-200">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Priorité</label>
+                <select
+                  className="input"
+                  value={form.priority}
+                  onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))}
+                >
+                  {priorityOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Expiration (minutes)</label>
+                <input
+                  type="number"
+                  min={5}
+                  className="input"
+                  value={form.expiresInMinutes}
+                  onChange={(e) => setForm((prev) => ({ ...prev, expiresInMinutes: e.target.value }))}
+                />
+                <p className="text-xs text-gray-500 mt-1">Temps avant expiration de la commande</p>
+              </div>
             </div>
 
-            <div>
-              <label className="label">Expiration (minutes)</label>
-              <input
-                type="number"
-                min={5}
-                className="input"
-                value={form.expiresInMinutes}
-                onChange={(e) => setForm((prev) => ({ ...prev, expiresInMinutes: e.target.value }))}
-              />
-            </div>
-
-            <button type="submit" className="btn-primary w-full" disabled={creating}>
-              {creating ? 'Envoi...' : 'Programmer'}
+            <button type="submit" className="btn-primary w-full" disabled={creating || !form.iccid}>
+              {creating ? '⏳ Envoi en cours...' : '📤 Envoyer la commande'}
             </button>
           </form>
+      </div>
+
+      {/* Historique des commandes */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">📋 Historique des commandes</h2>
+          <button 
+            className="btn-secondary text-sm" 
+            onClick={() => setRefreshTick((tick) => tick + 1)}
+            disabled={loading}
+          >
+            🔄 Actualiser
+          </button>
         </div>
+        
+        {loading ? (
+          <div className="animate-shimmer h-64"></div>
+        ) : commands.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <p className="text-lg mb-2">Aucune commande enregistrée</p>
+            <p className="text-sm">Les commandes envoyées apparaîtront ici</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="py-3 px-4">Commande</th>
+                  <th className="py-3 px-4">Dispositif</th>
+                  <th className="py-3 px-4">Priorité</th>
+                  <th className="py-3 px-4">Statut</th>
+                  <th className="py-3 px-4">Créée</th>
+                </tr>
+              </thead>
+              <tbody>
+                {commands.map((cmd) => (
+                  <tr key={cmd.id} className="border-b hover:bg-gray-50 transition-colors">
+                    <td className="py-3 px-4">
+                      <span className="font-medium">{cmd.command}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-medium">{cmd.device_name || cmd.sim_iccid || '—'}</div>
+                      {cmd.patient_first_name || cmd.patient_last_name ? (
+                        <div className="text-xs text-gray-500">
+                          {cmd.patient_first_name} {cmd.patient_last_name}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-amber-600">Non assigné</div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="capitalize text-gray-700">{cmd.priority}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          statusColors[cmd.status] || 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {cmd.status === 'pending' ? '⏳ En attente' :
+                         cmd.status === 'executed' ? '✅ Exécutée' :
+                         cmd.status === 'error' ? '❌ Erreur' :
+                         cmd.status === 'expired' ? '⏰ Expirée' :
+                         cmd.status === 'cancelled' ? '🚫 Annulée' :
+                         cmd.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-gray-500">
+                      {new Date(cmd.created_at ?? cmd.execute_after).toLocaleString('fr-FR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

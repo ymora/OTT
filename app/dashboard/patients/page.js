@@ -25,7 +25,11 @@ export default function PatientsPage() {
     postal_code: ''
   }), [])
   const [formData, setFormData] = useState(emptyForm)
+  const [formErrors, setFormErrors] = useState({})
   const [selectedPatient, setSelectedPatient] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [editingPatient, setEditingPatient] = useState(null)
+  const [deletingPatient, setDeletingPatient] = useState(null)
   const [patientDetails, setPatientDetails] = useState(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [patientNotifPrefs, setPatientNotifPrefs] = useState({
@@ -57,15 +61,100 @@ export default function PatientsPage() {
     loadPatients()
   }, [loadPatients])
 
+  const filteredPatients = useMemo(() => {
+    return patients.filter(p => {
+      if (searchTerm) {
+        const needle = searchTerm.toLowerCase()
+        const haystack = `${p.first_name || ''} ${p.last_name || ''} ${p.email || ''} ${p.phone || ''} ${p.device_name || ''}`.toLowerCase()
+        if (!haystack.includes(needle)) return false
+      }
+      return true
+    })
+  }, [patients, searchTerm])
+
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+    // Effacer l'erreur du champ quand l'utilisateur modifie
+    if (formErrors[field]) {
+      setFormErrors(prev => {
+        const next = { ...prev }
+        delete next[field]
+        return next
+      })
+    }
+  }
+
+  const validateForm = () => {
+    const errors = {}
+    
+    // Prénom obligatoire
+    if (!formData.first_name || formData.first_name.trim().length === 0) {
+      errors.first_name = 'Le prénom est obligatoire'
+    } else if (formData.first_name.trim().length < 2) {
+      errors.first_name = 'Le prénom doit contenir au moins 2 caractères'
+    }
+    
+    // Nom obligatoire
+    if (!formData.last_name || formData.last_name.trim().length === 0) {
+      errors.last_name = 'Le nom est obligatoire'
+    } else if (formData.last_name.trim().length < 2) {
+      errors.last_name = 'Le nom doit contenir au moins 2 caractères'
+    }
+    
+    // Email (optionnel mais doit être valide si renseigné)
+    if (formData.email && formData.email.trim().length > 0) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email.trim())) {
+        errors.email = 'Format d\'email invalide (ex: nom@example.com)'
+      }
+    }
+    
+    // Téléphone (optionnel mais doit être valide si renseigné)
+    if (formData.phone && formData.phone.trim().length > 0) {
+      const phoneRegex = /^(\+33|0)[1-9](\d{2}){4}$/
+      const cleanedPhone = formData.phone.replace(/\s/g, '')
+      if (!phoneRegex.test(cleanedPhone)) {
+        errors.phone = 'Format de téléphone invalide (ex: +33612345678 ou 0612345678)'
+      }
+    }
+    
+    // Code postal (optionnel mais doit être valide si renseigné)
+    if (formData.postal_code && formData.postal_code.trim().length > 0) {
+      const postalRegex = /^\d{5}$/
+      if (!postalRegex.test(formData.postal_code.trim())) {
+        errors.postal_code = 'Le code postal doit contenir 5 chiffres'
+      }
+    }
+    
+    // Date de naissance (optionnel mais doit être valide si renseigné)
+    if (formData.birth_date && formData.birth_date.trim().length > 0) {
+      const birthDate = new Date(formData.birth_date)
+      const today = new Date()
+      if (isNaN(birthDate.getTime())) {
+        errors.birth_date = 'Date de naissance invalide'
+      } else if (birthDate > today) {
+        errors.birth_date = 'La date de naissance ne peut pas être dans le futur'
+      } else {
+        const age = today.getFullYear() - birthDate.getFullYear()
+        if (age > 150) {
+          errors.birth_date = 'Date de naissance invalide (âge > 150 ans)'
+        }
+      }
+    }
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
   }
 
   const handleCreatePatient = async () => {
-    if (!formData.first_name || !formData.last_name) {
-      setError('Prénom et nom sont obligatoires')
+    setError(null)
+    setFormErrors({})
+    
+    if (!validateForm()) {
+      setError('Veuillez corriger les erreurs dans le formulaire')
       return
     }
+    
     try {
       setSaving(true)
       setError(null)
@@ -78,6 +167,7 @@ export default function PatientsPage() {
       )
       setShowForm(false)
       setFormData(emptyForm)
+      setFormErrors({})
       setSuccess('Patient créé avec succès')
       loadPatients()
     } catch (err) {
@@ -103,6 +193,79 @@ export default function PatientsPage() {
       setError(err.message)
     } finally {
       setSavingNotifPrefs(false)
+    }
+  }
+
+  const handleEdit = (patient) => {
+    setEditingPatient(patient)
+    setFormData({
+      first_name: patient.first_name || '',
+      last_name: patient.last_name || '',
+      birth_date: patient.birth_date ? patient.birth_date.split('T')[0] : '',
+      phone: patient.phone || '',
+      email: patient.email || '',
+      city: patient.city || '',
+      postal_code: patient.postal_code || ''
+    })
+    setFormErrors({})
+    setShowForm(true)
+  }
+
+  const handleUpdatePatient = async () => {
+    if (!editingPatient) return
+    
+    setError(null)
+    setFormErrors({})
+    
+    if (!validateForm()) {
+      setError('Veuillez corriger les erreurs dans le formulaire')
+      return
+    }
+    
+    try {
+      setSaving(true)
+      setError(null)
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/patients/${editingPatient.id}`,
+        { method: 'PUT', body: JSON.stringify(formData) },
+        { requiresAuth: true }
+      )
+      setShowForm(false)
+      setEditingPatient(null)
+      setFormData(emptyForm)
+      setFormErrors({})
+      setSuccess('Patient modifié avec succès')
+      loadPatients()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (patient) => {
+    if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer le patient "${patient.first_name} ${patient.last_name}" ?\n\nCette action est irréversible.`)) {
+      return
+    }
+
+    try {
+      setDeletingPatient(patient.id)
+      setError(null)
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/patients/${patient.id}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      setSuccess('Patient supprimé avec succès')
+      loadPatients()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeletingPatient(null)
     }
   }
 
@@ -166,9 +329,27 @@ export default function PatientsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div>
         <h1 className="text-3xl font-bold">👥 Patients</h1>
-        <button className="btn-primary" onClick={() => setShowForm(true)}>➕ Nouveau Patient</button>
+      </div>
+
+      {/* Recherche et Nouveau Patient sur la même ligne */}
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex-1">
+          <input
+            type="text"
+            className="input"
+            placeholder="Rechercher un patient..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <button className="btn-primary" onClick={() => {
+          setEditingPatient(null)
+          setFormData(emptyForm)
+          setFormErrors({})
+          setShowForm(true)
+        }}>➕ Nouveau Patient</button>
       </div>
 
       {(error || success) && (
@@ -194,44 +375,51 @@ export default function PatientsPage() {
                 </tr>
               </thead>
               <tbody>
-                {patients.map((p, i) => (
-                  <tr key={p.id} className="border-b hover:bg-gray-50 animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
-                    <td className="py-3 px-4 font-medium">{p.first_name} {p.last_name}</td>
-                    <td className="py-3 px-4">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
-                    <td className="py-3 px-4">{p.phone || '-'}</td>
-                    <td className="py-3 px-4">{p.email || '-'}</td>
-                    <td className="py-3 px-4">
-                      {p.device_name ? (
-                        <div className="space-y-1">
-                          <p className="font-medium">{p.device_name}</p>
-                          <p className="text-xs text-gray-500 font-mono">{p.sim_iccid}</p>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-amber-600">Non assigné</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                          onClick={() => handleShowDetails(p)}
-                          title="Voir détails"
-                        >
-                          <span className="text-lg">👁️</span>
-                        </button>
-                        {p.device_name && (
-                          <button
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            onClick={() => router.push(`/dashboard/map?deviceId=${p.device_id}`)}
-                            title="Voir sur la carte"
-                          >
-                            <span className="text-lg">📍</span>
-                          </button>
-                        )}
-                      </div>
+                {filteredPatients.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="py-8 text-center text-gray-500">
+                      {searchTerm ? 'Aucun patient ne correspond à la recherche' : 'Aucun patient'}
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredPatients.map((p, i) => (
+                    <tr key={p.id} className="border-b hover:bg-gray-50 animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
+                      <td className="py-3 px-4 font-medium">{p.first_name} {p.last_name}</td>
+                      <td className="py-3 px-4">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
+                      <td className="py-3 px-4">{p.phone || '-'}</td>
+                      <td className="py-3 px-4">{p.email || '-'}</td>
+                      <td className="py-3 px-4">
+                        {p.device_name ? (
+                          <div className="space-y-1">
+                            <p className="font-medium">{p.device_name}</p>
+                            <p className="text-xs text-gray-500 font-mono">{p.sim_iccid}</p>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-amber-600">Non assigné</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => handleEdit(p)}
+                            title="Modifier le patient"
+                          >
+                            <span className="text-lg">✏️</span>
+                          </button>
+                          <button
+                            className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                            onClick={() => handleDelete(p)}
+                            disabled={deletingPatient === p.id}
+                            title="Supprimer le patient"
+                          >
+                            <span className="text-lg">{deletingPatient === p.id ? '⏳' : '🗑️'}</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -242,8 +430,13 @@ export default function PatientsPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold">Nouveau patient</h2>
-              <button className="text-gray-500 hover:text-gray-900" onClick={() => setShowForm(false)}>✖</button>
+              <h2 className="text-2xl font-semibold">{editingPatient ? 'Modifier le patient' : 'Nouveau patient'}</h2>
+              <button className="text-gray-500 hover:text-gray-900" onClick={() => {
+                setShowForm(false)
+                setEditingPatient(null)
+                setFormData(emptyForm)
+                setFormErrors({})
+              }}>✖</button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -278,9 +471,22 @@ export default function PatientsPage() {
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <button className="btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
-              <button className="btn-primary" onClick={handleCreatePatient} disabled={saving}>
-                {saving ? 'Création...' : '✅ Enregistrer'}
+              <button 
+                className="btn-secondary" 
+                onClick={() => {
+                  setShowForm(false)
+                  setFormData(emptyForm)
+                  setFormErrors({})
+                }}
+              >
+                Annuler
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={editingPatient ? handleUpdatePatient : handleCreatePatient} 
+                disabled={saving}
+              >
+                {saving ? (editingPatient ? 'Modification...' : 'Création...') : '✅ Enregistrer'}
               </button>
             </div>
           </div>

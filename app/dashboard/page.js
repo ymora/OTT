@@ -118,98 +118,77 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Section Actions Requises */}
-      {(criticalItems.length > 0 || unassignedDevices.length > 0 || lowBatteryList.length > 0) && (
+      {/* Section Actions Requises - Consolidée avec toutes les alertes */}
+      {(alerts.length > 0 || unassignedDevices.length > 0 || lowBatteryList.length > 0) && (
         <div className="card">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <span className="text-red-500">⚡</span>
             Actions Requises
           </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Alertes critiques */}
-            {criticalItems.length > 0 && (
-              <div className="border-l-4 border-red-500 pl-4">
-                <h3 className="font-semibold text-red-700 mb-2">Alertes Critiques ({criticalItems.length})</h3>
-                <div className="space-y-2">
-                  {criticalItems.slice(0, 3).map(alert => (
-                    <div key={alert.id} className="text-sm">
-                      <p className="font-medium">{alert.message}</p>
-                      <p className="font-semibold text-gray-900">{alert.device_name || alert.sim_iccid}</p>
-                    </div>
+          
+          <div className="space-y-6">
+            {/* Toutes les alertes */}
+            {alerts.length > 0 && (
+              <div>
+                <h3 className="font-semibold text-gray-700 mb-3 flex items-center justify-between">
+                  <span>🔔 Toutes les Alertes ({alerts.length})</span>
+                </h3>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {alerts.map((alert, i) => (
+                    <AlertCard key={alert.id} alert={alert} delay={i * 0.05} />
                   ))}
                 </div>
-                <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/alerts')}>
-                  Voir toutes →
-                </button>
               </div>
             )}
 
-            {/* Batteries faibles */}
-            {lowBatteryList.length > 0 && (
-              <div className="border-l-4 border-orange-500 pl-4">
-                <h3 className="font-semibold text-orange-700 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
-                <div className="space-y-2">
-                  {lowBatteryList.map(device => {
-                    const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
-                    return (
-                      <div key={device.id} className="text-sm">
-                        <p className="font-semibold text-gray-900">{device.device_name || device.sim_iccid}</p>
-                        <p className="text-xs text-gray-500">{battery.toFixed(0)}% restant</p>
-                      </div>
-                    )
-                  })}
-                </div>
-                <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
-                  Voir tous →
-                </button>
-              </div>
-            )}
-
-            {/* Boîtiers non assignés */}
-            {unassignedDevices.length > 0 && (
-              <div className="border-l-4 border-amber-500 pl-4">
-                <h3 className="font-semibold text-amber-700 mb-2">Non Assignés ({unassignedDevices.length})</h3>
-                <div className="space-y-2">
-                  {unassignedDevices.slice(0, 3).map(device => (
-                    <div key={device.id} className="text-sm">
-                      <p className="font-semibold text-gray-900">{device.device_name || device.sim_iccid}</p>
-                      <p className="text-xs text-gray-500">
-                        {device.last_seen ? new Date(device.last_seen).toLocaleDateString('fr-FR') : 'Jamais connecté'}
-                      </p>
+            {/* Autres actions (batteries faibles, non assignés) */}
+            {(lowBatteryList.length > 0 || unassignedDevices.length > 0) && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                {/* Batteries faibles */}
+                {lowBatteryList.length > 0 && (
+                  <div className="border-l-4 border-orange-500 pl-4">
+                    <h3 className="font-semibold text-orange-700 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
+                    <div className="space-y-2">
+                      {lowBatteryList.map(device => {
+                        const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
+                        return (
+                          <div key={device.id} className="text-sm">
+                            <p className="font-semibold text-gray-900">{device.device_name || device.sim_iccid}</p>
+                            <p className="text-xs text-gray-500">{battery.toFixed(0)}% restant</p>
+                          </div>
+                        )
+                      })}
                     </div>
-                  ))}
-                </div>
-                <button className="btn-primary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
-                  Assigner →
-                </button>
+                    <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
+                      Voir tous →
+                    </button>
+                  </div>
+                )}
+
+                {/* Boîtiers non assignés */}
+                {unassignedDevices.length > 0 && (
+                  <div className="border-l-4 border-amber-500 pl-4">
+                    <h3 className="font-semibold text-amber-700 mb-2">Non Assignés ({unassignedDevices.length})</h3>
+                    <div className="space-y-2">
+                      {unassignedDevices.slice(0, 5).map(device => (
+                        <div key={device.id} className="text-sm">
+                          <p className="font-semibold text-gray-900">{device.device_name || device.sim_iccid}</p>
+                          <p className="text-xs text-gray-500">
+                            {device.last_seen ? new Date(device.last_seen).toLocaleDateString('fr-FR') : 'Jamais connecté'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="btn-primary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
+                      Assigner →
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
       )}
-
-      {/* Section Activité Récente - Aperçu uniquement (sans les alertes critiques déjà affichées) */}
-      {(() => {
-        // Exclure les alertes critiques/high déjà affichées dans "Actions Requises"
-        const criticalAlertIds = new Set(criticalItems.map(a => a.id))
-        const recentAlerts = alerts.filter(a => !criticalAlertIds.has(a.id)).slice(0, 3)
-        
-        return recentAlerts.length > 0 ? (
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">🔔 Activité Récente</h2>
-              <button className="btn-secondary text-xs" onClick={() => router.push('/dashboard/alerts')}>
-                Voir toutes les alertes →
-              </button>
-            </div>
-            <div className="space-y-2">
-              {recentAlerts.map((alert, i) => (
-                <AlertCard key={alert.id} alert={alert} delay={i * 0.05} />
-              ))}
-            </div>
-          </div>
-        ) : null
-      })()}
     </div>
   )
 }

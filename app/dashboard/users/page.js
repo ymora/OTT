@@ -20,8 +20,6 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [roleFilter, setRoleFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [formData, setFormData] = useState(defaultFormState)
   const [formError, setFormError] = useState(null)
@@ -82,21 +80,14 @@ export default function UsersPage() {
 
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
-      const matchesSearch = searchTerm.toLowerCase().split(' ').every(term =>
-        (user.first_name?.toLowerCase().includes(term)) ||
-        (user.last_name?.toLowerCase().includes(term)) ||
-        (user.email?.toLowerCase().includes(term)) ||
-        (user.phone?.toLowerCase().includes(term))
-      )
-
-      const matchesRole = roleFilter === 'all' || user.role_name === roleFilter
-      const matchesStatus = statusFilter === 'all' ||
-        (statusFilter === 'active' && user.is_active) ||
-        (statusFilter === 'inactive' && !user.is_active)
-
-      return matchesSearch && matchesRole && matchesStatus
+      if (searchTerm) {
+        const needle = searchTerm.toLowerCase()
+        const haystack = `${user.first_name || ''} ${user.last_name || ''} ${user.email || ''} ${user.phone || ''} ${user.role_name || ''}`.toLowerCase()
+        if (!haystack.includes(needle)) return false
+      }
+      return true
     })
-  }, [users, searchTerm, roleFilter, statusFilter])
+  }, [users, searchTerm])
 
   const roleColors = {
     admin: 'bg-purple-100 text-purple-700',
@@ -282,7 +273,38 @@ export default function UsersPage() {
     }
   }
 
-  const handleDeleteUser = async () => {
+  const handleDeleteUser = async (userToDelete) => {
+    if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer l'utilisateur "${userToDelete.first_name} ${userToDelete.last_name}" ?\n\nCette action est irréversible.`)) {
+      return
+    }
+
+    try {
+      setDeleteLoading(true)
+      setError(null)
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/users/${userToDelete.id}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      loadUsers()
+      if (showEditModal) {
+        closeEditModal()
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  const handleDeleteUserFromEdit = async () => {
+    if (!editingUser) return
+    await handleDeleteUser(editingUser)
+  }
+
+  const oldHandleDeleteUser = async () => {
     if (!editingUser) return
     const confirmed = window.confirm(`Supprimer définitivement ${editingUser.first_name} ${editingUser.last_name} ?`)
     if (!confirmed) return
@@ -308,10 +330,20 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">👥 Utilisateurs</h1>
-          <p className="text-gray-600 mt-1">Gestion des accès et permissions</p>
+      <div>
+        <h1 className="text-3xl font-bold">👥 Utilisateurs</h1>
+      </div>
+
+      {/* Recherche et Nouvel Utilisateur sur la même ligne */}
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex-1">
+          <input
+            type="text"
+            className="input"
+            placeholder="Rechercher un utilisateur..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
         <button 
           className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" 
@@ -321,58 +353,6 @@ export default function UsersPage() {
         >
           ➕ Nouvel Utilisateur
         </button>
-      </div>
-
-      {/* Filtres */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex gap-2">
-          {[
-            { id: 'all', label: 'Tous les rôles' },
-            ...roles.map(r => ({ id: r.name, label: r.name }))
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setRoleFilter(tab.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                roleFilter === tab.id
-                  ? 'bg-primary-600 text-white shadow-md'
-                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        
-        <div className="flex gap-2">
-          {[
-            { id: 'all', label: 'Tous' },
-            { id: 'active', label: 'Actifs' },
-            { id: 'inactive', label: 'Inactifs' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                statusFilter === tab.id
-                  ? 'bg-primary-600 text-white shadow-md'
-                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        
-        <div className="flex-1 max-w-md">
-          <input
-            type="text"
-            placeholder="🔍 Rechercher par nom, email, téléphone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="input w-full"
-          />
-        </div>
       </div>
 
       <div className="card">
@@ -440,20 +420,18 @@ export default function UsersPage() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            onClick={() => {
-                              setSelectedUser(user)
-                              setShowDetailsModal(true)
-                            }}
-                            title="Voir les détails"
-                          >
-                            <span className="text-lg">👁️</span>
-                          </button>
-                          <button
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                             onClick={() => openEditModal(user)}
                             title="Modifier l'utilisateur"
                           >
                             <span className="text-lg">✏️</span>
+                          </button>
+                          <button
+                            className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                            onClick={() => handleDeleteUser(user)}
+                            disabled={deleteLoading || user?.role_name !== 'admin'}
+                            title={user?.role_name === 'admin' ? "Supprimer l'utilisateur" : "Réservé aux administrateurs"}
+                          >
+                            <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
                           </button>
                         </div>
                       </td>
@@ -776,7 +754,7 @@ export default function UsersPage() {
                 <button
                   type="button"
                   className="text-red-600 hover:text-red-700 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={handleDeleteUser}
+                  onClick={handleDeleteUserFromEdit}
                   disabled={editSaving || deleteLoading || user?.role_name !== 'admin'}
                   title={user?.role_name === 'admin' ? "Supprimer l'utilisateur" : "Réservé aux administrateurs"}
                 >

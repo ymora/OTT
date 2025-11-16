@@ -8,16 +8,22 @@ import { fetchJson } from '@/lib/api'
 export default function AlertsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
   const [alerts, setAlerts] = useState([])
+  const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
   const [error, setError] = useState(null)
+  const [severityFilter, setSeverityFilter] = useState('ALL')
+  const [deviceFilter, setDeviceFilter] = useState('ALL')
   const [searchTerm, setSearchTerm] = useState('')
 
   const loadAlerts = useCallback(async () => {
     try {
       setError(null)
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/alerts')
-      setAlerts(data.alerts || [])
+      const [alertsData, devicesData] = await Promise.all([
+        fetchJson(fetchWithAuth, API_URL, '/api.php/alerts'),
+        fetchJson(fetchWithAuth, API_URL, '/api.php/devices')
+      ])
+      setAlerts(alertsData.alerts || [])
+      setDevices(devicesData.devices || [])
     } catch (err) {
       console.error(err)
       setError(err.message)
@@ -32,7 +38,16 @@ export default function AlertsPage() {
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter(a => {
-      if (filter !== 'all' && a.status !== filter) return false
+      // Ne garder que les alertes actives (non résolues)
+      if (a.status === 'resolved') return false
+      
+      // Filtre par sévérité
+      if (severityFilter !== 'ALL' && a.severity !== severityFilter) return false
+      
+      // Filtre par dispositif
+      if (deviceFilter !== 'ALL' && String(a.device_id) !== deviceFilter) return false
+      
+      // Filtre de recherche
       if (searchTerm) {
         const needle = searchTerm.toLowerCase()
         const haystack = `${a.device_name || ''} ${a.sim_iccid || ''} ${a.first_name || ''} ${a.last_name || ''}`.toLowerCase()
@@ -40,32 +55,47 @@ export default function AlertsPage() {
       }
       return true
     })
-  }, [alerts, filter, searchTerm])
+  }, [alerts, severityFilter, deviceFilter, searchTerm])
 
   return (
     <div className="space-y-6 animate-fade-in">
       <h1 className="text-3xl font-bold">🔔 Alertes</h1>
 
-      {/* Filtres */}
+      {/* Filtres - Présentés comme dans Logs */}
       <div className="flex flex-col md:flex-row gap-3">
-        <div className="flex gap-3">
-          {['all', 'unresolved', 'resolved'].map(f => (
+        {/* Filtres par sévérité */}
+        <div className="flex gap-2">
+          {['ALL', 'critical', 'high', 'medium', 'low'].map(severity => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                filter === f ? 'bg-primary-500 text-white shadow-lg scale-105' : 'bg-white text-gray-700 hover:bg-gray-100'
+              key={severity}
+              onClick={() => setSeverityFilter(severity)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                severityFilter === severity
+                  ? 'bg-primary-500 text-white shadow-lg scale-105'
+                  : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
             >
-              {f === 'all' ? 'Toutes' : f === 'unresolved' ? 'Non résolues' : 'Résolues'}
+              {severity === 'ALL' ? 'Toutes' : severity.charAt(0).toUpperCase() + severity.slice(1)}
             </button>
           ))}
         </div>
-        <div className="md:ml-auto">
+
+        {/* Filtres dispositif et recherche */}
+        <div className="flex gap-3 md:ml-auto">
+          <select
+            value={deviceFilter}
+            onChange={e => setDeviceFilter(e.target.value)}
+            className="input"
+          >
+            <option value="ALL">Tous les dispositifs</option>
+            {devices.map(device => (
+              <option key={device.id} value={device.id}>{device.device_name || device.sim_iccid}</option>
+            ))}
+          </select>
           <input
             type="text"
             className="input"
-            placeholder="Rechercher patient ou dispositif..."
+            placeholder="Rechercher dans les alertes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />

@@ -48,25 +48,25 @@
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6 transition-all hover:shadow-md;
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 transition-all hover:shadow-md;
   }
   
   .btn-primary {
-    @apply bg-primary-500 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-primary-600 hover:shadow-lg hover:scale-105 active:scale-95;
+    @apply bg-primary-500 dark:bg-primary-600 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-primary-600 dark:hover:bg-primary-700 hover:shadow-lg hover:scale-105 active:scale-95;
   }
   
   .btn-secondary {
-    @apply bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium transition-all hover:bg-gray-200 hover:shadow-md;
+    @apply bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg font-medium transition-all hover:bg-gray-200 dark:hover:bg-gray-600 hover:shadow-md;
   }
   
   .btn-danger {
-    @apply bg-red-500 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-red-600 hover:shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-red-500 dark:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-red-600 dark:hover:bg-red-700 hover:shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   
   .badge {
@@ -74,23 +74,23 @@
   }
   
   .badge-success {
-    @apply bg-green-100 text-green-700;
+    @apply bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300;
   }
   
   .badge-warning {
-    @apply bg-orange-100 text-orange-700;
+    @apply bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300;
   }
   
   .badge-danger {
-    @apply bg-red-100 text-red-700;
+    @apply bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300;
   }
   
   .badge-info {
-    @apply bg-blue-100 text-blue-700;
+    @apply bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300;
   }
   
   .input {
-    @apply w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all;
+    @apply w-full px-4 py-2 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 transition-all;
   }
 }
 

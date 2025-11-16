@@ -77,6 +77,69 @@ export default function OTAPage() {
     }
   }
 
+  const deployToAll = async () => {
+    if (!selectedFirmware || devicesToUpdate.length === 0) return
+
+    const confirmMessage = `⚠️ ATTENTION : Déploiement massif OTA\n\n` +
+      `Firmware: v${selectedFirmware.version}\n` +
+      `Dispositifs concernés: ${devicesToUpdate.length}\n\n` +
+      `Cette opération va déployer le firmware sur TOUS les dispositifs listés.\n` +
+      `Cela peut planter les dispositifs si le firmware est incompatible.\n\n` +
+      `Êtes-vous sûr de vouloir continuer ?`
+
+    if (!confirm(confirmMessage)) return
+
+    setMessage(null)
+    setError(null)
+    const allDeviceIds = devicesToUpdate.map(d => d.id)
+    
+    // Marquer tous comme en cours de déploiement
+    const deployingState = {}
+    allDeviceIds.forEach(id => { deployingState[id] = true })
+    setDeploying(deployingState)
+
+    let successCount = 0
+    let errorCount = 0
+
+    try {
+      // Déployer sur tous les dispositifs en parallèle
+      const promises = allDeviceIds.map(async (deviceId) => {
+        try {
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${deviceId}/ota`,
+            {
+              method: 'POST',
+              body: JSON.stringify({ firmware_version: selectedFirmware.version })
+            },
+            { requiresAuth: true }
+          )
+          successCount++
+        } catch (err) {
+          errorCount++
+          console.error(`Erreur OTA pour dispositif ${deviceId}:`, err)
+        }
+      })
+
+      await Promise.all(promises)
+
+      if (errorCount === 0) {
+        setMessage(`✅ OTA v${selectedFirmware.version} programmé avec succès sur ${successCount} dispositif(s)`)
+      } else {
+        setError(`⚠️ Déploiement partiel : ${successCount} succès, ${errorCount} erreur(s)`)
+      }
+
+      // Recharger les données
+      await loadData()
+    } catch (err) {
+      setError(`Erreur lors du déploiement massif: ${err.message}`)
+    } finally {
+      // Réinitialiser l'état de déploiement
+      setDeploying({})
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -94,7 +157,6 @@ export default function OTAPage() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">📦 Firmwares Disponibles</h2>
-          <button className="btn-secondary text-sm">📤 Upload Firmware</button>
         </div>
 
         {loading ? (
@@ -160,12 +222,16 @@ export default function OTAPage() {
                 {devicesToUpdate.length} dispositif(s) n&apos;ont pas ce firmware
               </p>
             </div>
-            <button
-              onClick={() => setSelectedFirmware(null)}
-              className="btn-secondary text-sm"
-            >
-              ✖ Annuler
-            </button>
+            {devicesToUpdate.length > 1 && (
+              <button
+                onClick={deployToAll}
+                disabled={Object.keys(deploying).length > 0}
+                className="btn-primary text-sm"
+                title="Déployer le firmware sur tous les dispositifs listés"
+              >
+                {Object.keys(deploying).length > 0 ? '⏳ Déploiement en cours...' : '🚀 Déployer sur tous'}
+              </button>
+            )}
           </div>
 
           {devicesToUpdate.length === 0 ? (

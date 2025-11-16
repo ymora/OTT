@@ -110,7 +110,17 @@ export default function MapPage() {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 uppercase">Localisation</p>
                 <p className="font-semibold">{enrichedSelection.city}</p>
-                <p className="text-gray-500">Lat/Lng : {enrichedSelection.latitude?.toFixed(4)}, {enrichedSelection.longitude?.toFixed(4)}</p>
+                <p className="text-gray-500">
+                  Lat/Lng : {
+                    enrichedSelection.latitude && typeof enrichedSelection.latitude === 'number' 
+                      ? enrichedSelection.latitude.toFixed(4) 
+                      : 'N/A'
+                  }, {
+                    enrichedSelection.longitude && typeof enrichedSelection.longitude === 'number'
+                      ? enrichedSelection.longitude.toFixed(4)
+                      : 'N/A'
+                  }
+                </p>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500 uppercase">Batterie</p>

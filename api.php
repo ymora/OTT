@@ -377,6 +377,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleCreatePatient();
 } elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdatePatient($m[1]);
+} elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    handleDeletePatient($m[1]);
 } elseif(preg_match('#/patients/(\d+)/notifications$#', $path, $m) && $method === 'GET') {
     handleGetPatientNotifications($m[1]);
 } elseif(preg_match('#/patients/(\d+)/notifications$#', $path, $m) && $method === 'PUT') {
@@ -467,27 +469,22 @@ function handleGetUsers() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     try {
-        // Vérifier si la colonne phone existe
-        $hasPhoneColumn = false;
-        try {
-            $checkStmt = $pdo->query("
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'phone'
-            ");
-            $result = $checkStmt->fetch(PDO::FETCH_ASSOC);
-            $hasPhoneColumn = !empty($result);
-        } catch(PDOException $e) {
-            // Si la vérification échoue, on assume que la colonne n'existe pas
-            $hasPhoneColumn = false;
-            error_log('[handleGetUsers] Check phone column failed: ' . $e->getMessage());
-        }
-        
         // Compter le total
         $countStmt = $pdo->query("SELECT COUNT(*) FROM users");
         $total = $countStmt->fetchColumn();
         
-        // Construire la requête selon l'existence de la colonne phone
+        // Utiliser une requête qui fonctionne avec ou sans la colonne phone
+        // On utilise une sous-requête pour détecter la colonne de manière sûre
+        try {
+            // Essayer d'abord avec la colonne phone
+            $testStmt = $pdo->query("SELECT phone FROM users LIMIT 1");
+            $hasPhoneColumn = true;
+        } catch(PDOException $e) {
+            // Si ça échoue, la colonne n'existe pas
+            $hasPhoneColumn = false;
+        }
+        
+        // Construire la requête selon l'existence de la colonne
         if ($hasPhoneColumn) {
             $stmt = $pdo->prepare("
                 SELECT 
@@ -506,7 +503,7 @@ function handleGetUsers() {
                 LIMIT :limit OFFSET :offset
             ");
         } else {
-            // Version sans colonne phone
+            // Version sans colonne phone - utiliser NULL AS phone
             $stmt = $pdo->prepare("
                 SELECT 
                     u.id, u.email, u.first_name, u.last_name, NULL AS phone, u.password_hash,
@@ -640,23 +637,44 @@ function handleDeleteUser($user_id) {
     requirePermission('users.manage');
     
     try {
+        // Vérifier que l'utilisateur existe
         $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id");
         $stmt->execute(['id' => $user_id]);
         $user = $stmt->fetch();
         
         if (!$user) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'User not found']);
+            echo json_encode(['success' => false, 'error' => 'Utilisateur introuvable']);
             return;
         }
         
+        // Ne pas permettre la suppression de soi-même
+        $currentUser = getCurrentUser();
+        if ($currentUser && intval($currentUser['id']) === intval($user_id)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Vous ne pouvez pas supprimer votre propre compte']);
+            return;
+        }
+        
+        // Supprimer les préférences de notifications associées
+        try {
+            $pdo->prepare("DELETE FROM user_notifications_preferences WHERE user_id = :user_id")->execute(['user_id' => $user_id]);
+        } catch(PDOException $e) {
+            // Ignorer si la table n'existe pas
+            error_log('[handleDeleteUser] Could not delete notification preferences: ' . $e->getMessage());
+        }
+        
+        // Supprimer l'utilisateur
         $pdo->prepare("DELETE FROM users WHERE id = :id")->execute(['id' => $user_id]);
+        
         auditLog('user.deleted', 'user', $user_id, $user, null);
-        echo json_encode(['success' => true]);
+        echo json_encode(['success' => true, 'message' => 'Utilisateur supprimé avec succès']);
         
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur de base de données';
+        error_log('[handleDeleteUser] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -1518,9 +1536,14 @@ function handleGetAlerts() {
         ";
         $params = [];
         
-        if ($status && in_array($status, ['unresolved', 'resolved', 'acknowledged'])) {
+        // Ne retourner que les alertes actives (non résolues) par défaut
+        // Le statut "resolved" n'est plus utilisé - les alertes disparaissent quand elles ne sont plus pertinentes
+        if ($status && in_array($status, ['unresolved', 'acknowledged'])) {
             $sql .= " AND a.status = :status";
             $params['status'] = $status;
+        } else {
+            // Par défaut, exclure les alertes résolues
+            $sql .= " AND a.status != 'resolved'";
         }
         
         if ($severity && in_array($severity, ['low', 'medium', 'high', 'critical'])) {
@@ -1691,6 +1714,49 @@ function handleUpdatePatient($patient_id) {
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleDeletePatient($patient_id) {
+    global $pdo;
+    requirePermission('patients.edit');
+
+    try {
+        // Vérifier que le patient existe
+        $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id");
+        $stmt->execute(['id' => $patient_id]);
+        $patient = $stmt->fetch();
+
+        if (!$patient) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Patient introuvable']);
+            return;
+        }
+
+        // Vérifier s'il y a des dispositifs assignés
+        $deviceStmt = $pdo->prepare("SELECT COUNT(*) FROM devices WHERE patient_id = :patient_id");
+        $deviceStmt->execute(['patient_id' => $patient_id]);
+        $deviceCount = $deviceStmt->fetchColumn();
+
+        if ($deviceCount > 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Impossible de supprimer un patient avec des dispositifs assignés. Veuillez d\'abord désassigner les dispositifs.']);
+            return;
+        }
+
+        // Supprimer les préférences de notifications associées
+        $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :patient_id")->execute(['patient_id' => $patient_id]);
+
+        // Supprimer le patient
+        $pdo->prepare("DELETE FROM patients WHERE id = :id")->execute(['id' => $patient_id]);
+
+        auditLog('patient.deleted', 'patient', $patient_id, $patient, null);
+        echo json_encode(['success' => true, 'message' => 'Patient supprimé avec succès']);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleDeletePatient] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 

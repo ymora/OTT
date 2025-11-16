@@ -6,7 +6,6 @@ import { fetchJson } from '@/lib/api'
 import { formatDateTime } from '@/lib/utils'
 
 const typeStyles = {
-  SUCCESS: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   INFO: 'bg-blue-50 text-blue-700 border-blue-200',
   WARN: 'bg-orange-50 text-orange-700 border-orange-200',
   ERROR: 'bg-red-50 text-red-700 border-red-200'
@@ -54,54 +53,54 @@ export default function LogsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">📝 Journal Système</h1>
-          <p className="text-gray-600 mt-1">Suivi temps réel des événements terrain.</p>
-        </div>
-        <div className="space-x-2">
-          {['ALL', 'INFO', 'WARN', 'ERROR', 'SUCCESS'].map(type => (
+      <div>
+        <h1 className="text-3xl font-bold">📝 Journal Système</h1>
+        <p className="text-gray-600 mt-1">Suivi temps réel des événements terrain.</p>
+      </div>
+
+      {/* Filtres - Présentés comme les autres pages */}
+      <div className="flex flex-col md:flex-row gap-3">
+        {/* Filtres de type */}
+        <div className="flex gap-2">
+          {['ALL', 'INFO', 'WARN', 'ERROR'].map(type => (
             <button
               key={type}
               onClick={() => setTypeFilter(type)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 typeFilter === type
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-primary-500 text-white shadow-lg scale-105'
+                  : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
             >
               {type === 'ALL' ? 'Tous' : type}
             </button>
           ))}
         </div>
+
+        {/* Filtres dispositif et recherche */}
+        <div className="flex gap-3 md:ml-auto">
+          <select
+            value={deviceFilter}
+            onChange={e => setDeviceFilter(e.target.value)}
+            className="input"
+          >
+            <option value="ALL">Tous les dispositifs</option>
+            {devices.map(device => (
+              <option key={device.id} value={device.id}>{device.device_name || device.sim_iccid}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="input"
+            placeholder="Rechercher dans les logs..."
+          />
+        </div>
       </div>
 
+      {/* Liste des logs */}
       <div className="card space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Dispositif</label>
-            <select
-              value={deviceFilter}
-              onChange={e => setDeviceFilter(e.target.value)}
-              className="input"
-            >
-              <option value="ALL">Tous</option>
-              {devices.map(device => (
-                <option key={device.id} value={device.id}>{device.device_name || device.sim_iccid}</option>
-              ))}
-            </select>
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Rechercher</label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="input"
-              placeholder="Ex: batterie, transmission, OTA..."
-            />
-          </div>
-        </div>
 
         {error && (
           <div className="alert alert-warning">
