@@ -7,8 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 const withBase = (path) => `${basePath}${path}`
 
-// Menu plat simplifié - toutes les fonctionnalités accessibles directement
-// Pattern cohérent : chaque page contient carte (si pertinent) + tableau + actions
+// Menu simplifié - 4 pages principales avec fonctionnalités regroupées
 const menuStructure = [
   {
     name: 'Vue d\'Ensemble',
@@ -21,70 +20,21 @@ const menuStructure = [
     icon: '🔌',
     path: '/dashboard/devices',
     permission: 'devices.view',
-    description: 'Carte + Tableau avec actions intégrées'
+    description: 'Gestion complète des dispositifs (carte, OTA, commandes, logs, alertes)'
   },
   {
     name: 'Patients',
-    icon: '👥',
+    icon: '🏥',
     path: '/dashboard/patients',
     permission: 'patients.view',
     description: 'Gestion des patients'
   },
   {
-    name: 'Alertes',
-    icon: '🔔',
-    path: '/dashboard/alerts',
-    permission: 'alerts.view',
-    description: 'Surveillance et alertes'
-  },
-  {
-    name: 'Commandes',
-    icon: '📡',
-    path: '/dashboard/commands',
-    permission: 'devices.commands',
-    description: 'Commandes dispositifs'
-  },
-  {
     name: 'Utilisateurs',
-    icon: '👤',
+    icon: '👨‍💼',
     path: '/dashboard/users',
     permission: 'users.view',
-    description: 'Gestion des utilisateurs'
-  },
-  {
-    name: 'Audit',
-    icon: '📜',
-    path: '/dashboard/audit',
-    permission: 'audit.view',
-    description: 'Logs d\'audit'
-  },
-  {
-    name: 'OTA',
-    icon: '🔄',
-    path: '/dashboard/ota',
-    permission: 'devices.edit',
-    description: 'Gestion des firmwares et mises à jour OTA'
-  },
-  {
-    name: 'Notifications',
-    icon: '📧',
-    path: '/dashboard/notifications',
-    permission: 'users.view',
-    description: 'Queue des notifications et tests'
-  },
-  {
-    name: 'Diagnostics',
-    icon: '🔍',
-    path: '/dashboard/diagnostics',
-    permission: 'settings.edit',
-    description: 'Statut API et base de données'
-  },
-  {
-    name: 'Paramètres',
-    icon: '⚙️',
-    path: '/dashboard/admin',
-    permission: 'settings.edit',
-    description: 'Configuration système'
+    description: 'Gestion des utilisateurs (audit, notifications, paramètres)'
   },
 ]
 
@@ -114,13 +64,18 @@ export default function Sidebar() {
       <nav className="p-4 space-y-1">
         {menuStructure.map((item) => {
           if (!hasPermission(item.permission)) return null
-          const isActive = normalizedPathname === item.path || normalizedPathname.startsWith(item.path + '/')
+          
+          // Logique d'activation : pour /dashboard, seulement si exactement /dashboard
+          // Pour les autres, si le pathname correspond exactement ou commence par le path + '/'
+          const isActive = item.path === '/dashboard'
+            ? normalizedPathname === '/dashboard'
+            : normalizedPathname === item.path || normalizedPathname.startsWith(item.path + '/')
           
           return (
             <Link
               key={item.path}
               href={item.path}
-              className={`
+tu as des que              className={`
                 flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all group
                 ${isActive 
                   ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white shadow-lg scale-105' 

@@ -361,6 +361,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 // Audit
 } elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
     handleGetAuditLogs();
+} elseif(preg_match('#/audit$#', $path) && $method === 'DELETE') {
+    handleClearAuditLogs();
 
 // Alerts (V1 compatible)
 } elseif(preg_match('#/alerts$#', $path) && $method === 'GET') {
@@ -2158,6 +2160,23 @@ function handleGetAuditLogs() {
         $stmt->execute();
         
         echo json_encode(['success' => true, 'logs' => $stmt->fetchAll()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleClearAuditLogs() {
+    global $pdo;
+    requireAdmin(); // Seuls les admins peuvent supprimer les logs
+    
+    try {
+        $stmt = $pdo->prepare("TRUNCATE TABLE audit_logs RESTART IDENTITY CASCADE");
+        $stmt->execute();
+        
+        auditLog('audit.cleared', 'system', null, null, ['cleared_by' => getCurrentUser()['id']]);
+        
+        echo json_encode(['success' => true, 'message' => 'Journal d\'audit réinitialisé']);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);

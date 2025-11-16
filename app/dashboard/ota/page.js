@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 
@@ -8,16 +8,18 @@ export default function OTAPage() {
   const { fetchWithAuth, API_URL } = useAuth()
   const [firmwares, setFirmwares] = useState([])
   const [devices, setDevices] = useState([])
+  const [selectedFirmware, setSelectedFirmware] = useState(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
+  const [deploying, setDeploying] = useState({})
 
   const loadData = useCallback(async () => {
     try {
       setError(null)
       const [firmwaresData, devicesData] = await Promise.all([
-        fetchJson(fetchWithAuth, API_URL, '/api.php/firmwares'),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/devices')
+        fetchJson(fetchWithAuth, API_URL, '/api.php/firmwares', {}, { requiresAuth: true }),
+        fetchJson(fetchWithAuth, API_URL, '/api.php/devices', {}, { requiresAuth: true })
       ])
       setFirmwares(firmwaresData.firmwares || [])
       setDevices(devicesData.devices || [])
@@ -33,9 +35,22 @@ export default function OTAPage() {
     loadData()
   }, [loadData])
 
+  // Filtrer les dispositifs qui n'ont PAS le firmware sélectionné
+  const devicesToUpdate = useMemo(() => {
+    if (!selectedFirmware) return []
+    
+    return devices.filter(device => {
+      const deviceFirmware = device.firmware_version || '0.0.0'
+      return deviceFirmware !== selectedFirmware.version
+    })
+  }, [devices, selectedFirmware])
+
   const triggerOTA = async (deviceId, version) => {
     try {
       setMessage(null)
+      setError(null)
+      setDeploying(prev => ({ ...prev, [deviceId]: true }))
+      
       await fetchJson(
         fetchWithAuth,
         API_URL,
@@ -44,30 +59,43 @@ export default function OTAPage() {
           method: 'POST',
           body: JSON.stringify({ firmware_version: version })
         },
-        { requiresAuth: false }
+        { requiresAuth: true }
       )
-      setMessage(`OTA v${version} programmé pour le dispositif #${deviceId}`)
+      
+      setMessage(`✅ OTA v${version} programmé pour le dispositif`)
+      
+      // Recharger les données pour mettre à jour les versions
+      await loadData()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Erreur lors du déploiement')
+    } finally {
+      setDeploying(prev => {
+        const next = { ...prev }
+        delete next[deviceId]
+        return next
+      })
     }
   }
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <h1 className="text-3xl font-bold">🔄 Gestion OTA</h1>
+      <div>
+        <h1 className="text-3xl font-bold">🔄 Gestion OTA</h1>
+        <p className="text-gray-600 mt-1">Déploiement de firmwares sur les dispositifs</p>
+      </div>
+
+      {(error || message) && (
+        <div className={`alert ${error ? 'alert-warning' : 'alert-success'}`}>
+          {error ? `❌ Erreur : ${error}` : message}
+        </div>
+      )}
 
       {/* Firmwares */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">📦 Firmwares Disponibles</h2>
-          <button className="btn-primary">📤 Upload Firmware</button>
+          <button className="btn-secondary text-sm">📤 Upload Firmware</button>
         </div>
-
-        {(error || message) && (
-          <div className={`alert ${error ? 'alert-warning' : 'alert-success'} mb-4`}>
-            {error ? `Erreur API : ${error}` : message}
-          </div>
-        )}
 
         {loading ? (
           <div className="animate-shimmer h-48"></div>
@@ -85,23 +113,32 @@ export default function OTAPage() {
               </thead>
               <tbody>
                 {firmwares.map((fw, i) => (
-                  <tr key={fw.id} className="border-b hover:bg-gray-50 animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
+                  <tr 
+                    key={fw.id} 
+                    className={`border-b hover:bg-gray-50 transition-all cursor-pointer ${
+                      selectedFirmware?.id === fw.id ? 'bg-primary-50 border-primary-200' : ''
+                    }`}
+                    onClick={() => setSelectedFirmware(fw)}
+                    style={{animationDelay: `${i * 0.05}s`}}
+                  >
                     <td className="py-3 px-4 font-mono font-bold">v{fw.version}</td>
                     <td className="py-3 px-4">{(fw.file_size / 1024).toFixed(0)} Ko</td>
                     <td className="py-3 px-4">
-                      {fw.is_stable ? <span className="badge badge-success">✅ Stable</span> : <span className="badge">Beta</span>}
+                      {fw.is_stable ? (
+                        <span className="badge badge-success">✅ Stable</span>
+                      ) : (
+                        <span className="badge badge-warning">⚠️ Beta</span>
+                      )}
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{new Date(fw.created_at).toLocaleDateString('fr-FR')}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {new Date(fw.created_at).toLocaleDateString('fr-FR')}
+                    </td>
                     <td className="py-3 px-4">
-                      <button
-                        onClick={() => {
-                          const deviceId = prompt('ID du dispositif:')
-                          if (deviceId) triggerOTA(deviceId, fw.version)
-                        }}
-                        className="btn-primary text-sm"
-                      >
-                        Déployer
-                      </button>
+                      {selectedFirmware?.id === fw.id ? (
+                        <span className="badge badge-success">✓ Sélectionné</span>
+                      ) : (
+                        <span className="text-sm text-gray-500">Cliquer pour sélectionner</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -111,19 +148,94 @@ export default function OTAPage() {
         )}
       </div>
 
-      {/* Configuration Dispositifs */}
-      <div className="card">
-        <h2 className="text-xl font-semibold mb-4">⚙️ Configuration Dispositifs</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {devices.map((d, i) => (
-            <div key={d.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all animate-scale-in" style={{animationDelay: `${i * 0.03}s`}}>
-              <p className="font-semibold mb-2">{d.device_name || d.sim_iccid?.substr(-8)}</p>
-              <p className="text-sm text-gray-600 mb-2">Firmware: v{d.firmware_version || '3.0.0'}</p>
-              <button className="btn-secondary w-full text-sm">⚙️ Configurer</button>
+      {/* Liste des dispositifs à mettre à jour */}
+      {selectedFirmware && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-semibold">
+                📱 Dispositifs à mettre à jour vers v{selectedFirmware.version}
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {devicesToUpdate.length} dispositif(s) n&apos;ont pas ce firmware
+              </p>
             </div>
-          ))}
+            <button
+              onClick={() => setSelectedFirmware(null)}
+              className="btn-secondary text-sm"
+            >
+              ✖ Annuler
+            </button>
+          </div>
+
+          {devicesToUpdate.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-lg mb-2">✅ Tous les dispositifs ont déjà ce firmware</p>
+              <p className="text-sm">Aucun déploiement nécessaire</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4">Dispositif</th>
+                    <th className="text-left py-3 px-4">ICCID</th>
+                    <th className="text-left py-3 px-4">Firmware actuel</th>
+                    <th className="text-left py-3 px-4">Patient</th>
+                    <th className="text-left py-3 px-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {devicesToUpdate.map((device, i) => (
+                    <tr 
+                      key={device.id} 
+                      className="border-b hover:bg-gray-50 animate-slide-up"
+                      style={{animationDelay: `${i * 0.03}s`}}
+                    >
+                      <td className="py-3 px-4 font-medium">
+                        {device.device_name || `Dispositif #${device.id}`}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-sm text-gray-600">
+                        {device.sim_iccid || '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="badge badge-warning">
+                          v{device.firmware_version || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm">
+                        {device.first_name && device.last_name ? (
+                          <span>{device.first_name} {device.last_name}</span>
+                        ) : (
+                          <span className="text-gray-400">Non assigné</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <button
+                          onClick={() => triggerOTA(device.id, selectedFirmware.version)}
+                          disabled={deploying[device.id]}
+                          className="btn-primary text-sm"
+                        >
+                          {deploying[device.id] ? '⏳ Déploiement...' : '🚀 Déployer'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {!selectedFirmware && (
+        <div className="card bg-gray-50 border-dashed">
+          <div className="text-center py-8 text-gray-500">
+            <p className="text-lg mb-2">👆 Sélectionnez un firmware ci-dessus</p>
+            <p className="text-sm">La liste des dispositifs à mettre à jour s&apos;affichera ici</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

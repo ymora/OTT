@@ -13,15 +13,17 @@ const actionColors = {
 }
 
 export default function AuditPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
+  const { fetchWithAuth, API_URL, user } = useAuth()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [clearing, setClearing] = useState(false)
 
   const loadLogs = useCallback(async () => {
     try {
       setError(null)
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/audit?limit=200')
+      setLoading(true)
+      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/audit?limit=200', {}, { requiresAuth: true })
       setLogs(data.logs || [])
     } catch (err) {
       console.error(err)
@@ -31,9 +33,37 @@ export default function AuditPage() {
     }
   }, [fetchWithAuth, API_URL])
 
+  // Rafraîchir automatiquement à l'ouverture de l'onglet
   useEffect(() => {
     loadLogs()
   }, [loadLogs])
+
+  const handleClearLogs = async () => {
+    if (!confirm('⚠️ Êtes-vous sûr de vouloir réinitialiser le journal d\'audit ?\n\nCette action est irréversible et ne peut être effectuée que par un administrateur.')) {
+      return
+    }
+
+    try {
+      setClearing(true)
+      setError(null)
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        '/api.php/audit',
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      // Recharger les logs après suppression
+      await loadLogs()
+    } catch (err) {
+      console.error(err)
+      setError(err.message || 'Erreur lors de la réinitialisation')
+    } finally {
+      setClearing(false)
+    }
+  }
+
+  const isAdmin = user?.role_name === 'admin'
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -42,7 +72,15 @@ export default function AuditPage() {
           <h1 className="text-3xl font-bold">📜 Journal d&apos;Audit</h1>
           <p className="text-gray-600 mt-1">Traçabilité complète des actions</p>
         </div>
-        <button onClick={loadLogs} className="btn-secondary">🔄 Actualiser</button>
+        {isAdmin && (
+          <button
+            onClick={handleClearLogs}
+            disabled={clearing}
+            className="btn-danger"
+          >
+            {clearing ? '⏳ Réinitialisation...' : '🗑️ RAZ Journal'}
+          </button>
+        )}
       </div>
 
       {error && (
