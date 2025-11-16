@@ -144,11 +144,17 @@ function Clean-Build {
 }
 
 function Test-Build {
+    param([switch]$Full = $false)
+    
     Write-Info "Test du build pour GitHub Pages..."
+    if ($Full) {
+        Write-Info "Mode test complet active"
+    }
     Write-Host ""
     
     Clean-Build
     
+    # Variables d'environnement pour le build
     $env:NEXT_PUBLIC_API_URL = "https://ott-jbln.onrender.com"
     $env:NEXT_PUBLIC_REQUIRE_AUTH = "true"
     $env:NEXT_PUBLIC_ENABLE_DEMO_RESET = "false"
@@ -156,26 +162,87 @@ function Test-Build {
     $env:NEXT_PUBLIC_BASE_PATH = "/OTT"
     $env:NODE_ENV = "production"
     
+    # Build
+    Write-Info "Compilation Next.js..."
     npm run export 2>&1 | Out-Null
     
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "Build reussi!"
-        
-        if (Test-Path "out/index.html") {
-            $content = Get-Content "out/index.html" -Raw
-            if ($content -match "OTT Dashboard") {
-                Write-Success "  index.html contient l'application"
-            }
-        }
-        
-        if (-not (Test-Path "out/.nojekyll")) {
-            New-Item -Path "out/.nojekyll" -ItemType File -Force | Out-Null
-            Write-Success "  .nojekyll cree"
-        }
-    } else {
+    if ($LASTEXITCODE -ne 0) {
         Write-Error "Build echoue"
         exit 1
     }
+    
+    Write-Success "Build reussi!"
+    Write-Host ""
+    
+    # Tests de base
+    $testsPassed = 0
+    $testsFailed = 0
+    
+    function Test-Step {
+        param([string]$Name, [scriptblock]$Test)
+        Write-Host "  [TEST] $Name..." -NoNewline -ForegroundColor Yellow
+        try {
+            if (& $Test) {
+                Write-Host " OK" -ForegroundColor Green
+                $script:testsPassed++
+                return $true
+            } else {
+                Write-Host " ECHEC" -ForegroundColor Red
+                $script:testsFailed++
+                return $false
+            }
+        } catch {
+            Write-Host " ERREUR" -ForegroundColor Red
+            $script:testsFailed++
+            return $false
+        }
+    }
+    
+    # Tests essentiels
+    Test-Step "out/index.html existe" { Test-Path "out/index.html" }
+    
+    if (Test-Path "out/index.html") {
+        $content = Get-Content "out/index.html" -Raw
+        Test-Step "index.html contient l'application" { $content -match "OTT Dashboard" }
+        Test-Step "index.html ne contient pas la documentation" { -not ($content -match "Documentation OTT") }
+    }
+    
+    Test-Step ".nojekyll existe" {
+        if (-not (Test-Path "out/.nojekyll")) {
+            New-Item -Path "out/.nojekyll" -ItemType File -Force | Out-Null
+        }
+        Test-Path "out/.nojekyll"
+    }
+    
+    # Tests complets si demandé
+    if ($Full) {
+        Test-Step "Dossier _next/ existe" { Test-Path "out/_next" }
+        Test-Step "Fichiers CSS generes" { (Get-ChildItem "out/_next/static/css" -ErrorAction SilentlyContinue).Count -gt 0 }
+        Test-Step "Fichiers JS generes" { (Get-ChildItem "out/_next/static/chunks" -Recurse -Filter "*.js" -ErrorAction SilentlyContinue).Count -gt 0 }
+        Test-Step "Pages dashboard generees" { Test-Path "out/dashboard" }
+        Test-Step "Manifest.json existe" { Test-Path "out/manifest.json" }
+        Test-Step "Icons existent" { (Test-Path "out/icon-192.png") -and (Test-Path "out/icon-512.png") }
+        Test-Step "Service Worker existe" { Test-Path "out/sw.js" }
+        
+        if (Test-Path "out/index.html") {
+            $content = Get-Content "out/index.html" -Raw
+            Test-Step "Chemins utilisent /OTT" { $content -match "/OTT/_next" -or $content -match "/OTT/manifest.json" }
+        }
+        
+        Write-Host ""
+        $outSize = (Get-ChildItem "out" -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB
+        Write-Info "Taille du build: $([math]::Round($outSize, 2)) MB"
+    }
+    
+    Write-Host ""
+    Write-Host "Resume: $testsPassed reussis, $testsFailed echoues" -ForegroundColor $(if ($testsFailed -eq 0) { "Green" } else { "Red" })
+    
+    if ($testsFailed -gt 0) {
+        Write-Error "Le build n'est pas pret pour le deploiement"
+        exit 1
+    }
+    
+    Write-Success "Le build est pret pour GitHub Pages!"
 }
 
 function Start-DevServer {
@@ -293,7 +360,7 @@ switch ($Action) {
     "test" {
         Write-Info "Tests du build..."
         Check-Dependencies
-        Test-Build
+        Test-Build -Full
         Write-Success "Tests termines"
     }
     
@@ -302,6 +369,12 @@ switch ($Action) {
         Check-Dependencies
         Test-Build
         Write-Success "Build termine dans out/"
+        Write-Host ""
+        Write-Info "Prochaines etapes:"
+        Write-Host "  1. Commit et push les changements" -ForegroundColor Gray
+        Write-Host "  2. Verifier GitHub Pages Settings > Source = GitHub Actions" -ForegroundColor Gray
+        Write-Host "  3. Attendre le deploiement automatique" -ForegroundColor Gray
+        Write-Host "  4. Tester: https://ymora.github.io/OTT/" -ForegroundColor Gray
     }
     
     "setup" {

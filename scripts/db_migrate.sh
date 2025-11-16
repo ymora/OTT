@@ -1,4 +1,4 @@
-fais le#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Helper to apply sql/schema.sql (and optionally sql/demo_seed.sql) against the target Postgres DB.
 #
 # Usage:

@@ -36,6 +36,12 @@ jobs:
           NEXT_PUBLIC_API_URL: https://ott-jbln.onrender.com
           NEXT_PUBLIC_REQUIRE_AUTH: 'true'
           NEXT_PUBLIC_ENABLE_DEMO_RESET: 'false'
+          NEXT_STATIC_EXPORT: 'true'
+          NEXT_PUBLIC_BASE_PATH: '/OTT'
+          NODE_ENV: 'production'
+      
+      - name: Ensure .nojekyll exists
+        run: touch out/.nojekyll
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
