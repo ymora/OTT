@@ -3,7 +3,7 @@
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 
 const statusColors = {
   online: '#22c55e',
