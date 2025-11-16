@@ -558,17 +558,41 @@ function handleCreateUser() {
     }
     
     try {
-        $stmt = $pdo->prepare("
-            INSERT INTO users (email, password_hash, first_name, last_name, role_id)
-            VALUES (:email, :password_hash, :first_name, :last_name, :role_id)
-        ");
-        $stmt->execute([
-            'email' => $input['email'],
-            'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
-            'first_name' => $input['first_name'] ?? '',
-            'last_name' => $input['last_name'] ?? '',
-            'role_id' => $input['role_id'] ?? 4
-        ]);
+        // Vérifier si la colonne phone existe
+        $hasPhoneColumn = false;
+        try {
+            $testStmt = $pdo->query("SELECT phone FROM users LIMIT 1");
+            $hasPhoneColumn = true;
+        } catch(PDOException $e) {
+            $hasPhoneColumn = false;
+        }
+        
+        if ($hasPhoneColumn) {
+            $stmt = $pdo->prepare("
+                INSERT INTO users (email, password_hash, first_name, last_name, role_id, phone)
+                VALUES (:email, :password_hash, :first_name, :last_name, :role_id, :phone)
+            ");
+            $stmt->execute([
+                'email' => $input['email'],
+                'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
+                'first_name' => $input['first_name'] ?? '',
+                'last_name' => $input['last_name'] ?? '',
+                'role_id' => $input['role_id'] ?? 4,
+                'phone' => !empty($input['phone']) ? trim($input['phone']) : null
+            ]);
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO users (email, password_hash, first_name, last_name, role_id)
+                VALUES (:email, :password_hash, :first_name, :last_name, :role_id)
+            ");
+            $stmt->execute([
+                'email' => $input['email'],
+                'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
+                'first_name' => $input['first_name'] ?? '',
+                'last_name' => $input['last_name'] ?? '',
+                'role_id' => $input['role_id'] ?? 4
+            ]);
+        }
         
         $user_id = $pdo->lastInsertId();
         $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user_id]);
@@ -599,14 +623,29 @@ function handleUpdateUser($user_id) {
             return;
         }
         
+        // Vérifier si la colonne phone existe
+        $hasPhoneColumn = false;
+        try {
+            $testStmt = $pdo->query("SELECT phone FROM users LIMIT 1");
+            $hasPhoneColumn = true;
+        } catch(PDOException $e) {
+            $hasPhoneColumn = false;
+        }
+        
         $updates = [];
         $params = ['id' => $user_id];
         
-        foreach(['first_name', 'last_name', 'role_id', 'is_active'] as $field) {
+        foreach(['first_name', 'last_name', 'email', 'role_id', 'is_active'] as $field) {
             if (isset($input[$field])) {
                 $updates[] = "$field = :$field";
                 $params[$field] = $input[$field];
             }
+        }
+        
+        // Gérer le champ phone si la colonne existe
+        if ($hasPhoneColumn && array_key_exists('phone', $input)) {
+            $updates[] = "phone = :phone";
+            $params['phone'] = !empty($input['phone']) ? trim($input['phone']) : null;
         }
         
         if (isset($input['password']) && !empty($input['password'])) {
@@ -656,12 +695,23 @@ function handleDeleteUser($user_id) {
             return;
         }
         
+        // Vérifier s'il y a des entrées d'audit liées (optionnel, mais on peut les garder avec user_id NULL)
+        // Les dispositifs sont liés aux PATIENTS, pas aux utilisateurs, donc pas de vérification nécessaire
+        
         // Supprimer les préférences de notifications associées
         try {
             $pdo->prepare("DELETE FROM user_notifications_preferences WHERE user_id = :user_id")->execute(['user_id' => $user_id]);
         } catch(PDOException $e) {
             // Ignorer si la table n'existe pas
             error_log('[handleDeleteUser] Could not delete notification preferences: ' . $e->getMessage());
+        }
+        
+        // Mettre à jour les logs d'audit pour mettre user_id à NULL (garder l'historique)
+        try {
+            $pdo->prepare("UPDATE audit_logs SET user_id = NULL WHERE user_id = :user_id")->execute(['user_id' => $user_id]);
+        } catch(PDOException $e) {
+            // Ignorer si ça échoue
+            error_log('[handleDeleteUser] Could not update audit logs: ' . $e->getMessage());
         }
         
         // Supprimer l'utilisateur
@@ -1745,7 +1795,12 @@ function handleDeletePatient($patient_id) {
         }
 
         // Supprimer les préférences de notifications associées
-        $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :patient_id")->execute(['patient_id' => $patient_id]);
+        try {
+            $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :patient_id")->execute(['patient_id' => $patient_id]);
+        } catch(PDOException $e) {
+            // Ignorer si la table n'existe pas
+            error_log('[handleDeletePatient] Could not delete notification preferences: ' . $e->getMessage());
+        }
 
         // Supprimer le patient
         $pdo->prepare("DELETE FROM patients WHERE id = :id")->execute(['id' => $patient_id]);
@@ -1906,9 +1961,14 @@ function handleUpdateDeviceConfig($device_id) {
         $params = ['device_id' => $device_id];
         
         foreach(['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients'] as $field) {
-            if (isset($input[$field])) {
-                $updates[] = "$field = :$field";
-                $params[$field] = is_array($input[$field]) ? json_encode($input[$field]) : $input[$field];
+            if (array_key_exists($field, $input)) {
+                if ($input[$field] === null) {
+                    // Permettre de mettre à NULL pour réinitialiser
+                    $updates[] = "$field = NULL";
+                } else {
+                    $updates[] = "$field = :$field";
+                    $params[$field] = is_array($input[$field]) ? json_encode($input[$field]) : $input[$field];
+                }
             }
         }
         

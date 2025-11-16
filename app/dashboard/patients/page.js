@@ -42,6 +42,8 @@ export default function PatientsPage() {
     notify_alert_critical: true
   })
   const [savingNotifPrefs, setSavingNotifPrefs] = useState(false)
+  const [devices, setDevices] = useState([])
+  const [unassigningDevice, setUnassigningDevice] = useState(null)
 
   const loadPatients = useCallback(async () => {
     try {
@@ -57,9 +59,21 @@ export default function PatientsPage() {
     }
   }, [API_URL, fetchWithAuth])
 
+  const loadDevices = useCallback(async () => {
+    try {
+      const devicesData = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices', {}, { requiresAuth: true })
+      // Filtrer uniquement les dispositifs assignés aux patients
+      const assignedDevices = (devicesData.devices || []).filter(d => d.patient_id)
+      setDevices(assignedDevices)
+    } catch (err) {
+      console.error('Erreur chargement dispositifs:', err)
+    }
+  }, [API_URL, fetchWithAuth])
+
   useEffect(() => {
     loadPatients()
-  }, [loadPatients])
+    loadDevices()
+  }, [loadPatients, loadDevices])
 
   const filteredPatients = useMemo(() => {
     return patients.filter(p => {
@@ -71,6 +85,78 @@ export default function PatientsPage() {
       return true
     })
   }, [patients, searchTerm])
+
+  // Fonctions utilitaires pour le calcul des valeurs
+  const getDeviceStatus = (lastSeen) => {
+    if (!lastSeen) return false
+    return new Date(lastSeen) > new Date(Date.now() - 15 * 60 * 1000)
+  }
+
+  const getBatteryValue = (battery) => {
+    if (typeof battery === 'number') return battery
+    return parseFloat(battery) || 0
+  }
+
+  const handleUnassignDevice = async (device) => {
+    if (!confirm(`⚠️ Êtes-vous sûr de vouloir désassigner le dispositif "${device.device_name || device.sim_iccid}" du patient ?\n\nLe dispositif sera réinitialisé avec les paramètres d'origine et disponible pour une nouvelle assignation.`)) {
+      return
+    }
+
+    try {
+      setUnassigningDevice(device.id)
+      setError(null)
+      
+      // 1. Désassigner le dispositif (mettre patient_id à null)
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${device.id}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ patient_id: null })
+        },
+        { requiresAuth: true }
+      )
+      
+      // 2. Réinitialiser la configuration du dispositif aux paramètres d'origine
+      try {
+        await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/devices/${device.id}/config`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              sleep_minutes: null,
+              measurement_duration_ms: null,
+              send_every_n_wakeups: null,
+              calibration_coefficients: null
+            })
+          },
+          { requiresAuth: true }
+        )
+      } catch (configErr) {
+        // Ne pas bloquer si la réinitialisation de la config échoue
+        console.warn('Erreur réinitialisation config dispositif:', configErr)
+      }
+      
+      // Recharger les dispositifs et les patients
+      await loadDevices()
+      await loadPatients()
+      setSuccess('Dispositif désassigné et réinitialisé avec succès')
+    } catch (err) {
+      let errorMessage = 'Erreur lors de la désassignation du dispositif'
+      if (err.message) {
+        errorMessage = err.message
+      } else if (err.error) {
+        errorMessage = err.error
+      }
+      setError(errorMessage)
+      console.error('Erreur désassignation dispositif:', err)
+    } finally {
+      setUnassigningDevice(null)
+    }
+  }
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -253,17 +339,30 @@ export default function PatientsPage() {
     try {
       setDeletingPatient(patient.id)
       setError(null)
-      await fetchJson(
+      setSuccess(null)
+      const response = await fetchJson(
         fetchWithAuth,
         API_URL,
         `/api.php/patients/${patient.id}`,
         { method: 'DELETE' },
         { requiresAuth: true }
       )
-      setSuccess('Patient supprimé avec succès')
-      loadPatients()
+      if (response.success) {
+        setSuccess(response.message || 'Patient supprimé avec succès')
+        loadPatients()
+      } else {
+        setError(response.error || 'Erreur lors de la suppression')
+      }
     } catch (err) {
-      setError(err.message)
+      // Extraire le message d'erreur de la réponse si disponible
+      let errorMessage = 'Erreur lors de la suppression du patient'
+      if (err.message) {
+        errorMessage = err.message
+      } else if (err.error) {
+        errorMessage = err.error
+      }
+      setError(errorMessage)
+      console.error('Erreur suppression patient:', err)
     } finally {
       setDeletingPatient(null)
     }
@@ -352,20 +451,19 @@ export default function PatientsPage() {
         }}>➕ Nouveau Patient</button>
       </div>
 
-      {(error || success) && (
-        <div className={`alert ${error ? 'alert-warning' : 'alert-success'}`}>
-          {error || success}
-        </div>
-      )}
-
       <div className="card">
+        {(error || success) && (
+          <div className={`alert ${error ? 'alert-warning' : 'alert-success'} mb-4`}>
+            {error || success}
+          </div>
+        )}
         {loading ? (
           <div className="animate-shimmer h-96"></div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b">
+                <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4">Nom</th>
                   <th className="text-left py-3 px-4">Date Naissance</th>
                   <th className="text-left py-3 px-4">Téléphone</th>
@@ -383,15 +481,15 @@ export default function PatientsPage() {
                   </tr>
                 ) : (
                   filteredPatients.map((p, i) => (
-                    <tr key={p.id} className="border-b hover:bg-gray-50 animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
+                    <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
                       <td className="py-3 px-4 font-medium">{p.first_name} {p.last_name}</td>
-                      <td className="py-3 px-4">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
-                      <td className="py-3 px-4">{p.phone || '-'}</td>
-                      <td className="py-3 px-4">{p.email || '-'}</td>
+                      <td className="py-3 px-4 text-gray-600">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{p.phone || '-'}</td>
+                      <td className="py-3 px-4 text-gray-600">{p.email || '-'}</td>
                       <td className="py-3 px-4">
                         {p.device_name ? (
                           <div className="space-y-1">
-                            <p className="font-medium">{p.device_name}</p>
+                            <p className="font-medium text-gray-900">{p.device_name}</p>
                             <p className="text-xs text-gray-500 font-mono">{p.sim_iccid}</p>
                           </div>
                         ) : (
@@ -400,6 +498,19 @@ export default function PatientsPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
+                          {(() => {
+                            const assignedDevice = devices.find(d => d.patient_id === p.id)
+                            return assignedDevice ? (
+                              <button
+                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                onClick={() => handleUnassignDevice(assignedDevice)}
+                                disabled={unassigningDevice === assignedDevice.id}
+                                title="Désassigner le dispositif du patient"
+                              >
+                                <span className="text-lg">{unassigningDevice === assignedDevice.id ? '⏳' : '🔌'}</span>
+                              </button>
+                            ) : null
+                          })()}
                           <button
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                             onClick={() => handleEdit(p)}
@@ -410,8 +521,8 @@ export default function PatientsPage() {
                           <button
                             className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                             onClick={() => handleDelete(p)}
-                            disabled={deletingPatient === p.id}
-                            title="Supprimer le patient"
+                            disabled={deletingPatient === p.id || devices.some(d => d.patient_id === p.id)}
+                            title={devices.some(d => d.patient_id === p.id) ? "Impossible de supprimer un patient avec un dispositif assigné. Désassignez d'abord le dispositif." : "Supprimer le patient"}
                           >
                             <span className="text-lg">{deletingPatient === p.id ? '⏳' : '🗑️'}</span>
                           </button>

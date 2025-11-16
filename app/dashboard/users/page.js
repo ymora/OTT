@@ -13,43 +13,40 @@ const defaultFormState = {
   role_id: ''
 }
 
+const defaultNotificationPrefs = {
+  email_enabled: true,
+  sms_enabled: false,
+  push_enabled: true,
+  phone_number: '',
+  notify_battery_low: true,
+  notify_device_offline: true,
+  notify_abnormal_flow: true,
+  notify_new_patient: false
+}
+
 export default function UsersPage() {
-  const { fetchWithAuth, API_URL, user } = useAuth()
+  const { fetchWithAuth, API_URL, user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [formData, setFormData] = useState(defaultFormState)
-  const [formError, setFormError] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editingUser, setEditingUser] = useState(null)
-  const [editForm, setEditForm] = useState({
+  const [showUserModal, setShowUserModal] = useState(false)
+  const [editingUser, setEditingUser] = useState(null) // null = création, objet = modification
+  const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
-    role_id: '',
-    is_active: true,
+    email: '',
+    phone: '',
     password: '',
-    phone: ''
+    role_id: '',
+    is_active: true
   })
-  const [notificationPrefs, setNotificationPrefs] = useState({
-    email_enabled: true,
-    sms_enabled: false,
-    push_enabled: true,
-    phone_number: '',
-    notify_battery_low: true,
-    notify_device_offline: true,
-    notify_abnormal_flow: true,
-    notify_new_patient: false
-  })
+  const [notificationPrefs, setNotificationPrefs] = useState(defaultNotificationPrefs)
   const [loadingNotifPrefs, setLoadingNotifPrefs] = useState(false)
-  const [editError, setEditError] = useState(null)
-  const [editSaving, setEditSaving] = useState(false)
+  const [formError, setFormError] = useState(null)
+  const [saving, setSaving] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
-  const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [selectedUser, setSelectedUser] = useState(null)
 
   const loadUsers = useCallback(async () => {
     try {
@@ -63,6 +60,7 @@ export default function UsersPage() {
       setLoading(false)
     }
   }, [API_URL, fetchWithAuth])
+
 
   const loadRoles = useCallback(async () => {
     try {
@@ -100,51 +98,134 @@ export default function UsersPage() {
     return (
       formData.first_name.trim().length > 1 &&
       formData.last_name.trim().length > 1 &&
-      /\S+@\S+\.\S+/.test(formData.email) &&
-      formData.password.length >= 6 &&
+      (!editingUser || formData.email ? /\S+@\S+\.\S+/.test(formData.email) : true) &&
+      (editingUser ? true : formData.password.length >= 6) &&
       Boolean(formData.role_id)
     )
-  }, [formData])
+  }, [formData, editingUser])
 
-  const openModal = () => {
-    setFormData(defaultFormState)
+  const openCreateModal = () => {
+    setEditingUser(null)
+    setFormData({
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      password: '',
+      role_id: '',
+      is_active: true
+    })
+    setNotificationPrefs(defaultNotificationPrefs)
     setFormError(null)
-    setShowCreateModal(true)
+    setShowUserModal(true)
   }
 
-  const closeModal = () => {
+  const closeUserModal = () => {
     if (saving) return
-    setShowCreateModal(false)
+    setShowUserModal(false)
+    setEditingUser(null)
     setFormError(null)
   }
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    const { name, value, type, checked } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }))
   }
 
-  const handleCreateUser = async (e) => {
+  const handleSubmitUser = async (e) => {
     e.preventDefault()
-    if (!canSubmit) return
     setSaving(true)
     setFormError(null)
+    
     try {
-      const payload = {
-        ...formData,
-        role_id: parseInt(formData.role_id, 10)
+      if (editingUser) {
+        // Modification
+        const payload = {
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          email: formData.email,
+          role_id: formData.role_id ? parseInt(formData.role_id, 10) : undefined,
+          is_active: formData.is_active,
+          phone: formData.phone || null
+        }
+        if (formData.password.trim().length >= 6) {
+          payload.password = formData.password
+        }
+        
+        await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/users/${editingUser.id}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+          },
+          { requiresAuth: true }
+        )
+        
+                // Sauvegarder les préférences de notifications (avec le téléphone synchronisé)
+                try {
+                  await fetchJson(
+                    fetchWithAuth,
+                    API_URL,
+                    `/api.php/users/${editingUser.id}/notifications`,
+                    {
+                      method: 'PUT',
+                      body: JSON.stringify({
+                        ...notificationPrefs,
+                        phone_number: formData.phone || notificationPrefs.phone_number || ''
+                      })
+                    },
+                    { requiresAuth: true }
+                  )
+                } catch (notifErr) {
+                  console.warn('Erreur sauvegarde notifications:', notifErr)
+                }
+      } else {
+        // Création
+        const payload = {
+          ...formData,
+          role_id: parseInt(formData.role_id, 10),
+          phone: formData.phone || null
+        }
+        const response = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          '/api.php/users',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          },
+          { requiresAuth: true }
+        )
+        
+                // Sauvegarder les préférences de notifications pour le nouvel utilisateur (avec le téléphone synchronisé)
+                if (response.user_id) {
+                  try {
+                    await fetchJson(
+                      fetchWithAuth,
+                      API_URL,
+                      `/api.php/users/${response.user_id}/notifications`,
+                      {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                          ...notificationPrefs,
+                          phone_number: formData.phone || notificationPrefs.phone_number || ''
+                        })
+                      },
+                      { requiresAuth: true }
+                    )
+                  } catch (notifErr) {
+                    console.warn('Erreur sauvegarde notifications:', notifErr)
+                  }
+                }
       }
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        '/api.php/users',
-        {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        },
-        { requiresAuth: true }
-      )
-      setShowCreateModal(false)
-      setFormData(defaultFormState)
+      
+      setShowUserModal(false)
+      setEditingUser(null)
       await loadUsers()
     } catch (err) {
       setFormError(err.message)
@@ -155,16 +236,17 @@ export default function UsersPage() {
 
   const openEditModal = async (user) => {
     setEditingUser(user)
-    setEditForm({
+    setFormData({
       first_name: user.first_name || '',
       last_name: user.last_name || '',
-      role_id: roles.find(r => r.name === user.role_name)?.id || '',
-      is_active: Boolean(user.is_active),
+      email: user.email || '',
+      phone: user.phone || '',
       password: '',
-      phone: user.phone || ''
+      role_id: roles.find(r => r.name === user.role_name)?.id || '',
+      is_active: Boolean(user.is_active)
     })
-    setEditError(null)
-    setShowEditModal(true)
+    setFormError(null)
+    setShowUserModal(true)
     
     // Charger les préférences de notifications
     try {
@@ -176,100 +258,31 @@ export default function UsersPage() {
         {},
         { requiresAuth: true }
       )
-      setNotificationPrefs(data.preferences || {
-        email_enabled: true,
-        sms_enabled: false,
-        push_enabled: true,
-        phone_number: user.phone || '',
-        notify_battery_low: true,
-        notify_device_offline: true,
-        notify_abnormal_flow: true,
-        notify_new_patient: false
+      const prefs = data.preferences || defaultNotificationPrefs
+      // Utiliser le téléphone de l'utilisateur ou celui des préférences
+      const phoneValue = user.phone || prefs.phone_number || ''
+      setNotificationPrefs({
+        ...prefs,
+        phone_number: phoneValue
       })
+      // Synchroniser formData.phone
+      setFormData(prev => ({
+        ...prev,
+        phone: phoneValue
+      }))
     } catch (err) {
       // Si pas de préférences, utiliser les valeurs par défaut
+      const phoneValue = user.phone || ''
       setNotificationPrefs({
-        email_enabled: true,
-        sms_enabled: false,
-        push_enabled: true,
-        phone_number: user.phone || '',
-        notify_battery_low: true,
-        notify_device_offline: true,
-        notify_abnormal_flow: true,
-        notify_new_patient: false
+        ...defaultNotificationPrefs,
+        phone_number: phoneValue
       })
+      setFormData(prev => ({
+        ...prev,
+        phone: phoneValue
+      }))
     } finally {
       setLoadingNotifPrefs(false)
-    }
-  }
-
-  const closeEditModal = () => {
-    if (editSaving || deleteLoading) return
-    setShowEditModal(false)
-    setEditingUser(null)
-    setEditError(null)
-  }
-
-  const handleEditInputChange = (e) => {
-    const { name, value, type, checked } = e.target
-    setEditForm(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }))
-  }
-
-  const handleEditSubmit = async (e) => {
-    e.preventDefault()
-    if (!editingUser) return
-    setEditSaving(true)
-    setEditError(null)
-    try {
-      // Sauvegarder les données utilisateur
-      const payload = {
-        first_name: editForm.first_name,
-        last_name: editForm.last_name,
-        role_id: editForm.role_id ? parseInt(editForm.role_id, 10) : undefined,
-        is_active: editForm.is_active,
-        phone: editForm.phone || null
-      }
-      if (editForm.password.trim().length >= 6) {
-        payload.password = editForm.password
-      }
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/users/${editingUser.id}`,
-        {
-          method: 'PUT',
-          body: JSON.stringify(payload)
-        },
-        { requiresAuth: true }
-      )
-      
-      // Sauvegarder les préférences de notifications
-      try {
-        await fetchJson(
-          fetchWithAuth,
-          API_URL,
-          `/api.php/users/${editingUser.id}/notifications`,
-          {
-            method: 'PUT',
-            body: JSON.stringify(notificationPrefs)
-          },
-          { requiresAuth: true }
-        )
-      } catch (notifErr) {
-        console.warn('Erreur sauvegarde notifications:', notifErr)
-        // Ne pas bloquer la sauvegarde si les notifications échouent
-      }
-      
-      setShowEditModal(false)
-      setEditingUser(null)
-      await loadUsers()
-    } catch (err) {
-      setEditError(err.message)
-    } finally {
-      setEditSaving(false)
     }
   }
 
@@ -281,19 +294,31 @@ export default function UsersPage() {
     try {
       setDeleteLoading(true)
       setError(null)
-      await fetchJson(
+      const response = await fetchJson(
         fetchWithAuth,
         API_URL,
         `/api.php/users/${userToDelete.id}`,
         { method: 'DELETE' },
         { requiresAuth: true }
       )
-      loadUsers()
-      if (showEditModal) {
-        closeEditModal()
+      if (response.success) {
+        loadUsers()
+        if (showUserModal && editingUser) {
+          closeUserModal()
+        }
+      } else {
+        setError(response.error || 'Erreur lors de la suppression')
       }
     } catch (err) {
-      setError(err.message)
+      // Extraire le message d'erreur de la réponse si disponible
+      let errorMessage = 'Erreur lors de la suppression de l\'utilisateur'
+      if (err.message) {
+        errorMessage = err.message
+      } else if (err.error) {
+        errorMessage = err.error
+      }
+      setError(errorMessage)
+      console.error('Erreur suppression utilisateur:', err)
     } finally {
       setDeleteLoading(false)
     }
@@ -302,30 +327,6 @@ export default function UsersPage() {
   const handleDeleteUserFromEdit = async () => {
     if (!editingUser) return
     await handleDeleteUser(editingUser)
-  }
-
-  const oldHandleDeleteUser = async () => {
-    if (!editingUser) return
-    const confirmed = window.confirm(`Supprimer définitivement ${editingUser.first_name} ${editingUser.last_name} ?`)
-    if (!confirmed) return
-    setDeleteLoading(true)
-    setEditError(null)
-    try {
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/users/${editingUser.id}`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      setShowEditModal(false)
-      setEditingUser(null)
-      await loadUsers()
-    } catch (err) {
-      setEditError(err.message)
-    } finally {
-      setDeleteLoading(false)
-    }
   }
 
   return (
@@ -347,9 +348,9 @@ export default function UsersPage() {
         </div>
         <button 
           className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" 
-          onClick={openModal}
-          disabled={user?.role_name !== 'admin'}
-          title={user?.role_name === 'admin' ? "Créer un nouvel utilisateur" : "Réservé aux administrateurs"}
+          onClick={openCreateModal}
+          disabled={currentUser?.role_name !== 'admin'}
+          title={currentUser?.role_name === 'admin' ? "Créer un nouvel utilisateur" : "Réservé aux administrateurs"}
         >
           ➕ Nouvel Utilisateur
         </button>
@@ -428,8 +429,8 @@ export default function UsersPage() {
                           <button
                             className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                             onClick={() => handleDeleteUser(user)}
-                            disabled={deleteLoading || user?.role_name !== 'admin'}
-                            title={user?.role_name === 'admin' ? "Supprimer l'utilisateur" : "Réservé aux administrateurs"}
+                            disabled={deleteLoading || currentUser?.role_name !== 'admin' || user.id === currentUser?.id}
+                            title={currentUser?.role_name === 'admin' && user.id !== currentUser?.id ? "Supprimer l'utilisateur" : user.id === currentUser?.id ? "Vous ne pouvez pas supprimer votre propre compte" : "Réservé aux administrateurs"}
                           >
                             <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
                           </button>
@@ -444,19 +445,23 @@ export default function UsersPage() {
         )}
       </div>
 
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4 animate-scale-in">
+      {showUserModal && (
+        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-semibold">Nouvel utilisateur</h2>
-                <p className="text-sm text-gray-500">Créer un accès avec un rôle défini</p>
+                <h2 className="text-2xl font-semibold">
+                  {editingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {editingUser ? editingUser.email : 'Créer un accès avec un rôle défini'}
+                </p>
               </div>
-              <button className="text-gray-500 hover:text-gray-700" onClick={closeModal} disabled={saving}>
+              <button className="text-gray-500 hover:text-gray-700" onClick={closeUserModal} disabled={saving || deleteLoading}>
                 ✕
               </button>
             </div>
-            <form className="space-y-4" onSubmit={handleCreateUser}>
+            <form className="space-y-4" onSubmit={handleSubmitUser}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className="text-sm font-medium text-gray-700">
                   Prénom
@@ -481,6 +486,7 @@ export default function UsersPage() {
                   />
                 </label>
               </div>
+              
               <label className="text-sm font-medium text-gray-700 w-full">
                 Email
                 <input
@@ -492,6 +498,7 @@ export default function UsersPage() {
                   required
                 />
               </label>
+
               <label className="text-sm font-medium text-gray-700 w-full">
                 Téléphone (optionnel, pour SMS)
                 <input
@@ -503,18 +510,7 @@ export default function UsersPage() {
                   placeholder="+33612345678"
                 />
               </label>
-              <label className="text-sm font-medium text-gray-700 w-full">
-                Mot de passe (6+ caractères)
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="input mt-1"
-                  required
-                  minLength={6}
-                />
-              </label>
+              
               <label className="text-sm font-medium text-gray-700 w-full">
                 Rôle
                 <select
@@ -533,118 +529,35 @@ export default function UsersPage() {
                 </select>
               </label>
 
-              {formError && (
-                <div className="alert alert-error">
-                  <strong>Erreur :</strong> {formError}
-                </div>
+              {editingUser && (
+                <label className="flex items-center gap-3 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    name="is_active"
+                    checked={formData.is_active}
+                    onChange={handleInputChange}
+                    className="form-checkbox h-4 w-4 text-primary-600"
+                  />
+                  Compte actif
+                </label>
               )}
 
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button type="button" className="btn-secondary" onClick={closeModal} disabled={saving}>
-                  Annuler
-                </button>
-                <button type="submit" className="btn-primary" disabled={!canSubmit || saving}>
-                  {saving ? 'Création…' : 'Créer'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showEditModal && editingUser && (
-        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold">Modifier l’utilisateur</h2>
-                <p className="text-sm text-gray-500">{editingUser.email}</p>
-              </div>
-              <button className="text-gray-500 hover:text-gray-700" onClick={closeEditModal} disabled={editSaving || deleteLoading}>
-                ✕
-              </button>
-            </div>
-            <form className="space-y-4" onSubmit={handleEditSubmit}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="text-sm font-medium text-gray-700">
-                  Prénom
-                  <input
-                    type="text"
-                    name="first_name"
-                    value={editForm.first_name}
-                    onChange={handleEditInputChange}
-                    className="input mt-1"
-                    required
-                  />
-                </label>
-                <label className="text-sm font-medium text-gray-700">
-                  Nom
-                  <input
-                    type="text"
-                    name="last_name"
-                    value={editForm.last_name}
-                    onChange={handleEditInputChange}
-                    className="input mt-1"
-                    required
-                  />
-                </label>
-              </div>
               <label className="text-sm font-medium text-gray-700 w-full">
-                Rôle
-                <select
-                  name="role_id"
-                  value={editForm.role_id}
-                  onChange={handleEditInputChange}
-                  className="input mt-1"
-                  required
-                >
-                  <option value="">Choisir un rôle…</option>
-                  {roles.map(role => (
-                    <option key={role.id} value={role.id}>
-                      {role.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="flex items-center gap-3 text-sm font-medium text-gray-700">
-                <input
-                  type="checkbox"
-                  name="is_active"
-                  checked={editForm.is_active}
-                  onChange={handleEditInputChange}
-                  className="form-checkbox h-4 w-4 text-primary-600"
-                />
-                Compte actif
-              </label>
-
-              <label className="text-sm font-medium text-gray-700 w-full">
-                Téléphone (pour SMS)
-                <input
-                  type="tel"
-                  name="phone"
-                  value={editForm.phone}
-                  onChange={handleEditInputChange}
-                  className="input mt-1"
-                  placeholder="+33612345678"
-                />
-              </label>
-
-              <label className="text-sm font-medium text-gray-700 w-full">
-                Nouveau mot de passe (optionnel, 6+ caractères)
+                {editingUser ? 'Nouveau mot de passe (optionnel, 6+ caractères)' : 'Mot de passe (6+ caractères)'}
                 <input
                   type="password"
                   name="password"
-                  value={editForm.password}
-                  onChange={handleEditInputChange}
+                  value={formData.password}
+                  onChange={handleInputChange}
                   className="input mt-1"
+                  required={!editingUser}
                   minLength={6}
                 />
               </label>
 
-              {editError && (
+              {formError && (
                 <div className="alert alert-error">
-                  <strong>Erreur :</strong> {editError}
+                  <strong>Erreur :</strong> {formError}
                 </div>
               )}
 
@@ -652,7 +565,7 @@ export default function UsersPage() {
               <div className="border-t pt-4 mt-4">
                 <h3 className="text-lg font-semibold mb-3">📧 Notifications</h3>
                 
-                {loadingNotifPrefs ? (
+                {editingUser && loadingNotifPrefs ? (
                   <div className="text-sm text-gray-500">Chargement des préférences...</div>
                 ) : (
                   <div className="space-y-4">
@@ -689,20 +602,6 @@ export default function UsersPage() {
                         </label>
                       </div>
                     </div>
-
-                    {/* Numéro SMS */}
-                    {notificationPrefs.sms_enabled && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Numéro SMS</label>
-                        <input
-                          type="tel"
-                          value={notificationPrefs.phone_number || editForm.phone || ''}
-                          onChange={(e) => setNotificationPrefs(prev => ({ ...prev, phone_number: e.target.value }))}
-                          className="input text-sm"
-                          placeholder="+33612345678"
-                        />
-                      </div>
-                    )}
 
                     {/* Types d'alertes */}
                     <div>
@@ -751,21 +650,20 @@ export default function UsersPage() {
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                <button
-                  type="button"
-                  className="text-red-600 hover:text-red-700 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={handleDeleteUserFromEdit}
-                  disabled={editSaving || deleteLoading || user?.role_name !== 'admin'}
-                  title={user?.role_name === 'admin' ? "Supprimer l'utilisateur" : "Réservé aux administrateurs"}
-                >
-                  {deleteLoading ? 'Suppression…' : '🗑️ Supprimer'}
-                </button>
-                <div className="flex items-center gap-3">
-                  <button type="button" className="btn-secondary" onClick={closeEditModal} disabled={editSaving || deleteLoading}>
-                    Annuler
+                {editingUser && (
+                  <button
+                    type="button"
+                    className="text-red-600 hover:text-red-700 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleDeleteUserFromEdit}
+                    disabled={saving || deleteLoading || currentUser?.role_name !== 'admin' || editingUser?.id === currentUser?.id}
+                    title={currentUser?.role_name === 'admin' && editingUser?.id !== currentUser?.id ? "Supprimer l'utilisateur" : editingUser?.id === currentUser?.id ? "Vous ne pouvez pas supprimer votre propre compte" : "Réservé aux administrateurs"}
+                  >
+                    {deleteLoading ? 'Suppression…' : '🗑️ Supprimer'}
                   </button>
-                  <button type="submit" className="btn-primary" disabled={editSaving || deleteLoading}>
-                    {editSaving ? 'Enregistrement…' : 'Enregistrer'}
+                )}
+                <div className={`flex items-center gap-3 ${editingUser ? '' : 'ml-auto'}`}>
+                  <button type="submit" className="btn-primary" disabled={saving || deleteLoading || (!editingUser && !canSubmit)}>
+                    {saving ? (editingUser ? 'Enregistrement…' : 'Création…') : (editingUser ? 'Enregistrer' : 'Créer')}
                   </button>
                 </div>
               </div>
@@ -774,129 +672,6 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Modal Détails Utilisateur */}
-      {showDetailsModal && selectedUser && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold">
-                  👤 {selectedUser.first_name} {selectedUser.last_name}
-                </h2>
-                <p className="text-sm text-gray-500">{selectedUser.email}</p>
-              </div>
-              <button
-                className="text-gray-500 hover:text-gray-900 text-2xl"
-                onClick={() => {
-                  setShowDetailsModal(false)
-                  setSelectedUser(null)
-                }}
-              >
-                ✖
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Informations principales */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="card">
-                  <p className="text-sm text-gray-500">Rôle</p>
-                  <p className="font-semibold text-lg">
-                    <span className={`badge ${roleColors[selectedUser.role_name] || 'bg-gray-100 text-gray-700'}`}>
-                      {selectedUser.role_name}
-                    </span>
-                  </p>
-                </div>
-                <div className="card">
-                  <p className="text-sm text-gray-500">Statut</p>
-                  <p className="font-semibold text-lg">
-                    {selectedUser.is_active ? (
-                      <span className="badge badge-success">✅ Actif</span>
-                    ) : (
-                      <span className="badge text-gray-600 bg-gray-100">❌ Inactif</span>
-                    )}
-                  </p>
-                </div>
-                <div className="card">
-                  <p className="text-sm text-gray-500">Téléphone</p>
-                  <p className="font-semibold text-lg">
-                    {selectedUser.phone || <span className="text-gray-400">Non renseigné</span>}
-                  </p>
-                </div>
-                <div className="card">
-                  <p className="text-sm text-gray-500">Dernière connexion</p>
-                  <p className="font-semibold text-lg">
-                    {selectedUser.last_login ? (
-                      new Date(selectedUser.last_login).toLocaleString('fr-FR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    ) : (
-                      <span className="text-gray-400">Jamais</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              {/* Date de création */}
-              {selectedUser.created_at && (
-                <div className="card">
-                  <p className="text-sm text-gray-500">Compte créé le</p>
-                  <p className="font-semibold">
-                    {new Date(selectedUser.created_at).toLocaleDateString('fr-FR', {
-                      day: '2-digit',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
-                  </p>
-                </div>
-              )}
-
-              {/* Permissions */}
-              {selectedUser.permissions && (
-                <div className="card">
-                  <h3 className="text-lg font-semibold mb-3">🔐 Permissions</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedUser.permissions.split(',').filter(p => p.trim()).map((perm, idx) => (
-                      <span key={idx} className="badge badge-info">
-                        {perm.trim()}
-                      </span>
-                    ))}
-                    {(!selectedUser.permissions || selectedUser.permissions.split(',').filter(p => p.trim()).length === 0) && (
-                      <span className="text-sm text-gray-400">Aucune permission spécifique</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t">
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    setShowDetailsModal(false)
-                    setSelectedUser(null)
-                  }}
-                >
-                  Fermer
-                </button>
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    setShowDetailsModal(false)
-                    openEditModal(selectedUser)
-                  }}
-                >
-                  ✏️ Modifier
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

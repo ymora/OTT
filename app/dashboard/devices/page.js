@@ -6,11 +6,11 @@ import { fetchJson } from '@/lib/api'
 import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Chart from '@/components/Chart'
+import AlertCard from '@/components/AlertCard'
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
 
 // Import dynamique des pages pour les onglets
-const EventsPage = dynamic(() => import('../events/page'), { ssr: false })
 const CommandsPage = dynamic(() => import('../commands/page'), { ssr: false })
 const OTAPage = dynamic(() => import('../ota/page'), { ssr: false })
 
@@ -31,9 +31,11 @@ export default function DevicesPage() {
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [deviceDetails, setDeviceDetails] = useState(null)
   const [deviceLogs, setDeviceLogs] = useState([])
+  const [deviceAlerts, setDeviceAlerts] = useState([])
   const [deviceMeasurements, setDeviceMeasurements] = useState([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [modalActiveTab, setModalActiveTab] = useState('details') // 'details', 'alerts', 'logs'
   
   // Modal assignation
   const [assignModalOpen, setAssignModalOpen] = useState(false)
@@ -109,17 +111,21 @@ export default function DevicesPage() {
   const handleShowDetails = async (device) => {
     setSelectedDevice(device)
     setShowDetailsModal(true)
+    setModalActiveTab('details')
     setLoadingDetails(true)
     setDeviceDetails(null)
     setDeviceLogs([])
+    setDeviceAlerts([])
     setDeviceMeasurements([])
     
     try {
-      const [logsData, historyData] = await Promise.all([
+      const [logsData, alertsData, historyData] = await Promise.all([
         fetchJson(fetchWithAuth, API_URL, `/api.php/logs?device_id=${device.id}&limit=50`, {}, { requiresAuth: true }).catch(() => ({ logs: [] })),
+        fetchJson(fetchWithAuth, API_URL, `/api.php/alerts?device_id=${device.id}`, {}, { requiresAuth: true }).catch(() => ({ alerts: [] })),
         fetchJson(fetchWithAuth, API_URL, `/api.php/device/${device.id}`, {}, { requiresAuth: true }).catch(() => ({ measurements: [] }))
       ])
       setDeviceLogs(logsData.logs || [])
+      setDeviceAlerts((alertsData.alerts || []).filter(a => a.status !== 'resolved'))
       setDeviceMeasurements(historyData.measurements || [])
       setDeviceDetails(device)
     } catch (err) {
@@ -272,7 +278,6 @@ export default function DevicesPage() {
     { id: 'list', label: '📋 Liste', icon: '📋' },
     { id: 'ota', label: '⬆️ Mise à jour', icon: '⬆️', permission: 'devices.edit' },
     { id: 'commands', label: '📡 Commandes', icon: '📡', permission: 'devices.commands' },
-    { id: 'events', label: '📊 Événements', icon: '📊', permission: 'devices.view' },
   ]
 
   const hasPermission = (permission) => {
@@ -418,12 +423,9 @@ export default function DevicesPage() {
                       </td>
                       <td className="py-3 px-4">
                         {device.first_name ? (
-                          <div>
-                            <p className="font-medium">{device.first_name} {device.last_name}</p>
-                            <span className="badge badge-success text-xs">Assigné</span>
-                          </div>
+                          <span className="badge badge-success text-xs">{device.first_name} {device.last_name}</span>
                         ) : (
-                          <span className="text-sm text-amber-600">Non assigné</span>
+                          <span className="badge bg-orange-100 text-orange-700 text-xs">Non assigné</span>
                         )}
                       </td>
                       <td className="py-3 px-4">
@@ -461,13 +463,12 @@ export default function DevicesPage() {
 
       {activeTab === 'ota' && <OTAPage />}
       {activeTab === 'commands' && <CommandsPage />}
-      {activeTab === 'events' && <EventsPage />}
 
       {/* Modal Détails & Journal - accessible depuis tous les onglets */}
       {showDetailsModal && selectedDevice && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[95vh] flex flex-col">
+            <div className="flex-shrink-0 bg-white border-b p-6 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">
                   🔌 {selectedDevice.device_name || selectedDevice.sim_iccid}
@@ -481,99 +482,157 @@ export default function DevicesPage() {
                   setSelectedDevice(null)
                   setDeviceDetails(null)
                   setDeviceLogs([])
+                  setDeviceAlerts([])
                   setDeviceMeasurements([])
+                  setModalActiveTab('details')
                 }}
               >
                 ✖
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            {/* Onglets du modal */}
+            <div className="flex-shrink-0 border-b border-gray-200 px-6">
+              <nav className="flex gap-2">
+                <button
+                  onClick={() => setModalActiveTab('details')}
+                  className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
+                    modalActiveTab === 'details'
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  📊 Détails
+                </button>
+                <button
+                  onClick={() => setModalActiveTab('alerts')}
+                  className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
+                    modalActiveTab === 'alerts'
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  🔔 Alertes ({deviceAlerts.length})
+                </button>
+                <button
+                  onClick={() => setModalActiveTab('logs')}
+                  className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
+                    modalActiveTab === 'logs'
+                      ? 'border-primary-500 text-primary-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  }`}
+                >
+                  📝 Journal ({deviceLogs.length})
+                </button>
+              </nav>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
               {loadingDetails ? (
                 <div className="animate-shimmer h-64"></div>
               ) : (
                 <>
-                  {/* Informations */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="card">
-                      <p className="text-sm text-gray-500">Statut</p>
-                      <p className="font-semibold text-lg">{getStatusBadge(selectedDevice).label}</p>
-                    </div>
-                    <div className="card">
-                      <p className="text-sm text-gray-500">Batterie</p>
-                      <p className={`font-semibold text-lg ${getBatteryBadge(selectedDevice.last_battery).color}`}>
-                        {getBatteryBadge(selectedDevice.last_battery).label}
-                      </p>
-                    </div>
-                    <div className="card">
-                      <p className="text-sm text-gray-500">Firmware</p>
-                      <p className="font-semibold text-lg font-mono">{selectedDevice.firmware_version || 'N/A'}</p>
-                    </div>
-                  </div>
-
-                  {/* Patient */}
-                  {selectedDevice.first_name && (
-                    <div className="card">
-                      <h3 className="text-lg font-semibold mb-2">👤 Patient assigné</h3>
-                      <p className="font-medium">{selectedDevice.first_name} {selectedDevice.last_name}</p>
-                    </div>
-                  )}
-
-                  {/* Historique - Graphiques */}
-                  {deviceMeasurements.length > 0 && (
-                    <div className="card">
-                      <h3 className="text-lg font-semibold mb-4">📈 Historique (72h)</h3>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-600 mb-2">Débit</h4>
-                          <div className="h-48">
-                            <Chart data={deviceMeasurements} type="flowrate" />
-                          </div>
+                  {modalActiveTab === 'details' && (
+                    <>
+                      {/* Informations */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="card">
+                          <p className="text-sm text-gray-500">Statut</p>
+                          <p className="font-semibold text-lg">{getStatusBadge(selectedDevice).label}</p>
                         </div>
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-600 mb-2">Batterie</h4>
-                          <div className="h-48">
-                            <Chart data={deviceMeasurements.map(m => ({ ...m, last_battery: m.battery }))} type="battery" />
-                          </div>
+                        <div className="card">
+                          <p className="text-sm text-gray-500">Batterie</p>
+                          <p className={`font-semibold text-lg ${getBatteryBadge(selectedDevice.last_battery).color}`}>
+                            {getBatteryBadge(selectedDevice.last_battery).label}
+                          </p>
+                        </div>
+                        <div className="card">
+                          <p className="text-sm text-gray-500">Firmware</p>
+                          <p className="font-semibold text-lg font-mono">{selectedDevice.firmware_version || 'N/A'}</p>
+                        </div>
+                        <div className="card">
+                          <p className="text-sm text-gray-500">Patient</p>
+                          {selectedDevice.first_name ? (
+                            <p className="font-semibold text-lg">{selectedDevice.first_name} {selectedDevice.last_name}</p>
+                          ) : (
+                            <p className="font-semibold text-lg text-gray-400">Non assigné</p>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  )}
 
-                  {/* Journal */}
-                  <div className="card">
-                    <h3 className="text-lg font-semibold mb-4">📝 Journal ({deviceLogs.length})</h3>
-                    {deviceLogs.length === 0 ? (
-                      <p className="text-gray-500 text-sm">Aucun log disponible</p>
-                    ) : (
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {deviceLogs.map((log) => (
-                          <div key={log.id} className="border rounded-lg p-3 text-sm">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className={`badge ${
-                                log.level === 'ERROR' ? 'badge-error' :
-                                log.level === 'WARN' ? 'badge-warning' :
-                                log.level === 'SUCCESS' ? 'badge-success' :
-                                'badge-info'
-                              }`}>
-                                {log.level}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {new Date(log.timestamp).toLocaleString('fr-FR')}
-                              </span>
+                      {/* Historique - Graphiques */}
+                      {deviceMeasurements.length > 0 && (
+                        <div className="card">
+                          <h3 className="text-lg font-semibold mb-4">📈 Historique (72h)</h3>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-600 mb-2">Débit</h4>
+                              <div className="h-48">
+                                <Chart data={deviceMeasurements} type="flowrate" />
+                              </div>
                             </div>
-                            <p className="font-medium text-gray-900">{log.event_type}</p>
-                            <p className="text-gray-600 mt-1">{log.message}</p>
-                            {log.details && (
-                              <pre className="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded overflow-x-auto">
-                                {JSON.stringify(log.details, null, 2)}
-                              </pre>
-                            )}
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-600 mb-2">Batterie</h4>
+                              <div className="h-48">
+                                <Chart data={deviceMeasurements.map(m => ({ ...m, last_battery: m.battery }))} type="battery" />
+                              </div>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {modalActiveTab === 'alerts' && (
+                    <div className="h-full flex flex-col">
+                      <h3 className="text-lg font-semibold mb-4">🔔 Alertes ({deviceAlerts.length})</h3>
+                      {deviceAlerts.length === 0 ? (
+                        <p className="text-gray-500 text-sm">Aucune alerte active pour ce dispositif</p>
+                      ) : (
+                        <div className="flex-1 space-y-3 overflow-y-auto">
+                          {deviceAlerts.map((alert, i) => (
+                            <AlertCard key={alert.id} alert={alert} delay={i * 0.03} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {modalActiveTab === 'logs' && (
+                    <div className="h-full flex flex-col">
+                      <h3 className="text-lg font-semibold mb-4">📝 Journal ({deviceLogs.length})</h3>
+                      {deviceLogs.length === 0 ? (
+                        <p className="text-gray-500 text-sm">Aucun log disponible</p>
+                      ) : (
+                        <div className="flex-1 space-y-2 overflow-y-auto">
+                          {deviceLogs.map((log) => (
+                            <div key={log.id} className="border rounded-lg p-3 text-sm">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className={`badge ${
+                                  log.level === 'ERROR' ? 'badge-error' :
+                                  log.level === 'WARN' ? 'badge-warning' :
+                                  log.level === 'SUCCESS' ? 'badge-success' :
+                                  'badge-info'
+                                }`}>
+                                  {log.level}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {new Date(log.timestamp).toLocaleString('fr-FR')}
+                                </span>
+                              </div>
+                              <p className="font-medium text-gray-900">{log.event_type}</p>
+                              <p className="text-gray-600 mt-1">{log.message}</p>
+                              {log.details && (
+                                <pre className="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded overflow-x-auto">
+                                  {JSON.stringify(log.details, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -587,10 +646,17 @@ export default function DevicesPage() {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 space-y-4 animate-scale-in">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-semibold">Rattacher le dispositif</h2>
+                <h2 className="text-2xl font-semibold">
+                  {selectedDevice.patient_id ? 'Modifier l\'assignation' : 'Assigner le dispositif'}
+                </h2>
                 <p className="text-sm text-gray-500">
                   {selectedDevice.device_name || selectedDevice.sim_iccid}
                 </p>
+                {selectedDevice.first_name && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Actuellement assigné à : {selectedDevice.first_name} {selectedDevice.last_name}
+                  </p>
+                )}
               </div>
               <button className="text-gray-500 hover:text-gray-700" onClick={closeAssignModal} disabled={assignLoading}>
                 ✕
@@ -604,13 +670,16 @@ export default function DevicesPage() {
                   value={assignForm.patient_id}
                   onChange={(e) => setAssignForm({ patient_id: e.target.value })}
                 >
-                  <option value="">— Aucun patient —</option>
+                  <option value="">— Désassigner (Aucun patient) —</option>
                   {patients.map(patient => (
                     <option key={patient.id} value={patient.id}>
                       {patient.last_name.toUpperCase()} {patient.first_name}
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Sélectionner "Désassigner" pour retirer le dispositif du patient actuel
+                </p>
               </label>
 
               {assignError && (

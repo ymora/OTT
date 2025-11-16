@@ -39,6 +39,15 @@ jobs:
           NEXT_PUBLIC_BASE_PATH: '/OTT'
           NODE_ENV: 'production'
       
+      - name: Verify build output
+        run: |
+          echo "Contenu du dossier out/:"
+          ls -la out/ | head -20
+          if [ ! -f "out/index.html" ]; then
+            echo "ERREUR: index.html non trouvé dans out/"
+            exit 1
+          fi
+      
       - name: Ensure .nojekyll exists
         run: touch out/.nojekyll
       
