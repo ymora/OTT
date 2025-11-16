@@ -75,7 +75,7 @@ const menuStructure = [
   {
     name: 'Diagnostics',
     icon: '🔍',
-    path: '/diagnostics',
+    path: '/dashboard/diagnostics',
     permission: 'settings.edit',
     description: 'Statut API et base de données'
   },
@@ -97,12 +97,24 @@ export default function Sidebar() {
     return user?.permissions?.includes(permission)
   }
 
+  // Normaliser le pathname pour la comparaison (enlever basePath si présent)
+  const normalizePath = (path) => {
+    if (!path) return ''
+    // Enlever le basePath du début si présent
+    if (basePath && path.startsWith(basePath)) {
+      return path.substring(basePath.length) || '/'
+    }
+    return path
+  }
+
+  const normalizedPathname = normalizePath(pathname)
+
   return (
     <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 overflow-y-auto">
       <nav className="p-4 space-y-1">
         {menuStructure.map((item) => {
           if (!hasPermission(item.permission)) return null
-          const isActive = pathname === item.path || pathname.startsWith(item.path + '/')
+          const isActive = normalizedPathname === item.path || normalizedPathname.startsWith(item.path + '/')
           
           return (
             <Link
