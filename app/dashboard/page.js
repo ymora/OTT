@@ -49,9 +49,10 @@ export default function DashboardPage() {
       return hoursSince < 2
     }).length,
     criticalAlerts: alerts.filter(a => a.severity === 'critical').length,
-    avgBattery: devices.length > 0
-      ? (devices.reduce((sum, d) => sum + (d.last_battery || 0), 0) / devices.length).toFixed(1)
-      : 0
+    lowBatteryDevices: devices.filter(d => {
+      const battery = d.last_battery
+      return battery !== null && battery !== undefined && battery < 30
+    }).length
   }
 
   const assignedDevices = devices.filter(d => d.first_name || d.last_name)
@@ -70,6 +71,12 @@ export default function DashboardPage() {
     )
   }
 
+  const criticalItems = alerts.filter(a => a.severity === 'critical' || a.severity === 'high')
+  const lowBatteryList = devices.filter(d => {
+    const battery = d.last_battery
+    return battery !== null && battery !== undefined && battery < 30
+  }).slice(0, 5)
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -84,8 +91,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Stats Cards - Indicateurs clés */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Dispositifs Totaux"
           value={stats.totalDevices}
@@ -94,7 +101,7 @@ export default function DashboardPage() {
           delay={0}
         />
         <StatsCard
-          title="Dispositifs Actifs"
+          title="En Ligne"
           value={stats.activeDevices}
           icon="✅"
           color="green"
@@ -108,100 +115,165 @@ export default function DashboardPage() {
           delay={0.2}
         />
         <StatsCard
-          title="Batterie Moyenne"
-          value={`${stats.avgBattery}%`}
+          title={stats.lowBatteryDevices > 0 ? "Batterie Faible" : "Batterie OK"}
+          value={stats.lowBatteryDevices}
           icon="🔋"
-          color="blue"
+          color={stats.lowBatteryDevices > 0 ? "orange" : "green"}
           delay={0.3}
         />
       </div>
 
-      {/* Graphiques */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card animate-slide-up" style={{animationDelay: '0.4s'}}>
-          <h2 className="text-lg font-semibold mb-4">📈 Débits Dernières 24h</h2>
-          <Chart data={measurements} type="flowrate" />
-        </div>
-        
-        <div className="card animate-slide-up" style={{animationDelay: '0.5s'}}>
-          <h2 className="text-lg font-semibold mb-4">🔋 Niveaux Batterie</h2>
-          <Chart data={devices} type="battery" />
-        </div>
-      </div>
+      {/* Section Actions Requises */}
+      {(criticalItems.length > 0 || unassignedDevices.length > 0 || lowBatteryList.length > 0) && (
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <span className="text-red-500">⚡</span>
+            Actions Requises
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Alertes critiques */}
+            {criticalItems.length > 0 && (
+              <div className="border-l-4 border-red-500 pl-4">
+                <h3 className="font-semibold text-red-700 mb-2">Alertes Critiques ({criticalItems.length})</h3>
+                <div className="space-y-2">
+                  {criticalItems.slice(0, 3).map(alert => (
+                    <div key={alert.id} className="text-sm">
+                      <p className="font-medium">{alert.message}</p>
+                      <p className="text-xs text-gray-500">{alert.device_name || alert.sim_iccid}</p>
+                    </div>
+                  ))}
+                </div>
+                <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/alerts')}>
+                  Voir toutes →
+                </button>
+              </div>
+            )}
 
-      {/* Rattachements */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card animate-slide-up" style={{animationDelay: '0.55s'}}>
-          <h2 className="text-lg font-semibold mb-4">👥 Rattachements récents</h2>
-          {recentAssignments.length === 0 ? (
-            <p className="text-gray-500 text-sm">Aucun rattachement trouvé.</p>
-          ) : (
-            <ul className="space-y-3">
-              {recentAssignments.map(device => (
-                <li key={device.id} className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-semibold">{device.first_name} {device.last_name}</p>
-                    <p className="text-gray-500">{device.device_name || device.sim_iccid}</p>
-                  </div>
-                  <button className="btn-secondary text-xs" onClick={() => router.push(`/dashboard/devices?focus=${device.id}`)}>
-                    Voir dispositif
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+            {/* Batteries faibles */}
+            {lowBatteryList.length > 0 && (
+              <div className="border-l-4 border-orange-500 pl-4">
+                <h3 className="font-semibold text-orange-700 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
+                <div className="space-y-2">
+                  {lowBatteryList.map(device => (
+                    <div key={device.id} className="text-sm">
+                      <p className="font-medium">{device.device_name || device.sim_iccid}</p>
+                      <p className="text-xs text-gray-500">{device.last_battery?.toFixed(0)}% restant</p>
+                    </div>
+                  ))}
+                </div>
+                <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
+                  Voir tous →
+                </button>
+              </div>
+            )}
 
-        <div className="card animate-slide-up" style={{animationDelay: '0.6s'}}>
-          <h2 className="text-lg font-semibold mb-4">📦 Boîtiers non assignés</h2>
-          {unassignedDevices.length === 0 ? (
-            <p className="text-green-600 text-sm">Tous les boîtiers sont affectés ✅</p>
-          ) : (
-            <ul className="space-y-3">
-              {unassignedDevices.slice(0, 5).map(device => (
-                <li key={device.id} className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-semibold">{device.device_name || device.sim_iccid}</p>
-                    <p className="text-gray-500">Dernier contact : {device.last_seen ? new Date(device.last_seen).toLocaleString('fr-FR') : 'Jamais'}</p>
-                  </div>
-                  <button className="btn-primary text-xs" onClick={() => router.push('/dashboard/devices')}>
-                    Assigner
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-
-      {/* Alertes Récentes */}
-      {alerts.length > 0 && (
-        <div className="card animate-slide-up" style={{animationDelay: '0.6s'}}>
-          <h2 className="text-lg font-semibold mb-4">🔔 Alertes Récentes</h2>
-          <div className="space-y-3">
-            {alerts.slice(0, 5).map((alert, i) => (
-              <AlertCard key={alert.id} alert={alert} delay={i * 0.05} />
-            ))}
+            {/* Boîtiers non assignés */}
+            {unassignedDevices.length > 0 && (
+              <div className="border-l-4 border-amber-500 pl-4">
+                <h3 className="font-semibold text-amber-700 mb-2">Non Assignés ({unassignedDevices.length})</h3>
+                <div className="space-y-2">
+                  {unassignedDevices.slice(0, 3).map(device => (
+                    <div key={device.id} className="text-sm">
+                      <p className="font-medium">{device.device_name || device.sim_iccid}</p>
+                      <p className="text-xs text-gray-500">
+                        {device.last_seen ? new Date(device.last_seen).toLocaleDateString('fr-FR') : 'Jamais connecté'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <button className="btn-primary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
+                  Assigner →
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Dispositifs */}
-      <div className="card animate-slide-up" style={{animationDelay: '0.7s'}}>
-        <h2 className="text-lg font-semibold mb-4">🔌 Dispositifs</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {devices.slice(0, 6).map((device, i) => (
-            <DeviceCard
-              key={device.id}
-              device={device}
-              delay={i * 0.05}
-              onSelect={selected => router.push(`/dashboard/map?deviceId=${selected.id}`)}
-            />
-          ))}
+      {/* Section Surveillance */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Alertes récentes */}
+        {alerts.length > 0 && (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">🔔 Alertes Récentes</h2>
+              <button className="btn-secondary text-xs" onClick={() => router.push('/dashboard/alerts')}>
+                Tout voir →
+              </button>
+            </div>
+            <div className="space-y-2">
+              {alerts.slice(0, 4).map((alert, i) => (
+                <AlertCard key={alert.id} alert={alert} delay={i * 0.05} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Rattachements récents */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">👥 Rattachements Récents</h2>
+            <button className="btn-secondary text-xs" onClick={() => router.push('/dashboard/patients')}>
+              Gérer →
+            </button>
+          </div>
+          {recentAssignments.length === 0 ? (
+            <p className="text-gray-500 text-sm">Aucun rattachement récent</p>
+          ) : (
+            <ul className="space-y-2">
+              {recentAssignments.slice(0, 4).map(device => (
+                <li key={device.id} className="flex items-center justify-between text-sm p-2 hover:bg-gray-50 rounded">
+                  <div>
+                    <p className="font-medium">{device.first_name} {device.last_name}</p>
+                    <p className="text-xs text-gray-500">{device.device_name || device.sim_iccid}</p>
+                  </div>
+                  <button 
+                    className="btn-secondary text-xs" 
+                    onClick={() => router.push(`/dashboard/map?deviceId=${device.id}`)}
+                  >
+                    Voir
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <div className="text-right mt-4">
-          <button className="btn-secondary" onClick={() => router.push('/dashboard/map')}>
-            Voir tous les dispositifs sur la carte →
+      </div>
+
+      {/* Section Données - Graphiques */}
+      <div className="card">
+        <h2 className="text-lg font-semibold mb-4">📊 Données Récentes</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Débits (24h)</h3>
+            <div className="h-48">
+              <Chart data={measurements} type="flowrate" />
+            </div>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-gray-600 mb-2">Batteries</h3>
+            <div className="h-48">
+              <Chart data={devices} type="battery" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Actions rapides */}
+      <div className="card">
+        <h2 className="text-lg font-semibold mb-4">🚀 Accès Rapide</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <button className="btn-primary text-sm" onClick={() => router.push('/dashboard/map')}>
+            📍 Carte
+          </button>
+          <button className="btn-primary text-sm" onClick={() => router.push('/dashboard/devices')}>
+            🔌 Dispositifs
+          </button>
+          <button className="btn-primary text-sm" onClick={() => router.push('/dashboard/patients')}>
+            👥 Patients
+          </button>
+          <button className="btn-primary text-sm" onClick={() => router.push('/dashboard/alerts')}>
+            🔔 Alertes
           </button>
         </div>
       </div>

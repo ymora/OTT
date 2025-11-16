@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
+import Chart from '@/components/Chart'
 
 export default function PatientsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
@@ -22,6 +23,9 @@ export default function PatientsPage() {
     postal_code: ''
   }), [])
   const [formData, setFormData] = useState(emptyForm)
+  const [selectedPatient, setSelectedPatient] = useState(null)
+  const [patientDetails, setPatientDetails] = useState(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
 
   const loadPatients = useCallback(async () => {
     try {
@@ -71,6 +75,47 @@ export default function PatientsPage() {
     }
   }
 
+  const handleShowDetails = async (patient) => {
+    setSelectedPatient(patient)
+    setLoadingDetails(true)
+    setPatientDetails(null)
+    try {
+      const [devicesData, alertsData, measurementsData] = await Promise.all([
+        fetchJson(fetchWithAuth, API_URL, '/api.php/devices'),
+        fetchJson(fetchWithAuth, API_URL, '/api.php/alerts'),
+        fetchJson(fetchWithAuth, API_URL, '/api.php/measurements/latest')
+      ])
+      
+      const patientDevice = (devicesData.devices || []).find(d => 
+        d.patient_id === patient.id || (d.first_name === patient.first_name && d.last_name === patient.last_name)
+      )
+      const patientAlerts = (alertsData.alerts || []).filter(a => 
+        patientDevice && a.device_id === patientDevice.id
+      )
+      const patientMeasurements = (measurementsData.measurements || []).filter(m =>
+        patientDevice && m.device_id === patientDevice.id
+      ).slice(0, 100)
+      
+      setPatientDetails({
+        device: patientDevice,
+        alerts: patientAlerts,
+        measurements: patientMeasurements,
+        stats: {
+          totalMeasurements: patientMeasurements.length,
+          avgFlowrate: patientMeasurements.length > 0
+            ? (patientMeasurements.reduce((sum, m) => sum + (m.flowrate || 0), 0) / patientMeasurements.length).toFixed(2)
+            : 0,
+          lastMeasurement: patientMeasurements.length > 0 ? patientMeasurements[0].timestamp : null
+        }
+      })
+    } catch (err) {
+      console.error(err)
+      setError('Erreur lors du chargement des détails')
+    } finally {
+      setLoadingDetails(false)
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -117,7 +162,12 @@ export default function PatientsPage() {
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <button className="btn-secondary text-sm">👁️ Détails</button>
+                      <button 
+                        className="btn-secondary text-sm" 
+                        onClick={() => handleShowDetails(p)}
+                      >
+                        👁️ Détails
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -171,6 +221,176 @@ export default function PatientsPage() {
               <button className="btn-primary" onClick={handleCreatePatient} disabled={saving}>
                 {saving ? 'Création...' : '✅ Enregistrer'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPatient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
+              <h2 className="text-2xl font-semibold">
+                👤 Détails Patient : {selectedPatient.first_name} {selectedPatient.last_name}
+              </h2>
+              <button 
+                className="text-gray-500 hover:text-gray-900 text-2xl" 
+                onClick={() => {
+                  setSelectedPatient(null)
+                  setPatientDetails(null)
+                }}
+              >
+                ✖
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {loadingDetails ? (
+                <div className="animate-shimmer h-64"></div>
+              ) : patientDetails ? (
+                <>
+                  {/* Informations patient */}
+                  <div className="card">
+                    <h3 className="text-lg font-semibold mb-4">📋 Informations</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Prénom</p>
+                        <p className="font-medium">{selectedPatient.first_name}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Nom</p>
+                        <p className="font-medium">{selectedPatient.last_name}</p>
+                      </div>
+                      {selectedPatient.birth_date && (
+                        <div>
+                          <p className="text-sm text-gray-500">Date de naissance</p>
+                          <p className="font-medium">{new Date(selectedPatient.birth_date).toLocaleDateString('fr-FR')}</p>
+                        </div>
+                      )}
+                      {selectedPatient.phone && (
+                        <div>
+                          <p className="text-sm text-gray-500">Téléphone</p>
+                          <p className="font-medium">{selectedPatient.phone}</p>
+                        </div>
+                      )}
+                      {selectedPatient.email && (
+                        <div>
+                          <p className="text-sm text-gray-500">Email</p>
+                          <p className="font-medium">{selectedPatient.email}</p>
+                        </div>
+                      )}
+                      {(selectedPatient.city || selectedPatient.postal_code) && (
+                        <div>
+                          <p className="text-sm text-gray-500">Adresse</p>
+                          <p className="font-medium">
+                            {selectedPatient.city || ''} {selectedPatient.postal_code || ''}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dispositif associé */}
+                  <div className="card">
+                    <h3 className="text-lg font-semibold mb-4">🔌 Dispositif</h3>
+                    {patientDetails.device ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-lg">{patientDetails.device.device_name || 'Dispositif sans nom'}</p>
+                            <p className="text-sm text-gray-500">ICCID: {patientDetails.device.sim_iccid}</p>
+                          </div>
+                          <span className={`badge ${patientDetails.device.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
+                            {patientDetails.device.status || 'inconnu'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-gray-500">Batterie</p>
+                            <p className="font-medium">{patientDetails.device.last_battery ? `${patientDetails.device.last_battery.toFixed(1)}%` : 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Dernière connexion</p>
+                            <p className="font-medium">
+                              {patientDetails.device.last_seen 
+                                ? new Date(patientDetails.device.last_seen).toLocaleString('fr-FR')
+                                : 'Jamais'}
+                            </p>
+                          </div>
+                        </div>
+                        {patientDetails.device.latitude && patientDetails.device.longitude && (
+                          <a
+                            href={`/dashboard/map?deviceId=${patientDetails.device.id}`}
+                            className="btn-secondary text-sm inline-block"
+                          >
+                            📍 Voir sur la carte
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-amber-600">Aucun dispositif attribué à ce patient</p>
+                    )}
+                  </div>
+
+                  {/* Statistiques */}
+                  {patientDetails.device && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="card">
+                        <p className="text-sm text-gray-500">Mesures totales</p>
+                        <p className="text-2xl font-semibold">{patientDetails.stats.totalMeasurements}</p>
+                      </div>
+                      <div className="card">
+                        <p className="text-sm text-gray-500">Débit moyen</p>
+                        <p className="text-2xl font-semibold">{patientDetails.stats.avgFlowrate} L/min</p>
+                      </div>
+                      <div className="card">
+                        <p className="text-sm text-gray-500">Batterie actuelle</p>
+                        <p className="text-2xl font-semibold">
+                          {patientDetails.device.last_battery ? `${patientDetails.device.last_battery.toFixed(0)}%` : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Alertes */}
+                  {patientDetails.alerts.length > 0 && (
+                    <div className="card">
+                      <h3 className="text-lg font-semibold mb-4">🚨 Alertes ({patientDetails.alerts.length})</h3>
+                      <div className="space-y-2">
+                        {patientDetails.alerts.slice(0, 5).map(alert => (
+                          <div key={alert.id} className="border rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium">{alert.message}</p>
+                              <span className={`badge ${
+                                alert.severity === 'critical' ? 'badge-error' :
+                                alert.severity === 'high' ? 'badge-warning' :
+                                'badge-info'
+                              }`}>
+                                {alert.severity}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {new Date(alert.created_at).toLocaleString('fr-FR')}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Graphique mesures récentes */}
+                  {patientDetails.measurements.length > 0 && (
+                    <div className="card">
+                      <h3 className="text-lg font-semibold mb-4">📈 Mesures récentes</h3>
+                      <div className="h-64">
+                        <Chart data={patientDetails.measurements} type="flowrate" />
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-gray-500">Aucune donnée disponible</p>
+              )}
             </div>
           </div>
         </div>
