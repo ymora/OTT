@@ -26,8 +26,8 @@ if ($useLocalAPI -eq "" -or $useLocalAPI -eq "n" -or $useLocalAPI -eq "N") {
     Write-Host "  ⚠️  Assurez-vous d'avoir l'API PHP qui tourne sur le port 8080" -ForegroundColor Yellow
 }
 
-$requireAuth = Read-Host "Activer l'authentification ? [O/n] (défaut: n pour développement)"
-$authValue = if ($requireAuth -eq "" -or $requireAuth -eq "n" -or $requireAuth -eq "N") { "false" } else { "true" }
+# L'authentification est maintenant toujours requise
+$authValue = "true"
 
 $envContent = @"
 # Configuration Frontend OTT - Développement Local

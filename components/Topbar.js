@@ -18,6 +18,7 @@ export default function Topbar() {
 
   const handleLogout = () => {
     logout()
+    // Next.js gère automatiquement le basePath
     router.push('/')
   }
 

@@ -134,7 +134,7 @@ export default function DashboardPage() {
                   {criticalItems.slice(0, 3).map(alert => (
                     <div key={alert.id} className="text-sm">
                       <p className="font-medium">{alert.message}</p>
-                      <p className="text-xs text-gray-500">{alert.device_name || alert.sim_iccid}</p>
+                      <p className="font-semibold text-gray-900">{alert.device_name || alert.sim_iccid}</p>
                     </div>
                   ))}
                 </div>
@@ -153,7 +153,7 @@ export default function DashboardPage() {
                     const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
                     return (
                       <div key={device.id} className="text-sm">
-                        <p className="font-medium">{device.device_name || device.sim_iccid}</p>
+                        <p className="font-semibold text-gray-900">{device.device_name || device.sim_iccid}</p>
                         <p className="text-xs text-gray-500">{battery.toFixed(0)}% restant</p>
                       </div>
                     )
@@ -172,7 +172,7 @@ export default function DashboardPage() {
                 <div className="space-y-2">
                   {unassignedDevices.slice(0, 3).map(device => (
                     <div key={device.id} className="text-sm">
-                      <p className="font-medium">{device.device_name || device.sim_iccid}</p>
+                      <p className="font-semibold text-gray-900">{device.device_name || device.sim_iccid}</p>
                       <p className="text-xs text-gray-500">
                         {device.last_seen ? new Date(device.last_seen).toLocaleDateString('fr-FR') : 'Jamais connecté'}
                       </p>

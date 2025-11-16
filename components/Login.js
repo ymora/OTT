@@ -36,7 +36,7 @@ export default function Login() {
       localStorage.setItem('ott_token', data.token)
       localStorage.setItem('ott_user', JSON.stringify(data.user))
 
-      // Rediriger vers dashboard
+      // Rediriger vers dashboard (Next.js gère automatiquement le basePath)
       router.push('/dashboard')
 
     } catch (err) {

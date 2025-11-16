@@ -6,7 +6,8 @@ import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 
-const REQUIRE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_AUTH !== 'false'
+// Authentification toujours requise
+const REQUIRE_AUTH = true
 
 function DashboardLayoutContent({ children }) {
   const router = useRouter()
@@ -15,6 +16,7 @@ function DashboardLayoutContent({ children }) {
   useEffect(() => {
     if (!REQUIRE_AUTH) return
     if (!loading && !user) {
+      // Next.js gère automatiquement le basePath
       router.push('/')
     }
   }, [user, loading, router])

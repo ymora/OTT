@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
@@ -48,16 +49,14 @@ export default function Sidebar() {
   }
 
   // Normaliser le pathname pour la comparaison (enlever basePath si présent)
-  const normalizePath = (path) => {
-    if (!path) return ''
+  const normalizedPathname = useMemo(() => {
+    if (!pathname) return ''
     // Enlever le basePath du début si présent
-    if (basePath && path.startsWith(basePath)) {
-      return path.substring(basePath.length) || '/'
+    if (basePath && pathname.startsWith(basePath)) {
+      return pathname.substring(basePath.length) || '/'
     }
-    return path
-  }
-
-  const normalizedPathname = normalizePath(pathname)
+    return pathname
+  }, [pathname])
 
   return (
     <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 overflow-y-auto">
@@ -75,14 +74,14 @@ export default function Sidebar() {
             <Link
               key={item.path}
               href={item.path}
-tu as des que              className={`
+              className={`
                 flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all group
                 ${isActive 
                   ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white shadow-lg scale-105' 
                   : 'text-gray-700 hover:bg-gray-100 hover:scale-102'
                 }
               `}
-              title={item.description}
+              title={item.description || undefined}
             >
               <span className="text-xl">{item.icon}</span>
               <span>{item.name}</span>

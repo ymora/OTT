@@ -20,22 +20,62 @@ const statusBadges = {
 const ONLINE_THRESHOLD_HOURS = 2
 const WARNING_THRESHOLD_HOURS = 6
 
-function buildIcon(status = 'online') {
+function buildIcon(status = 'online', deviceId = null, deviceName = null, isHovered = false) {
   const color = statusColors[status] || statusColors.online
+  const size = isHovered ? 18 : 14
+  const borderSize = isHovered ? 4 : 3
+  const shadowSize = isHovered ? 12 : 8
+  const pulseClass = isHovered ? 'marker-pulse' : ''
+  
+  // Créer un label court pour identifier le dispositif
+  const label = deviceName 
+    ? deviceName.split('-').pop()?.substring(0, 3) || deviceId?.toString().slice(-2) || ''
+    : deviceId?.toString().slice(-2) || ''
+  
   return L.divIcon({
-    className: 'custom-marker',
+    className: `custom-marker ${pulseClass}`,
     html: `
-      <div style="
-        background:${color};
-        width:14px;
-        height:14px;
-        border-radius:50%;
-        border:3px solid white;
-        box-shadow:0 0 8px rgba(0,0,0,0.3);
-      "></div>
+      <div class="marker-container" style="
+        position: relative;
+        width: ${size + borderSize * 2}px;
+        height: ${size + borderSize * 2}px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <div style="
+          background:${color};
+          width:${size}px;
+          height:${size}px;
+          border-radius:50%;
+          border:${borderSize}px solid white;
+          box-shadow:0 0 ${shadowSize}px rgba(0,0,0,0.4);
+          transition: all 0.3s ease;
+          position: relative;
+          z-index: 2;
+        "></div>
+        ${label ? `
+        <div style="
+          position: absolute;
+          top: -8px;
+          right: -8px;
+          background: white;
+          color: ${color};
+          font-size: 10px;
+          font-weight: bold;
+          padding: 2px 4px;
+          border-radius: 8px;
+          border: 1px solid ${color};
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          z-index: 3;
+          min-width: 16px;
+          text-align: center;
+        ">${label}</div>
+        ` : ''}
+      </div>
     `,
-    iconSize: [20, 20],
-    iconAnchor: [10, 20]
+    iconSize: [isHovered ? 30 : 26, isHovered ? 30 : 26],
+    iconAnchor: [isHovered ? 15 : 13, isHovered ? 30 : 26]
   })
 }
 
@@ -83,6 +123,7 @@ function computeBatteryMeta(value) {
 
 function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
   const map = useMap()
+  const [hoveredDeviceId, setHoveredDeviceId] = useState(null)
 
   useEffect(() => {
     if (!focusDeviceId || !map) return
@@ -136,15 +177,19 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
 
   return (
     <>
-      {enrichedDevices.map(device => (
-        <Marker
-          key={device.id}
-          position={[device.latitude, device.longitude]}
-          icon={buildIcon(device.connectionStatus)}
-          eventHandlers={{
-            click: () => onSelect?.(device)
-          }}
-        >
+      {enrichedDevices.map(device => {
+        const isHovered = hoveredDeviceId === device.id
+        return (
+          <Marker
+            key={device.id}
+            position={[device.latitude, device.longitude]}
+            icon={buildIcon(device.connectionStatus, device.id, device.device_name, isHovered)}
+            eventHandlers={{
+              click: () => onSelect?.(device),
+              mouseover: () => setHoveredDeviceId(device.id),
+              mouseout: () => setHoveredDeviceId(null)
+            }}
+          >
           <Popup maxWidth={280}>
             <div className="space-y-2 p-1">
               <div className="flex items-center justify-between gap-2 border-b pb-2">
@@ -212,7 +257,8 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
             </div>
           </Popup>
         </Marker>
-      ))}
+        )
+      })}
     </>
   )
 }

@@ -77,7 +77,7 @@ export default function DevicesPage() {
     return devices.filter(d => {
       const matchesSearch =
         d.device_name?.toLowerCase().includes(needle) ||
-        d.sim_iccid?.includes(searchTerm) ||
+    d.sim_iccid?.includes(searchTerm) ||
         `${d.first_name || ''} ${d.last_name || ''}`.toLowerCase().includes(needle)
 
       const isAssigned = Boolean(d.patient_id)
@@ -130,11 +130,36 @@ export default function DevicesPage() {
   const handleAssignSubmit = async (event) => {
     event.preventDefault()
     if (!selectedDevice) return
+    
+    // Vérifier si le patient a déjà un dispositif assigné
+    const selectedPatientId = assignForm.patient_id === '' ? null : parseInt(assignForm.patient_id, 10)
+    if (selectedPatientId) {
+      const existingDevice = devices.find(d => 
+        d.patient_id === selectedPatientId && d.id !== selectedDevice.id
+      )
+      
+      if (existingDevice) {
+        const patient = patients.find(p => p.id === selectedPatientId)
+        const patientName = patient ? `${patient.first_name} ${patient.last_name}` : 'ce patient'
+        const existingDeviceName = existingDevice.device_name || existingDevice.sim_iccid || 'un dispositif'
+        
+        const confirmed = window.confirm(
+          `⚠️ Attention : ${patientName} a déjà un dispositif assigné (${existingDeviceName}).\n\n` +
+          `Voulez-vous vraiment remplacer ce dispositif par ${selectedDevice.device_name || selectedDevice.sim_iccid} ?\n\n` +
+          `Note : Un patient ne devrait normalement avoir qu'un seul dispositif.`
+        )
+        
+        if (!confirmed) {
+          return
+        }
+      }
+    }
+    
     setAssignLoading(true)
     setAssignError(null)
     try {
       const payload = {
-        patient_id: assignForm.patient_id === '' ? null : parseInt(assignForm.patient_id, 10)
+        patient_id: selectedPatientId
       }
       await fetchJson(
         fetchWithAuth,
@@ -292,18 +317,18 @@ export default function DevicesPage() {
               }`}
             >
               {tab.label}
-            </button>
+        </button>
           ))}
-        </div>
-        
+      </div>
+
         <div className="flex-1 max-w-md">
-          <input
-            type="text"
-            placeholder="🔍 Rechercher par nom, patient, ou ICCID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+        <input
+          type="text"
+          placeholder="🔍 Rechercher par nom, patient, ou ICCID..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
             className="input w-full"
-          />
+        />
         </div>
       </div>
 

@@ -5,7 +5,8 @@ import { createContext, useContext, useState, useEffect } from 'react'
 const AuthContext = createContext()
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
-const REQUIRE_AUTH = process.env.NEXT_PUBLIC_REQUIRE_AUTH !== 'false'
+// Authentification toujours requise
+const REQUIRE_AUTH = true
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)

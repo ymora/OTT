@@ -15,6 +15,29 @@
   z-index: 3 !important;
 }
 
+/* Animation de clignotement pour les marqueurs au survol */
+.marker-pulse {
+  animation: markerPulse 1s ease-in-out infinite;
+}
+
+@keyframes markerPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+  }
+}
+
+/* Style pour les marqueurs au survol */
+.leaflet-marker-icon:hover {
+  z-index: 1000 !important;
+  filter: brightness(1.2);
+  transition: all 0.2s ease;
+}
+
 :root {
   --primary: 102 126 234;
   --secondary: 118 75 162;

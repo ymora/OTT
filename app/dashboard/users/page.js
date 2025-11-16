@@ -406,59 +406,60 @@ export default function UsersPage() {
                   </tr>
                 ) : (
                   filteredUsers.map((user, i) => (
-                  <tr 
-                    key={user.id} 
-                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors animate-slide-up"
-                    style={{animationDelay: `${i * 0.05}s`}}
-                  >
-                    <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
-                    <td className="py-3 px-4 text-gray-600">{user.email}</td>
-                    <td className="py-3 px-4">
-                      <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
-                        {user.role_name}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {user.phone || '-'}
-                    </td>
-                    <td className="py-3 px-4">
-                      {user.is_active ? (
-                        <span className="badge badge-success">✅ Actif</span>
-                      ) : (
-                        <span className="badge text-gray-600 bg-gray-100">❌ Inactif</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">
-                      {user.last_login ? new Date(user.last_login).toLocaleString('fr-FR', { 
-                        day: '2-digit', 
-                        month: '2-digit', 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      }) : 'Jamais'}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                          onClick={() => {
-                            setSelectedUser(user)
-                            setShowDetailsModal(true)
-                          }}
-                          title="Voir les détails"
-                        >
-                          <span className="text-lg">👁️</span>
-                        </button>
-                        <button
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                          onClick={() => openEditModal(user)}
-                          title="Modifier l'utilisateur"
-                        >
-                          <span className="text-lg">✏️</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                    <tr 
+                      key={user.id} 
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors animate-slide-up"
+                      style={{animationDelay: `${i * 0.05}s`}}
+                    >
+                      <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
+                      <td className="py-3 px-4 text-gray-600">{user.email}</td>
+                      <td className="py-3 px-4">
+                        <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
+                          {user.role_name}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {user.phone || '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {user.is_active ? (
+                          <span className="badge badge-success">✅ Actif</span>
+                        ) : (
+                          <span className="badge text-gray-600 bg-gray-100">❌ Inactif</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {user.last_login ? new Date(user.last_login).toLocaleString('fr-FR', { 
+                          day: '2-digit', 
+                          month: '2-digit', 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        }) : 'Jamais'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => {
+                              setSelectedUser(user)
+                              setShowDetailsModal(true)
+                            }}
+                            title="Voir les détails"
+                          >
+                            <span className="text-lg">👁️</span>
+                          </button>
+                          <button
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => openEditModal(user)}
+                            title="Modifier l'utilisateur"
+                          >
+                            <span className="text-lg">✏️</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

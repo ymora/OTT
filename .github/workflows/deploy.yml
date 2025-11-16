@@ -34,7 +34,6 @@ jobs:
         run: npm run export
         env:
           NEXT_PUBLIC_API_URL: https://ott-jbln.onrender.com
-          NEXT_PUBLIC_REQUIRE_AUTH: 'true'
           NEXT_PUBLIC_ENABLE_DEMO_RESET: 'false'
           NEXT_STATIC_EXPORT: 'true'
           NEXT_PUBLIC_BASE_PATH: '/OTT'

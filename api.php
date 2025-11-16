@@ -467,27 +467,64 @@ function handleGetUsers() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     try {
+        // Vérifier si la colonne phone existe
+        $hasPhoneColumn = false;
+        try {
+            $checkStmt = $pdo->query("
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'phone'
+            ");
+            $result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+            $hasPhoneColumn = !empty($result);
+        } catch(PDOException $e) {
+            // Si la vérification échoue, on assume que la colonne n'existe pas
+            $hasPhoneColumn = false;
+            error_log('[handleGetUsers] Check phone column failed: ' . $e->getMessage());
+        }
+        
         // Compter le total
         $countStmt = $pdo->query("SELECT COUNT(*) FROM users");
         $total = $countStmt->fetchColumn();
         
-        // Requête avec pagination
-        $stmt = $pdo->prepare("
-            SELECT 
-                u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
-                u.is_active, u.last_login, u.created_at,
-                r.name AS role_name,
-                r.description AS role_description,
-                COALESCE(STRING_AGG(p.code, ','), '') AS permissions
-            FROM users u
-            JOIN roles r ON u.role_id = r.id
-            LEFT JOIN role_permissions rp ON r.id = rp.role_id
-            LEFT JOIN permissions p ON rp.permission_id = p.id
-            GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
-                     u.is_active, u.last_login, u.created_at, r.name, r.description
-            ORDER BY u.created_at DESC
-            LIMIT :limit OFFSET :offset
-        ");
+        // Construire la requête selon l'existence de la colonne phone
+        if ($hasPhoneColumn) {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
+                    u.is_active, u.last_login, u.created_at,
+                    r.name AS role_name,
+                    r.description AS role_description,
+                    COALESCE(STRING_AGG(p.code, ','), '') AS permissions
+                FROM users u
+                JOIN roles r ON u.role_id = r.id
+                LEFT JOIN role_permissions rp ON r.id = rp.role_id
+                LEFT JOIN permissions p ON rp.permission_id = p.id
+                GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
+                         u.is_active, u.last_login, u.created_at, r.name, r.description
+                ORDER BY u.created_at DESC
+                LIMIT :limit OFFSET :offset
+            ");
+        } else {
+            // Version sans colonne phone
+            $stmt = $pdo->prepare("
+                SELECT 
+                    u.id, u.email, u.first_name, u.last_name, NULL AS phone, u.password_hash,
+                    u.is_active, u.last_login, u.created_at,
+                    r.name AS role_name,
+                    r.description AS role_description,
+                    COALESCE(STRING_AGG(p.code, ','), '') AS permissions
+                FROM users u
+                JOIN roles r ON u.role_id = r.id
+                LEFT JOIN role_permissions rp ON r.id = rp.role_id
+                LEFT JOIN permissions p ON rp.permission_id = p.id
+                GROUP BY u.id, u.email, u.first_name, u.last_name, u.password_hash,
+                         u.is_active, u.last_login, u.created_at, r.name, r.description
+                ORDER BY u.created_at DESC
+                LIMIT :limit OFFSET :offset
+            ");
+        }
+        
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();

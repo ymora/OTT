@@ -91,7 +91,7 @@ $frontendEnv = @"
 # Configuration Frontend OTT - Developpement Local
 # Utilise l'API PHP locale (qui se connecte a Render)
 NEXT_PUBLIC_API_URL=http://localhost:8080
-NEXT_PUBLIC_REQUIRE_AUTH=false
+# NEXT_PUBLIC_REQUIRE_AUTH n'est plus utilisé - l'auth est toujours requise
 NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 "@
 

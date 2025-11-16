@@ -6,14 +6,17 @@ import Login from '@/components/Login'
 
 export default function HomePage() {
   const router = useRouter()
-  const requireAuth = process.env.NEXT_PUBLIC_REQUIRE_AUTH !== 'false'
+  // Authentification toujours requise
+  const requireAuth = true
 
   useEffect(() => {
     if (!requireAuth) {
+      // Next.js gère automatiquement le basePath
       router.push('/dashboard')
     }
   }, [router, requireAuth])
 
+  // Afficher le login pendant la redirection si auth requise
   if (requireAuth) {
     return <Login />
   }

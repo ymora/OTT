@@ -116,13 +116,13 @@ git push origin main
 | Variable | Description | Valeur recommandée |
 |----------|-------------|--------------------|
 | `NEXT_PUBLIC_API_URL` | URL publique de l’API PHP | `https://ott-jbln.onrender.com` |
-| `NEXT_PUBLIC_REQUIRE_AUTH` | Forcer la page de connexion | `true` en prod, `false` pour une démo readonly |
+| ~~`NEXT_PUBLIC_REQUIRE_AUTH`~~ | ~~Forcer la page de connexion~~ | **Déprécié** - L'authentification est maintenant toujours requise |
 | `NEXT_STATIC_EXPORT` | Activé automatiquement par `npm run export` | *(géré par le script)* |
 
 ```bash
 cat > .env.local <<'EOF'
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
-NEXT_PUBLIC_REQUIRE_AUTH=true
+# NEXT_PUBLIC_REQUIRE_AUTH n'est plus utilisé - l'auth est toujours requise
 NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 EOF
 ```

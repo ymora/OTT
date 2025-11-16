@@ -116,7 +116,7 @@ function Setup-EnvLocal {
 # Configuration Frontend OTT - Developpement Local
 # Utilise l'API Render par defaut (plus simple pour tester)
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
-NEXT_PUBLIC_REQUIRE_AUTH=false
+# NEXT_PUBLIC_REQUIRE_AUTH n'est plus utilisé - l'auth est toujours requise
 NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 "@ | Out-File -FilePath ".env.local" -Encoding UTF8
         Write-Success "  Fichier .env.local cree avec API Render"
@@ -156,7 +156,7 @@ function Test-Build {
     
     # Variables d'environnement pour le build
     $env:NEXT_PUBLIC_API_URL = "https://ott-jbln.onrender.com"
-    $env:NEXT_PUBLIC_REQUIRE_AUTH = "true"
+    # NEXT_PUBLIC_REQUIRE_AUTH n'est plus utilisé - l'auth est toujours requise
     $env:NEXT_PUBLIC_ENABLE_DEMO_RESET = "false"
     $env:NEXT_STATIC_EXPORT = "true"
     $env:NEXT_PUBLIC_BASE_PATH = "/OTT"
