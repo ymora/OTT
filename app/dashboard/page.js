@@ -151,14 +151,14 @@ export default function DashboardPage() {
           <>
             <StatsCard
               title="Mesures 24h"
-              value={report.overview.measurements_24h || 0}
+              value={Number(report.overview.measurements_24h) || 0}
               icon="📈"
               color="blue"
               delay={0.4}
             />
             <StatsCard
               title="Débit Moyen"
-              value={`${report.overview.avg_flowrate_24h || 0} L/min`}
+              value={`${Number(report.overview.avg_flowrate_24h) || 0} L/min`}
               icon="💧"
               color="green"
               delay={0.5}
@@ -198,12 +198,15 @@ export default function DashboardPage() {
               <div className="border-l-4 border-orange-500 pl-4">
                 <h3 className="font-semibold text-orange-700 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
                 <div className="space-y-2">
-                  {lowBatteryList.map(device => (
-                    <div key={device.id} className="text-sm">
-                      <p className="font-medium">{device.device_name || device.sim_iccid}</p>
-                      <p className="text-xs text-gray-500">{device.last_battery?.toFixed(0)}% restant</p>
-                    </div>
-                  ))}
+                  {lowBatteryList.map(device => {
+                    const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
+                    return (
+                      <div key={device.id} className="text-sm">
+                        <p className="font-medium">{device.device_name || device.sim_iccid}</p>
+                        <p className="text-xs text-gray-500">{battery.toFixed(0)}% restant</p>
+                      </div>
+                    )
+                  })}
                 </div>
                 <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
                   Voir tous →
@@ -353,19 +356,23 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {report.top_devices.map(device => (
-                  <tr key={device.id} className="border-b hover:bg-gray-50">
-                    <td className="py-2">
-                      <p className="font-medium">{device.device_name || device.sim_iccid}</p>
-                      <p className="text-xs text-gray-500">{device.status}</p>
-                    </td>
-                    <td className="py-2">{device.avg_flowrate ?? '—'} L/min</td>
-                    <td className="py-2">{device.avg_battery ?? '—'}%</td>
-                    <td className="py-2 text-sm text-gray-600">
-                      {device.last_measurement ? new Date(device.last_measurement).toLocaleString('fr-FR') : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {report.top_devices.map(device => {
+                  const flowrate = typeof device.avg_flowrate === 'number' ? device.avg_flowrate : parseFloat(device.avg_flowrate)
+                  const battery = typeof device.avg_battery === 'number' ? device.avg_battery : parseFloat(device.avg_battery)
+                  return (
+                    <tr key={device.id} className="border-b hover:bg-gray-50">
+                      <td className="py-2">
+                        <p className="font-medium">{device.device_name || device.sim_iccid}</p>
+                        <p className="text-xs text-gray-500">{device.status}</p>
+                      </td>
+                      <td className="py-2">{!isNaN(flowrate) ? `${flowrate.toFixed(2)} L/min` : '—'}</td>
+                      <td className="py-2">{!isNaN(battery) ? `${battery.toFixed(1)}%` : '—'}</td>
+                      <td className="py-2 text-sm text-gray-600">
+                        {device.last_measurement ? new Date(device.last_measurement).toLocaleString('fr-FR') : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
