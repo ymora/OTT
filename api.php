@@ -647,31 +647,40 @@ function handleGetDevices() {
     $user = getCurrentUser();
     
     try {
+        // Requête simplifiée et robuste
         $stmt = $pdo->query("
-            SELECT d.*, p.first_name, p.last_name, dc.firmware_version, dc.ota_pending,
-                   CASE 
-                     WHEN d.installation_date IS NULL THEN NULL
-                     ELSE EXTRACT(DAY FROM NOW() - d.installation_date)
-                   END as days_with_current_patient,
-                   CASE 
-                     WHEN d.first_use_date IS NULL THEN NULL
-                     ELSE EXTRACT(DAY FROM NOW() - d.first_use_date)
-                   END as total_days_in_use,
-                   (
-                     SELECT SUM(
-                       EXTRACT(EPOCH FROM (m.timestamp - LAG(m.timestamp) OVER (ORDER BY m.timestamp))) / 60.0
-                     )
-                     FROM measurements m
-                     WHERE m.device_id = d.id AND m.flowrate > 0.5
-                   ) as total_usage_hours
+            SELECT 
+                d.id,
+                d.sim_iccid,
+                d.device_serial,
+                d.device_name,
+                d.firmware_version,
+                d.status,
+                d.patient_id,
+                d.installation_date,
+                d.first_use_date,
+                d.last_seen,
+                d.last_battery,
+                d.latitude,
+                d.longitude,
+                d.created_at,
+                d.updated_at,
+                p.first_name, 
+                p.last_name, 
+                COALESCE(dc.firmware_version, d.firmware_version) as firmware_version,
+                COALESCE(dc.ota_pending, FALSE) as ota_pending
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
+            ORDER BY d.last_seen DESC NULLS LAST, d.created_at DESC
         ");
-        echo json_encode(['success' => true, 'devices' => $stmt->fetchAll()]);
+        $devices = $stmt->fetchAll();
+        echo json_encode(['success' => true, 'devices' => $devices]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleGetDevices] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
