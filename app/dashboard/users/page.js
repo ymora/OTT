@@ -630,7 +630,7 @@ export default function UsersPage() {
 
                     {/* Types d'alertes */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Types d'alertes</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Types d&apos;alertes</label>
                       <div className="grid grid-cols-2 gap-2">
                         <label className="flex items-center gap-2 text-sm">
                           <input

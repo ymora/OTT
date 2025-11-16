@@ -4,6 +4,7 @@
  * Version complète avec JWT, multi-users, OTA, notifications, audit
  */
 
+require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
 
 // Headers CORS (DOIT être en tout premier)

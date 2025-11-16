@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import StatsCard from '@/components/StatsCard'
-import DeviceCard from '@/components/DeviceCard'
 import AlertCard from '@/components/AlertCard'
 import Chart from '@/components/Chart'
 import { fetchJson } from '@/lib/api'

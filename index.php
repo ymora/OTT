@@ -4,6 +4,7 @@
  * HAPPLYZ MEDICAL SAS
  */
 
+require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
 
 header('Content-Type: application/json; charset=utf-8');
