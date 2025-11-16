@@ -76,7 +76,7 @@ const menuStructure = [
     name: 'Diagnostics',
     icon: '🔍',
     path: '/diagnostics',
-    permission: null,
+    permission: 'settings.edit',
     description: 'Statut API et base de données'
   },
   {
