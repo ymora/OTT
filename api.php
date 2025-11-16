@@ -611,16 +611,19 @@ function handleGetRoles() {
     
     try {
         $stmt = $pdo->query("
-            SELECT r.*, GROUP_CONCAT(p.code) as permissions
+            SELECT r.*, COALESCE(STRING_AGG(p.code, ','), '') as permissions
             FROM roles r
             LEFT JOIN role_permissions rp ON r.id = rp.role_id
             LEFT JOIN permissions p ON rp.permission_id = p.id
             GROUP BY r.id
+            ORDER BY r.id
         ");
         echo json_encode(['success' => true, 'roles' => $stmt->fetchAll()]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleGetRoles] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 

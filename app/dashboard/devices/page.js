@@ -3,15 +3,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Chart from '@/components/Chart'
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
 
+// Import dynamique des pages pour les onglets
+const AlertsPage = dynamic(() => import('../alerts/page'), { ssr: false })
+const CommandsPage = dynamic(() => import('../commands/page'), { ssr: false })
+const LogsPage = dynamic(() => import('../logs/page'), { ssr: false })
+const OTAPage = dynamic(() => import('../ota/page'), { ssr: false })
+
 export default function DevicesPage() {
   const { fetchWithAuth, API_URL, user } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const activeTab = searchParams.get('tab') || 'list'
+  
   const [devices, setDevices] = useState([])
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(true)
@@ -189,6 +198,26 @@ export default function DevicesPage() {
 
   const isAdmin = user?.role_name === 'admin'
 
+  const tabs = [
+    { id: 'list', label: '📋 Liste', icon: '📋' },
+    { id: 'ota', label: '🔄 OTA', icon: '🔄', permission: 'devices.edit' },
+    { id: 'commands', label: '📡 Commandes', icon: '📡', permission: 'devices.commands' },
+    { id: 'logs', label: '📝 Logs', icon: '📝', permission: 'devices.view' },
+    { id: 'alerts', label: '🔔 Alertes', icon: '🔔', permission: 'alerts.view' },
+  ]
+
+  const hasPermission = (permission) => {
+    if (!permission) return true
+    if (isAdmin) return true
+    return user?.permissions?.includes(permission)
+  }
+
+  const visibleTabs = tabs.filter(tab => hasPermission(tab.permission))
+
+  const setTab = (tabId) => {
+    router.push(`/dashboard/devices${tabId !== 'list' ? `?tab=${tabId}` : ''}`)
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -199,19 +228,41 @@ export default function DevicesPage() {
         </div>
       </div>
 
+      {/* Onglets */}
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-2 overflow-x-auto">
+          {visibleTabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setTab(tab.id)}
+              className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-all ${
+                activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
       {error && (
         <div className="alert alert-warning">
           <strong>Erreur API :</strong> {error}
         </div>
       )}
 
-      {/* Carte */}
-      {!loading && devices.length > 0 && (
+      {/* Contenu selon l'onglet actif */}
+      {activeTab === 'list' && (
+        <>
+          {/* Carte */}
+          {!loading && devices.length > 0 && (
         <div className="card p-0 overflow-hidden">
           <div className="p-4 border-b">
             <h2 className="text-lg font-semibold">🗺️ Carte des dispositifs</h2>
           </div>
-          <div style={{ height: '400px', width: '100%' }}>
+          <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
             <LeafletMap
               devices={devices}
               onSelect={(device) => {
@@ -372,10 +423,17 @@ export default function DevicesPage() {
           </table>
         </div>
       )}
+        </>
+      )}
 
-      {/* Modal Détails & Journal */}
+      {activeTab === 'ota' && <OTAPage />}
+      {activeTab === 'commands' && <CommandsPage />}
+      {activeTab === 'logs' && <LogsPage />}
+      {activeTab === 'alerts' && <AlertsPage />}
+
+      {/* Modal Détails & Journal - accessible depuis tous les onglets */}
       {showDetailsModal && selectedDevice && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
               <div>
@@ -493,7 +551,7 @@ export default function DevicesPage() {
 
       {/* Modal Assignation */}
       {assignModalOpen && selectedDevice && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 space-y-4 animate-scale-in">
             <div className="flex items-center justify-between">
               <div>

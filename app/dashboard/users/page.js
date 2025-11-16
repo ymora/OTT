@@ -19,6 +19,9 @@ export default function UsersPage() {
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [formData, setFormData] = useState(defaultFormState)
   const [formError, setFormError] = useState(null)
@@ -47,6 +50,8 @@ export default function UsersPage() {
   const [editError, setEditError] = useState(null)
   const [editSaving, setEditSaving] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [selectedUser, setSelectedUser] = useState(null)
 
   const loadUsers = useCallback(async () => {
     try {
@@ -74,6 +79,24 @@ export default function UsersPage() {
     loadUsers()
     loadRoles()
   }, [loadUsers, loadRoles])
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => {
+      const matchesSearch = searchTerm.toLowerCase().split(' ').every(term =>
+        (user.first_name?.toLowerCase().includes(term)) ||
+        (user.last_name?.toLowerCase().includes(term)) ||
+        (user.email?.toLowerCase().includes(term)) ||
+        (user.phone?.toLowerCase().includes(term))
+      )
+
+      const matchesRole = roleFilter === 'all' || user.role_name === roleFilter
+      const matchesStatus = statusFilter === 'all' ||
+        (statusFilter === 'active' && user.is_active) ||
+        (statusFilter === 'inactive' && !user.is_active)
+
+      return matchesSearch && matchesRole && matchesStatus
+    })
+  }, [users, searchTerm, roleFilter, statusFilter])
 
   const roleColors = {
     admin: 'bg-purple-100 text-purple-700',
@@ -295,6 +318,58 @@ export default function UsersPage() {
         </button>
       </div>
 
+      {/* Filtres */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex gap-2">
+          {[
+            { id: 'all', label: 'Tous les rôles' },
+            ...roles.map(r => ({ id: r.name, label: r.name }))
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setRoleFilter(tab.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                roleFilter === tab.id
+                  ? 'bg-primary-600 text-white shadow-md'
+                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        
+        <div className="flex gap-2">
+          {[
+            { id: 'all', label: 'Tous' },
+            { id: 'active', label: 'Actifs' },
+            { id: 'inactive', label: 'Inactifs' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                statusFilter === tab.id
+                  ? 'bg-primary-600 text-white shadow-md'
+                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        
+        <div className="flex-1 max-w-md">
+          <input
+            type="text"
+            placeholder="🔍 Rechercher par nom, email, téléphone..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="input w-full"
+          />
+        </div>
+      </div>
+
       <div className="card">
         {error && (
           <div className="alert alert-warning mb-4">
@@ -318,7 +393,14 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user, i) => (
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-8 text-center text-gray-500">
+                      Aucun utilisateur trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((user, i) => (
                   <tr 
                     key={user.id} 
                     className="border-b border-gray-100 hover:bg-gray-50 transition-colors animate-slide-up"
@@ -353,6 +435,16 @@ export default function UsersPage() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          onClick={() => {
+                            setSelectedUser(user)
+                            setShowDetailsModal(true)
+                          }}
+                          title="Voir les détails"
+                        >
+                          <span className="text-lg">👁️</span>
+                        </button>
+                        <button
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                           onClick={() => openEditModal(user)}
                           title="Modifier l'utilisateur"
                         >
@@ -369,7 +461,7 @@ export default function UsersPage() {
       </div>
 
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4 animate-scale-in">
             <div className="flex items-center justify-between">
               <div>
@@ -477,7 +569,7 @@ export default function UsersPage() {
       )}
 
       {showEditModal && editingUser && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8">
             <div className="flex items-center justify-between">
               <div>
@@ -693,6 +785,130 @@ export default function UsersPage() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Détails Utilisateur */}
+      {showDetailsModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold">
+                  👤 {selectedUser.first_name} {selectedUser.last_name}
+                </h2>
+                <p className="text-sm text-gray-500">{selectedUser.email}</p>
+              </div>
+              <button
+                className="text-gray-500 hover:text-gray-900 text-2xl"
+                onClick={() => {
+                  setShowDetailsModal(false)
+                  setSelectedUser(null)
+                }}
+              >
+                ✖
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Informations principales */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="card">
+                  <p className="text-sm text-gray-500">Rôle</p>
+                  <p className="font-semibold text-lg">
+                    <span className={`badge ${roleColors[selectedUser.role_name] || 'bg-gray-100 text-gray-700'}`}>
+                      {selectedUser.role_name}
+                    </span>
+                  </p>
+                </div>
+                <div className="card">
+                  <p className="text-sm text-gray-500">Statut</p>
+                  <p className="font-semibold text-lg">
+                    {selectedUser.is_active ? (
+                      <span className="badge badge-success">✅ Actif</span>
+                    ) : (
+                      <span className="badge text-gray-600 bg-gray-100">❌ Inactif</span>
+                    )}
+                  </p>
+                </div>
+                <div className="card">
+                  <p className="text-sm text-gray-500">Téléphone</p>
+                  <p className="font-semibold text-lg">
+                    {selectedUser.phone || <span className="text-gray-400">Non renseigné</span>}
+                  </p>
+                </div>
+                <div className="card">
+                  <p className="text-sm text-gray-500">Dernière connexion</p>
+                  <p className="font-semibold text-lg">
+                    {selectedUser.last_login ? (
+                      new Date(selectedUser.last_login).toLocaleString('fr-FR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    ) : (
+                      <span className="text-gray-400">Jamais</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Date de création */}
+              {selectedUser.created_at && (
+                <div className="card">
+                  <p className="text-sm text-gray-500">Compte créé le</p>
+                  <p className="font-semibold">
+                    {new Date(selectedUser.created_at).toLocaleDateString('fr-FR', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </p>
+                </div>
+              )}
+
+              {/* Permissions */}
+              {selectedUser.permissions && (
+                <div className="card">
+                  <h3 className="text-lg font-semibold mb-3">🔐 Permissions</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedUser.permissions.split(',').filter(p => p.trim()).map((perm, idx) => (
+                      <span key={idx} className="badge badge-info">
+                        {perm.trim()}
+                      </span>
+                    ))}
+                    {(!selectedUser.permissions || selectedUser.permissions.split(',').filter(p => p.trim()).length === 0) && (
+                      <span className="text-sm text-gray-400">Aucune permission spécifique</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t">
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowDetailsModal(false)
+                    setSelectedUser(null)
+                  }}
+                >
+                  Fermer
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    setShowDetailsModal(false)
+                    openEditModal(selectedUser)
+                  }}
+                >
+                  ✏️ Modifier
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
