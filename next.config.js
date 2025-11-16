@@ -9,9 +9,11 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
-  // Ne pas utiliser basePath en développement pour éviter les problèmes de routage
-  basePath: basePath || undefined,
-  assetPrefix: basePath || undefined,
+  // Configuration basePath et assetPrefix pour GitHub Pages
+  // En mode export statique, utiliser /OTT pour que les assets soient correctement chargés
+  basePath: isStaticExport ? '/OTT' : undefined,
+  assetPrefix: isStaticExport ? '/OTT' : undefined,
+  trailingSlash: isStaticExport ? true : false,
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath || ''
   },
