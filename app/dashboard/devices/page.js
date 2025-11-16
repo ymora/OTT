@@ -174,9 +174,12 @@ export default function DevicesPage() {
 
   const getBatteryBadge = (battery) => {
     if (battery === null || battery === undefined) return { label: 'N/A', color: 'text-gray-500' }
-    if (battery < 20) return { label: `${battery.toFixed(0)}%`, color: 'text-red-600 font-semibold' }
-    if (battery < 50) return { label: `${battery.toFixed(0)}%`, color: 'text-amber-600' }
-    return { label: `${battery.toFixed(0)}%`, color: 'text-green-600' }
+    // Convertir en nombre pour s'assurer que c'est un nombre valide
+    const batteryNum = typeof battery === 'number' ? battery : parseFloat(battery)
+    if (isNaN(batteryNum)) return { label: 'N/A', color: 'text-gray-500' }
+    if (batteryNum < 20) return { label: `${batteryNum.toFixed(0)}%`, color: 'text-red-600 font-semibold' }
+    if (batteryNum < 50) return { label: `${batteryNum.toFixed(0)}%`, color: 'text-amber-600' }
+    return { label: `${batteryNum.toFixed(0)}%`, color: 'text-green-600' }
   }
 
   const isAdmin = user?.role_name === 'admin'
