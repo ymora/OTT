@@ -913,7 +913,9 @@ function formatCommandForDashboard($row) {
         'result_message' => $row['result_message'],
         'result_payload' => safeJsonDecode($row['result_payload']),
         'device_name' => $row['device_name'] ?? null,
-        'sim_iccid' => $row['sim_iccid'] ?? null
+        'sim_iccid' => $row['sim_iccid'] ?? null,
+        'patient_first_name' => $row['patient_first_name'] ?? null,
+        'patient_last_name' => $row['patient_last_name'] ?? null
     ];
 }
 
@@ -1066,9 +1068,12 @@ function handleGetDeviceCommands($iccid) {
     
     try {
         $sql = "
-            SELECT dc.*, d.sim_iccid, d.device_name
+            SELECT dc.*, d.sim_iccid, d.device_name,
+                   p.first_name AS patient_first_name,
+                   p.last_name AS patient_last_name
             FROM device_commands dc
             JOIN devices d ON dc.device_id = d.id
+            LEFT JOIN patients p ON d.patient_id = p.id
             WHERE dc.device_id = :device_id
         ";
         $params = ['device_id' => $device['id']];
@@ -1105,9 +1110,12 @@ function handleListAllCommands() {
     try {
         expireDeviceCommands();
         $sql = "
-            SELECT dc.*, d.sim_iccid, d.device_name
+            SELECT dc.*, d.sim_iccid, d.device_name,
+                   p.first_name AS patient_first_name,
+                   p.last_name AS patient_last_name
             FROM device_commands dc
             JOIN devices d ON dc.device_id = d.id
+            LEFT JOIN patients p ON d.patient_id = p.id
             WHERE 1=1
         ";
         $params = [];
@@ -1416,7 +1424,9 @@ function handleGetPatients() {
         $stmt = $pdo->query("
             SELECT p.*, 
                    (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
-                   (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d
+                   (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d,
+                   (SELECT device_name FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_name,
+                   (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid
             FROM patients p
             ORDER BY p.last_name, p.first_name
         ");
@@ -1556,12 +1566,26 @@ function handleGetReportsOverview() {
             GROUP BY severity
         ");
 
+        $assignmentStmt = $pdo->query("
+            SELECT p.id AS patient_id,
+                   p.first_name,
+                   p.last_name,
+                   d.device_name,
+                   d.sim_iccid,
+                   d.status,
+                   d.last_seen
+            FROM patients p
+            LEFT JOIN devices d ON d.patient_id = p.id
+            ORDER BY p.last_name, p.first_name
+        ");
+
         echo json_encode([
             'success' => true,
             'overview' => $stats,
             'trend' => $trendStmt->fetchAll(),
             'top_devices' => $topDevicesStmt->fetchAll(),
-            'severity_breakdown' => $severityStmt->fetchAll()
+            'severity_breakdown' => $severityStmt->fetchAll(),
+            'assignments' => $assignmentStmt->fetchAll()
         ]);
     } catch(PDOException $e) {
         http_response_code(500);

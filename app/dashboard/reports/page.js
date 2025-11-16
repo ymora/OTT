@@ -35,6 +35,7 @@ export default function ReportsPage() {
 
   const overview = report?.overview || {}
   const severity = report?.severity_breakdown || []
+  const assignments = report?.assignments || []
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -113,6 +114,43 @@ export default function ReportsPage() {
                       <td className="py-2">{device.avg_battery ?? '—'}%</td>
                       <td className="py-2 text-sm text-gray-600">
                         {device.last_measurement ? new Date(device.last_measurement).toLocaleString('fr-FR') : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2 className="text-xl font-semibold mb-3">Patients & dispositifs associés</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left border-b">
+                    <th className="py-2">Patient</th>
+                    <th className="py-2">Dispositif</th>
+                    <th className="py-2">Statut</th>
+                    <th className="py-2">Dernier contact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignments.map((row) => (
+                    <tr key={row.patient_id} className="border-b">
+                      <td className="py-2">{row.first_name} {row.last_name}</td>
+                      <td className="py-2">
+                        {row.device_name ? (
+                          <>
+                            <p className="font-medium">{row.device_name}</p>
+                            <p className="text-xs text-gray-500">{row.sim_iccid}</p>
+                          </>
+                        ) : (
+                          <span className="text-amber-600 text-sm">Aucun boîtier</span>
+                        )}
+                      </td>
+                      <td className="py-2">{row.status || '—'}</td>
+                      <td className="py-2 text-sm text-gray-600">
+                        {row.last_seen ? new Date(row.last_seen).toLocaleString('fr-FR') : '—'}
                       </td>
                     </tr>
                   ))}

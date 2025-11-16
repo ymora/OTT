@@ -93,6 +93,20 @@ git push origin main
 - **Auth** : Next → `/api.php/auth/login` (JWT). Token stocké dans LocalStorage, injecté par `fetchWithAuth`. L’API vérifie JWT + permissions (rôles admin/tech/etc.).
 - **Docs / Firmware** : `public/DOCUMENTATION_COMPLETE_OTT.html` décrit la procédure complète, `hardware/firmware/...` contient les sources mais n’est pas versionné.
 
+### 📟 Dépannage – “mon dispositif n’apparaît pas”
+1. **Vérifier l’ICCID côté firmware**
+   - Après `SIM READY`, journaliser `modem.getSimCCID()` et confirmer qu’il correspond à l’ICCID attendu.
+2. **S’assurer que le POST mesure cible bien l’API**
+   - `httpPost(PATH_MEASURE, body)` doit pointer sur `https://ott-jbln.onrender.com/api.php/devices/measurements`.
+   - Le body JSON doit contenir `device_sim_iccid`, `payload.flowrate`, `payload.battery`.
+3. **Observer la réponse API**
+   - En succès, l’API renvoie `{ success: true, device_id: <id> }`. Sinon, noter le message `[API]` côté série.
+4. **Confirmer côté dashboard**
+   - Une fois la mesure enregistrée, le boîtier apparaît dans `/api.php/devices`. Utiliser la recherche ICCID sur la page “Dispositifs” pour le localiser, puis l’associer à un patient.
+5. **Toujours absent ?**
+   - Relancer `scripts/db_migrate.sh --seed` si vous êtes sur un environnement de démo.
+   - Vérifier que `ENABLE_DEMO_RESET` n’a pas été déclenché récemment (les boîtiers “réels” doivent être ré-injectés après un reset).
+
 ---
 
 ## 🛠️ Préparation Environnement

@@ -137,6 +137,11 @@ export default function LogsPage() {
                         <span className="text-sm text-gray-500">{formatDateTime(log.timestamp || log.created_at)}</span>
                       </div>
                       <p className="text-gray-800">{log.message}</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {log.first_name || log.last_name
+                          ? `Patient : ${log.first_name || ''} ${log.last_name || ''}`
+                          : 'Patient non assigné'}
+                      </p>
                     </div>
                   </div>
                 )

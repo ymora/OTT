@@ -54,6 +54,12 @@ export default function DashboardPage() {
       : 0
   }
 
+  const assignedDevices = devices.filter(d => d.first_name || d.last_name)
+  const unassignedDevices = devices.filter(d => !d.first_name && !d.last_name)
+  const recentAssignments = assignedDevices
+    .sort((a, b) => new Date(b.updated_at || b.installation_date || 0) - new Date(a.updated_at || a.installation_date || 0))
+    .slice(0, 5)
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -120,6 +126,51 @@ export default function DashboardPage() {
         <div className="card animate-slide-up" style={{animationDelay: '0.5s'}}>
           <h2 className="text-lg font-semibold mb-4">🔋 Niveaux Batterie</h2>
           <Chart data={devices} type="battery" />
+        </div>
+      </div>
+
+      {/* Rattachements */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card animate-slide-up" style={{animationDelay: '0.55s'}}>
+          <h2 className="text-lg font-semibold mb-4">👥 Rattachements récents</h2>
+          {recentAssignments.length === 0 ? (
+            <p className="text-gray-500 text-sm">Aucun rattachement trouvé.</p>
+          ) : (
+            <ul className="space-y-3">
+              {recentAssignments.map(device => (
+                <li key={device.id} className="flex items-center justify-between text-sm">
+                  <div>
+                    <p className="font-semibold">{device.first_name} {device.last_name}</p>
+                    <p className="text-gray-500">{device.device_name || device.sim_iccid}</p>
+                  </div>
+                  <button className="btn-secondary text-xs" onClick={() => router.push(`/dashboard/devices?focus=${device.id}`)}>
+                    Voir dispositif
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="card animate-slide-up" style={{animationDelay: '0.6s'}}>
+          <h2 className="text-lg font-semibold mb-4">📦 Boîtiers non assignés</h2>
+          {unassignedDevices.length === 0 ? (
+            <p className="text-green-600 text-sm">Tous les boîtiers sont affectés ✅</p>
+          ) : (
+            <ul className="space-y-3">
+              {unassignedDevices.slice(0, 5).map(device => (
+                <li key={device.id} className="flex items-center justify-between text-sm">
+                  <div>
+                    <p className="font-semibold">{device.device_name || device.sim_iccid}</p>
+                    <p className="text-gray-500">Dernier contact : {device.last_seen ? new Date(device.last_seen).toLocaleString('fr-FR') : 'Jamais'}</p>
+                  </div>
+                  <button className="btn-primary text-xs" onClick={() => router.push('/dashboard/devices')}>
+                    Assigner
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 

@@ -260,6 +260,7 @@ export default function CommandsPage() {
                 <tr className="text-left text-gray-500 border-b">
                   <th className="py-2">Commande</th>
                   <th className="py-2">Dispositif</th>
+                  <th className="py-2">Patient</th>
                   <th className="py-2">Priorité</th>
                   <th className="py-2">Statut</th>
                   <th className="py-2">Créée</th>
@@ -272,6 +273,15 @@ export default function CommandsPage() {
                     <td className="py-2 text-gray-600">
                       <div>{cmd.device_name || '—'}</div>
                       <div className="text-xs text-gray-500">{cmd.sim_iccid}</div>
+                    </td>
+                    <td className="py-2 text-gray-600">
+                      {cmd.patient_first_name || cmd.patient_last_name ? (
+                        <div>
+                          {cmd.patient_first_name} {cmd.patient_last_name}
+                        </div>
+                      ) : (
+                        <span className="text-amber-600 text-sm">Non attribué</span>
+                      )}
                     </td>
                     <td className="py-2 capitalize">{cmd.priority}</td>
                     <td className="py-2">
@@ -312,7 +322,7 @@ export default function CommandsPage() {
               >
                 {devices.map((device) => (
                   <option key={device.sim_iccid} value={device.sim_iccid}>
-                    {device.device_name || device.sim_iccid}
+                    {(device.device_name || device.sim_iccid) + (device.first_name ? ` · ${device.first_name} ${device.last_name || ''}` : ' · Non assigné')}
                   </option>
                 ))}
               </select>

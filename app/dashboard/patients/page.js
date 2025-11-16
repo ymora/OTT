@@ -95,7 +95,7 @@ export default function PatientsPage() {
                   <th className="text-left py-3 px-4">Nom</th>
                   <th className="text-left py-3 px-4">Date Naissance</th>
                   <th className="text-left py-3 px-4">Téléphone</th>
-                  <th className="text-left py-3 px-4">Dispositifs</th>
+                  <th className="text-left py-3 px-4">Dispositif</th>
                   <th className="text-left py-3 px-4">Actions</th>
                 </tr>
               </thead>
@@ -106,7 +106,15 @@ export default function PatientsPage() {
                     <td className="py-3 px-4">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
                     <td className="py-3 px-4">{p.phone || '-'}</td>
                     <td className="py-3 px-4">
-                      <span className="badge badge-success">{p.device_count || 0}</span>
+                      {p.device_name ? (
+                        <div className="space-y-1">
+                          <p className="font-medium">{p.device_name}</p>
+                          <p className="text-xs text-gray-500">ICCID : {p.sim_iccid}</p>
+                          <span className="badge badge-success">1 boîtier</span>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-amber-600">Aucun dispositif attribué</div>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <button className="btn-secondary text-sm">👁️ Détails</button>
