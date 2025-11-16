@@ -44,7 +44,11 @@ export default function DashboardPage() {
   const stats = {
     totalDevices: devices.length,
     activeDevices: devices.filter(d => {
+      // Gérer les valeurs null, undefined ou invalides
+      if (!d.last_seen) return false
       const lastSeen = new Date(d.last_seen)
+      // Vérifier que la date est valide
+      if (isNaN(lastSeen.getTime())) return false
       const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
       return hoursSince < 2
     }).length,
@@ -58,7 +62,26 @@ export default function DashboardPage() {
   const assignedDevices = devices.filter(d => d.first_name || d.last_name)
   const unassignedDevices = devices.filter(d => !d.first_name && !d.last_name)
   const recentAssignments = assignedDevices
-    .sort((a, b) => new Date(b.updated_at || b.installation_date || 0) - new Date(a.updated_at || a.installation_date || 0))
+    .sort((a, b) => {
+      // Fonction helper pour obtenir un timestamp valide ou null
+      const getTimestamp = (device) => {
+        const dateStr = device.updated_at || device.installation_date
+        if (!dateStr) return null
+        const date = new Date(dateStr)
+        return isNaN(date.getTime()) ? null : date.getTime()
+      }
+      
+      const timestampA = getTimestamp(a)
+      const timestampB = getTimestamp(b)
+      
+      // Les dispositifs sans date vont à la fin (timestamp null = très petit)
+      if (timestampA === null && timestampB === null) return 0
+      if (timestampA === null) return 1  // A va après B
+      if (timestampB === null) return -1 // B va après A
+      
+      // Tri décroissant : les plus récents en premier
+      return timestampB - timestampA
+    })
     .slice(0, 5)
 
   if (loading) {
