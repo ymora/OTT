@@ -586,24 +586,6 @@ export default function DevicesPage() {
         </div>
       </div>
 
-      {/* Onglets */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="flex gap-2 overflow-x-auto">
-          {visibleTabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setTab(tab.id)}
-              className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-all ${
-                activeTab === tab.id
-                  ? 'border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
 
       {error && (
         <div className="alert alert-warning">
