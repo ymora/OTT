@@ -1,10 +1,42 @@
-'use client'
-
-import { createContext, useContext, useState, useEffect } from 'react'
-
-const AuthContext = createContext()
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
+ 'use client'
+ 
+ import { createContext, useContext, useState, useEffect } from 'react'
+ 
+ const AuthContext = createContext()
+ 
+ const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com').replace(/\/$/, '')
+ const API_PROXY_PREFIX = process.env.NEXT_PUBLIC_API_PROXY_PREFIX || '/api/proxy'
+ 
+ const isAbsoluteUrl = url => /^https?:\/\//i.test(url)
+ 
+ const buildAbsoluteApiUrl = (input = '') => {
+   if (!input) return API_URL
+   if (isAbsoluteUrl(input)) return input
+   if (input.startsWith('/')) return `${API_URL}${input}`
+   return `${API_URL}/${input}`
+ }
+ 
+ const buildClientApiUrl = input => {
+   const absoluteUrl = buildAbsoluteApiUrl(input)
+   if (typeof window === 'undefined') {
+     return absoluteUrl
+   }
+ 
+   try {
+     const targetUrl = new URL(absoluteUrl)
+     const currentOrigin = window.location.origin
+     const targetOrigin = `${targetUrl.protocol}//${targetUrl.host}`
+ 
+     if (targetOrigin === currentOrigin) {
+       return absoluteUrl.replace(currentOrigin, '')
+     }
+ 
+     return `${API_PROXY_PREFIX}${targetUrl.pathname}${targetUrl.search}`
+   } catch (error) {
+     console.error('Erreur construction URL API:', error)
+     return absoluteUrl
+   }
+ }
 // Authentification toujours requise
 const REQUIRE_AUTH = true
 
@@ -27,7 +59,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = async (email, password) => {
-    const response = await fetch(`${API_URL}/api.php/auth/login`, {
+    const response = await fetch(buildClientApiUrl('/api.php/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -71,8 +103,9 @@ export function AuthProvider({ children }) {
     }
 
     finalOptions.headers = headers
+    const targetUrl = buildClientApiUrl(url)
 
-    const response = await fetch(url, finalOptions)
+    const response = await fetch(targetUrl, finalOptions)
 
     if (response.status === 401 && token) {
       logout()

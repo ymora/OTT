@@ -38,8 +38,6 @@ const commandStatusColors = {
 export default function DevicesPage() {
   const { fetchWithAuth, API_URL, user } = useAuth()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const activeTab = searchParams.get('tab') || 'list'
   
   const [devices, setDevices] = useState([])
   const [patients, setPatients] = useState([])
@@ -560,22 +558,6 @@ export default function DevicesPage() {
 
   const isAdmin = user?.role_name === 'admin'
 
-  const tabs = [
-    { id: 'list', label: '📋 Liste', icon: '📋' },
-  ]
-
-  const hasPermission = (permission) => {
-    if (!permission) return true
-    if (isAdmin) return true
-    return user?.permissions?.includes(permission)
-  }
-
-  const visibleTabs = tabs.filter(tab => hasPermission(tab.permission))
-
-  const setTab = (tabId) => {
-    router.push(`/dashboard/devices${tabId !== 'list' ? `?tab=${tabId}` : ''}`)
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -593,11 +575,8 @@ export default function DevicesPage() {
         </div>
       )}
 
-      {/* Contenu selon l'onglet actif */}
-      {activeTab === 'list' && (
-        <>
-          {/* Carte */}
-          {!loading && devices.length > 0 && (
+      {/* Carte */}
+      {!loading && devices.length > 0 && (
         <div className="card p-0 overflow-hidden">
           <div className="p-4 border-b">
             <h2 className="text-lg font-semibold">🗺️ Carte des dispositifs</h2>
@@ -640,16 +619,16 @@ export default function DevicesPage() {
               }`}
             >
               {tab.label}
-        </button>
+            </button>
           ))}
-      </div>
+        </div>
 
         <div className="flex-1 max-w-md">
-        <input
-          type="text"
-          placeholder="🔍 Rechercher par nom, patient, ou ICCID..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          <input
+            type="text"
+            placeholder="🔍 Rechercher par nom, patient, ou ICCID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="input w-full"
           />
         </div>
@@ -789,8 +768,6 @@ export default function DevicesPage() {
             </tbody>
           </table>
         </div>
-      )}
-        </>
       )}
 
 
@@ -1128,7 +1105,7 @@ export default function DevicesPage() {
                               <div className="bg-orange-100 dark:bg-orange-900/30 border-l-4 border-orange-500 dark:border-orange-400 p-3 rounded">
                                 <p className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">⚠️ Mise à jour OTA</p>
                                 <p className="text-xs text-orange-700 dark:text-orange-300">
-                                  Laisser l'URL vide pour utiliser la configuration stockée dans le dispositif.
+                                  Laisser l&apos;URL vide pour utiliser la configuration stockée dans le dispositif.
                                 </p>
                               </div>
                               <div>
@@ -1214,8 +1191,8 @@ export default function DevicesPage() {
                         {deviceCommands.length === 0 ? (
                           <div className="text-center py-12 text-muted">
                             <p className="text-sm">Aucune commande enregistrée pour ce dispositif</p>
-                          </div>
-                        ) : (
+        </div>
+      ) : (
                           <div className="space-y-2">
                             {deviceCommands.map((cmd) => (
                               <div key={cmd.id} className="border border-gray-200/80 dark:border-slate-700/50 rounded-lg p-3 text-sm bg-gradient-to-br from-white to-gray-50/50 dark:from-slate-800/50 dark:to-slate-800/30 backdrop-blur-sm hover:shadow-md transition-all duration-200">
@@ -1291,7 +1268,7 @@ export default function DevicesPage() {
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Sélectionner "Désassigner" pour retirer le dispositif du patient actuel
+                  Sélectionner &quot;Désassigner&quot; pour retirer le dispositif du patient actuel
                 </p>
               </label>
 

@@ -219,7 +219,7 @@ export default function CommandsPage() {
       <div>
         <h1 className="text-3xl font-bold">📡 Commandes Dispositifs</h1>
         <p className="text-gray-600 mt-1">
-          Envoyer des commandes aux dispositifs et consulter l'historique
+          Envoyer des commandes aux dispositifs et consulter l&apos;historique
         </p>
       </div>
 
@@ -507,7 +507,7 @@ export default function CommandsPage() {
                 <div className="bg-orange-100 border-l-4 border-orange-500 p-3 rounded">
                   <p className="text-sm font-semibold text-orange-800 mb-1">⚠️ Mise à jour OTA</p>
                   <p className="text-xs text-orange-700">
-                    Laisser l'URL vide pour utiliser la configuration stockée dans le dispositif.
+                    Laisser l&apos;URL vide pour utiliser la configuration stockée dans le dispositif.
                   </p>
                 </div>
                 <div>

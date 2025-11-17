@@ -112,7 +112,7 @@ export default function FirmwareUploadPage() {
           <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded">
             <p className="text-amber-800 font-semibold mb-1">⚠️ Accès restreint</p>
             <p className="text-amber-700 text-sm">
-              Seuls les administrateurs peuvent uploader des firmwares. Veuillez contacter un administrateur si vous avez besoin d'ajouter un nouveau firmware.
+              Seuls les administrateurs peuvent uploader des firmwares. Veuillez contacter un administrateur si vous avez besoin d&apos;ajouter un nouveau firmware.
             </p>
           </div>
         </div>
@@ -220,7 +220,7 @@ export default function FirmwareUploadPage() {
           <div className="bg-gradient-to-r from-amber-50 to-amber-50/50 dark:from-amber-900/20 dark:to-amber-900/10 border-l-4 border-amber-500 dark:border-amber-400 p-4 rounded backdrop-blur-sm">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ Attention</p>
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              Assurez-vous que le firmware est compatible avec les dispositifs OTT avant de l'uploader. 
+              Assurez-vous que le firmware est compatible avec les dispositifs OTT avant de l&apos;uploader. 
               Un firmware incompatible peut planter les dispositifs de manière irréversible.
             </p>
           </div>
