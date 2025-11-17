@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { buildUrl } from '@/lib/utils'
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -23,10 +24,10 @@ export default function Login() {
       await login(email, password)
       setLoading(false)
       
-      // Rediriger vers dashboard avec basePath explicite
-      const dashboardPath = `${basePath}/dashboard`.replace(/\/+/g, '/')
-      // Utiliser window.location pour forcer la navigation complète
-      window.location.href = dashboardPath
+      // Rediriger vers dashboard avec basePath explicite (sans doubles slashes)
+      const dashboardPath = buildUrl('/dashboard', basePath)
+      // Utiliser replace au lieu de href pour éviter d'ajouter à l'historique et les paramètres vides
+      window.location.replace(dashboardPath)
 
     } catch (err) {
       setError(err.message || 'Erreur de connexion au serveur')
