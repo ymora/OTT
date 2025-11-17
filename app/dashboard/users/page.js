@@ -446,24 +446,24 @@ export default function UsersPage() {
       </div>
 
       {showUserModal && (
-        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/70 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-semibold">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                   {editingUser ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}
                 </h2>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {editingUser ? editingUser.email : 'Créer un accès avec un rôle défini'}
                 </p>
               </div>
-              <button className="text-gray-500 hover:text-gray-700" onClick={closeUserModal} disabled={saving || deleteLoading}>
+              <button className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" onClick={closeUserModal} disabled={saving || deleteLoading}>
                 ✕
               </button>
             </div>
             <form className="space-y-4" onSubmit={handleSubmitUser}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Prénom
                   <input
                     type="text"
@@ -474,7 +474,7 @@ export default function UsersPage() {
                     required
                   />
                 </label>
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Nom
                   <input
                     type="text"
@@ -487,7 +487,7 @@ export default function UsersPage() {
                 </label>
               </div>
               
-              <label className="text-sm font-medium text-gray-700 w-full">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
                 Email
                 <input
                   type="email"
@@ -499,7 +499,7 @@ export default function UsersPage() {
                 />
               </label>
 
-              <label className="text-sm font-medium text-gray-700 w-full">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
                 Téléphone (optionnel, pour SMS)
                 <input
                   type="tel"
@@ -511,7 +511,7 @@ export default function UsersPage() {
                 />
               </label>
               
-              <label className="text-sm font-medium text-gray-700 w-full">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
                 Rôle
                 <select
                   name="role_id"
@@ -530,19 +530,19 @@ export default function UsersPage() {
               </label>
 
               {editingUser && (
-                <label className="flex items-center gap-3 text-sm font-medium text-gray-700">
+                <label className="flex items-center gap-3 text-sm font-medium text-gray-700 dark:text-gray-300">
                   <input
                     type="checkbox"
                     name="is_active"
                     checked={formData.is_active}
                     onChange={handleInputChange}
-                    className="form-checkbox h-4 w-4 text-primary-600"
+                    className="form-checkbox h-4 w-4 text-primary-600 dark:text-primary-400"
                   />
                   Compte actif
                 </label>
               )}
 
-              <label className="text-sm font-medium text-gray-700 w-full">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
                 {editingUser ? 'Nouveau mot de passe (optionnel, 6+ caractères)' : 'Mot de passe (6+ caractères)'}
                 <input
                   type="password"
@@ -561,51 +561,51 @@ export default function UsersPage() {
                 </div>
               )}
 
-              {/* Section Notifications */}
-              <div className="border-t pt-4 mt-4">
-                <h3 className="text-lg font-semibold mb-3">📧 Notifications</h3>
-                
-                {editingUser && loadingNotifPrefs ? (
-                  <div className="text-sm text-gray-500">Chargement des préférences...</div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Canaux de notification */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Canaux activés</label>
-                      <div className="grid grid-cols-3 gap-3">
-                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                          <input
-                            type="checkbox"
-                            checked={notificationPrefs.email_enabled}
-                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, email_enabled: e.target.checked }))}
-                            className="form-checkbox"
-                          />
-                          <span className="text-sm">✉️ Email</span>
-                        </label>
-                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                          <input
-                            type="checkbox"
-                            checked={notificationPrefs.sms_enabled}
-                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, sms_enabled: e.target.checked }))}
-                            className="form-checkbox"
-                          />
-                          <span className="text-sm">📱 SMS</span>
-                        </label>
-                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                          <input
-                            type="checkbox"
-                            checked={notificationPrefs.push_enabled}
-                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, push_enabled: e.target.checked }))}
-                            className="form-checkbox"
-                          />
-                          <span className="text-sm">🔔 Push</span>
-                        </label>
-                      </div>
-                    </div>
+                      {/* Section Notifications */}
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                        <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">📧 Notifications</h3>
+                        
+                        {editingUser && loadingNotifPrefs ? (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">Chargement des préférences...</div>
+                        ) : (
+                          <div className="space-y-4">
+                            {/* Canaux de notification */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Canaux activés</label>
+                              <div className="grid grid-cols-3 gap-3">
+                                <label className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={notificationPrefs.email_enabled}
+                                    onChange={(e) => setNotificationPrefs(prev => ({ ...prev, email_enabled: e.target.checked }))}
+                                    className="form-checkbox"
+                                  />
+                                  <span className="text-sm text-gray-900 dark:text-gray-100">✉️ Email</span>
+                                </label>
+                                <label className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={notificationPrefs.sms_enabled}
+                                    onChange={(e) => setNotificationPrefs(prev => ({ ...prev, sms_enabled: e.target.checked }))}
+                                    className="form-checkbox"
+                                  />
+                                  <span className="text-sm text-gray-900 dark:text-gray-100">📱 SMS</span>
+                                </label>
+                                <label className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={notificationPrefs.push_enabled}
+                                    onChange={(e) => setNotificationPrefs(prev => ({ ...prev, push_enabled: e.target.checked }))}
+                                    className="form-checkbox"
+                                  />
+                                  <span className="text-sm text-gray-900 dark:text-gray-100">🔔 Push</span>
+                                </label>
+                              </div>
+                            </div>
 
-                    {/* Types d'alertes */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Types d&apos;alertes</label>
+                            {/* Types d'alertes */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Types d&apos;alertes</label>
                       <div className="grid grid-cols-2 gap-2">
                         <label className="flex items-center gap-2 text-sm">
                           <input
