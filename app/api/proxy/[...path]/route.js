@@ -32,7 +32,8 @@ const sanitizeHeaders = headers => {
   HOP_BY_HOP_HEADERS.forEach(header => cleaned.delete(header))
   cleaned.delete('host')
   cleaned.delete('content-length')
-  cleaned.delete('accept-encoding')
+  // Ne pas supprimer accept-encoding pour permettre la compression
+  // Le navigateur gérera automatiquement la décompression
   cleaned.set('origin', upstreamBase.origin)
   cleaned.set('referer', upstreamBase.origin)
   return cleaned
@@ -53,10 +54,24 @@ const proxyRequest = async (request, { params }) => {
       cache: 'no-store'
     })
 
-    const responseHeaders = new Headers(upstreamResponse.headers)
-    HOP_BY_HOP_HEADERS.forEach(header => responseHeaders.delete(header))
+    // Lire le body comme texte (Node.js décompresse automatiquement)
+    const responseText = await upstreamResponse.text()
 
-    return new NextResponse(upstreamResponse.body, {
+    const responseHeaders = new Headers()
+    // Copier tous les headers sauf les hop-by-hop et content-encoding
+    upstreamResponse.headers.forEach((value, key) => {
+      const lowerKey = key.toLowerCase()
+      if (
+        !HOP_BY_HOP_HEADERS.includes(lowerKey) &&
+        lowerKey !== 'content-length' &&
+        lowerKey !== 'content-encoding'
+      ) {
+        responseHeaders.set(key, value)
+      }
+    })
+
+    // Renvoyer le contenu décompressé
+    return new NextResponse(responseText, {
       status: upstreamResponse.status,
       statusText: upstreamResponse.statusText,
       headers: responseHeaders
