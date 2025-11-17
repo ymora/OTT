@@ -1,96 +1,52 @@
-# 🔐 Instructions pour réinitialiser le mot de passe admin
+# Instructions pour réinitialiser le mot de passe de ymora@free.fr
 
-## Informations
-- **Email**: `ymora@free.fr`
-- **Nouveau mot de passe**: `Ym120879`
+## Mot de passe à définir: `Ym120879`
 
-## Méthode recommandée : Via Render Dashboard
+## Méthode 1: Via script PHP (recommandé si PHP est disponible)
 
-### Étape 1: Générer le hash bcrypt
-
-1. Connectez-vous à [Render Dashboard](https://dashboard.render.com/)
-2. Allez dans votre service **API PHP** (pas PostgreSQL)
-3. Cliquez sur **"Shell"** ou **"Connect"**
-4. Exécutez cette commande pour générer le hash:
-
-```bash
-php -r "echo password_hash('Ym120879', PASSWORD_BCRYPT);"
-```
-
-**Copiez le hash généré** (il commence par `$2y$10$...`)
-
-### Étape 2: Mettre à jour dans la base de données
-
-1. Allez dans votre service **PostgreSQL** sur Render
-2. Cliquez sur **"Connect"** ou **"Shell"**
-3. Exécutez cette commande SQL (remplacez `<HASH>` par le hash copié à l'étape 1):
-
-```sql
-UPDATE users 
-SET password_hash = '<HASH>'
-WHERE email = 'ymora@free.fr';
-```
-
-**Exemple** (avec un hash fictif):
-```sql
-UPDATE users 
-SET password_hash = '$2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
-WHERE email = 'ymora@free.fr';
-```
-
-### Étape 3: Vérifier
-
-```sql
-SELECT 
-    id, 
-    email, 
-    first_name, 
-    last_name, 
-    role_id,
-    CASE 
-        WHEN password_hash IS NOT NULL THEN '✅ OK'
-        ELSE '❌ ERREUR'
-    END as status
-FROM users 
-WHERE email = 'ymora@free.fr';
-```
-
-### Étape 4: Tester la connexion
-
-Allez sur le dashboard et connectez-vous avec:
-- **Email**: `ymora@free.fr`
-- **Mot de passe**: `Ym120879`
-
-## Méthode alternative : Via script PHP
-
-Si vous avez accès au shell de votre service API sur Render:
+Sur le serveur Render, exécutez:
 
 ```bash
 php scripts/reset_admin_password.php
 ```
 
-Ce script génère automatiquement le hash et met à jour la base de données.
+Le script est déjà configuré avec:
+- Email: `ymora@free.fr`
+- Mot de passe: `Ym120879`
 
-## Si l'utilisateur n'existe pas
+## Méthode 2: Via SQL direct (recommandé pour Render)
 
-Si l'utilisateur `ymora@free.fr` n'existe pas dans la base, créez-le:
+1. Connectez-vous au dashboard Render
+2. Allez dans votre service PostgreSQL
+3. Cliquez sur "Connect" ou "Shell"
+4. Exécutez d'abord cette commande pour générer le hash:
 
 ```sql
-INSERT INTO users (email, password_hash, first_name, last_name, role_id, is_active)
-VALUES (
-    'ymora@free.fr',
-    '<HASH_GÉNÉRÉ>',  -- Remplacez par le hash de l'étape 1
-    'Admin',
-    'OTT',
-    1,  -- role_id = 1 = admin
-    TRUE
-);
+-- Générer le hash bcrypt (nécessite l'extension pgcrypto)
+-- OU utilisez PHP: php -r "echo password_hash('Ym120879', PASSWORD_BCRYPT);"
 ```
 
-## Aide supplémentaire
+5. Puis exécutez la mise à jour:
 
-Si vous avez des problèmes, vérifiez:
-1. Que l'email est exactement `ymora@free.fr` (sans espaces)
-2. Que le hash bcrypt est valide (commence par `$2y$10$`)
-3. Que l'utilisateur a le `role_id = 1` (admin)
+```sql
+UPDATE users 
+SET password_hash = '<HASH_GÉNÉRÉ>'
+WHERE email = 'ymora@free.fr';
+```
 
+## Méthode 3: Via API (si vous avez un autre compte admin)
+
+Si vous avez accès à un autre compte administrateur:
+
+```bash
+curl -X PUT https://ott-jbln.onrender.com/api.php/users/{id} \
+  -H "Authorization: Bearer {VOTRE_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "Ym120879"}'
+```
+
+## Vérification
+
+Après la réinitialisation, testez la connexion avec:
+- Email: `ymora@free.fr`
+- Mot de passe: `Ym120879`

@@ -357,6 +357,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 // Admin tools
 } elseif(preg_match('#/admin/reset-demo$#', $path) && $method === 'POST') {
     handleResetDemo();
+} elseif(preg_match('#/admin/reset-password$#', $path) && $method === 'POST') {
+    handleResetPassword();
 
 // Audit
 } elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
@@ -1638,6 +1640,67 @@ function handleResetDemo() {
             'error' => 'Demo reset failed',
             'details' => $e->getMessage()
         ]);
+    }
+}
+
+function handleResetPassword() {
+    global $pdo;
+    
+    // Clé secrète pour sécuriser l'endpoint (à définir dans les variables d'environnement)
+    $secretKey = getenv('PASSWORD_RESET_SECRET') ?: 'TEMPORARY_RESET_KEY_CHANGE_IN_PRODUCTION';
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    $providedKey = $input['secret_key'] ?? '';
+    $email = $input['email'] ?? 'ymora@free.fr';
+    $newPassword = $input['password'] ?? 'Ym120879';
+    
+    // Vérifier la clé secrète
+    if ($providedKey !== $secretKey) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Invalid secret key']);
+        return;
+    }
+    
+    if (empty($email) || empty($newPassword)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Email and password required']);
+        return;
+    }
+    
+    try {
+        // Vérifier que l'utilisateur existe
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = :email");
+        $stmt->execute(['email' => $email]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'User not found']);
+            return;
+        }
+        
+        // Générer le hash bcrypt
+        $passwordHash = password_hash($newPassword, PASSWORD_BCRYPT);
+        
+        // Mettre à jour le mot de passe
+        $updateStmt = $pdo->prepare("UPDATE users SET password_hash = :password_hash WHERE email = :email");
+        $updateStmt->execute([
+            'email' => $email,
+            'password_hash' => $passwordHash
+        ]);
+        
+        auditLog('admin.password_reset', 'system', $user['id'], null, ['email' => $email]);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Password reset successfully',
+            'email' => $email
+        ]);
+        
+    } catch(PDOException $e) {
+        error_log('[handleResetPassword] Database error: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
     }
 }
 
