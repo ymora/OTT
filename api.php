@@ -954,58 +954,178 @@ function handlePostMeasurement() {
     
     $input = json_decode(file_get_contents('php://input'), true);
     
-    if (!$input || !isset($input['device_sim_iccid'])) {
+    // Support des deux formats : device_sim_iccid (ancien) et sim_iccid (firmware)
+    $iccid = trim($input['sim_iccid'] ?? $input['device_sim_iccid'] ?? '');
+    
+    // Validation de l'ICCID (longueur max 20 selon le schéma)
+    if (!$input || empty($iccid) || strlen($iccid) > 20) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid data']);
+        echo json_encode(['success' => false, 'error' => 'Invalid data: sim_iccid required and must be max 20 characters']);
         return;
     }
     
-    $iccid = $input['device_sim_iccid'];
-    $flowrate = $input['payload']['flowrate'] ?? $input['flowrate'] ?? 0;
-    $battery = $input['payload']['battery'] ?? $input['battery'] ?? 0;
+    // Support des deux formats pour flow/flowrate
+    $flowrate = $input['flow'] ?? $input['flowrate'] ?? $input['payload']['flowrate'] ?? 0;
+    // Support des deux formats pour battery
+    $battery = $input['battery'] ?? $input['payload']['battery'] ?? 0;
+    // RSSI optionnel
+    $rssi = $input['rssi'] ?? $input['signal_strength'] ?? null;
+    // Firmware version optionnel
+    $firmware_version = $input['firmware_version'] ?? null;
+    // Timestamp optionnel (auto-généré si absent)
+    $timestamp = isset($input['timestamp']) ? $input['timestamp'] : null;
+    // Status optionnel
     $status = $input['status'] ?? 'TIMER';
     
     try {
-        $stmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :iccid");
-        $stmt->execute(['iccid' => $iccid]);
-        $device = $stmt->fetch();
+        // Normaliser le timestamp
+        $timestampValue = $timestamp ? date('Y-m-d H:i:s', strtotime($timestamp)) : date('Y-m-d H:i:s');
         
-        if (!$device) {
-            $pdo->prepare("INSERT INTO devices (sim_iccid, last_seen, last_battery) VALUES (:iccid, NOW(), :battery)")
-                ->execute(['iccid' => $iccid, 'battery' => $battery]);
-            $device_id = $pdo->lastInsertId();
-            $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id)")->execute(['device_id' => $device_id]);
-        } else {
-            $device_id = $device['id'];
-            $pdo->prepare("UPDATE devices SET last_seen = NOW(), last_battery = :battery WHERE id = :id")
-                ->execute(['battery' => $battery, 'id' => $device_id]);
+        // Début de transaction pour garantir la cohérence des données
+        $pdo->beginTransaction();
+        
+        try {
+            $stmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE sim_iccid = :iccid FOR UPDATE");
+            $stmt->execute(['iccid' => $iccid]);
+            $device = $stmt->fetch();
+            
+            if (!$device) {
+                // Enregistrement automatique du nouveau dispositif avec paramètres par défaut
+                // Utiliser l'ICCID comme nom par défaut du dispositif (identifiant unique de la SIM)
+                $insertStmt = $pdo->prepare("
+                    INSERT INTO devices (sim_iccid, device_name, device_serial, last_seen, last_battery, firmware_version, status, first_use_date)
+                    VALUES (:iccid, :device_name, :device_serial, :timestamp, :battery, :firmware_version, 'active', :timestamp)
+                ");
+                $insertStmt->execute([
+                    'iccid' => $iccid,
+                    'device_name' => $iccid, // Utiliser l'ICCID comme nom par défaut
+                    'device_serial' => $iccid, // Utiliser l'ICCID comme numéro de série (c'est l'ID unique de la SIM)
+                    'battery' => $battery,
+                    'firmware_version' => $firmware_version,
+                    'timestamp' => $timestampValue
+                ]);
+                $device_id = $pdo->lastInsertId();
+                
+                // Créer la configuration par défaut
+                $pdo->prepare("INSERT INTO device_configurations (device_id, firmware_version) VALUES (:device_id, :firmware_version)")
+                    ->execute(['device_id' => $device_id, 'firmware_version' => $firmware_version]);
+            } else {
+                $device_id = $device['id'];
+                
+                // Mettre à jour les informations du dispositif
+                $updateParams = ['battery' => $battery, 'id' => $device_id, 'timestamp' => $timestampValue];
+                $updateFields = ['last_seen = :timestamp', 'last_battery = :battery'];
+                
+                // Mettre à jour la version firmware si fournie et différente
+                if ($firmware_version && $firmware_version !== $device['firmware_version']) {
+                    $updateFields[] = 'firmware_version = :firmware_version';
+                    $updateParams['firmware_version'] = $firmware_version;
+                }
+                
+                $pdo->prepare("UPDATE devices SET " . implode(', ', $updateFields) . " WHERE id = :id")
+                    ->execute($updateParams);
+                
+                // Mettre à jour la configuration si firmware_version a changé
+                if ($firmware_version && $firmware_version !== $device['firmware_version']) {
+                    $pdo->prepare("UPDATE device_configurations SET firmware_version = :firmware_version WHERE device_id = :device_id")
+                        ->execute(['firmware_version' => $firmware_version, 'device_id' => $device_id]);
+                }
+            }
+            
+            // Enregistrer la mesure
+            $measurementStmt = $pdo->prepare("
+                INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status)
+                VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status)
+            ");
+            $measurementStmt->execute([
+                'device_id' => $device_id,
+                'flowrate' => $flowrate,
+                'battery' => $battery,
+                'rssi' => $rssi,
+                'status' => $status,
+                'timestamp' => $timestampValue
+            ]);
+            
+            // Alertes
+            if ($battery < 20) {
+                createAlert($pdo, $device_id, 'low_battery', 'high', "Batterie faible: $battery%");
+            }
+            
+            // Commit de la transaction
+            $pdo->commit();
+            
+            $commands = fetchPendingCommandsForDevice($device_id);
+            echo json_encode([
+                'success' => true,
+                'device_id' => $device_id,
+                'device_auto_registered' => !$device,
+                'commands' => $commands
+            ]);
+            
+        } catch(PDOException $e) {
+            // Rollback en cas d'erreur
+            $pdo->rollBack();
+            
+            // Gérer les contraintes uniques (race condition)
+            if ($e->getCode() == 23000) {
+                // Contrainte unique violée (dispositif créé entre-temps par une autre requête)
+                // Réessayer une fois
+                try {
+                    $pdo->beginTransaction();
+                    $retryStmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE sim_iccid = :iccid");
+                    $retryStmt->execute(['iccid' => $iccid]);
+                    $device = $retryStmt->fetch();
+                    
+                    if ($device) {
+                        $device_id = $device['id'];
+                        // Continuer avec la mise à jour et l'insertion de la mesure
+                        $updateParams = ['battery' => $battery, 'id' => $device_id, 'timestamp' => $timestampValue];
+                        $pdo->prepare("UPDATE devices SET last_seen = :timestamp, last_battery = :battery WHERE id = :id")
+                            ->execute($updateParams);
+                        
+                        $pdo->prepare("
+                            INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status)
+                            VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status)
+                        ")->execute([
+                            'device_id' => $device_id,
+                            'flowrate' => $flowrate,
+                            'battery' => $battery,
+                            'rssi' => $rssi,
+                            'status' => $status,
+                            'timestamp' => $timestampValue
+                        ]);
+                        
+                        if ($battery < 20) {
+                            createAlert($pdo, $device_id, 'low_battery', 'high', "Batterie faible: $battery%");
+                        }
+                        
+                        $pdo->commit();
+                        $commands = fetchPendingCommandsForDevice($device_id);
+                        echo json_encode([
+                            'success' => true,
+                            'device_id' => $device_id,
+                            'device_auto_registered' => false,
+                            'commands' => $commands
+                        ]);
+                        return;
+                    }
+                } catch(PDOException $retryE) {
+                    $pdo->rollBack();
+                    throw $retryE;
+                }
+            }
+            throw $e;
         }
-        
-        $pdo->prepare("
-            INSERT INTO measurements (device_id, timestamp, flowrate, battery, device_status)
-            VALUES (:device_id, NOW(), :flowrate, :battery, :status)
-        ")->execute([
-            'device_id' => $device_id,
-            'flowrate' => $flowrate,
-            'battery' => $battery,
-            'status' => $status
-        ]);
-        
-        // Alertes
-        if ($battery < 20) {
-            createAlert($pdo, $device_id, 'low_battery', 'high', "Batterie faible: $battery%");
-        }
-        
-        $commands = fetchPendingCommandsForDevice($device_id);
-        echo json_encode([
-            'success' => true,
-            'device_id' => $device_id,
-            'commands' => $commands
-        ]);
         
     } catch(PDOException $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        // S'assurer que la transaction est annulée
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        http_response_code($e->getCode() == 23000 ? 409 : 500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handlePostMeasurement] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -1091,6 +1211,65 @@ function formatCommandForDashboard($row) {
 function fetchPendingCommandsForDevice($device_id, $limit = 5) {
     global $pdo;
     expireDeviceCommands($device_id);
+    
+    // Vérifier si une OTA est en attente et créer automatiquement la commande OTA_REQUEST
+    $configStmt = $pdo->prepare("
+        SELECT target_firmware_version, firmware_url, ota_pending
+        FROM device_configurations
+        WHERE device_id = :device_id AND ota_pending = TRUE
+    ");
+    $configStmt->execute(['device_id' => $device_id]);
+    $config = $configStmt->fetch();
+    
+    if ($config && $config['ota_pending']) {
+        // Vérifier si une commande OTA_REQUEST n'existe pas déjà
+        $existingOtaStmt = $pdo->prepare("
+            SELECT id FROM device_commands
+            WHERE device_id = :device_id
+              AND command = 'OTA_REQUEST'
+              AND status = 'pending'
+        ");
+        $existingOtaStmt->execute(['device_id' => $device_id]);
+        
+        if (!$existingOtaStmt->fetch()) {
+            // Récupérer les infos du firmware (MD5, etc.)
+            $firmwareStmt = $pdo->prepare("
+                SELECT version, checksum, file_path
+                FROM firmware_versions
+                WHERE version = :version
+            ");
+            $firmwareStmt->execute(['version' => $config['target_firmware_version']]);
+            $firmware = $firmwareStmt->fetch();
+            
+            if ($firmware) {
+                // Construire l'URL complète
+                $base_url = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
+                $base_url .= $_SERVER['HTTP_HOST'];
+                $firmware_url = $config['firmware_url'] ?: ($base_url . '/' . $firmware['file_path']);
+                
+                // Calculer le MD5 depuis le fichier (le firmware attend MD5, pas SHA256)
+                $firmware_full_path = __DIR__ . '/' . $firmware['file_path'];
+                $md5 = file_exists($firmware_full_path) ? hash_file('md5', $firmware_full_path) : '';
+                
+                // Créer le payload OTA_REQUEST avec url, md5, et version
+                $otaPayload = [
+                    'url' => $firmware_url,
+                    'md5' => $md5,
+                    'version' => $firmware['version']
+                ];
+                
+                // Insérer la commande OTA_REQUEST
+                $insertStmt = $pdo->prepare("
+                    INSERT INTO device_commands (device_id, command, payload, priority, status, execute_after, expires_at)
+                    VALUES (:device_id, 'OTA_REQUEST', :payload, 'high', 'pending', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR))
+                ");
+                $insertStmt->execute([
+                    'device_id' => $device_id,
+                    'payload' => json_encode($otaPayload)
+                ]);
+            }
+        }
+    }
     
     $stmt = $pdo->prepare("
         SELECT id, command, payload, priority, status, execute_after, expires_at
@@ -1383,6 +1562,15 @@ function handleAcknowledgeCommand() {
             'id' => $commandId
         ]);
         
+        // Si c'est une commande OTA_REQUEST exécutée, désactiver ota_pending
+        if ($command['command'] === 'OTA_REQUEST' && $newStatus === 'executed') {
+            $pdo->prepare("
+                UPDATE device_configurations
+                SET ota_pending = FALSE
+                WHERE device_id = :device_id
+            ")->execute(['device_id' => $command['device_id']]);
+        }
+        
         auditLog('device.command_ack', 'device', $command['device_id'], null, [
             'command_id' => $commandId,
             'status' => $newStatus
@@ -1458,39 +1646,118 @@ function handlePostLog() {
     
     $input = json_decode(file_get_contents('php://input'), true);
     
-    if (!$input || !isset($input['device_sim_iccid']) || !isset($input['event'])) {
+    // Support des deux formats : sim_iccid (firmware) et device_sim_iccid (ancien)
+    $iccid = trim($input['sim_iccid'] ?? $input['device_sim_iccid'] ?? '');
+    
+    // Support des deux formats pour l'événement : event (ancien) ou directement level/event_type/message (firmware)
+    $hasEvent = isset($input['event']) || isset($input['level']) || isset($input['event_type']);
+    
+    // Validation de l'ICCID (longueur max 20 selon le schéma)
+    if (!$input || empty($iccid) || strlen($iccid) > 20 || !$hasEvent) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid data']);
+        echo json_encode(['success' => false, 'error' => 'Invalid data: sim_iccid (max 20 chars) and event/level required']);
         return;
     }
     
+    // Extraire les données de l'événement selon le format
+    $level = $input['event']['level'] ?? $input['level'] ?? 'INFO';
+    $event_type = $input['event']['type'] ?? $input['event_type'] ?? 'unknown';
+    $message = $input['event']['message'] ?? $input['message'] ?? '';
+    $details = $input['event']['details'] ?? $input['details'] ?? null;
+    
     try {
-        $stmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :iccid");
-        $stmt->execute(['iccid' => $input['device_sim_iccid']]);
-        $device = $stmt->fetch();
+        // Début de transaction pour garantir la cohérence
+        $pdo->beginTransaction();
         
-        if (!$device) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Device not found']);
-            return;
+        try {
+            $stmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :iccid FOR UPDATE");
+            $stmt->execute(['iccid' => $iccid]);
+            $device = $stmt->fetch();
+            
+            if (!$device) {
+                // Enregistrement automatique du dispositif si inexistant
+                // Utiliser l'ICCID comme nom par défaut du dispositif (identifiant unique de la SIM)
+                $pdo->prepare("INSERT INTO devices (sim_iccid, device_name, device_serial, status, first_use_date) VALUES (:iccid, :device_name, :device_serial, 'active', NOW())")
+                    ->execute([
+                        'iccid' => $iccid,
+                        'device_name' => $iccid, // Utiliser l'ICCID comme nom par défaut
+                        'device_serial' => $iccid // Utiliser l'ICCID comme numéro de série (c'est l'ID unique de la SIM)
+                    ]);
+                $device_id = $pdo->lastInsertId();
+                
+                // Créer la configuration par défaut
+                $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id)")
+                    ->execute(['device_id' => $device_id]);
+            } else {
+                $device_id = $device['id'];
+            }
+            
+            $pdo->prepare("
+                INSERT INTO device_logs (device_id, timestamp, level, event_type, message, details)
+                VALUES (:device_id, NOW(), :level, :event_type, :message, :details)
+            ")->execute([
+                'device_id' => $device_id,
+                'level' => $level,
+                'event_type' => $event_type,
+                'message' => $message,
+                'details' => $details ? json_encode($details) : null
+            ]);
+            
+            $pdo->commit();
+            
+            echo json_encode([
+                'success' => true,
+                'device_auto_registered' => !$device
+            ]);
+            
+        } catch(PDOException $e) {
+            $pdo->rollBack();
+            
+            // Gérer les contraintes uniques (race condition)
+            if ($e->getCode() == 23000) {
+                // Réessayer une fois
+                try {
+                    $pdo->beginTransaction();
+                    $retryStmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :iccid");
+                    $retryStmt->execute(['iccid' => $iccid]);
+                    $device = $retryStmt->fetch();
+                    
+                    if ($device) {
+                        $device_id = $device['id'];
+                        $pdo->prepare("
+                            INSERT INTO device_logs (device_id, timestamp, level, event_type, message, details)
+                            VALUES (:device_id, NOW(), :level, :event_type, :message, :details)
+                        ")->execute([
+                            'device_id' => $device_id,
+                            'level' => $level,
+                            'event_type' => $event_type,
+                            'message' => $message,
+                            'details' => $details ? json_encode($details) : null
+                        ]);
+                        $pdo->commit();
+                        echo json_encode([
+                            'success' => true,
+                            'device_auto_registered' => false
+                        ]);
+                        return;
+                    }
+                } catch(PDOException $retryE) {
+                    $pdo->rollBack();
+                    throw $retryE;
+                }
+            }
+            throw $e;
         }
         
-        $pdo->prepare("
-            INSERT INTO device_logs (device_id, timestamp, level, event_type, message, details)
-            VALUES (:device_id, NOW(), :level, :event_type, :message, :details)
-        ")->execute([
-            'device_id' => $device['id'],
-            'level' => $input['event']['level'] ?? 'INFO',
-            'event_type' => $input['event']['type'] ?? 'unknown',
-            'message' => $input['event']['message'] ?? '',
-            'details' => isset($input['event']['details']) ? json_encode($input['event']['details']) : null
-        ]);
-        
-        echo json_encode(['success' => true]);
-        
     } catch(PDOException $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        // S'assurer que la transaction est annulée
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        http_response_code($e->getCode() == 23000 ? 409 : 500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handlePostLog] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -2062,6 +2329,30 @@ function handleGetFirmwares() {
     }
 }
 
+function extractVersionFromBin($bin_path) {
+    // Tente d'extraire la version depuis le fichier .bin
+    // Cherche la section .version avec OTT_FW_VERSION=
+    $data = file_get_contents($bin_path);
+    if ($data === false) {
+        return null;
+    }
+    
+    // Méthode 1: Chercher OTT_FW_VERSION=<version>
+    if (preg_match('/OTT_FW_VERSION=([^\x00]+)/', $data, $matches)) {
+        return trim($matches[1]);
+    }
+    
+    // Méthode 2: Chercher des patterns de version (X.Y ou X.Y-Z)
+    if (preg_match('/(\d+\.\d+[-\w]*)/', $data, $matches)) {
+        $version = trim($matches[1]);
+        if (preg_match('/^\d+\.\d+/', $version)) {
+            return $version;
+        }
+    }
+    
+    return null;
+}
+
 function handleUploadFirmware() {
     global $pdo;
     $user = requireAdmin();
@@ -2077,10 +2368,28 @@ function handleUploadFirmware() {
     $release_notes = $_POST['release_notes'] ?? '';
     $is_stable = isset($_POST['is_stable']) && $_POST['is_stable'] === 'true';
     
-    if (empty($version) || pathinfo($file['name'], PATHINFO_EXTENSION) !== 'bin') {
+    if (pathinfo($file['name'], PATHINFO_EXTENSION) !== 'bin') {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid version or file type']);
+        echo json_encode(['success' => false, 'error' => 'Invalid file type: .bin required']);
         return;
+    }
+    
+    // Sauvegarder temporairement pour extraire la version
+    $tmp_path = $file['tmp_name'];
+    
+    // Si version non fournie, tenter de l'extraire depuis le .bin
+    if (empty($version)) {
+        $extracted_version = extractVersionFromBin($tmp_path);
+        if ($extracted_version) {
+            $version = $extracted_version;
+        } else {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false, 
+                'error' => 'Version not found in binary and not provided. Please provide version or ensure firmware contains OTT_FW_VERSION section.'
+            ]);
+            return;
+        }
     }
     
     $upload_dir = __DIR__ . '/firmwares/';
@@ -2089,12 +2398,14 @@ function handleUploadFirmware() {
     $file_path = 'firmwares/fw_ott_v' . $version . '.bin';
     $full_path = __DIR__ . '/' . $file_path;
     
-    if (!move_uploaded_file($file['tmp_name'], $full_path)) {
+    if (!move_uploaded_file($tmp_path, $full_path)) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Failed to save file']);
         return;
     }
     
+    // Calculer MD5 pour validation OTA (en plus du SHA256)
+    $md5 = hash_file('md5', $full_path);
     $checksum = hash_file('sha256', $full_path);
     $file_size = filesize($full_path);
     
@@ -2113,9 +2424,20 @@ function handleUploadFirmware() {
         ]);
         
         $firmware_id = $pdo->lastInsertId();
-        auditLog('firmware.uploaded', 'firmware', $firmware_id, null, ['version' => $version, 'file_size' => $file_size]);
+        auditLog('firmware.uploaded', 'firmware', $firmware_id, null, [
+            'version' => $version, 
+            'file_size' => $file_size,
+            'extracted_from_bin' => empty($_POST['version'])
+        ]);
         
-        echo json_encode(['success' => true, 'firmware_id' => $firmware_id, 'checksum' => $checksum]);
+        echo json_encode([
+            'success' => true, 
+            'firmware_id' => $firmware_id, 
+            'version' => $version,
+            'checksum' => $checksum,
+            'md5' => $md5,
+            'extracted_from_bin' => empty($_POST['version'])
+        ]);
         
     } catch(PDOException $e) {
         unlink($full_path);

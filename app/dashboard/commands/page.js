@@ -620,7 +620,7 @@ export default function CommandsPage() {
                     <td className="py-3 px-4">
                       <div className="font-medium text-primary">{cmd.device_name || cmd.sim_iccid || '—'}</div>
                       {cmd.patient_first_name || cmd.patient_last_name ? (
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-muted">
                           {cmd.patient_first_name} {cmd.patient_last_name}
                         </div>
                       ) : (

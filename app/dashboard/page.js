@@ -76,8 +76,8 @@ export default function DashboardPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="animate-slide-up">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Vue d&apos;Ensemble</h1>
-        <p className="text-gray-600">Tableau de bord en temps réel des dispositifs OTT</p>
+        <h1 className="text-3xl font-bold text-primary mb-2">Vue d&apos;Ensemble</h1>
+        <p className="text-muted">Tableau de bord en temps réel des dispositifs OTT</p>
       </div>
 
       {error && (
@@ -130,7 +130,7 @@ export default function DashboardPage() {
             {/* Toutes les alertes */}
             {alerts.length > 0 && (
               <div>
-                <h3 className="font-semibold text-gray-700 mb-3 flex items-center justify-between">
+                <h3 className="font-semibold text-primary mb-3 flex items-center justify-between">
                   <span>🔔 Toutes les Alertes ({alerts.length})</span>
                 </h3>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -147,14 +147,14 @@ export default function DashboardPage() {
                 {/* Batteries faibles */}
                 {lowBatteryList.length > 0 && (
                   <div className="border-l-4 border-orange-500 pl-4">
-                    <h3 className="font-semibold text-orange-700 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
+                    <h3 className="font-semibold text-orange-600 dark:text-orange-400 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
                     <div className="space-y-2">
                       {lowBatteryList.map(device => {
                         const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
                         return (
                           <div key={device.id} className="text-sm">
                             <p className="font-semibold text-primary">{device.device_name || device.sim_iccid}</p>
-                            <p className="text-xs text-gray-500">{battery.toFixed(0)}% restant</p>
+                            <p className="text-xs text-muted">{battery.toFixed(0)}% restant</p>
                           </div>
                         )
                       })}
@@ -168,12 +168,12 @@ export default function DashboardPage() {
                 {/* Boîtiers non assignés */}
                 {unassignedDevices.length > 0 && (
                   <div className="border-l-4 border-amber-500 pl-4">
-                    <h3 className="font-semibold text-amber-700 mb-2">Non Assignés ({unassignedDevices.length})</h3>
+                    <h3 className="font-semibold text-amber-600 dark:text-amber-400 mb-2">Non Assignés ({unassignedDevices.length})</h3>
                     <div className="space-y-2">
                       {unassignedDevices.slice(0, 5).map(device => (
                         <div key={device.id} className="text-sm">
-                          <p className="font-semibold text-gray-900">{device.device_name || device.sim_iccid}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="font-semibold text-primary">{device.device_name || device.sim_iccid}</p>
+                          <p className="text-xs text-muted">
                             {device.last_seen ? new Date(device.last_seen).toLocaleDateString('fr-FR') : 'Jamais connecté'}
                           </p>
                         </div>

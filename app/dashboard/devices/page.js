@@ -10,9 +10,30 @@ import AlertCard from '@/components/AlertCard'
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
 
-// Import dynamique des pages pour les onglets
-const CommandsPage = dynamic(() => import('../commands/page'), { ssr: false })
-const OTAPage = dynamic(() => import('../ota/page'), { ssr: false })
+// Constantes pour les commandes
+const commandOptions = [
+  { value: 'SET_SLEEP_SECONDS', label: 'Modifier intervalle de sommeil' },
+  { value: 'PING', label: 'Ping / Diagnostic rapide' },
+  { value: 'UPDATE_CONFIG', label: 'Mettre à jour la configuration' },
+  { value: 'UPDATE_CALIBRATION', label: 'Recalibrer le capteur' },
+  { value: 'OTA_REQUEST', label: 'Déclencher une mise à jour OTA' },
+]
+
+const priorityOptions = [
+  { value: 'low', label: 'Basse' },
+  { value: 'normal', label: 'Normale' },
+  { value: 'high', label: 'Haute' },
+  { value: 'critical', label: 'Critique' },
+]
+
+const commandStatusColors = {
+  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  executing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+  executed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  error: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  expired: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  cancelled: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+}
 
 export default function DevicesPage() {
   const { fetchWithAuth, API_URL, user } = useAuth()
@@ -33,9 +54,46 @@ export default function DevicesPage() {
   const [deviceLogs, setDeviceLogs] = useState([])
   const [deviceAlerts, setDeviceAlerts] = useState([])
   const [deviceMeasurements, setDeviceMeasurements] = useState([])
+  const [deviceCommands, setDeviceCommands] = useState([])
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [modalActiveTab, setModalActiveTab] = useState('details') // 'details', 'alerts', 'logs'
+  const [modalActiveTab, setModalActiveTab] = useState('details') // 'details', 'alerts', 'logs', 'commands'
+  
+  // État pour le formulaire de commandes dans le modal
+  const [commandForm, setCommandForm] = useState({
+    command: 'SET_SLEEP_SECONDS',
+    sleepSeconds: 300,
+    message: '',
+    priority: 'normal',
+    expiresInMinutes: 60,
+    configApn: '',
+    configJwt: '',
+    configIccid: '',
+    configSerial: '',
+    configSimPin: '',
+    configSleepMinutes: '',
+    configAirflowPasses: '',
+    configAirflowSamples: '',
+    configAirflowDelay: '',
+    configWatchdogSeconds: '',
+    configModemBootTimeout: '',
+    configSimReadyTimeout: '',
+    configNetworkAttachTimeout: '',
+    configModemReboots: '',
+    configOtaPrimaryUrl: '',
+    configOtaFallbackUrl: '',
+    configOtaMd5: '',
+    calA0: '',
+    calA1: '',
+    calA2: '',
+    otaUrl: '',
+    otaChannel: 'primary',
+    otaMd5: '',
+  })
+  const [commandError, setCommandError] = useState(null)
+  const [commandSuccess, setCommandSuccess] = useState(null)
+  const [creatingCommand, setCreatingCommand] = useState(false)
+  const [commandRefreshTick, setCommandRefreshTick] = useState(0)
   
   // Modal assignation
   const [assignModalOpen, setAssignModalOpen] = useState(false)
@@ -43,12 +101,12 @@ export default function DevicesPage() {
   const [assignError, setAssignError] = useState(null)
   const [assignLoading, setAssignLoading] = useState(false)
   
-  // OTA
-  const [otaLoading, setOtaLoading] = useState({})
-  const [otaModalOpen, setOtaModalOpen] = useState(false)
-  const [otaDevice, setOtaDevice] = useState(null)
+  // OTA intégré dans le tableau
   const [firmwares, setFirmwares] = useState([])
-  const [selectedFirmware, setSelectedFirmware] = useState('')
+  const [selectedFirmwareVersion, setSelectedFirmwareVersion] = useState('')
+  const [otaDeploying, setOtaDeploying] = useState({})
+  const [otaMessage, setOtaMessage] = useState(null)
+  const [otaError, setOtaError] = useState(null)
   
   // Focus sur la carte
   const [focusDeviceId, setFocusDeviceId] = useState(null)
@@ -84,6 +142,110 @@ export default function DevicesPage() {
     }
   }, [fetchWithAuth, API_URL])
 
+  // Fonction pour déclencher OTA sur un dispositif
+  const handleOTA = async (device, e) => {
+    e.stopPropagation() // Empêcher l'ouverture du modal
+    if (!selectedFirmwareVersion) {
+      setOtaError('Veuillez sélectionner un firmware')
+      return
+    }
+
+    try {
+      setOtaError(null)
+      setOtaMessage(null)
+      setOtaDeploying(prev => ({ ...prev, [device.id]: true }))
+      
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${device.id}/ota`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ firmware_version: selectedFirmwareVersion })
+        },
+        { requiresAuth: true }
+      )
+      
+      setOtaMessage(`✅ OTA v${selectedFirmwareVersion} programmé pour ${device.device_name || device.sim_iccid}`)
+      
+      // Recharger les dispositifs
+      await loadDevices()
+    } catch (err) {
+      setOtaError(err.message || 'Erreur lors du déploiement OTA')
+    } finally {
+      setOtaDeploying(prev => {
+        const next = { ...prev }
+        delete next[device.id]
+        return next
+      })
+    }
+  }
+
+  // Fonction pour flasher tous les dispositifs concernés
+  const handleOTAAll = async (e) => {
+    e.stopPropagation()
+    if (!selectedFirmwareVersion || devicesToUpdate.length === 0) return
+
+    const confirmMessage = `⚠️ ATTENTION : Déploiement massif OTA\n\n` +
+      `Firmware: v${selectedFirmwareVersion}\n` +
+      `Dispositifs concernés: ${devicesToUpdate.length}\n\n` +
+      `Cette opération va déployer le firmware sur TOUS les dispositifs listés.\n` +
+      `Cela peut planter les dispositifs si le firmware est incompatible.\n\n` +
+      `Êtes-vous sûr de vouloir continuer ?`
+
+    if (!confirm(confirmMessage)) return
+
+    setOtaError(null)
+    setOtaMessage(null)
+    const allDeviceIds = devicesToUpdate.map(d => d.id)
+    
+    // Marquer tous comme en cours de déploiement
+    const deployingState = {}
+    allDeviceIds.forEach(id => { deployingState[id] = true })
+    setOtaDeploying(deployingState)
+
+    let successCount = 0
+    let errorCount = 0
+
+    try {
+      // Déployer sur tous les dispositifs en parallèle
+      const promises = allDeviceIds.map(async (deviceId) => {
+        try {
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${deviceId}/ota`,
+            {
+              method: 'POST',
+              body: JSON.stringify({ firmware_version: selectedFirmwareVersion })
+            },
+            { requiresAuth: true }
+          )
+          successCount++
+        } catch (err) {
+          errorCount++
+          console.error(`Erreur OTA pour dispositif ${deviceId}:`, err)
+        }
+      })
+
+      await Promise.all(promises)
+
+      if (errorCount === 0) {
+        setOtaMessage(`✅ OTA v${selectedFirmwareVersion} programmé avec succès sur ${successCount} dispositif(s)`)
+      } else {
+        setOtaError(`⚠️ Déploiement partiel : ${successCount} succès, ${errorCount} erreur(s)`)
+      }
+
+      // Recharger les dispositifs
+      await loadDevices()
+    } catch (err) {
+      setOtaError(`Erreur lors du déploiement massif: ${err.message}`)
+    } finally {
+      // Réinitialiser l'état de déploiement
+      setOtaDeploying({})
+    }
+  }
+
   useEffect(() => {
     loadDevices()
     loadPatients()
@@ -108,6 +270,15 @@ export default function DevicesPage() {
     })
   }, [devices, searchTerm, assignmentFilter])
 
+  // Dispositifs qui ont un firmware différent du sélectionné
+  const devicesToUpdate = useMemo(() => {
+    if (!selectedFirmwareVersion) return []
+    return filteredDevices.filter(device => {
+      const deviceFirmware = device.firmware_version || '0.0.0'
+      return deviceFirmware !== selectedFirmwareVersion
+    })
+  }, [filteredDevices, selectedFirmwareVersion])
+
   const handleShowDetails = async (device) => {
     setSelectedDevice(device)
     setShowDetailsModal(true)
@@ -117,21 +288,185 @@ export default function DevicesPage() {
     setDeviceLogs([])
     setDeviceAlerts([])
     setDeviceMeasurements([])
+    setDeviceCommands([])
     
     try {
-      const [logsData, alertsData, historyData] = await Promise.all([
+      const [logsData, alertsData, historyData, commandsData] = await Promise.all([
         fetchJson(fetchWithAuth, API_URL, `/api.php/logs?device_id=${device.id}&limit=50`, {}, { requiresAuth: true }).catch(() => ({ logs: [] })),
         fetchJson(fetchWithAuth, API_URL, `/api.php/alerts?device_id=${device.id}`, {}, { requiresAuth: true }).catch(() => ({ alerts: [] })),
-        fetchJson(fetchWithAuth, API_URL, `/api.php/device/${device.id}`, {}, { requiresAuth: true }).catch(() => ({ measurements: [] }))
+        fetchJson(fetchWithAuth, API_URL, `/api.php/device/${device.id}`, {}, { requiresAuth: true }).catch(() => ({ measurements: [] })),
+        fetchJson(fetchWithAuth, API_URL, `/api.php/devices/commands?limit=100`, {}, { requiresAuth: true }).catch(() => ({ commands: [] }))
       ])
       setDeviceLogs(logsData.logs || [])
       setDeviceAlerts((alertsData.alerts || []).filter(a => a.status !== 'resolved'))
       setDeviceMeasurements(historyData.measurements || [])
+      // Filtrer les commandes pour ce dispositif uniquement
+      const filteredCommands = (commandsData.commands || []).filter(cmd => 
+        String(cmd.device_id) === String(device.id) || cmd.sim_iccid === device.sim_iccid
+      )
+      setDeviceCommands(filteredCommands)
       setDeviceDetails(device)
     } catch (err) {
       console.error(err)
     } finally {
       setLoadingDetails(false)
+    }
+  }
+
+  // Charger les commandes pour le dispositif sélectionné
+  const loadDeviceCommands = useCallback(async () => {
+    if (!selectedDevice) return
+    try {
+      const commandsData = await fetchJson(
+        fetchWithAuth, 
+        API_URL, 
+        `/api.php/devices/commands?limit=100`, 
+        {}, 
+        { requiresAuth: true }
+      ).catch(() => ({ commands: [] }))
+      
+      const filteredCommands = (commandsData.commands || []).filter(cmd => 
+        String(cmd.device_id) === String(selectedDevice.id) || cmd.sim_iccid === selectedDevice.sim_iccid
+      )
+      setDeviceCommands(filteredCommands)
+    } catch (err) {
+      console.error('Erreur chargement commandes:', err)
+    }
+  }, [selectedDevice, fetchWithAuth, API_URL])
+
+  useEffect(() => {
+    if (modalActiveTab === 'commands' && selectedDevice) {
+      loadDeviceCommands()
+    }
+  }, [modalActiveTab, selectedDevice, commandRefreshTick, loadDeviceCommands])
+
+  // Fonction pour envoyer une commande depuis le modal
+  const handleCreateCommand = async (e) => {
+    e.preventDefault()
+    if (!selectedDevice) return
+
+    const payload = {}
+    if (commandForm.command === 'SET_SLEEP_SECONDS') {
+      payload.seconds = Number(commandForm.sleepSeconds) || 300
+    } else if (commandForm.command === 'PING') {
+      payload.message = commandForm.message?.trim() || 'PING'
+    } else if (commandForm.command === 'UPDATE_CONFIG') {
+      const addString = (key, value) => {
+        const trimmed = (value ?? '').trim()
+        if (trimmed) payload[key] = trimmed
+      }
+      const addNumber = (key, value) => {
+        if (value === '' || value === null || value === undefined) return
+        const num = Number(value)
+        if (Number.isFinite(num)) {
+          payload[key] = num
+        }
+      }
+      addString('apn', commandForm.configApn)
+      addString('jwt', commandForm.configJwt)
+      addString('iccid', commandForm.configIccid)
+      addString('serial', commandForm.configSerial)
+      addString('sim_pin', commandForm.configSimPin)
+      addNumber('sleep_minutes_default', commandForm.configSleepMinutes)
+      addNumber('airflow_passes', commandForm.configAirflowPasses)
+      addNumber('airflow_samples_per_pass', commandForm.configAirflowSamples)
+      addNumber('airflow_delay_ms', commandForm.configAirflowDelay)
+      addNumber('watchdog_seconds', commandForm.configWatchdogSeconds)
+      addNumber('modem_boot_timeout_ms', commandForm.configModemBootTimeout)
+      addNumber('sim_ready_timeout_ms', commandForm.configSimReadyTimeout)
+      addNumber('network_attach_timeout_ms', commandForm.configNetworkAttachTimeout)
+      addNumber('modem_max_reboots', commandForm.configModemReboots)
+      addString('ota_primary_url', commandForm.configOtaPrimaryUrl)
+      addString('ota_fallback_url', commandForm.configOtaFallbackUrl)
+      addString('ota_md5', commandForm.configOtaMd5)
+
+      if (Object.keys(payload).length === 0) {
+        setCommandError('Veuillez renseigner au moins un champ de configuration')
+        return
+      }
+    } else if (commandForm.command === 'UPDATE_CALIBRATION') {
+      if (commandForm.calA0 === '' || commandForm.calA1 === '' || commandForm.calA2 === '') {
+        setCommandError('Veuillez fournir les coefficients a0, a1 et a2')
+        return
+      }
+      payload.a0 = Number(commandForm.calA0)
+      payload.a1 = Number(commandForm.calA1)
+      payload.a2 = Number(commandForm.calA2)
+      if ([payload.a0, payload.a1, payload.a2].some((value) => Number.isNaN(value))) {
+        setCommandError('Les coefficients doivent être numériques')
+        return
+      }
+    } else if (commandForm.command === 'OTA_REQUEST') {
+      payload.channel = commandForm.otaChannel
+      const trimmedUrl = commandForm.otaUrl?.trim()
+      if (trimmedUrl) {
+        payload.url = trimmedUrl
+      }
+      const trimmedMd5 = commandForm.otaMd5?.trim()
+      if (trimmedMd5) {
+        payload.md5 = trimmedMd5
+      }
+    }
+
+    const body = {
+      command: commandForm.command,
+      payload,
+      priority: commandForm.priority,
+      expires_in_seconds: Number(commandForm.expiresInMinutes) > 0 ? Number(commandForm.expiresInMinutes) * 60 : undefined,
+    }
+
+    try {
+      setCreatingCommand(true)
+      setCommandError(null)
+      setCommandSuccess(null)
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${selectedDevice.sim_iccid}/commands`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+        { requiresAuth: true }
+      )
+      setCommandSuccess('✅ Commande envoyée avec succès')
+      // Réinitialiser le formulaire
+      setCommandForm({
+        command: 'SET_SLEEP_SECONDS',
+        sleepSeconds: 300,
+        message: '',
+        priority: 'normal',
+        expiresInMinutes: 60,
+        configApn: '',
+        configJwt: '',
+        configIccid: '',
+        configSerial: '',
+        configSimPin: '',
+        configSleepMinutes: '',
+        configAirflowPasses: '',
+        configAirflowSamples: '',
+        configAirflowDelay: '',
+        configWatchdogSeconds: '',
+        configModemBootTimeout: '',
+        configSimReadyTimeout: '',
+        configNetworkAttachTimeout: '',
+        configModemReboots: '',
+        configOtaPrimaryUrl: '',
+        configOtaFallbackUrl: '',
+        configOtaMd5: '',
+        calA0: '',
+        calA1: '',
+        calA2: '',
+        otaUrl: '',
+        otaChannel: 'primary',
+        otaMd5: '',
+      })
+      setCommandRefreshTick(tick => tick + 1)
+    } catch (err) {
+      console.error(err)
+      setCommandError(err.message || 'Erreur lors de l\'envoi de la commande')
+    } finally {
+      setCreatingCommand(false)
     }
   }
 
@@ -204,55 +539,6 @@ export default function DevicesPage() {
     }
   }
 
-  const handleOTA = (device) => {
-    setOtaDevice(device)
-    setSelectedFirmware('')
-    setOtaModalOpen(true)
-  }
-
-  const closeOTAModal = () => {
-    setOtaModalOpen(false)
-    setOtaDevice(null)
-    setSelectedFirmware('')
-  }
-
-  const confirmOTA = async () => {
-    if (!otaDevice || !selectedFirmware) {
-      alert('Veuillez sélectionner un firmware')
-      return
-    }
-
-    const currentFirmware = otaDevice.firmware_version || 'N/A'
-    const confirmMessage = `⚠️ ATTENTION : Mise à jour OTA\n\n` +
-      `Dispositif: ${otaDevice.device_name || otaDevice.sim_iccid}\n` +
-      `Firmware actuel: ${currentFirmware}\n` +
-      `Firmware cible: ${selectedFirmware}\n\n` +
-      `Cette opération peut planter le dispositif si le firmware est incompatible.\n` +
-      `Êtes-vous sûr de vouloir continuer ?`
-
-    if (!confirm(confirmMessage)) return
-
-    setOtaLoading(prev => ({ ...prev, [otaDevice.id]: true }))
-    try {
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${otaDevice.id}/ota`,
-        { 
-          method: 'POST', 
-          body: JSON.stringify({ firmware_version: selectedFirmware }) 
-        },
-        { requiresAuth: true }
-      )
-      alert(`✅ Mise à jour OTA v${selectedFirmware} programmée avec succès`)
-      await loadDevices()
-      closeOTAModal()
-    } catch (err) {
-      alert(`❌ Erreur OTA: ${err.message}`)
-    } finally {
-      setOtaLoading(prev => ({ ...prev, [otaDevice.id]: false }))
-    }
-  }
 
   const getStatusBadge = (device) => {
     if (!device.last_seen) return { label: 'Jamais vu', color: 'bg-gray-100 text-gray-700' }
@@ -276,8 +562,6 @@ export default function DevicesPage() {
 
   const tabs = [
     { id: 'list', label: '📋 Liste', icon: '📋' },
-    { id: 'ota', label: '⬆️ Mise à jour', icon: '⬆️', permission: 'devices.edit' },
-    { id: 'commands', label: '📡 Commandes', icon: '📡', permission: 'devices.commands' },
   ]
 
   const hasPermission = (permission) => {
@@ -349,7 +633,14 @@ export default function DevicesPage() {
         </div>
       )}
 
-      {/* Filtres */}
+      {/* Messages OTA */}
+      {(otaError || otaMessage) && (
+        <div className={`alert ${otaError ? 'alert-warning' : 'alert-success'}`}>
+          {otaError || otaMessage}
+        </div>
+      )}
+
+      {/* Filtres et sélection firmware */}
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex gap-2">
           {[
@@ -378,7 +669,40 @@ export default function DevicesPage() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
             className="input w-full"
-        />
+          />
+        </div>
+
+        {/* Sélecteur de firmware pour OTA */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+            Firmware OTA:
+          </label>
+          <select
+            value={selectedFirmwareVersion}
+            onChange={(e) => {
+              setSelectedFirmwareVersion(e.target.value)
+              setOtaMessage(null)
+              setOtaError(null)
+            }}
+            className="input min-w-[150px]"
+          >
+            <option value="">— Sélectionner —</option>
+            {firmwares.map(fw => (
+              <option key={fw.id} value={fw.version}>
+                v{fw.version}
+              </option>
+            ))}
+          </select>
+          {selectedFirmwareVersion && devicesToUpdate.length > 1 && (
+            <button
+              onClick={handleOTAAll}
+              disabled={Object.keys(otaDeploying).length > 0}
+              className="btn-primary text-sm whitespace-nowrap"
+              title={`Flasher tous les ${devicesToUpdate.length} dispositifs concernés`}
+            >
+              {Object.keys(otaDeploying).length > 0 ? '⏳ Déploiement...' : `🚀 Flasher tous (${devicesToUpdate.length})`}
+            </button>
+          )}
         </div>
       </div>
 
@@ -396,12 +720,15 @@ export default function DevicesPage() {
                 <th className="text-left py-3 px-4">Batterie</th>
                 <th className="text-left py-3 px-4">Dernier contact</th>
                 <th className="text-left py-3 px-4">Firmware</th>
+                {selectedFirmwareVersion && (
+                  <th className="text-right py-3 px-4">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {filteredDevices.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-8 text-center text-gray-500">
+                  <td colSpan={selectedFirmwareVersion ? 7 : 6} className="py-8 text-center text-gray-500">
                     Aucun dispositif trouvé
                   </td>
                 </tr>
@@ -409,6 +736,10 @@ export default function DevicesPage() {
                 filteredDevices.map((device, i) => {
                   const status = getStatusBadge(device)
                   const battery = getBatteryBadge(device.last_battery)
+                  const deviceFirmware = device.firmware_version || '0.0.0'
+                  const needsUpdate = selectedFirmwareVersion && deviceFirmware !== selectedFirmwareVersion
+                  const isDeploying = otaDeploying[device.id]
+                  
                   return (
                     <tr 
                       key={device.id} 
@@ -418,7 +749,7 @@ export default function DevicesPage() {
                       <td className="py-3 px-4">
                         <div>
                           <p className="font-semibold text-primary">{device.device_name || 'Sans nom'}</p>
-                          <p className="text-xs text-gray-500 font-mono">{device.sim_iccid}</p>
+                          <p className="text-xs text-muted font-mono">{device.sim_iccid}</p>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -449,7 +780,26 @@ export default function DevicesPage() {
                         {device.ota_pending && (
                           <span className="badge badge-warning text-xs ml-2">OTA en attente</span>
                         )}
+                        {needsUpdate && (
+                          <span className="badge badge-info text-xs ml-2">→ v{selectedFirmwareVersion}</span>
+                        )}
                       </td>
+                      {selectedFirmwareVersion && (
+                        <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          {needsUpdate ? (
+                            <button
+                              onClick={(e) => handleOTA(device, e)}
+                              disabled={isDeploying}
+                              className="btn-primary text-xs px-3 py-1"
+                              title={`Flasher vers v${selectedFirmwareVersion}`}
+                            >
+                              {isDeploying ? '⏳' : '⬆️ Flasher'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">✓ À jour</span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   )
                 })
@@ -461,8 +811,6 @@ export default function DevicesPage() {
         </>
       )}
 
-      {activeTab === 'ota' && <OTAPage />}
-      {activeTab === 'commands' && <CommandsPage />}
 
       {/* Modal Détails & Journal - accessible depuis tous les onglets */}
       {showDetailsModal && selectedDevice && (
@@ -524,6 +872,18 @@ export default function DevicesPage() {
                 >
                   📝 Journal ({deviceLogs.length})
                 </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setModalActiveTab('commands')}
+                    className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
+                      modalActiveTab === 'commands'
+                        ? 'border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
+                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    📡 Commandes ({deviceCommands.length})
+                  </button>
+                )}
               </nav>
             </div>
 
@@ -633,6 +993,277 @@ export default function DevicesPage() {
                       )}
                     </div>
                   )}
+
+                  {modalActiveTab === 'commands' && isAdmin && (
+                    <div className="h-full flex flex-col space-y-6">
+                      <div>
+                        <h3 className="text-lg font-semibold mb-4 text-primary">📡 Commandes</h3>
+                        {(commandError || commandSuccess) && (
+                          <div className={`alert ${commandError ? 'alert-warning' : 'alert-success'} mb-4`}>
+                            {commandError || commandSuccess}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Formulaire de commande */}
+                      <div className="card">
+                        <h4 className="text-md font-semibold mb-4 text-primary">Envoyer une commande</h4>
+                        <form onSubmit={handleCreateCommand} className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-muted mb-2">Type de commande *</label>
+                            <select
+                              className="input"
+                              value={commandForm.command}
+                              onChange={(e) => setCommandForm((prev) => ({ ...prev, command: e.target.value }))}
+                              required
+                            >
+                              {commandOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Paramètres spécifiques selon le type de commande */}
+                          {commandForm.command === 'SET_SLEEP_SECONDS' && (
+                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                              <label className="block text-sm font-medium text-muted mb-2">
+                                Intervalle de sommeil (secondes) *
+                              </label>
+                              <input
+                                type="number"
+                                min={30}
+                                max={7200}
+                                className="input"
+                                value={commandForm.sleepSeconds}
+                                onChange={(e) => setCommandForm((prev) => ({ ...prev, sleepSeconds: e.target.value }))}
+                                required
+                              />
+                              <p className="text-xs text-muted mt-1">Valeur entre 30 et 7200 secondes</p>
+                            </div>
+                          )}
+
+                          {commandForm.command === 'PING' && (
+                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                              <label className="block text-sm font-medium text-muted mb-2">
+                                Message de diagnostic (optionnel)
+                              </label>
+                              <input
+                                type="text"
+                                className="input"
+                                placeholder="Ex: Test de connexion"
+                                value={commandForm.message}
+                                onChange={(e) => setCommandForm((prev) => ({ ...prev, message: e.target.value }))}
+                              />
+                              <p className="text-xs text-muted mt-1">Message qui sera renvoyé par le dispositif</p>
+                            </div>
+                          )}
+
+                          {commandForm.command === 'UPDATE_CONFIG' && (
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 space-y-4">
+                              <div className="bg-amber-100 dark:bg-amber-900/30 border-l-4 border-amber-500 dark:border-amber-400 p-3 rounded">
+                                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ Configuration avancée</p>
+                                <p className="text-xs text-amber-700 dark:text-amber-300">
+                                  Remplir uniquement les champs à modifier. Les valeurs vides seront ignorées.
+                                </p>
+                              </div>
+                              
+                              <div>
+                                <p className="text-sm font-semibold text-primary mb-3">🔐 Identité & Réseau</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <input className="input" placeholder="APN" value={commandForm.configApn} onChange={(e) => setCommandForm((prev) => ({ ...prev, configApn: e.target.value }))} />
+                                  <input className="input" placeholder="JWT Bearer..." value={commandForm.configJwt} onChange={(e) => setCommandForm((prev) => ({ ...prev, configJwt: e.target.value }))} />
+                                  <input className="input" placeholder="ICCID" value={commandForm.configIccid} onChange={(e) => setCommandForm((prev) => ({ ...prev, configIccid: e.target.value }))} />
+                                  <input className="input" placeholder="Numéro de série" value={commandForm.configSerial} onChange={(e) => setCommandForm((prev) => ({ ...prev, configSerial: e.target.value }))} />
+                                  <input className="input" placeholder="PIN SIM" value={commandForm.configSimPin} onChange={(e) => setCommandForm((prev) => ({ ...prev, configSimPin: e.target.value }))} />
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="text-sm font-semibold text-primary mb-3">📊 Mesures & Sommeil</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <input type="number" min={1} className="input" placeholder="Sommeil par défaut (minutes)" value={commandForm.configSleepMinutes} onChange={(e) => setCommandForm((prev) => ({ ...prev, configSleepMinutes: e.target.value }))} />
+                                  <input type="number" min={1} className="input" placeholder="Passes capteur" value={commandForm.configAirflowPasses} onChange={(e) => setCommandForm((prev) => ({ ...prev, configAirflowPasses: e.target.value }))} />
+                                  <input type="number" min={1} className="input" placeholder="Échantillons / passe" value={commandForm.configAirflowSamples} onChange={(e) => setCommandForm((prev) => ({ ...prev, configAirflowSamples: e.target.value }))} />
+                                  <input type="number" min={1} className="input" placeholder="Délai échantillons (ms)" value={commandForm.configAirflowDelay} onChange={(e) => setCommandForm((prev) => ({ ...prev, configAirflowDelay: e.target.value }))} />
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="text-sm font-semibold text-primary mb-3">⚙️ Watchdog & Modem</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <input type="number" min={5} className="input" placeholder="Watchdog (secondes)" value={commandForm.configWatchdogSeconds} onChange={(e) => setCommandForm((prev) => ({ ...prev, configWatchdogSeconds: e.target.value }))} />
+                                  <input type="number" min={1000} className="input" placeholder="Timeout boot modem (ms)" value={commandForm.configModemBootTimeout} onChange={(e) => setCommandForm((prev) => ({ ...prev, configModemBootTimeout: e.target.value }))} />
+                                  <input type="number" min={1000} className="input" placeholder="Timeout SIM prête (ms)" value={commandForm.configSimReadyTimeout} onChange={(e) => setCommandForm((prev) => ({ ...prev, configSimReadyTimeout: e.target.value }))} />
+                                  <input type="number" min={1000} className="input" placeholder="Timeout attache réseau (ms)" value={commandForm.configNetworkAttachTimeout} onChange={(e) => setCommandForm((prev) => ({ ...prev, configNetworkAttachTimeout: e.target.value }))} />
+                                  <input type="number" min={1} className="input" placeholder="Redémarrages modem max" value={commandForm.configModemReboots} onChange={(e) => setCommandForm((prev) => ({ ...prev, configModemReboots: e.target.value }))} />
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="text-sm font-semibold text-primary mb-3">⬆️ OTA par défaut</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <input className="input" placeholder="URL primaire" value={commandForm.configOtaPrimaryUrl} onChange={(e) => setCommandForm((prev) => ({ ...prev, configOtaPrimaryUrl: e.target.value }))} />
+                                  <input className="input" placeholder="URL fallback" value={commandForm.configOtaFallbackUrl} onChange={(e) => setCommandForm((prev) => ({ ...prev, configOtaFallbackUrl: e.target.value }))} />
+                                  <input className="input md:col-span-2" placeholder="MD5 attendu (optionnel)" value={commandForm.configOtaMd5} onChange={(e) => setCommandForm((prev) => ({ ...prev, configOtaMd5: e.target.value }))} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {commandForm.command === 'UPDATE_CALIBRATION' && (
+                            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                              <p className="text-sm font-semibold text-primary mb-3">📐 Coefficients de calibration</p>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {['a0', 'a1', 'a2'].map((coef) => (
+                                  <div key={coef}>
+                                    <label className="block text-sm font-medium text-muted mb-1">
+                                      Coefficient {coef.toUpperCase()} *
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      className="input"
+                                      placeholder={`Valeur ${coef.toUpperCase()}`}
+                                      value={commandForm[`cal${coef.toUpperCase()}`]}
+                                      onChange={(e) =>
+                                        setCommandForm((prev) => ({
+                                          ...prev,
+                                          [`cal${coef.toUpperCase()}`]: e.target.value,
+                                        }))
+                                      }
+                                      required
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {commandForm.command === 'OTA_REQUEST' && (
+                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4 space-y-3">
+                              <div className="bg-orange-100 dark:bg-orange-900/30 border-l-4 border-orange-500 dark:border-orange-400 p-3 rounded">
+                                <p className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">⚠️ Mise à jour OTA</p>
+                                <p className="text-xs text-orange-700 dark:text-orange-300">
+                                  Laisser l'URL vide pour utiliser la configuration stockée dans le dispositif.
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-muted mb-2">Canal OTA</label>
+                                <select
+                                  className="input"
+                                  value={commandForm.otaChannel}
+                                  onChange={(e) => setCommandForm((prev) => ({ ...prev, otaChannel: e.target.value }))}
+                                >
+                                  <option value="primary">Primaire</option>
+                                  <option value="fallback">Fallback</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-muted mb-2">URL du firmware (optionnel)</label>
+                                <input
+                                  type="text"
+                                  className="input"
+                                  placeholder="https://..."
+                                  value={commandForm.otaUrl}
+                                  onChange={(e) => setCommandForm((prev) => ({ ...prev, otaUrl: e.target.value }))}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-muted mb-2">MD5 attendu (optionnel)</label>
+                                <input
+                                  type="text"
+                                  className="input"
+                                  placeholder="Hash MD5 du firmware"
+                                  value={commandForm.otaMd5}
+                                  onChange={(e) => setCommandForm((prev) => ({ ...prev, otaMd5: e.target.value }))}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-200 dark:border-gray-700">
+                            <div>
+                              <label className="block text-sm font-medium text-muted mb-2">Priorité</label>
+                              <select
+                                className="input"
+                                value={commandForm.priority}
+                                onChange={(e) => setCommandForm((prev) => ({ ...prev, priority: e.target.value }))}
+                              >
+                                {priorityOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-muted mb-2">Expiration (minutes)</label>
+                              <input
+                                type="number"
+                                min={5}
+                                className="input"
+                                value={commandForm.expiresInMinutes}
+                                onChange={(e) => setCommandForm((prev) => ({ ...prev, expiresInMinutes: e.target.value }))}
+                              />
+                              <p className="text-xs text-muted mt-1">Temps avant expiration de la commande</p>
+                            </div>
+                          </div>
+
+                          <button type="submit" className="btn-primary w-full" disabled={creatingCommand}>
+                            {creatingCommand ? '⏳ Envoi en cours...' : '📤 Envoyer la commande'}
+                          </button>
+                        </form>
+                      </div>
+
+                      {/* Historique des commandes */}
+                      <div className="card flex-1 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-md font-semibold text-primary">Historique des commandes</h4>
+                          <button 
+                            className="btn-secondary text-sm" 
+                            onClick={() => setCommandRefreshTick(tick => tick + 1)}
+                          >
+                            🔄 Actualiser
+                          </button>
+                        </div>
+                        
+                        {deviceCommands.length === 0 ? (
+                          <div className="text-center py-12 text-muted">
+                            <p className="text-sm">Aucune commande enregistrée pour ce dispositif</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {deviceCommands.map((cmd) => (
+                              <div key={cmd.id} className="border border-gray-200/80 dark:border-slate-700/50 rounded-lg p-3 text-sm bg-gradient-to-br from-white to-gray-50/50 dark:from-slate-800/50 dark:to-slate-800/30 backdrop-blur-sm hover:shadow-md transition-all duration-200">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-medium text-primary">{cmd.command}</span>
+                                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${commandStatusColors[cmd.status] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
+                                    {cmd.status === 'pending' ? '⏳ En attente' :
+                                     cmd.status === 'executed' ? '✅ Exécutée' :
+                                     cmd.status === 'error' ? '❌ Erreur' :
+                                     cmd.status === 'expired' ? '⏰ Expirée' :
+                                     cmd.status === 'cancelled' ? '🚫 Annulée' :
+                                     cmd.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-muted">
+                                  <span>Priorité: {cmd.priority}</span>
+                                  <span>{new Date(cmd.created_at ?? cmd.execute_after).toLocaleString('fr-FR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -701,91 +1332,6 @@ export default function DevicesPage() {
         </div>
       )}
 
-      {/* Modal OTA */}
-      {otaModalOpen && otaDevice && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-xl shadow-2xl w-full max-w-xl p-6 space-y-4 animate-scale-in backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">⬆️ Mise à jour Firmware OTA</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {otaDevice.device_name || otaDevice.sim_iccid}
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Firmware actuel: <span className="font-mono font-semibold">{otaDevice.firmware_version || 'N/A'}</span>
-                </p>
-              </div>
-              <button 
-                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" 
-                onClick={closeOTAModal} 
-                disabled={otaLoading[otaDevice.id]}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="bg-gradient-to-r from-amber-50 to-amber-50/50 dark:from-amber-900/20 dark:to-amber-900/10 border-l-4 border-amber-500 dark:border-amber-400 p-4 rounded backdrop-blur-sm">
-              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ Attention</p>
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Une mise à jour OTA avec un firmware incompatible peut planter le dispositif de manière irréversible. 
-                Assurez-vous que le firmware sélectionné est compatible avec ce modèle de dispositif.
-              </p>
-            </div>
-
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-              Firmware cible
-              <select
-                className="input mt-1"
-                value={selectedFirmware}
-                onChange={(e) => setSelectedFirmware(e.target.value)}
-                disabled={otaLoading[otaDevice.id]}
-              >
-                <option value="">— Sélectionner un firmware —</option>
-                {firmwares
-                  .filter(fw => fw.version !== otaDevice.firmware_version)
-                  .sort((a, b) => {
-                    // Trier par version (décroissant) - versions stables en premier
-                    if (a.is_stable !== b.is_stable) return b.is_stable - a.is_stable
-                    return b.version.localeCompare(a.version, undefined, { numeric: true })
-                  })
-                  .map(firmware => (
-                    <option key={firmware.id} value={firmware.version}>
-                      {firmware.version} {firmware.is_stable ? '✅ Stable' : '⚠️ Beta'} 
-                      {firmware.release_notes ? ` - ${firmware.release_notes.substring(0, 50)}` : ''}
-                    </option>
-                  ))}
-              </select>
-            </label>
-
-              {selectedFirmware && (
-                <div className="bg-gradient-to-r from-blue-50 to-blue-50/50 dark:from-blue-900/20 dark:to-blue-900/10 border border-blue-200/80 dark:border-blue-800/50 rounded p-3 backdrop-blur-sm">
-                  <p className="text-xs text-blue-800 dark:text-blue-300">
-                    <strong>Mise à jour prévue :</strong> {otaDevice.firmware_version || 'N/A'} → {selectedFirmware}
-                  </p>
-                </div>
-              )}
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button 
-                type="button" 
-                className="btn-secondary" 
-                onClick={closeOTAModal} 
-                disabled={otaLoading[otaDevice.id]}
-              >
-                Annuler
-              </button>
-              <button 
-                type="button" 
-                className="btn-primary" 
-                onClick={confirmOTA}
-                disabled={!selectedFirmware || otaLoading[otaDevice.id]}
-              >
-                {otaLoading[otaDevice.id] ? 'Envoi en cours…' : 'Lancer la mise à jour'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -681,7 +681,7 @@ export default function PatientsPage() {
                     <h3 className="text-lg font-semibold mb-4">📋 Informations</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-gray-500">Prénom</p>
+                        <p className="text-sm text-muted">Prénom</p>
                         <p className="font-medium text-primary">{selectedPatient.first_name}</p>
                       </div>
                       <div>
@@ -690,26 +690,26 @@ export default function PatientsPage() {
                       </div>
                       {selectedPatient.birth_date && (
                         <div>
-                          <p className="text-sm text-gray-500">Date de naissance</p>
-                          <p className="font-medium">{new Date(selectedPatient.birth_date).toLocaleDateString('fr-FR')}</p>
+                          <p className="text-sm text-muted">Date de naissance</p>
+                          <p className="font-medium text-primary">{new Date(selectedPatient.birth_date).toLocaleDateString('fr-FR')}</p>
                         </div>
                       )}
                       {selectedPatient.phone && (
                         <div>
-                          <p className="text-sm text-gray-500">Téléphone</p>
-                          <p className="font-medium">{selectedPatient.phone}</p>
+                          <p className="text-sm text-muted">Téléphone</p>
+                          <p className="font-medium text-primary">{selectedPatient.phone}</p>
                         </div>
                       )}
                       {selectedPatient.email && (
                         <div>
-                          <p className="text-sm text-gray-500">Email</p>
-                          <p className="font-medium">{selectedPatient.email}</p>
+                          <p className="text-sm text-muted">Email</p>
+                          <p className="font-medium text-primary">{selectedPatient.email}</p>
                         </div>
                       )}
                       {(selectedPatient.city || selectedPatient.postal_code) && (
                         <div>
-                          <p className="text-sm text-gray-500">Adresse</p>
-                          <p className="font-medium">
+                          <p className="text-sm text-muted">Adresse</p>
+                          <p className="font-medium text-primary">
                             {selectedPatient.city || ''} {selectedPatient.postal_code || ''}
                           </p>
                         </div>

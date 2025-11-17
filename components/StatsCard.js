@@ -38,8 +38,8 @@ export default function StatsCard({ title, value, icon, color = 'primary', delay
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm text-gray-600 mb-1">{title}</p>
-          <p className="text-3xl font-bold text-gray-900 mb-2">
+          <p className="text-sm text-muted mb-1">{title}</p>
+          <p className="text-3xl font-bold text-primary mb-2">
             {typeof value === 'string' && value.includes('%') ? value : displayValue}
           </p>
         </div>

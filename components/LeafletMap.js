@@ -20,12 +20,12 @@ const statusBadges = {
 const ONLINE_THRESHOLD_HOURS = 2
 const WARNING_THRESHOLD_HOURS = 6
 
-function buildIcon(status = 'online', deviceId = null, deviceName = null, isHovered = false) {
+function buildIcon(status = 'online', deviceId = null, deviceName = null) {
   const color = statusColors[status] || statusColors.online
-  const size = isHovered ? 18 : 14
-  const borderSize = isHovered ? 4 : 3
-  const shadowSize = isHovered ? 12 : 8
-  const pulseClass = isHovered ? 'marker-pulse' : ''
+  // Taille fixe pour éviter la disparition au survol
+  const size = 14
+  const borderSize = 3
+  const shadowSize = 8
   
   // Créer un label court pour identifier le dispositif
   const label = deviceName 
@@ -33,7 +33,7 @@ function buildIcon(status = 'online', deviceId = null, deviceName = null, isHove
     : deviceId?.toString().slice(-2) || ''
   
   return L.divIcon({
-    className: `custom-marker ${pulseClass}`,
+    className: 'custom-marker',
     html: `
       <div class="marker-container" style="
         position: relative;
@@ -43,19 +43,19 @@ function buildIcon(status = 'online', deviceId = null, deviceName = null, isHove
         align-items: center;
         justify-content: center;
       ">
-      <div style="
+      <div class="marker-dot" style="
         background:${color};
-          width:${size}px;
-          height:${size}px;
+        width:${size}px;
+        height:${size}px;
         border-radius:50%;
-          border:${borderSize}px solid white;
-          box-shadow:0 0 ${shadowSize}px rgba(0,0,0,0.4);
-          transition: all 0.3s ease;
-          position: relative;
-          z-index: 2;
+        border:${borderSize}px solid white;
+        box-shadow:0 0 ${shadowSize}px rgba(0,0,0,0.4);
+        transition: all 0.3s ease;
+        position: relative;
+        z-index: 2;
       "></div>
         ${label ? `
-        <div style="
+        <div class="marker-label" style="
           position: absolute;
           top: -8px;
           right: -8px;
@@ -74,8 +74,8 @@ function buildIcon(status = 'online', deviceId = null, deviceName = null, isHove
         ` : ''}
       </div>
     `,
-    iconSize: [isHovered ? 30 : 26, isHovered ? 30 : 26],
-    iconAnchor: [isHovered ? 15 : 13, isHovered ? 30 : 26]
+    iconSize: [26, 26], // Taille fixe
+    iconAnchor: [13, 26] // Anchor fixe
   })
 }
 
@@ -175,20 +175,43 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
     [devices]
   )
 
+  // Mémoriser les icônes pour éviter les re-renders
+  const deviceIcons = useMemo(() => {
+    const icons = {}
+    enrichedDevices.forEach(device => {
+      icons[device.id] = buildIcon(device.connectionStatus, device.id, device.device_name, false)
+    })
+    return icons
+  }, [enrichedDevices])
+
   return (
     <>
       {enrichedDevices.map(device => {
-        const isHovered = hoveredDeviceId === device.id
         return (
         <Marker
           key={device.id}
           position={[device.latitude, device.longitude]}
-            icon={buildIcon(device.connectionStatus, device.id, device.device_name, isHovered)}
-            eventHandlers={{
-              click: () => onSelect?.(device),
-              mouseover: () => setHoveredDeviceId(device.id),
-              mouseout: () => setHoveredDeviceId(null)
-            }}
+          icon={deviceIcons[device.id]}
+          eventHandlers={{
+            click: () => onSelect?.(device),
+            mouseover: (e) => {
+              // Ajouter la classe hover via le DOM directement (évite le re-render)
+              const markerElement = e.target.getElement()
+              if (markerElement) {
+                markerElement.classList.add('marker-hovered')
+              }
+              setHoveredDeviceId(device.id)
+            },
+            mouseout: (e) => {
+              // Retirer la classe hover
+              const markerElement = e.target.getElement()
+              if (markerElement) {
+                markerElement.classList.remove('marker-hovered')
+              }
+              // Délai pour éviter la disparition lors du passage vers le popup
+              setTimeout(() => setHoveredDeviceId(null), 150)
+            }
+          }}
         >
           <Popup maxWidth={280}>
             <div className="space-y-2 p-1">
