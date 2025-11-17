@@ -2,38 +2,32 @@
 
 import dynamic from 'next/dynamic'
 import { Suspense, useEffect, useMemo, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
-import { fetchJson } from '@/lib/api'
 import { useSearchParams } from 'next/navigation'
+import { useApiData } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
 
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
 
 export default function MapPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
-  const [devices, setDevices] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [selectedDevice, setSelectedDevice] = useState(null)
   const searchParams = useSearchParams()
 
+  // Charger les données avec useApiData
+  const { data, loading, error } = useApiData(
+    '/api.php/devices',
+    { requiresAuth: false }
+  )
+
+  const devices = data?.devices || []
+  
+  // Sélectionner le premier dispositif si aucun n'est sélectionné (une seule fois)
   useEffect(() => {
-    const loadDevices = async () => {
-      try {
-        setError(null)
-        const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices')
-        const list = data.devices || []
-        setDevices(list)
-        if (!selectedDevice && list.length) {
-          setSelectedDevice(list[0])
-        }
-      } catch (err) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
+    if (!selectedDevice && devices.length > 0) {
+      setSelectedDevice(devices[0])
     }
-    loadDevices()
-  }, [fetchWithAuth, API_URL, selectedDevice])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devices.length])
 
   const focusDeviceId = searchParams.get('deviceId')
 
@@ -47,7 +41,15 @@ export default function MapPage() {
 
   if (loading) {
     return (
-      <div className="card animate-shimmer h-[600px]" />
+      <div className="space-y-6 animate-fade-in">
+        <div>
+          <h1 className="text-3xl font-bold">🗺️ Carte des Dispositifs</h1>
+          <p className="text-gray-600 mt-1">
+            Visualisation en direct des dispositifs (positions, batterie, statut transmission)
+          </p>
+        </div>
+        <LoadingSpinner size="lg" text="Chargement de la carte..." />
+      </div>
     )
   }
 
@@ -75,14 +77,10 @@ export default function MapPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="alert alert-warning">
-          <strong>Erreur API :</strong> {error}
-        </div>
-      )}
+      <ErrorMessage error={error} />
 
       <div className="card p-0 overflow-hidden">
-        <Suspense fallback={<div className="card animate-shimmer h-[600px]" />}>
+        <Suspense fallback={<LoadingSpinner size="lg" text="Chargement de la carte..." />}>
           <LeafletMap
             devices={mappableDevices}
             focusDeviceId={focusDeviceId}

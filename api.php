@@ -351,6 +351,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleTriggerOTA($m[1]);
 } elseif(preg_match('#/firmwares$#', $path) && $method === 'GET') {
     handleGetFirmwares();
+} elseif(preg_match('#/firmwares/(\d+)/download$#', $path, $matches) && $method === 'GET') {
+    handleDownloadFirmware($matches[1]);
 } elseif(preg_match('#/firmwares$#', $path) && $method === 'POST') {
     handleUploadFirmware();
 
@@ -363,6 +365,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleTestNotification();
 } elseif(preg_match('#/notifications/queue$#', $path) && $method === 'GET') {
     handleGetNotificationsQueue();
+} elseif(preg_match('#/notifications/process$#', $path) && $method === 'POST') {
+    handleProcessNotificationsQueue();
 
 // Admin tools
 } elseif(preg_match('#/admin/reset-demo$#', $path) && $method === 'POST') {
@@ -587,7 +591,7 @@ function handleCreateUser() {
                 'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
                 'first_name' => $input['first_name'] ?? '',
                 'last_name' => $input['last_name'] ?? '',
-                'role_id' => $input['role_id'] ?? 4,
+                'role_id' => $input['role_id'] ?? 3, // technicien par défaut (viewer supprimé)
                 'phone' => !empty($input['phone']) ? trim($input['phone']) : null
             ]);
         } else {
@@ -600,7 +604,7 @@ function handleCreateUser() {
             'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
             'first_name' => $input['first_name'] ?? '',
             'last_name' => $input['last_name'] ?? '',
-            'role_id' => $input['role_id'] ?? 4
+            'role_id' => $input['role_id'] ?? 3 // technicien par défaut (viewer supprimé)
         ]);
         }
         
@@ -2185,6 +2189,9 @@ function createAlert($pdo, $device_id, $type, $severity, $message) {
             'severity' => $severity,
             'message' => $message
         ]);
+        
+        // Déclencher les notifications pour cette alerte
+        triggerAlertNotifications($pdo, $device_id, $type, $severity, $message);
     } catch(PDOException $e) {}
 }
 
@@ -2456,6 +2463,45 @@ function handleUploadFirmware() {
     }
 }
 
+function handleDownloadFirmware($firmware_id) {
+    global $pdo;
+    requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        $stmt->execute(['id' => $firmware_id]);
+        $firmware = $stmt->fetch();
+        
+        if (!$firmware) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Firmware not found']);
+            return;
+        }
+        
+        $file_path = __DIR__ . '/' . $firmware['file_path'];
+        
+        if (!file_exists($file_path)) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Firmware file not found on server']);
+            return;
+        }
+        
+        // Envoyer le fichier
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="fw_ott_v' . $firmware['version'] . '.bin"');
+        header('Content-Length: ' . filesize($file_path));
+        header('Cache-Control: no-cache, must-revalidate');
+        header('Pragma: no-cache');
+        
+        readfile($file_path);
+        exit;
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
 // ============================================================================
 // HANDLERS - NOTIFICATIONS
 // ============================================================================
@@ -2489,6 +2535,13 @@ function handleUpdateNotificationPreferences() {
     $input = json_decode(file_get_contents('php://input'), true);
     
     try {
+        // Vérifier/créer les préférences
+        $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
+        $stmt->execute(['user_id' => $user['id']]);
+        if (!$stmt->fetch()) {
+            $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user['id']]);
+        }
+        
         $updates = [];
         $params = ['user_id' => $user['id']];
         
@@ -2498,8 +2551,15 @@ function handleUpdateNotificationPreferences() {
         
         foreach ($allowed as $field) {
             if (isset($input[$field])) {
-                $updates[] = "$field = :$field";
-                $params[$field] = $input[$field];
+                // Pour PostgreSQL, utiliser TRUE/FALSE pour les booléens
+                if (is_bool($input[$field])) {
+                    $updates[] = "$field = " . ($input[$field] ? 'TRUE' : 'FALSE');
+                } elseif ($input[$field] === null || $input[$field] === '') {
+                    $updates[] = "$field = NULL";
+                } else {
+                    $updates[] = "$field = :$field";
+                    $params[$field] = $input[$field];
+                }
             }
         }
         
@@ -2514,26 +2574,62 @@ function handleUpdateNotificationPreferences() {
         
         echo json_encode(['success' => true]);
     } catch(PDOException $e) {
+        error_log('[handleUpdateNotificationPreferences] Database error: ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
 function handleTestNotification() {
+    global $pdo;
     requireAuth();
     
+    $user = getCurrentUser();
     $input = json_decode(file_get_contents('php://input'), true);
     $type = $input['type'] ?? 'email';
     
-    if ($type === 'email') {
-        $result = ['success' => true, 'message' => 'Email test envoyé (SendGrid à configurer)'];
-    } elseif ($type === 'sms') {
-        $result = ['success' => true, 'message' => 'SMS test envoyé (Twilio à configurer)'];
-    } else {
-        $result = ['success' => false, 'error' => 'Invalid type'];
+    try {
+        // Récupérer les préférences de l'utilisateur
+        $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
+        $stmt->execute(['user_id' => $user['id']]);
+        $prefs = $stmt->fetch();
+        
+        if (!$prefs) {
+            echo json_encode(['success' => false, 'error' => 'Préférences non trouvées']);
+            return;
+        }
+        
+        $testMessage = "Ceci est un message de test depuis le dashboard OTT.";
+        $testSubject = "Test notification OTT";
+        
+        if ($type === 'email') {
+            if (!$prefs['email_enabled'] || !$user['email']) {
+                echo json_encode(['success' => false, 'error' => 'Email non activé ou adresse manquante']);
+                return;
+            }
+            $sent = sendEmail($user['email'], $testSubject, $testMessage);
+            $result = $sent 
+                ? ['success' => true, 'message' => 'Email test envoyé avec succès']
+                : ['success' => false, 'error' => 'Erreur lors de l\'envoi de l\'email'];
+        } elseif ($type === 'sms') {
+            if (!$prefs['sms_enabled'] || !$prefs['phone_number']) {
+                echo json_encode(['success' => false, 'error' => 'SMS non activé ou numéro manquant']);
+                return;
+            }
+            $sent = sendSMS($prefs['phone_number'], $testMessage);
+            $result = $sent 
+                ? ['success' => true, 'message' => 'SMS test envoyé avec succès']
+                : ['success' => false, 'error' => 'Erreur lors de l\'envoi du SMS'];
+        } else {
+            $result = ['success' => false, 'error' => 'Type invalide'];
+        }
+        
+        echo json_encode($result);
+    } catch(Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
-    
-    echo json_encode($result);
 }
 
 function handleGetNotificationsQueue() {
@@ -2558,6 +2654,21 @@ function handleGetNotificationsQueue() {
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleProcessNotificationsQueue() {
+    global $pdo;
+    requireAdmin(); // Seuls les admins peuvent déclencher le traitement manuellement
+    
+    try {
+        $input = json_decode(file_get_contents('php://input'), true);
+        $limit = isset($input['limit']) ? min(intval($input['limit']), 100) : 50;
+        $result = processNotificationsQueue($pdo, $limit);
+        echo json_encode(['success' => true, 'result' => $result]);
+    } catch(Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
 }
 
@@ -2600,11 +2711,12 @@ function handleUpdateUserNotifications($user_id) {
             return;
         }
         
-        // Vérifier/créer les préférences
-        $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
-        $stmt->execute(['user_id' => $user_id]);
-        if (!$stmt->fetch()) {
-            $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user_id]);
+        // Vérifier/créer les préférences (avec SMS activé par défaut)
+        $checkStmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
+        $checkStmt->execute(['user_id' => $user_id]);
+        if (!$checkStmt->fetch()) {
+            $insertStmt = $pdo->prepare("INSERT INTO user_notifications_preferences (user_id, sms_enabled) VALUES (:user_id, TRUE)");
+            $insertStmt->execute(['user_id' => $user_id]);
         }
         
         $updates = [];
@@ -2616,8 +2728,30 @@ function handleUpdateUserNotifications($user_id) {
         
         foreach ($allowed as $field) {
             if (isset($input[$field])) {
-                $updates[] = "$field = :$field";
-                $params[$field] = $input[$field];
+                $value = $input[$field];
+                
+                // Détecter les champs booléens
+                $isBooleanField = in_array($field, ['email_enabled', 'sms_enabled', 'push_enabled', 
+                    'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow', 'notify_new_patient']);
+                
+                if ($isBooleanField) {
+                    // Convertir en booléen (gérer string "true"/"false", 0/1, etc.)
+                    $boolValue = false;
+                    if (is_bool($value)) {
+                        $boolValue = $value;
+                    } elseif (is_string($value)) {
+                        $boolValue = in_array(strtolower($value), ['true', '1', 'yes', 'on']);
+                    } elseif (is_numeric($value)) {
+                        $boolValue = (int)$value !== 0;
+                    }
+                    // Pour PostgreSQL, utiliser TRUE/FALSE directement dans la requête
+                    $updates[] = "$field = " . ($boolValue ? 'TRUE' : 'FALSE');
+                } elseif ($value === null || $value === '') {
+                    $updates[] = "$field = NULL";
+                } else {
+                    $updates[] = "$field = :$field";
+                    $params[$field] = $value;
+                }
             }
         }
         
@@ -2627,13 +2761,22 @@ function handleUpdateUserNotifications($user_id) {
             return;
         }
         
-        $stmt = $pdo->prepare("UPDATE user_notifications_preferences SET " . implode(', ', $updates) . " WHERE user_id = :user_id");
+        // Construire la requête SQL
+        $sql = "UPDATE user_notifications_preferences SET " . implode(', ', $updates) . " WHERE user_id = :user_id";
+        
+        // Préparer et exécuter la requête
+        $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         
         echo json_encode(['success' => true]);
     } catch(PDOException $e) {
+        error_log('[handleUpdateUserNotifications] Database error: ' . $e->getMessage());
+        error_log('[handleUpdateUserNotifications] SQL: ' . ($sql ?? 'N/A'));
+        error_log('[handleUpdateUserNotifications] Params: ' . json_encode($params ?? []));
+        error_log('[handleUpdateUserNotifications] Input: ' . json_encode($input ?? []));
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -2692,8 +2835,30 @@ function handleUpdatePatientNotifications($patient_id) {
         
         foreach ($allowed as $field) {
             if (isset($input[$field])) {
-                $updates[] = "$field = :$field";
-                $params[$field] = $input[$field];
+                $value = $input[$field];
+                
+                // Détecter les champs booléens
+                $isBooleanField = in_array($field, ['email_enabled', 'sms_enabled', 'push_enabled', 
+                    'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow', 'notify_alert_critical']);
+                
+                if ($isBooleanField) {
+                    // Convertir en booléen (gérer string "true"/"false", 0/1, etc.)
+                    $boolValue = false;
+                    if (is_bool($value)) {
+                        $boolValue = $value;
+                    } elseif (is_string($value)) {
+                        $boolValue = in_array(strtolower($value), ['true', '1', 'yes', 'on']);
+                    } elseif (is_numeric($value)) {
+                        $boolValue = (int)$value !== 0;
+                    }
+                    // Pour PostgreSQL, utiliser TRUE/FALSE directement dans la requête
+                    $updates[] = "$field = " . ($boolValue ? 'TRUE' : 'FALSE');
+                } elseif ($value === null || $value === '') {
+                    $updates[] = "$field = NULL";
+                } else {
+                    $updates[] = "$field = :$field";
+                    $params[$field] = $value;
+                }
             }
         }
         
@@ -2703,13 +2868,18 @@ function handleUpdatePatientNotifications($patient_id) {
             return;
         }
         
-        $stmt = $pdo->prepare("UPDATE patient_notifications_preferences SET " . implode(', ', $updates) . " WHERE patient_id = :patient_id");
+        $sql = "UPDATE patient_notifications_preferences SET " . implode(', ', $updates) . " WHERE patient_id = :patient_id";
+        $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         
         echo json_encode(['success' => true]);
     } catch(PDOException $e) {
+        error_log('[handleUpdatePatientNotifications] Database error: ' . $e->getMessage());
+        error_log('[handleUpdatePatientNotifications] SQL: ' . ($sql ?? 'N/A'));
+        error_log('[handleUpdatePatientNotifications] Params: ' . json_encode($params ?? []));
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -2773,6 +2943,409 @@ function handleClearAuditLogs() {
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+// ============================================================================
+// NOTIFICATIONS - ENVOI ET QUEUE
+// ============================================================================
+
+/**
+ * Ajoute une notification à la queue
+ */
+function queueNotification($pdo, $user_id, $patient_id, $type, $subject, $message, $priority = 'medium', $data = null, $send_after = null) {
+    try {
+        // Vérifier qu'au moins user_id ou patient_id est défini
+        if (!$user_id && !$patient_id) {
+            return false;
+        }
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO notifications_queue (user_id, patient_id, type, priority, subject, message, data, send_after, status)
+            VALUES (:user_id, :patient_id, :type, :priority, :subject, :message, :data, :send_after, 'pending')
+        ");
+        
+        $stmt->execute([
+            'user_id' => $user_id,
+            'patient_id' => $patient_id,
+            'type' => $type,
+            'priority' => $priority,
+            'subject' => $subject,
+            'message' => $message,
+            'data' => $data ? json_encode($data) : null,
+            'send_after' => $send_after ? date('Y-m-d H:i:s', strtotime($send_after)) : date('Y-m-d H:i:s')
+        ]);
+        
+        return $pdo->lastInsertId();
+    } catch(PDOException $e) {
+        error_log("Erreur queueNotification: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Envoie un email via SendGrid
+ */
+function sendEmail($to, $subject, $message, $html = null) {
+    if (empty(SENDGRID_API_KEY) || empty(SENDGRID_FROM_EMAIL)) {
+        error_log("SendGrid non configuré: API_KEY ou FROM_EMAIL manquant");
+        return false;
+    }
+    
+    $url = 'https://api.sendgrid.com/v3/mail/send';
+    
+    $payload = [
+        'personalizations' => [
+            [
+                'to' => [['email' => $to]],
+                'subject' => $subject
+            ]
+        ],
+        'from' => ['email' => SENDGRID_FROM_EMAIL],
+        'content' => [
+            [
+                'type' => $html ? 'text/html' : 'text/plain',
+                'value' => $html ?: $message
+            ]
+        ]
+    ];
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . SENDGRID_API_KEY,
+        'Content-Type: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log("Erreur cURL SendGrid: " . $error);
+        return false;
+    }
+    
+    if ($httpCode >= 200 && $httpCode < 300) {
+        return true;
+    } else {
+        error_log("Erreur SendGrid HTTP $httpCode: " . $response);
+        return false;
+    }
+}
+
+/**
+ * Envoie un SMS via Twilio
+ */
+function sendSMS($to, $message) {
+    if (empty(TWILIO_ACCOUNT_SID) || empty(TWILIO_AUTH_TOKEN) || empty(TWILIO_FROM_NUMBER)) {
+        error_log("Twilio non configuré: ACCOUNT_SID, AUTH_TOKEN ou FROM_NUMBER manquant");
+        return false;
+    }
+    
+    // Normaliser le numéro (ajouter + si absent)
+    if (strpos($to, '+') !== 0) {
+        // Si commence par 0, remplacer par +33 (France)
+        if (strpos($to, '0') === 0) {
+            $to = '+33' . substr($to, 1);
+        } else {
+            $to = '+' . $to;
+        }
+    }
+    
+    $url = 'https://api.twilio.com/2010-04-01/Accounts/' . TWILIO_ACCOUNT_SID . '/Messages.json';
+    
+    $data = [
+        'From' => TWILIO_FROM_NUMBER,
+        'To' => $to,
+        'Body' => $message
+    ];
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_USERPWD, TWILIO_ACCOUNT_SID . ':' . TWILIO_AUTH_TOKEN);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log("Erreur cURL Twilio: " . $error);
+        return false;
+    }
+    
+    if ($httpCode >= 200 && $httpCode < 300) {
+        $result = json_decode($response, true);
+        if (isset($result['sid'])) {
+            return true;
+        }
+    }
+    
+    error_log("Erreur Twilio HTTP $httpCode: " . $response);
+    return false;
+}
+
+/**
+ * Déclenche les notifications pour une alerte
+ */
+function triggerAlertNotifications($pdo, $device_id, $alert_type, $severity, $message) {
+    try {
+        // Récupérer les informations du dispositif et du patient
+        $stmt = $pdo->prepare("
+            SELECT d.*, p.id as patient_id, p.first_name as patient_first_name, p.last_name as patient_last_name, 
+                   p.email as patient_email, p.phone as patient_phone
+            FROM devices d
+            LEFT JOIN patients p ON d.patient_id = p.id
+            WHERE d.id = :device_id
+        ");
+        $stmt->execute(['device_id' => $device_id]);
+        $device = $stmt->fetch();
+        
+        if (!$device) {
+            return;
+        }
+        
+        $deviceName = $device['device_name'] ?: $device['sim_iccid'];
+        $subject = "Alerte: $deviceName - " . ucfirst(str_replace('_', ' ', $alert_type));
+        $priority = ($severity === 'critical' || $severity === 'high') ? 'high' : 'medium';
+        
+        // Notifications pour le patient (si assigné)
+        if ($device['patient_id']) {
+            // Récupérer les préférences du patient
+            $prefsStmt = $pdo->prepare("SELECT * FROM patient_notifications_preferences WHERE patient_id = :patient_id");
+            $prefsStmt->execute(['patient_id' => $device['patient_id']]);
+            $patientPrefs = $prefsStmt->fetch();
+            
+            // Si pas de préférences, créer avec valeurs par défaut
+            if (!$patientPrefs) {
+                $pdo->prepare("
+                    INSERT INTO patient_notifications_preferences (patient_id, email_enabled, sms_enabled, notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_alert_critical)
+                    VALUES (:patient_id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+                ")->execute(['patient_id' => $device['patient_id']]);
+                $patientPrefs = ['email_enabled' => true, 'sms_enabled' => true, 'notify_battery_low' => true, 'notify_device_offline' => true, 'notify_abnormal_flow' => true, 'notify_alert_critical' => true];
+            }
+            
+            // Vérifier si cette alerte doit être notifiée au patient
+            $shouldNotify = false;
+            if ($alert_type === 'low_battery' && ($patientPrefs['notify_battery_low'] ?? true)) {
+                $shouldNotify = true;
+            } elseif ($alert_type === 'device_offline' && ($patientPrefs['notify_device_offline'] ?? true)) {
+                $shouldNotify = true;
+            } elseif ($alert_type === 'abnormal_flow' && ($patientPrefs['notify_abnormal_flow'] ?? true)) {
+                $shouldNotify = true;
+            } elseif ($severity === 'critical' && ($patientPrefs['notify_alert_critical'] ?? true)) {
+                $shouldNotify = true;
+            }
+            
+            if ($shouldNotify) {
+                $patientMessage = "Alerte sur votre dispositif $deviceName:\n\n$message\n\nSévérité: $severity";
+                
+                // Email patient
+                if ($patientPrefs['email_enabled'] && $device['patient_email']) {
+                    queueNotification($pdo, null, $device['patient_id'], 'email', $subject, $patientMessage, $priority, [
+                        'device_id' => $device_id,
+                        'alert_type' => $alert_type,
+                        'severity' => $severity
+                    ]);
+                }
+                
+                // SMS patient
+                if ($patientPrefs['sms_enabled'] && $device['patient_phone']) {
+                    queueNotification($pdo, null, $device['patient_id'], 'sms', $subject, $patientMessage, $priority, [
+                        'device_id' => $device_id,
+                        'alert_type' => $alert_type,
+                        'severity' => $severity
+                    ]);
+                }
+            }
+        }
+        
+        // Notifications pour les utilisateurs (médecins, techniciens, admins)
+        // Récupérer tous les utilisateurs actifs avec leurs préférences
+        $usersStmt = $pdo->prepare("
+            SELECT u.id, u.email, u.phone, unp.*
+            FROM users u
+            LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
+            WHERE u.is_active = TRUE
+        ");
+        $usersStmt->execute();
+        $users = $usersStmt->fetchAll();
+        
+        foreach ($users as $user) {
+            // Si pas de préférences, utiliser valeurs par défaut
+            if (!$user['email_enabled'] && !$user['sms_enabled']) {
+                continue; // Utilisateur sans notifications activées
+            }
+            
+            // Vérifier les préférences spécifiques
+            $shouldNotifyUser = false;
+            if ($alert_type === 'low_battery' && ($user['notify_battery_low'] ?? true)) {
+                $shouldNotifyUser = true;
+            } elseif ($alert_type === 'device_offline' && ($user['notify_device_offline'] ?? true)) {
+                $shouldNotifyUser = true;
+            } elseif ($alert_type === 'abnormal_flow' && ($user['notify_abnormal_flow'] ?? true)) {
+                $shouldNotifyUser = true;
+            } elseif ($severity === 'critical') {
+                $shouldNotifyUser = true; // Toujours notifier les alertes critiques
+            }
+            
+            if ($shouldNotifyUser) {
+                $userMessage = "Alerte dispositif $deviceName:\n\n$message\n\nSévérité: $severity";
+                if ($device['patient_first_name']) {
+                    $userMessage .= "\n\nPatient: {$device['patient_first_name']} {$device['patient_last_name']}";
+                }
+                
+                // Email utilisateur
+                if ($user['email_enabled'] && $user['email']) {
+                    queueNotification($pdo, $user['id'], null, 'email', $subject, $userMessage, $priority, [
+                        'device_id' => $device_id,
+                        'alert_type' => $alert_type,
+                        'severity' => $severity
+                    ]);
+                }
+                
+                // SMS utilisateur
+                if ($user['sms_enabled'] && $user['phone']) {
+                    queueNotification($pdo, $user['id'], null, 'sms', $subject, $userMessage, $priority, [
+                        'device_id' => $device_id,
+                        'alert_type' => $alert_type,
+                        'severity' => $severity
+                    ]);
+                }
+            }
+        }
+    } catch(PDOException $e) {
+        error_log("Erreur triggerAlertNotifications: " . $e->getMessage());
+    }
+}
+
+/**
+ * Traite la queue de notifications (à appeler via cron/worker)
+ */
+function processNotificationsQueue($pdo, $limit = 50) {
+    try {
+        // Récupérer les notifications en attente
+        $stmt = $pdo->prepare("
+            SELECT nq.*, u.email as user_email, u.phone as user_phone, 
+                   p.email as patient_email, p.phone as patient_phone
+            FROM notifications_queue nq
+            LEFT JOIN users u ON nq.user_id = u.id
+            LEFT JOIN patients p ON nq.patient_id = p.id
+            WHERE nq.status = 'pending'
+            AND nq.send_after <= NOW()
+            AND nq.attempts < nq.max_attempts
+            ORDER BY 
+                CASE nq.priority 
+                    WHEN 'critical' THEN 1 
+                    WHEN 'high' THEN 2 
+                    WHEN 'medium' THEN 3 
+                    ELSE 4 
+                END,
+                nq.created_at ASC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        $notifications = $stmt->fetchAll();
+        
+        $processed = 0;
+        $success = 0;
+        $failed = 0;
+        
+        foreach ($notifications as $notif) {
+            $processed++;
+            
+            // Déterminer le destinataire
+            $to = null;
+            if ($notif['user_email'] || $notif['user_phone']) {
+                $to = $notif['type'] === 'email' ? $notif['user_email'] : $notif['user_phone'];
+            } elseif ($notif['patient_email'] || $notif['patient_phone']) {
+                $to = $notif['type'] === 'email' ? $notif['patient_email'] : $notif['patient_phone'];
+            }
+            
+            if (!$to) {
+                // Pas de destinataire, marquer comme échoué
+                $pdo->prepare("
+                    UPDATE notifications_queue 
+                    SET status = 'failed', error_message = 'No recipient found', attempts = attempts + 1
+                    WHERE id = :id
+                ")->execute(['id' => $notif['id']]);
+                $failed++;
+                continue;
+            }
+            
+            // Envoyer selon le type
+            $sent = false;
+            $errorMsg = null;
+            
+            try {
+                if ($notif['type'] === 'email') {
+                    $sent = sendEmail($to, $notif['subject'] ?: 'Notification OTT', $notif['message']);
+                } elseif ($notif['type'] === 'sms') {
+                    $sent = sendSMS($to, $notif['message']);
+                } elseif ($notif['type'] === 'push') {
+                    // Push notifications: à implémenter avec PWA/service worker
+                    // Pour l'instant, on marque comme envoyé (sera géré côté frontend)
+                    $sent = true;
+                }
+                
+                if ($sent) {
+                    $pdo->prepare("
+                        UPDATE notifications_queue 
+                        SET status = 'sent', sent_at = NOW(), attempts = attempts + 1
+                        WHERE id = :id
+                    ")->execute(['id' => $notif['id']]);
+                    $success++;
+                } else {
+                    throw new Exception("Envoi échoué");
+                }
+            } catch(Exception $e) {
+                $errorMsg = $e->getMessage();
+                $newAttempts = $notif['attempts'] + 1;
+                
+                if ($newAttempts >= $notif['max_attempts']) {
+                    // Max tentatives atteint, marquer comme échoué
+                    $pdo->prepare("
+                        UPDATE notifications_queue 
+                        SET status = 'failed', error_message = :error, attempts = :attempts
+                        WHERE id = :id
+                    ")->execute([
+                        'id' => $notif['id'],
+                        'error' => $errorMsg,
+                        'attempts' => $newAttempts
+                    ]);
+                    $failed++;
+                } else {
+                    // Réessayer plus tard
+                    $pdo->prepare("
+                        UPDATE notifications_queue 
+                        SET error_message = :error, attempts = :attempts, send_after = NOW() + INTERVAL '5 minutes'
+                        WHERE id = :id
+                    ")->execute([
+                        'id' => $notif['id'],
+                        'error' => $errorMsg,
+                        'attempts' => $newAttempts
+                    ]);
+                }
+            }
+        }
+        
+        return [
+            'processed' => $processed,
+            'success' => $success,
+            'failed' => $failed
+        ];
+    } catch(PDOException $e) {
+        error_log("Erreur processNotificationsQueue: " . $e->getMessage());
+        return ['processed' => 0, 'success' => 0, 'failed' => 0, 'error' => $e->getMessage()];
     }
 }
 

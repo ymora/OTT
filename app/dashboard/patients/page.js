@@ -1,18 +1,24 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import Chart from '@/components/Chart'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
+import { useApiData, useFilter } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import SuccessMessage from '@/components/SuccessMessage'
+import SearchBar from '@/components/SearchBar'
+
+// Lazy load Chart pour accélérer Fast Refresh
+const Chart = dynamic(() => import('@/components/Chart'), { ssr: false })
 
 export default function PatientsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
   const router = useRouter()
-  const [patients, setPatients] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+  const [actionError, setActionError] = useState(null) // Erreurs d'actions (création, modification, etc.)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const emptyForm = useMemo(() => ({
@@ -27,14 +33,13 @@ export default function PatientsPage() {
   const [formData, setFormData] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState({})
   const [selectedPatient, setSelectedPatient] = useState(null)
-  const [searchTerm, setSearchTerm] = useState('')
   const [editingPatient, setEditingPatient] = useState(null)
   const [deletingPatient, setDeletingPatient] = useState(null)
   const [patientDetails, setPatientDetails] = useState(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [patientNotifPrefs, setPatientNotifPrefs] = useState({
     email_enabled: true,
-    sms_enabled: false,
+    sms_enabled: true, // Activé par défaut
     push_enabled: false,
     notify_battery_low: true,
     notify_device_offline: true,
@@ -42,49 +47,35 @@ export default function PatientsPage() {
     notify_alert_critical: true
   })
   const [savingNotifPrefs, setSavingNotifPrefs] = useState(false)
-  const [devices, setDevices] = useState([])
   const [unassigningDevice, setUnassigningDevice] = useState(null)
 
-  const loadPatients = useCallback(async () => {
-    try {
-      setError(null)
-      setSuccess(null)
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/patients')
-      setPatients(data.patients || [])
-    } catch (err) {
-      console.error(err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [API_URL, fetchWithAuth])
+  // Charger les données avec useApiData
+  const { data, loading, error, refetch } = useApiData(
+    ['/api.php/patients', '/api.php/devices'],
+    { requiresAuth: false }
+  )
 
-  const loadDevices = useCallback(async () => {
-    try {
-      const devicesData = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices', {}, { requiresAuth: true })
-      // Filtrer uniquement les dispositifs assignés aux patients
-      const assignedDevices = (devicesData.devices || []).filter(d => d.patient_id)
-      setDevices(assignedDevices)
-    } catch (err) {
-      console.error('Erreur chargement dispositifs:', err)
-    }
-  }, [API_URL, fetchWithAuth])
+  const patients = data?.patients?.patients || []
+  const allDevices = data?.devices?.devices || []
+  // Filtrer uniquement les dispositifs assignés aux patients
+  const devices = useMemo(() => {
+    return (allDevices || []).filter(d => d.patient_id)
+  }, [allDevices])
 
-  useEffect(() => {
-    loadPatients()
-    loadDevices()
-  }, [loadPatients, loadDevices])
-
-  const filteredPatients = useMemo(() => {
-    return patients.filter(p => {
-      if (searchTerm) {
-        const needle = searchTerm.toLowerCase()
+  // Utiliser useFilter pour la recherche
+  const {
+    searchTerm,
+    setSearchTerm,
+    filteredItems: filteredPatients
+  } = useFilter(patients, {
+    searchFn: (items, term) => {
+      const needle = term.toLowerCase()
+      return items.filter(p => {
         const haystack = `${p.first_name || ''} ${p.last_name || ''} ${p.email || ''} ${p.phone || ''} ${p.device_name || ''}`.toLowerCase()
-        if (!haystack.includes(needle)) return false
-      }
-      return true
-    })
-  }, [patients, searchTerm])
+        return haystack.includes(needle)
+      })
+    }
+  })
 
   // Fonctions utilitaires pour le calcul des valeurs
   const getDeviceStatus = (lastSeen) => {
@@ -104,7 +95,7 @@ export default function PatientsPage() {
 
     try {
       setUnassigningDevice(device.id)
-      setError(null)
+      setActionError(null)
       
       // 1. Désassigner le dispositif (mettre patient_id à null)
       await fetchJson(
@@ -141,8 +132,7 @@ export default function PatientsPage() {
       }
       
       // Recharger les dispositifs et les patients
-      await loadDevices()
-      await loadPatients()
+      await refetch()
       setSuccess('Dispositif désassigné et réinitialisé avec succès')
     } catch (err) {
       let errorMessage = 'Erreur lors de la désassignation du dispositif'
@@ -151,7 +141,7 @@ export default function PatientsPage() {
       } else if (err.error) {
         errorMessage = err.error
       }
-      setError(errorMessage)
+      setActionError(errorMessage)
       console.error('Erreur désassignation dispositif:', err)
     } finally {
       setUnassigningDevice(null)
@@ -233,17 +223,17 @@ export default function PatientsPage() {
   }
 
   const handleCreatePatient = async () => {
-    setError(null)
+    setActionError(null)
     setFormErrors({})
     
     if (!validateForm()) {
-      setError('Veuillez corriger les erreurs dans le formulaire')
+      setActionError('Veuillez corriger les erreurs dans le formulaire')
       return
     }
     
     try {
       setSaving(true)
-      setError(null)
+      setActionError(null)
       await fetchJson(
         fetchWithAuth,
         API_URL,
@@ -255,9 +245,9 @@ export default function PatientsPage() {
       setFormData(emptyForm)
       setFormErrors({})
       setSuccess('Patient créé avec succès')
-      loadPatients()
+      refetch()
     } catch (err) {
-      setError(err.message)
+      setActionError(err.message)
     } finally {
       setSaving(false)
     }
@@ -276,7 +266,7 @@ export default function PatientsPage() {
       )
       setSuccess('Préférences de notifications enregistrées')
     } catch (err) {
-      setError(err.message)
+      setActionError(err.message)
     } finally {
       setSavingNotifPrefs(false)
     }
@@ -300,17 +290,17 @@ export default function PatientsPage() {
   const handleUpdatePatient = async () => {
     if (!editingPatient) return
     
-    setError(null)
+    setActionError(null)
     setFormErrors({})
     
     if (!validateForm()) {
-      setError('Veuillez corriger les erreurs dans le formulaire')
+      setActionError('Veuillez corriger les erreurs dans le formulaire')
       return
     }
     
     try {
       setSaving(true)
-      setError(null)
+      setActionError(null)
       await fetchJson(
         fetchWithAuth,
         API_URL,
@@ -323,9 +313,9 @@ export default function PatientsPage() {
       setFormData(emptyForm)
       setFormErrors({})
       setSuccess('Patient modifié avec succès')
-      loadPatients()
+      refetch()
     } catch (err) {
-      setError(err.message)
+      setActionError(err.message)
     } finally {
       setSaving(false)
     }
@@ -338,7 +328,7 @@ export default function PatientsPage() {
 
     try {
       setDeletingPatient(patient.id)
-      setError(null)
+      setActionError(null)
       setSuccess(null)
       const response = await fetchJson(
         fetchWithAuth,
@@ -349,9 +339,9 @@ export default function PatientsPage() {
       )
       if (response.success) {
         setSuccess(response.message || 'Patient supprimé avec succès')
-        loadPatients()
+        refetch()
       } else {
-        setError(response.error || 'Erreur lors de la suppression')
+        setActionError(response.error || 'Erreur lors de la suppression')
       }
     } catch (err) {
       // Extraire le message d'erreur de la réponse si disponible
@@ -361,7 +351,7 @@ export default function PatientsPage() {
       } else if (err.error) {
         errorMessage = err.error
       }
-      setError(errorMessage)
+      setActionError(errorMessage)
       console.error('Erreur suppression patient:', err)
     } finally {
       setDeletingPatient(null)
@@ -420,7 +410,7 @@ export default function PatientsPage() {
       })
     } catch (err) {
       console.error(err)
-      setError('Erreur lors du chargement des détails')
+      setActionError('Erreur lors du chargement des détails')
     } finally {
       setLoadingDetails(false)
     }
@@ -452,13 +442,11 @@ export default function PatientsPage() {
       </div>
 
       <div className="card">
-        {(error || success) && (
-          <div className={`alert ${error ? 'alert-warning' : 'alert-success'} mb-4`}>
-            {error || success}
-          </div>
-        )}
+        <ErrorMessage error={error} onRetry={refetch} />
+        <ErrorMessage error={actionError} onClose={() => setActionError(null)} />
+        <SuccessMessage message={success} onClose={() => setSuccess(null)} />
         {loading ? (
-          <div className="animate-shimmer h-96"></div>
+          <LoadingSpinner size="lg" text="Chargement des patients..." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">

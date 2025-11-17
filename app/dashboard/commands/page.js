@@ -1,8 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
+import { useApiData } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import SuccessMessage from '@/components/SuccessMessage'
 
 const commandOptions = [
   { value: 'SET_SLEEP_SECONDS', label: 'Modifier intervalle de sommeil' },
@@ -30,11 +34,9 @@ const statusColors = {
 
 export default function CommandsPage() {
   const { fetchWithAuth, API_URL, user, loading: authLoading } = useAuth()
-  const [commands, setCommands] = useState([])
-  const [devices, setDevices] = useState([])
-  const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
-  const [error, setError] = useState(null)
+  const [actionError, setActionError] = useState(null)
+  const [success, setSuccess] = useState(null)
   const [refreshTick, setRefreshTick] = useState(0)
 
   const [form, setForm] = useState({
@@ -69,37 +71,33 @@ export default function CommandsPage() {
     otaMd5: '',
   })
 
-  const loadData = useCallback(async () => {
-    try {
-      setError(null)
-      setLoading(true)
-      const [commandData, deviceData] = await Promise.all([
-        fetchJson(fetchWithAuth, API_URL, `/api.php/devices/commands?limit=200`),
-        fetchJson(fetchWithAuth, API_URL, `/api.php/devices`),
-      ])
-      setCommands(commandData.commands || [])
-      setDevices(deviceData.devices || [])
-      if (!form.iccid && deviceData.devices?.length) {
-        setForm((prev) => ({ ...prev, iccid: deviceData.devices[0].sim_iccid }))
-      }
-    } catch (err) {
-      console.error(err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [API_URL, fetchWithAuth, form.iccid])
+  // Charger les données avec useApiData
+  const { data, loading, error, refetch } = useApiData(
+    ['/api.php/devices/commands?limit=200', '/api.php/devices'],
+    { requiresAuth: false, autoLoad: !authLoading && (!user || user.role_name === 'admin') }
+  )
 
+  const commands = data?.commands?.commands || []
+  const devices = data?.devices?.devices || []
+
+  // Initialiser le formulaire avec le premier dispositif
   useEffect(() => {
-    if (authLoading) return
-    if (user && user.role_name !== 'admin') return
-    loadData()
-  }, [loadData, refreshTick, authLoading, user])
+    if (!form.iccid && devices.length > 0) {
+      setForm((prev) => ({ ...prev, iccid: devices[0].sim_iccid }))
+    }
+  }, [devices, form.iccid])
+
+  // Rafraîchir quand refreshTick change
+  useEffect(() => {
+    if (refreshTick > 0 && !authLoading && (!user || user.role_name === 'admin')) {
+      refetch()
+    }
+  }, [refreshTick, authLoading, user, refetch])
 
   const handleCreate = async (e) => {
     e.preventDefault()
     if (!form.iccid) {
-      setError('Veuillez sélectionner un dispositif')
+      setActionError('Veuillez sélectionner un dispositif')
       return
     }
 
@@ -139,19 +137,19 @@ export default function CommandsPage() {
       addString('ota_md5', form.configOtaMd5)
 
       if (Object.keys(payload).length === 0) {
-        setError('Veuillez renseigner au moins un champ de configuration')
+        setActionError('Veuillez renseigner au moins un champ de configuration')
         return
       }
     } else if (form.command === 'UPDATE_CALIBRATION') {
       if (form.calA0 === '' || form.calA1 === '' || form.calA2 === '') {
-        setError('Veuillez fournir les coefficients a0, a1 et a2')
+        setActionError('Veuillez fournir les coefficients a0, a1 et a2')
         return
       }
       payload.a0 = Number(form.calA0)
       payload.a1 = Number(form.calA1)
       payload.a2 = Number(form.calA2)
       if ([payload.a0, payload.a1, payload.a2].some((value) => Number.isNaN(value))) {
-        setError('Les coefficients doivent être numériques')
+        setActionError('Les coefficients doivent être numériques')
         return
       }
     } else if (form.command === 'OTA_REQUEST') {
@@ -175,7 +173,7 @@ export default function CommandsPage() {
 
     try {
       setCreating(true)
-      setError(null)
+      setActionError(null)
       await fetchJson(
         fetchWithAuth,
         API_URL,
@@ -186,10 +184,11 @@ export default function CommandsPage() {
         },
         { requiresAuth: true }
       )
+      setSuccess('Commande créée avec succès')
       setRefreshTick((tick) => tick + 1)
     } catch (err) {
       console.error(err)
-      setError(err.message)
+      setActionError(err.message)
     } finally {
       setCreating(false)
     }
@@ -223,11 +222,9 @@ export default function CommandsPage() {
         </p>
       </div>
 
-      {error && (
-        <div className="alert alert-warning">
-          <strong>Erreur :</strong> {error}
-        </div>
-      )}
+      <ErrorMessage error={error} onRetry={refetch} />
+      <ErrorMessage error={actionError} onClose={() => setActionError(null)} />
+      <SuccessMessage message={success} onClose={() => setSuccess(null)} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="card">
@@ -593,7 +590,7 @@ export default function CommandsPage() {
         </div>
         
         {loading ? (
-          <div className="animate-shimmer h-64"></div>
+          <LoadingSpinner size="lg" text="Chargement des commandes..." />
         ) : commands.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <p className="text-lg mb-2">Aucune commande enregistrée</p>

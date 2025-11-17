@@ -1,8 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
+import { useApiData, useFilter } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import SuccessMessage from '@/components/SuccessMessage'
+import SearchBar from '@/components/SearchBar'
 
 const defaultFormState = {
   first_name: '',
@@ -15,7 +20,7 @@ const defaultFormState = {
 
 const defaultNotificationPrefs = {
   email_enabled: true,
-  sms_enabled: false,
+  sms_enabled: true, // Activé par défaut
   push_enabled: true,
   phone_number: '',
   notify_battery_low: true,
@@ -26,11 +31,8 @@ const defaultNotificationPrefs = {
 
 export default function UsersPage() {
   const { fetchWithAuth, API_URL, user: currentUser } = useAuth()
-  const [users, setUsers] = useState([])
-  const [roles, setRoles] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [actionError, setActionError] = useState(null)
+  const [success, setSuccess] = useState(null)
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null) // null = création, objet = modification
   const [formData, setFormData] = useState({
@@ -49,50 +51,35 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const loadUsers = useCallback(async () => {
-    try {
-      setError(null)
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/users', {}, { requiresAuth: true })
-      setUsers(data.users || [])
-    } catch (err) {
-      console.error(err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [API_URL, fetchWithAuth])
+  // Charger les données avec useApiData
+  const { data, loading, error, refetch } = useApiData(
+    ['/api.php/users', '/api.php/roles'],
+    { requiresAuth: true }
+  )
 
+  const users = data?.users?.users || []
+  const roles = data?.roles?.roles || []
 
-  const loadRoles = useCallback(async () => {
-    try {
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/roles', {}, { requiresAuth: true })
-      setRoles(data.roles || [])
-    } catch (err) {
-      console.error(err)
-    }
-  }, [API_URL, fetchWithAuth])
-
-  useEffect(() => {
-    loadUsers()
-    loadRoles()
-  }, [loadUsers, loadRoles])
-
-  const filteredUsers = useMemo(() => {
-    return users.filter(user => {
-      if (searchTerm) {
-        const needle = searchTerm.toLowerCase()
+  // Utiliser useFilter pour la recherche
+  const {
+    searchTerm,
+    setSearchTerm,
+    filteredItems: filteredUsers
+  } = useFilter(users, {
+    searchFn: (items, term) => {
+      const needle = term.toLowerCase()
+      return items.filter(user => {
         const haystack = `${user.first_name || ''} ${user.last_name || ''} ${user.email || ''} ${user.phone || ''} ${user.role_name || ''}`.toLowerCase()
-        if (!haystack.includes(needle)) return false
-      }
-      return true
-    })
-  }, [users, searchTerm])
+        return haystack.includes(needle)
+      })
+    }
+  })
 
   const roleColors = {
     admin: 'bg-purple-100 text-purple-700',
     medecin: 'bg-green-100 text-green-700',
     technicien: 'bg-blue-100 text-blue-700',
-    viewer: 'bg-gray-100 text-gray-700',
+    // viewer supprimé
   }
 
   const canSubmit = useMemo(() => {
@@ -302,14 +289,15 @@ export default function UsersPage() {
       setShowUserModal(false)
       setEditingUser(null)
       setFormErrors({})
-      await loadUsers()
+      setSuccess(editingUser ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
+      await refetch()
     } catch (err) {
       // Extraire le message d'erreur de la réponse API si disponible
       let errorMessage = err.message || 'Erreur lors de l\'enregistrement'
       if (err.error) {
         errorMessage = err.error
       }
-      setFormError(errorMessage)
+      setActionError(errorMessage)
       console.error('Erreur enregistrement utilisateur:', err)
     } finally {
       setSaving(false)
@@ -376,7 +364,7 @@ export default function UsersPage() {
 
     try {
       setDeleteLoading(true)
-      setError(null)
+      setActionError(null)
       const response = await fetchJson(
         fetchWithAuth,
         API_URL,
@@ -385,12 +373,13 @@ export default function UsersPage() {
         { requiresAuth: true }
       )
       if (response.success) {
-        loadUsers()
+        setSuccess('Utilisateur supprimé avec succès')
+        refetch()
         if (showUserModal && editingUser) {
           closeUserModal()
         }
       } else {
-        setError(response.error || 'Erreur lors de la suppression')
+        setActionError(response.error || 'Erreur lors de la suppression')
       }
     } catch (err) {
       // Extraire le message d'erreur de la réponse si disponible
@@ -400,7 +389,7 @@ export default function UsersPage() {
       } else if (err.error) {
         errorMessage = err.error
       }
-      setError(errorMessage)
+      setActionError(errorMessage)
       console.error('Erreur suppression utilisateur:', err)
     } finally {
       setDeleteLoading(false)
@@ -421,12 +410,10 @@ export default function UsersPage() {
       {/* Recherche et Nouvel Utilisateur sur la même ligne */}
       <div className="flex flex-col md:flex-row gap-3">
         <div className="flex-1">
-          <input
-            type="text"
-            className="input"
-            placeholder="Rechercher un utilisateur..."
+          <SearchBar
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={setSearchTerm}
+            placeholder="Rechercher un utilisateur..."
           />
         </div>
         <button 
@@ -440,13 +427,11 @@ export default function UsersPage() {
       </div>
 
       <div className="card">
-        {error && (
-          <div className="alert alert-warning mb-4">
-            <strong>Erreur API :</strong> {error}
-          </div>
-        )}
+        <ErrorMessage error={error} onRetry={refetch} />
+        <ErrorMessage error={actionError} onClose={() => setActionError(null)} />
+        <SuccessMessage message={success} onClose={() => setSuccess(null)} />
         {loading ? (
-          <div className="animate-shimmer h-64"></div>
+          <LoadingSpinner size="lg" text="Chargement des utilisateurs..." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -668,11 +653,7 @@ export default function UsersPage() {
                 )}
               </div>
 
-              {formError && (
-                <div className="alert alert-error">
-                  <strong>Erreur :</strong> {formError}
-                </div>
-              )}
+              <ErrorMessage error={formError} onClose={() => setFormError(null)} />
 
                       {/* Section Notifications */}
                       <div className="border-t border-gray-200/80 dark:border-slate-700/50 pt-4 mt-4">

@@ -1,37 +1,35 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
+import { useApiData } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import SuccessMessage from '@/components/SuccessMessage'
 
 export default function NotificationsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
   const [preferences, setPreferences] = useState(null)
-  const [queue, setQueue] = useState([])
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
-  const [error, setError] = useState(null)
+  const [actionError, setActionError] = useState(null)
 
-  const loadData = useCallback(async () => {
-    try {
-      setError(null)
-      const [prefsData, queueData] = await Promise.all([
-        fetchJson(fetchWithAuth, API_URL, '/api.php/notifications/preferences'),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/notifications/queue?limit=50')
-      ])
-      setPreferences(prefsData.preferences || {})
-      setQueue(queueData.queue || [])
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [API_URL, fetchWithAuth])
+  // Charger les données avec useApiData
+  const { data, loading, error, refetch } = useApiData(
+    ['/api.php/notifications/preferences', '/api.php/notifications/queue?limit=50'],
+    { requiresAuth: false }
+  )
 
+  const queue = data?.queue?.queue || []
+  
+  // Initialiser les préférences depuis les données (une seule fois)
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    if (!preferences && data?.preferences?.preferences) {
+      setPreferences(data.preferences.preferences)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.preferences?.preferences])
 
   const handleToggle = (field) => {
     setPreferences(prev => ({ ...prev, [field]: !prev?.[field] }))
@@ -53,8 +51,9 @@ export default function NotificationsPage() {
         { requiresAuth: false }
       )
       setMessage('Préférences enregistrées')
+      await refetch()
     } catch (err) {
-      setError(err.message)
+      setActionError(err.message)
     } finally {
       setSaving(false)
     }
@@ -71,12 +70,20 @@ export default function NotificationsPage() {
       )
       setMessage(`Notification ${type.toUpperCase()} envoyée (voir logs serveur)`)
     } catch (err) {
-      setError(err.message)
+      setActionError(err.message)
     }
   }
 
   if (loading || !preferences) {
-    return <div className="card animate-shimmer h-64"></div>
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div>
+          <h1 className="text-3xl font-bold">📧 Notifications</h1>
+          <p className="text-gray-600 mt-1">Configurer les canaux d&apos;alertes et préférences.</p>
+        </div>
+        <LoadingSpinner size="lg" text="Chargement des préférences..." />
+      </div>
+    )
   }
 
   return (
@@ -92,11 +99,9 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {(error || message) && (
-        <div className={`alert ${error ? 'alert-warning' : 'alert-success'}`}>
-          {error || message}
-        </div>
-      )}
+      <ErrorMessage error={error} onRetry={refetch} />
+      <ErrorMessage error={actionError} onClose={() => setActionError(null)} />
+      <SuccessMessage message={message} onClose={() => setMessage(null)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card space-y-4">

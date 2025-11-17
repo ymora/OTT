@@ -1,40 +1,26 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import StatsCard from '@/components/StatsCard'
 import AlertCard from '@/components/AlertCard'
-import { fetchJson } from '@/lib/api'
-import { useRouter } from 'next/navigation'
+import { useApiData } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { fetchWithAuth, API_URL } = useAuth()
-  const [devices, setDevices] = useState([])
-  const [alerts, setAlerts] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  
+  // Charger les données avec useApiData
+  const { data, loading, error, refetch } = useApiData(
+    ['/api.php/devices', '/api.php/alerts'],
+    { requiresAuth: false }
+  )
 
-  const loadData = useCallback(async () => {
-    try {
-      setError(null)
-      const [devicesData, alertsData] = await Promise.all([
-        fetchJson(fetchWithAuth, API_URL, '/api.php/devices'),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/alerts')
-      ])
-      setDevices(devicesData.devices || [])
-      setAlerts((alertsData.alerts || []).filter(a => a.status === 'unresolved'))
-    } catch (err) {
-      console.error(err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [API_URL, fetchWithAuth])
-
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  const devices = data?.devices?.devices || []
+  const alerts = useMemo(() => {
+    return (data?.alerts?.alerts || []).filter(a => a.status === 'unresolved')
+  }, [data])
 
   const stats = {
     totalDevices: devices.length,
@@ -58,10 +44,12 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} className="card animate-shimmer h-32"></div>
-        ))}
+      <div className="space-y-6 animate-fade-in">
+        <div className="animate-slide-up">
+          <h1 className="text-3xl font-bold text-primary mb-2">Vue d&apos;Ensemble</h1>
+          <p className="text-muted">Tableau de bord en temps réel des dispositifs OTT</p>
+        </div>
+        <LoadingSpinner size="lg" text="Chargement du tableau de bord..." />
       </div>
     )
   }
@@ -80,11 +68,7 @@ export default function DashboardPage() {
         <p className="text-muted">Tableau de bord en temps réel des dispositifs OTT</p>
       </div>
 
-      {error && (
-        <div className="alert alert-warning">
-          <strong>Erreur API :</strong> {error}
-        </div>
-      )}
+      <ErrorMessage error={error} onRetry={refetch} />
 
       {/* Stats Cards - Indicateurs clés (KPIs uniquement) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

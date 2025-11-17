@@ -93,6 +93,7 @@ export const DELETE = proxyRequest
 export const OPTIONS = proxyRequest
 export const HEAD = proxyRequest
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// Note: Les routes API ne sont pas compatibles avec l'export statique Next.js
+// Pour l'export statique, le script scripts/export_static.ps1 supprime temporairement
+// ce fichier avant l'export et le restaure après.
 

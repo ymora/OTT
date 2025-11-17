@@ -1,9 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { formatDateTime } from '@/lib/utils'
+import { useApiData } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
 
 const actionColors = {
   'user.login': 'border-green-500 bg-green-50 text-green-700',
@@ -14,29 +17,15 @@ const actionColors = {
 
 export default function AuditPage() {
   const { fetchWithAuth, API_URL, user } = useAuth()
-  const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [clearing, setClearing] = useState(false)
 
-  const loadLogs = useCallback(async () => {
-    try {
-      setError(null)
-      setLoading(true)
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/audit?limit=200', {}, { requiresAuth: true })
-      setLogs(data.logs || [])
-    } catch (err) {
-      console.error(err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [fetchWithAuth, API_URL])
+  // Charger les données avec useApiData
+  const { data, loading, error, refetch } = useApiData(
+    '/api.php/audit?limit=200',
+    { requiresAuth: true }
+  )
 
-  // Rafraîchir automatiquement à l'ouverture de l'onglet
-  useEffect(() => {
-    loadLogs()
-  }, [loadLogs])
+  const logs = data?.logs || []
 
   const handleClearLogs = async () => {
     if (!confirm('⚠️ Êtes-vous sûr de vouloir réinitialiser le journal d\'audit ?\n\nCette action est irréversible et ne peut être effectuée que par un administrateur.')) {
@@ -45,7 +34,6 @@ export default function AuditPage() {
 
     try {
       setClearing(true)
-      setError(null)
       await fetchJson(
         fetchWithAuth,
         API_URL,
@@ -54,10 +42,10 @@ export default function AuditPage() {
         { requiresAuth: true }
       )
       // Recharger les logs après suppression
-      await loadLogs()
+      await refetch()
     } catch (err) {
-      console.error(err)
-      setError(err.message || 'Erreur lors de la réinitialisation')
+      console.error('Erreur réinitialisation:', err)
+      // L'erreur sera gérée par ErrorMessage via le hook (refetch déclenchera une erreur si nécessaire)
     } finally {
       setClearing(false)
     }
@@ -82,17 +70,11 @@ export default function AuditPage() {
         </button>
       </div>
 
-      {error && (
-        <div className="alert alert-warning">
-          <strong>Erreur API :</strong> {error}
-        </div>
-      )}
+      <ErrorMessage error={error} onRetry={refetch} />
 
       <div className="space-y-3">
         {loading ? (
-          [1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="card animate-shimmer h-24"></div>
-          ))
+          <LoadingSpinner size="lg" text="Chargement du journal d'audit..." />
         ) : (
           logs.map((log, i) => {
             const colorClass = actionColors[log.action] || 'border-gray-300 bg-gray-50 text-gray-700'

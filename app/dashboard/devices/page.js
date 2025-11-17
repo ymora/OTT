@@ -5,10 +5,16 @@ import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import Chart from '@/components/Chart'
 import AlertCard from '@/components/AlertCard'
+import FlashUSBModal from '@/components/FlashUSBModal'
+import { useApiData } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import { useSerialPort } from '@/components/SerialPortManager'
 
+// Lazy load des composants lourds pour accélérer Fast Refresh
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
+const Chart = dynamic(() => import('@/components/Chart'), { ssr: false })
 
 // Constantes pour les commandes
 const commandOptions = [
@@ -39,12 +45,16 @@ export default function DevicesPage() {
   const { fetchWithAuth, API_URL, user } = useAuth()
   const router = useRouter()
   
-  const [devices, setDevices] = useState([])
-  const [patients, setPatients] = useState([])
-  const [loading, setLoading] = useState(true)
+  // Détection du port série USB (COM3)
+  const { port, isConnected, isSupported, requestPort, connect, disconnect, startReading, write } = useSerialPort()
+  const [usbConnectedDevice, setUsbConnectedDevice] = useState(null)
+  const [usbVirtualDevice, setUsbVirtualDevice] = useState(null) // Dispositif virtuel si non trouvé en base
+  const [checkingUSB, setCheckingUSB] = useState(false)
+  const [usbPortInfo, setUsbPortInfo] = useState(null)
+  const [autoDetecting, setAutoDetecting] = useState(true)
+  
   const [searchTerm, setSearchTerm] = useState('')
   const [assignmentFilter, setAssignmentFilter] = useState('all')
-  const [error, setError] = useState(null)
   
   // Modal détails/journal
   const [selectedDevice, setSelectedDevice] = useState(null)
@@ -56,6 +66,10 @@ export default function DevicesPage() {
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [modalActiveTab, setModalActiveTab] = useState('details') // 'details', 'alerts', 'logs', 'commands'
+  
+  // Modal Flash USB
+  const [showFlashUSBModal, setShowFlashUSBModal] = useState(false)
+  const [deviceForFlash, setDeviceForFlash] = useState(null)
   
   // État pour le formulaire de commandes dans le modal
   const [commandForm, setCommandForm] = useState({
@@ -100,7 +114,6 @@ export default function DevicesPage() {
   const [assignLoading, setAssignLoading] = useState(false)
   
   // OTA intégré dans le tableau
-  const [firmwares, setFirmwares] = useState([])
   const [selectedFirmwareVersion, setSelectedFirmwareVersion] = useState('')
   const [otaDeploying, setOtaDeploying] = useState({})
   const [otaMessage, setOtaMessage] = useState(null)
@@ -109,36 +122,223 @@ export default function DevicesPage() {
   // Focus sur la carte
   const [focusDeviceId, setFocusDeviceId] = useState(null)
 
-  const loadDevices = useCallback(async () => {
+  // Charger les données initiales avec useApiData
+  const { data, loading, error, refetch } = useApiData(
+    ['/api.php/devices', '/api.php/patients', '/api.php/firmwares'],
+    { requiresAuth: true }
+  )
+
+  const devices = data?.devices?.devices || []
+  const patients = data?.patients?.patients || []
+  const firmwares = data?.firmwares?.firmwares || []
+
+  // Fonction pour détecter un dispositif sur un port (définie en premier)
+  const detectDeviceOnPort = useCallback(async (targetPort) => {
     try {
-      setError(null)
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices', {}, { requiresAuth: true })
-      setDevices(data.devices || [])
+      const portInfo = targetPort.getInfo()
+      setUsbPortInfo(portInfo)
+      
+      // Connecter automatiquement
+      const connected = await connect(targetPort, 115200)
+      if (!connected) return null
+
+      // Lire l'ICCID/serial/firmware
+      let iccid = null
+      let deviceSerial = null
+      let firmwareVersion = null
+      let receivedData = ''
+
+      const stopReading = await startReading((data) => {
+        receivedData += data
+        // ICCID
+        const iccidMatch = receivedData.match(/\+CCID:\s*(\d+)/i) || receivedData.match(/(\d{19,20})/)
+        if (iccidMatch) {
+          iccid = iccidMatch[1]
+        }
+        // Serial
+        const serialMatch = receivedData.match(/SERIAL[:\s]+([A-Z0-9\-]+)/i) || receivedData.match(/IMEI[:\s]+([A-Z0-9]+)/i)
+        if (serialMatch) {
+          deviceSerial = serialMatch[1]
+        }
+        // Firmware version (plusieurs formats possibles)
+        // Chercher dans différents formats de réponse AT
+        const fwMatch = receivedData.match(/FIRMWARE[:\s=]+([\d.]+)/i) || 
+                       receivedData.match(/VERSION[:\s=]+([\d.]+)/i) ||
+                       receivedData.match(/FWVER[:\s=]+([\d.]+)/i) ||
+                       receivedData.match(/\+CGMR[:\s]+([^\r\n]+)/i) ||
+                       receivedData.match(/\+GMR[:\s]+([^\r\n]+)/i) ||
+                       receivedData.match(/v?(\d+\.\d+\.\d+)/i) ||
+                       receivedData.match(/(\d+\.\d+\.\d+)/) // Format simple X.Y.Z
+        if (fwMatch) {
+          firmwareVersion = fwMatch[1].trim()
+          // Nettoyer la version (enlever les espaces, caractères non désirés)
+          firmwareVersion = firmwareVersion.replace(/[^\d.]/g, '').substring(0, 20)
+        }
+      })
+
+      // Envoyer les commandes AT pour obtenir les infos
+      await write('AT\r\n') // Test de connexion
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await write('AT+CCID\r\n')
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      await write('AT+GSN\r\n')
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      await write('AT+CGMR\r\n') // Version firmware modem
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      await write('AT+GMR\r\n') // Version firmware alternative
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      await write('ATI\r\n') // Informations générales
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Commandes custom OTT si disponibles
+      await write('AT+FIRMWARE?\r\n')
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      await write('AT+VERSION?\r\n')
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      await write('AT+FWVER?\r\n')
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      if (stopReading) stopReading()
+
+      // Chercher dans la base
+      let foundDevice = null
+      if (iccid) {
+        foundDevice = devices.find(d => d.sim_iccid && d.sim_iccid.includes(iccid))
+      }
+      if (!foundDevice && deviceSerial) {
+        foundDevice = devices.find(d => d.device_serial && d.device_serial.includes(deviceSerial))
+      }
+
+      if (foundDevice) {
+        setUsbConnectedDevice(foundDevice)
+        setUsbVirtualDevice(null)
+        return foundDevice
+      } else {
+        // Créer un dispositif virtuel avec la version réelle du firmware
+        const virtualDevice = {
+          id: 'usb_virtual_' + Date.now(),
+          device_name: `USB-${iccid ? iccid.slice(-4) : deviceSerial || 'UNKNOWN'}`,
+          sim_iccid: iccid || 'N/A',
+          device_serial: deviceSerial || 'N/A',
+          firmware_version: firmwareVersion || 'N/A',
+          status: 'usb_connected',
+          last_seen: new Date().toISOString(),
+          last_battery: null,
+          patient_id: null,
+          isVirtual: true,
+          usbPortInfo: portInfo
+        }
+        setUsbVirtualDevice(virtualDevice)
+        setUsbConnectedDevice(null)
+        return virtualDevice
+      }
     } catch (err) {
-      console.error(err)
-      setError(err.message)
+      console.error('Erreur détection dispositif:', err)
+      return null
+    }
+  }, [connect, startReading, write, devices])
+
+  // Détecter le dispositif connecté en USB (pour autoriser un nouveau port)
+  const detectUSBDevice = useCallback(async () => {
+    if (!isSupported) {
+      alert('Web Serial API non supporté. Utilisez Chrome ou Edge.')
+      return
+    }
+
+    setCheckingUSB(true)
+    try {
+      // Demander l'accès au port
+      const selectedPort = await requestPort()
+      if (!selectedPort) {
+        setCheckingUSB(false)
+        return
+      }
+
+      // Détecter le dispositif sur ce port
+      await detectDeviceOnPort(selectedPort)
+    } catch (err) {
+      console.error('Erreur détection USB:', err)
+      alert(`Erreur lors de la détection: ${err.message}`)
     } finally {
-      setLoading(false)
+      setCheckingUSB(false)
     }
-  }, [fetchWithAuth, API_URL])
+  }, [isSupported, requestPort, detectDeviceOnPort])
 
-  const loadPatients = useCallback(async () => {
-    try {
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/patients', {}, { requiresAuth: true })
-      setPatients(data.patients || [])
-    } catch (err) {
-      console.error(err)
-    }
-  }, [fetchWithAuth, API_URL])
+  // Déconnecter le port USB
+  const disconnectUSB = useCallback(async () => {
+    await disconnect()
+    setUsbConnectedDevice(null)
+    setUsbVirtualDevice(null)
+    setUsbPortInfo(null)
+  }, [disconnect])
 
-  const loadFirmwares = useCallback(async () => {
-    try {
-      const data = await fetchJson(fetchWithAuth, API_URL, '/api.php/firmwares', {}, { requiresAuth: true })
-      setFirmwares(data.firmwares || [])
-    } catch (err) {
-      console.error(err)
+  // Détection automatique au chargement (ports déjà autorisés)
+  useEffect(() => {
+    if (!isSupported || !autoDetecting || loading) return
+
+    const autoDetect = async () => {
+      try {
+        // Récupérer les ports déjà autorisés (sans interaction utilisateur)
+        const ports = await navigator.serial.getPorts()
+        
+        if (ports.length === 0) {
+          setAutoDetecting(false)
+          return
+        }
+
+        // Essayer tous les ports USB connectés
+        for (const p of ports) {
+          const info = p.getInfo()
+          // Filtrer les ports USB
+          if (info.usbVendorId || info.usbProductId) {
+            const device = await detectDeviceOnPort(p)
+            if (device) break // Arrêter au premier dispositif trouvé
+          }
+        }
+
+        // Si pas de port USB spécifique, essayer le premier port
+        if (!usbConnectedDevice && !usbVirtualDevice && ports.length > 0) {
+          const firstPort = ports[0]
+          const info = firstPort.getInfo()
+          if (!info.usbVendorId && !info.usbProductId) {
+            // Port série non-USB, essayer quand même
+            await detectDeviceOnPort(firstPort)
+          }
+        }
+      } catch (err) {
+        console.log('Détection automatique USB:', err.message)
+      } finally {
+        setAutoDetecting(false)
+      }
     }
-  }, [fetchWithAuth, API_URL])
+
+    // Attendre que les devices soient chargés
+    if (devices.length > 0 || !loading) {
+      autoDetect()
+    }
+  }, [isSupported, autoDetecting, devices, loading, detectDeviceOnPort, usbConnectedDevice, usbVirtualDevice])
+
+  // Écouter les nouveaux ports connectés
+  useEffect(() => {
+    if (!isSupported) return
+
+    const handleConnect = async (event) => {
+      try {
+        // Nouveau port détecté, essayer de se connecter automatiquement
+        const port = event.target
+        const device = await detectDeviceOnPort(port)
+        if (device) {
+          console.log('Nouveau dispositif USB détecté:', device)
+        }
+      } catch (err) {
+        console.error('Erreur connexion nouveau port:', err)
+      }
+    }
+
+    navigator.serial.addEventListener('connect', handleConnect)
+    return () => {
+      navigator.serial.removeEventListener('connect', handleConnect)
+    }
+  }, [isSupported, detectDeviceOnPort])
 
   // Fonction pour déclencher OTA sur un dispositif
   const handleOTA = async (device, e) => {
@@ -167,7 +367,7 @@ export default function DevicesPage() {
       setOtaMessage(`✅ OTA v${selectedFirmwareVersion} programmé pour ${device.device_name || device.sim_iccid}`)
       
       // Recharger les dispositifs
-      await loadDevices()
+      await refetch()
     } catch (err) {
       setOtaError(err.message || 'Erreur lors du déploiement OTA')
     } finally {
@@ -235,7 +435,7 @@ export default function DevicesPage() {
       }
 
       // Recharger les dispositifs
-      await loadDevices()
+      await refetch()
     } catch (err) {
       setOtaError(`Erreur lors du déploiement massif: ${err.message}`)
     } finally {
@@ -244,15 +444,21 @@ export default function DevicesPage() {
     }
   }
 
-  useEffect(() => {
-    loadDevices()
-    loadPatients()
-    loadFirmwares()
-  }, [loadDevices, loadPatients, loadFirmwares])
+  // Les données sont chargées automatiquement par useApiData
+
+  // Combiner les dispositifs réels avec le dispositif virtuel USB
+  const allDevices = useMemo(() => {
+    const realDevices = [...devices]
+    // Ajouter le dispositif virtuel USB s'il existe et n'est pas déjà dans la liste
+    if (usbVirtualDevice && !realDevices.find(d => d.id === usbVirtualDevice.id)) {
+      realDevices.push(usbVirtualDevice)
+    }
+    return realDevices
+  }, [devices, usbVirtualDevice])
 
   const filteredDevices = useMemo(() => {
     const needle = searchTerm.toLowerCase()
-    return devices.filter(d => {
+    return allDevices.filter(d => {
       const matchesSearch =
         d.device_name?.toLowerCase().includes(needle) ||
     d.sim_iccid?.includes(searchTerm) ||
@@ -266,13 +472,17 @@ export default function DevicesPage() {
 
       return matchesSearch && matchesAssignment
     })
-  }, [devices, searchTerm, assignmentFilter])
+  }, [allDevices, searchTerm, assignmentFilter])
 
-  // Dispositifs qui ont un firmware différent du sélectionné
+  // Dispositifs qui ont un firmware différent du sélectionné (inclure les virtuels et N/A)
   const devicesToUpdate = useMemo(() => {
     if (!selectedFirmwareVersion) return []
     return filteredDevices.filter(device => {
-      const deviceFirmware = device.firmware_version || '0.0.0'
+      // Les dispositifs virtuels peuvent toujours être mis à jour
+      if (device.isVirtual) return true
+      const deviceFirmware = device.firmware_version || 'N/A'
+      // Si firmware est N/A ou différent, on peut le mettre à jour
+      if (deviceFirmware === 'N/A' || deviceFirmware === 'n/a') return true
       return deviceFirmware !== selectedFirmwareVersion
     })
   }, [filteredDevices, selectedFirmwareVersion])
@@ -529,7 +739,7 @@ export default function DevicesPage() {
       setAssignModalOpen(false)
       setSelectedDevice(null)
       setAssignForm({ patient_id: '' })
-      await loadDevices()
+      await refetch()
     } catch (err) {
       setAssignError(err.message)
     } finally {
@@ -564,8 +774,18 @@ export default function DevicesPage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">🔌 Dispositifs</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">{devices.length} dispositif(s) total</p>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            {allDevices.length} dispositif(s) total
+            {usbVirtualDevice && ' (1 USB non enregistré)'}
+          </p>
         </div>
+        {isConnected && (
+          <span className="px-3 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg text-sm font-medium">
+            🔌 USB Connecté
+            {usbConnectedDevice && ` - ${usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid}`}
+            {usbVirtualDevice && ` - ${usbVirtualDevice.device_name} (Non enregistré)`}
+          </span>
+        )}
       </div>
 
 
@@ -697,8 +917,14 @@ export default function DevicesPage() {
                 filteredDevices.map((device, i) => {
                   const status = getStatusBadge(device)
                   const battery = getBatteryBadge(device.last_battery)
-                  const deviceFirmware = device.firmware_version || '0.0.0'
-                  const needsUpdate = selectedFirmwareVersion && deviceFirmware !== selectedFirmwareVersion
+                  const deviceFirmware = device.firmware_version || 'N/A'
+                  // Un dispositif peut être mis à jour si : firmware N/A, différent, ou virtuel
+                  const needsUpdate = selectedFirmwareVersion && (
+                    device.isVirtual || 
+                    deviceFirmware === 'N/A' || 
+                    deviceFirmware === 'n/a' ||
+                    deviceFirmware !== selectedFirmwareVersion
+                  )
                   const isDeploying = otaDeploying[device.id]
                   
                   return (
@@ -709,8 +935,25 @@ export default function DevicesPage() {
                     >
                       <td className="py-3 px-4">
                         <div>
-                          <p className="font-semibold text-primary">{device.device_name || 'Sans nom'}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-primary">{device.device_name || 'Sans nom'}</p>
+                            {usbConnectedDevice && usbConnectedDevice.id === device.id && (
+                              <span className="px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded text-xs font-medium animate-pulse">
+                                🔌 USB
+                              </span>
+                            )}
+                            {device.isVirtual && (
+                              <span className="px-2 py-0.5 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 rounded text-xs font-medium animate-pulse">
+                                🔌 USB - Non enregistré
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-muted font-mono">{device.sim_iccid}</p>
+                          {device.isVirtual && (
+                            <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                              ⚠️ Dispositif détecté mais non enregistré - Flash disponible
+                            </p>
+                          )}
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -747,18 +990,33 @@ export default function DevicesPage() {
                       </td>
                       {selectedFirmwareVersion && (
                         <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          {needsUpdate ? (
+                          <div className="flex items-center justify-end gap-2">
+                            {needsUpdate || device.firmware_version === 'N/A' || device.firmware_version === 'n/a' ? (
+                              <button
+                                onClick={(e) => handleOTA(device, e)}
+                                disabled={isDeploying}
+                                className="btn-primary text-xs px-3 py-1"
+                                title={`Flasher OTA vers v${selectedFirmwareVersion}`}
+                              >
+                                {isDeploying ? '⏳' : '⬆️ OTA'}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400">✓ À jour</span>
+                            )}
                             <button
-                              onClick={(e) => handleOTA(device, e)}
-                              disabled={isDeploying}
-                              className="btn-primary text-xs px-3 py-1"
-                              title={`Flasher vers v${selectedFirmwareVersion}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                // Pour les dispositifs virtuels, ne pas passer device (sera pris automatiquement)
+                                setDeviceForFlash(device.isVirtual ? null : device)
+                                setShowFlashUSBModal(true)
+                              }}
+                              className="btn-secondary text-xs px-3 py-1"
+                              title="Flasher via USB"
+                              disabled={device.isVirtual && !isConnected}
                             >
-                              {isDeploying ? '⏳' : '⬆️ Flasher'}
+                              🔌 USB
                             </button>
-                          ) : (
-                            <span className="text-xs text-gray-400">✓ À jour</span>
-                          )}
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -1291,6 +1549,15 @@ export default function DevicesPage() {
         </div>
       )}
 
+      {/* Modal Flash USB */}
+      <FlashUSBModal
+        isOpen={showFlashUSBModal}
+        onClose={() => {
+          setShowFlashUSBModal(false)
+          setDeviceForFlash(null)
+        }}
+        device={deviceForFlash || usbVirtualDevice || usbConnectedDevice}
+      />
     </div>
   )
 }

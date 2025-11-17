@@ -174,7 +174,7 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TABLE IF NOT EXISTS user_notifications_preferences (
   user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   email_enabled BOOLEAN DEFAULT TRUE,
-  sms_enabled BOOLEAN DEFAULT FALSE,
+  sms_enabled BOOLEAN DEFAULT TRUE,
   push_enabled BOOLEAN DEFAULT TRUE,
   phone_number VARCHAR(20),
   notify_battery_low BOOLEAN DEFAULT TRUE,

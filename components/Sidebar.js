@@ -53,13 +53,9 @@ export default function Sidebar() {
     return user?.permissions?.includes(permission)
   }
 
-  // Normaliser le pathname pour la comparaison (enlever basePath si présent)
+  // Normaliser le pathname pour la comparaison
   const normalizedPathname = useMemo(() => {
     if (!pathname) return ''
-    // Enlever le basePath du début si présent
-    if (basePath && pathname.startsWith(basePath)) {
-      return pathname.substring(basePath.length) || '/'
-    }
     return pathname
   }, [pathname])
 

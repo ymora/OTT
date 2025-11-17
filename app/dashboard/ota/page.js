@@ -1,39 +1,27 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
+import { useApiData } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import SuccessMessage from '@/components/SuccessMessage'
 
 export default function OTAPage() {
   const { fetchWithAuth, API_URL } = useAuth()
-  const [firmwares, setFirmwares] = useState([])
-  const [devices, setDevices] = useState([])
   const [selectedFirmware, setSelectedFirmware] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState(null)
-  const [error, setError] = useState(null)
   const [deploying, setDeploying] = useState({})
 
-  const loadData = useCallback(async () => {
-    try {
-      setError(null)
-      const [firmwaresData, devicesData] = await Promise.all([
-        fetchJson(fetchWithAuth, API_URL, '/api.php/firmwares', {}, { requiresAuth: true }),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/devices', {}, { requiresAuth: true })
-      ])
-      setFirmwares(firmwaresData.firmwares || [])
-      setDevices(devicesData.devices || [])
-    } catch (err) {
-      console.error(err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [API_URL, fetchWithAuth])
+  // Charger les données avec useApiData
+  const { data, loading, error, refetch } = useApiData(
+    ['/api.php/firmwares', '/api.php/devices'],
+    { requiresAuth: true }
+  )
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  const firmwares = data?.firmwares?.firmwares || []
+  const devices = data?.devices?.devices || []
 
   // Filtrer les dispositifs qui n'ont PAS le firmware sélectionné
   const devicesToUpdate = useMemo(() => {
@@ -48,7 +36,6 @@ export default function OTAPage() {
   const triggerOTA = async (deviceId, version) => {
     try {
       setMessage(null)
-      setError(null)
       setDeploying(prev => ({ ...prev, [deviceId]: true }))
       
       await fetchJson(
@@ -65,9 +52,10 @@ export default function OTAPage() {
       setMessage(`✅ OTA v${version} programmé pour le dispositif`)
       
       // Recharger les données pour mettre à jour les versions
-      await loadData()
+      await refetch()
     } catch (err) {
-      setError(err.message || 'Erreur lors du déploiement')
+      setMessage(null)
+      setMessage(`❌ Erreur : ${err.message || 'Erreur lors du déploiement'}`)
     } finally {
       setDeploying(prev => {
         const next = { ...prev }
@@ -127,13 +115,13 @@ export default function OTAPage() {
       if (errorCount === 0) {
         setMessage(`✅ OTA v${selectedFirmware.version} programmé avec succès sur ${successCount} dispositif(s)`)
       } else {
-        setError(`⚠️ Déploiement partiel : ${successCount} succès, ${errorCount} erreur(s)`)
+        setMessage(`⚠️ Déploiement partiel : ${successCount} succès, ${errorCount} erreur(s)`)
       }
 
       // Recharger les données
-      await loadData()
+      await refetch()
     } catch (err) {
-      setError(`Erreur lors du déploiement massif: ${err.message}`)
+      setMessage(`❌ Erreur lors du déploiement massif: ${err.message}`)
     } finally {
       // Réinitialiser l'état de déploiement
       setDeploying({})
@@ -147,11 +135,8 @@ export default function OTAPage() {
         <p className="text-gray-600 mt-1">Déploiement de firmwares sur les dispositifs</p>
       </div>
 
-      {(error || message) && (
-        <div className={`alert ${error ? 'alert-warning' : 'alert-success'}`}>
-          {error ? `❌ Erreur : ${error}` : message}
-        </div>
-      )}
+      <ErrorMessage error={error} onRetry={refetch} />
+      <SuccessMessage message={message} onClose={() => setMessage(null)} />
 
       {/* Firmwares */}
       <div className="card">
@@ -160,7 +145,7 @@ export default function OTAPage() {
         </div>
 
         {loading ? (
-          <div className="animate-shimmer h-48"></div>
+          <LoadingSpinner size="lg" text="Chargement des firmwares..." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">

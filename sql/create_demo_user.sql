@@ -28,7 +28,7 @@ WITH upsert AS (
     crypt('Demo1234!', gen_salt('bf', 10)),
     'Demo',
     'User',
-    4,
+    3, -- technicien (viewer supprimé)
     TRUE
   )
   ON CONFLICT (email) DO UPDATE
@@ -40,7 +40,7 @@ WITH upsert AS (
   RETURNING id
 )
 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled)
-SELECT id, TRUE, FALSE, TRUE FROM upsert
+SELECT id, TRUE, TRUE, TRUE FROM upsert -- SMS activé par défaut
 ON CONFLICT (user_id) DO NOTHING;
 
 -- ============================================================================

@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
-import { fetchJson } from '@/lib/api'
+import { useApiData, useFilter } from '@/hooks'
 import { formatDateTime } from '@/lib/utils'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import FilterButtons from '@/components/FilterButtons'
+import FilterSelect from '@/components/FilterSelect'
+import SearchBar from '@/components/SearchBar'
 
 const typeStyles = {
   INFO: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -12,44 +15,47 @@ const typeStyles = {
 }
 
 export default function LogsPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
-  const [logs, setLogs] = useState([])
-  const [devices, setDevices] = useState([])
-  const [typeFilter, setTypeFilter] = useState('ALL')
-  const [deviceFilter, setDeviceFilter] = useState('ALL')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  // Charger les données avec useApiData
+  const { data: logsData, loading, error, refetch } = useApiData(
+    ['/api.php/logs?limit=200', '/api.php/devices'],
+    { requiresAuth: false }
+  )
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setError(null)
-        const [logsData, devicesData] = await Promise.all([
-          fetchJson(fetchWithAuth, API_URL, '/api.php/logs?limit=200'),
-          fetchJson(fetchWithAuth, API_URL, '/api.php/devices')
-        ])
-        setLogs(logsData.logs || [])
-        setDevices(devicesData.devices || [])
-      } catch (err) {
-        console.error(err)
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
+  const logs = logsData?.logs?.logs || []
+  const devices = logsData?.devices?.devices || []
+
+  // Utiliser useFilter pour la recherche et filtres
+  const {
+    searchTerm,
+    setSearchTerm,
+    filters,
+    setFilter,
+    filteredItems: filteredLogs
+  } = useFilter(logs, {
+    searchFn: (items, term) => {
+      return items.filter(log => 
+        log.message?.toLowerCase().includes(term.toLowerCase())
+      )
+    },
+    filterFn: (items, filters) => {
+      return items.filter(log => {
+        const level = (log.level || 'INFO').toUpperCase()
+        if (filters.type && filters.type !== 'ALL' && level !== filters.type) return false
+        if (filters.device && filters.device !== 'ALL' && String(log.device_id) !== filters.device) return false
+        return true
+      })
     }
-    loadData()
-  }, [fetchWithAuth, API_URL])
-
-  const filteredLogs = useMemo(() => {
-  return logs.filter(log => {
-    const level = (log.level || 'INFO').toUpperCase()
-    if (typeFilter !== 'ALL' && level !== typeFilter) return false
-    if (deviceFilter !== 'ALL' && String(log.device_id) !== deviceFilter) return false
-    if (searchTerm && !log.message.toLowerCase().includes(searchTerm.toLowerCase())) return false
-    return true
   })
-  }, [logs, typeFilter, deviceFilter, searchTerm])
+
+  const typeFilter = filters.type || 'ALL'
+  const deviceFilter = filters.device || 'ALL'
+
+  const typeOptions = [
+    { value: 'ALL', label: 'Tous' },
+    { value: 'INFO', label: 'INFO' },
+    { value: 'WARN', label: 'WARN' },
+    { value: 'ERROR', label: 'ERROR' }
+  ]
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -58,42 +64,25 @@ export default function LogsPage() {
         <p className="text-gray-600 mt-1">Suivi temps réel des événements terrain.</p>
       </div>
 
-      {/* Filtres - Présentés comme les autres pages */}
+      {/* Filtres */}
       <div className="flex flex-col md:flex-row gap-3">
-        {/* Filtres de type */}
-        <div className="flex gap-2">
-          {['ALL', 'INFO', 'WARN', 'ERROR'].map(type => (
-            <button
-              key={type}
-              onClick={() => setTypeFilter(type)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                typeFilter === type
-                  ? 'bg-primary-500 text-white shadow-lg scale-105'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              {type === 'ALL' ? 'Tous' : type}
-            </button>
-          ))}
-        </div>
+        <FilterButtons
+          options={typeOptions}
+          selected={typeFilter}
+          onChange={(value) => setFilter('type', value)}
+        />
 
-        {/* Filtres dispositif et recherche */}
         <div className="flex gap-3 md:ml-auto">
-          <select
+          <FilterSelect
             value={deviceFilter}
-            onChange={e => setDeviceFilter(e.target.value)}
-            className="input"
-          >
-            <option value="ALL">Tous les dispositifs</option>
-            {devices.map(device => (
-              <option key={device.id} value={device.id}>{device.device_name || device.sim_iccid}</option>
-            ))}
-          </select>
-          <input
-            type="text"
+            onChange={(value) => setFilter('device', value)}
+            options={[{ id: 'ALL', name: 'Tous les dispositifs' }, ...devices]}
+            placeholder="Tous les dispositifs"
+            getLabel={(opt) => opt.name || opt.device_name || opt.sim_iccid}
+          />
+          <SearchBar
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="input"
+            onChange={setSearchTerm}
             placeholder="Rechercher dans les logs..."
           />
         </div>
@@ -101,19 +90,10 @@ export default function LogsPage() {
 
       {/* Liste des logs */}
       <div className="card space-y-4">
-
-        {error && (
-          <div className="alert alert-warning">
-            <strong>Erreur API :</strong> {error}
-          </div>
-        )}
+        <ErrorMessage error={error} onRetry={refetch} />
 
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="card animate-shimmer h-24"></div>
-            ))}
-          </div>
+          <LoadingSpinner size="lg" text="Chargement des logs..." />
         ) : (
           <div className="space-y-3 max-h-[520px] overflow-y-auto pr-2">
             {filteredLogs.length === 0 ? (

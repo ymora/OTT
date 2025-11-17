@@ -1,124 +1,108 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import AlertCard from '@/components/AlertCard'
-import { useAuth } from '@/contexts/AuthContext'
-import { fetchJson } from '@/lib/api'
+import { useApiData, useFilter } from '@/hooks'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import FilterButtons from '@/components/FilterButtons'
+import FilterSelect from '@/components/FilterSelect'
+import SearchBar from '@/components/SearchBar'
 
 export default function AlertsPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
-  const [alerts, setAlerts] = useState([])
-  const [devices, setDevices] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [severityFilter, setSeverityFilter] = useState('ALL')
-  const [deviceFilter, setDeviceFilter] = useState('ALL')
-  const [searchTerm, setSearchTerm] = useState('')
+  // Charger les données avec useApiData
+  const { data: alertsData, loading, error, refetch } = useApiData(
+    ['/api.php/alerts', '/api.php/devices'],
+    { requiresAuth: false }
+  )
 
-  const loadAlerts = useCallback(async () => {
-    try {
-      setError(null)
-      const [alertsData, devicesData] = await Promise.all([
-        fetchJson(fetchWithAuth, API_URL, '/api.php/alerts'),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/devices')
-      ])
-      setAlerts(alertsData.alerts || [])
-      setDevices(devicesData.devices || [])
-    } catch (err) {
-      console.error(err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [fetchWithAuth, API_URL])
+  const alerts = alertsData?.alerts?.alerts || []
+  const devices = alertsData?.devices?.devices || []
 
-  useEffect(() => {
-    loadAlerts()
-  }, [loadAlerts])
+  // Filtrer les alertes (uniquement actives)
+  const activeAlerts = useMemo(() => {
+    return alerts.filter(a => a.status !== 'resolved')
+  }, [alerts])
 
-  const filteredAlerts = useMemo(() => {
-    return alerts.filter(a => {
-      // Ne garder que les alertes actives (non résolues)
-      if (a.status === 'resolved') return false
-      
-      // Filtre par sévérité
-      if (severityFilter !== 'ALL' && a.severity !== severityFilter) return false
-      
-      // Filtre par dispositif
-      if (deviceFilter !== 'ALL' && String(a.device_id) !== deviceFilter) return false
-      
-      // Filtre de recherche
-      if (searchTerm) {
-        const needle = searchTerm.toLowerCase()
+  // Utiliser useFilter pour la recherche et filtres
+  const {
+    searchTerm,
+    setSearchTerm,
+    filters,
+    setFilter,
+    filteredItems
+  } = useFilter(activeAlerts, {
+    searchFn: (items, term) => {
+      const needle = term.toLowerCase()
+      return items.filter(a => {
         const haystack = `${a.device_name || ''} ${a.sim_iccid || ''} ${a.first_name || ''} ${a.last_name || ''}`.toLowerCase()
-        if (!haystack.includes(needle)) return false
-      }
-      return true
-    })
-  }, [alerts, severityFilter, deviceFilter, searchTerm])
+        return haystack.includes(needle)
+      })
+    },
+    filterFn: (items, filters) => {
+      return items.filter(a => {
+        if (filters.severity && filters.severity !== 'ALL' && a.severity !== filters.severity) return false
+        if (filters.device && filters.device !== 'ALL' && String(a.device_id) !== filters.device) return false
+        return true
+      })
+    }
+  })
+
+  const severityFilter = filters.severity || 'ALL'
+  const deviceFilter = filters.device || 'ALL'
+
+  const severityOptions = [
+    { value: 'ALL', label: 'Toutes' },
+    { value: 'critical', label: 'Critique' },
+    { value: 'high', label: 'Haute' },
+    { value: 'medium', label: 'Moyenne' },
+    { value: 'low', label: 'Basse' }
+  ]
 
   return (
     <div className="space-y-6 animate-fade-in">
       <h1 className="text-3xl font-bold">🔔 Alertes</h1>
 
-      {/* Filtres - Présentés comme dans Logs */}
+      {/* Filtres */}
       <div className="flex flex-col md:flex-row gap-3">
-        {/* Filtres par sévérité */}
-        <div className="flex gap-2">
-          {['ALL', 'critical', 'high', 'medium', 'low'].map(severity => (
-            <button
-              key={severity}
-              onClick={() => setSeverityFilter(severity)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                severityFilter === severity
-                  ? 'bg-primary-500 text-white shadow-lg scale-105'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              {severity === 'ALL' ? 'Toutes' : severity.charAt(0).toUpperCase() + severity.slice(1)}
-            </button>
-          ))}
-        </div>
+        <FilterButtons
+          options={severityOptions}
+          selected={severityFilter}
+          onChange={(value) => setFilter('severity', value)}
+        />
 
-        {/* Filtres dispositif et recherche */}
         <div className="flex gap-3 md:ml-auto">
-          <select
+          <FilterSelect
             value={deviceFilter}
-            onChange={e => setDeviceFilter(e.target.value)}
-            className="input"
-          >
-            <option value="ALL">Tous les dispositifs</option>
-            {devices.map(device => (
-              <option key={device.id} value={device.id}>{device.device_name || device.sim_iccid}</option>
-            ))}
-          </select>
-          <input
-            type="text"
-            className="input"
-            placeholder="Rechercher dans les alertes..."
+            onChange={(value) => setFilter('device', value)}
+            options={[{ id: 'ALL', name: 'Tous les dispositifs' }, ...devices]}
+            placeholder="Tous les dispositifs"
+            getLabel={(opt) => opt.name || opt.device_name || opt.sim_iccid}
+          />
+          <SearchBar
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={setSearchTerm}
+            placeholder="Rechercher dans les alertes..."
           />
         </div>
       </div>
 
-      {error && (
-        <div className="alert alert-warning">
-          <strong>Erreur API :</strong> {error}
-        </div>
-      )}
+      <ErrorMessage error={error} onRetry={refetch} />
 
       {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="card animate-shimmer h-24"></div>
-          ))}
-        </div>
+        <LoadingSpinner size="lg" text="Chargement des alertes..." />
       ) : (
         <div className="space-y-3">
-          {filteredAlerts.map((alert, i) => (
-            <AlertCard key={alert.id} alert={alert} delay={i * 0.03} />
-          ))}
+          {filteredItems.length === 0 ? (
+            <div className="card text-center py-12 text-gray-500">
+              <p className="text-lg mb-2">Aucune alerte active</p>
+              <p className="text-sm">Les alertes résolues ne sont pas affichées ici</p>
+            </div>
+          ) : (
+            filteredItems.map((alert, i) => (
+              <AlertCard key={alert.id} alert={alert} delay={i * 0.03} />
+            ))
+          )}
         </div>
       )}
     </div>

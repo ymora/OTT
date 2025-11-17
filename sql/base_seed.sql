@@ -5,8 +5,7 @@
 INSERT INTO roles (id, name, description) VALUES
   (1, 'admin', 'Administrateur systeme - Acces complet'),
   (2, 'medecin', 'Medecin - Consultation patients et dispositifs'),
-  (3, 'technicien', 'Technicien - Maintenance dispositifs'),
-  (4, 'viewer', 'Lecture seule')
+  (3, 'technicien', 'Technicien - Maintenance dispositifs')
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
 
 INSERT INTO permissions (code, description, category) VALUES
@@ -50,26 +49,20 @@ SELECT 3, id FROM permissions WHERE code IN (
 )
 ON CONFLICT DO NOTHING;
 
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT 4, id FROM permissions WHERE code IN (
-  'devices.view','patients.view','reports.view','alerts.view'
-)
-ON CONFLICT DO NOTHING;
+-- Rôle viewer supprimé - les permissions étaient identiques à medecin (lecture seule)
 
 INSERT INTO users (id, email, password_hash, first_name, last_name, role_id, is_active)
 VALUES
   (1, 'admin@example.com', '$2y$10$w1K9P0IJhES2YwwHGwEk2Oq91Fv2R9DyCPr6Z0SqnX5nGooy2cS3m', 'Admin', 'Demo', 1, TRUE),
   (2, 'tech@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Tech', 'Demo', 3, TRUE),
-  (3, 'medecin@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Dr', 'Girard', 2, TRUE),
-  (4, 'viewer@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Claire', 'Observatrice', 4, TRUE)
+  (3, 'medecin@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Dr', 'Girard', 2, TRUE)
 ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
 
 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, phone_number)
 VALUES
   (1, TRUE, TRUE, '+33612345678'),
-  (2, TRUE, FALSE, '+33612345679'),
-  (3, TRUE, TRUE, '+33698765432'),
-  (4, TRUE, FALSE, '+33655554444')
+  (2, TRUE, TRUE, '+33612345679'), -- SMS activé par défaut
+  (3, TRUE, TRUE, '+33698765432')
 ON CONFLICT (user_id) DO UPDATE SET email_enabled = EXCLUDED.email_enabled;
 
 INSERT INTO patients (id, first_name, last_name, phone, city, postal_code, birth_date)
