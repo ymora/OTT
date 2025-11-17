@@ -24,8 +24,7 @@ const buildClientApiUrl = input => {
 
   // En export statique (GitHub Pages), le proxy Next.js n'est pas disponible
   // Utiliser directement l'API (CORS doit être configuré côté serveur)
-  const isStaticExport = process.env.NEXT_PUBLIC_STATIC_EXPORT === 'true' || 
-                         window.location.hostname === 'ymora.github.io'
+  const isStaticExport = process.env.NEXT_PUBLIC_STATIC_EXPORT === 'true'
   
   if (isStaticExport) {
     return absoluteUrl

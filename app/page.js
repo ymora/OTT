@@ -4,9 +4,6 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Login from '@/components/Login'
-import { buildUrl } from '@/lib/utils'
-
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
 export default function HomePage() {
   const router = useRouter()
@@ -14,12 +11,11 @@ export default function HomePage() {
 
   useEffect(() => {
     // Si l'utilisateur est déjà authentifié, rediriger vers le dashboard
+    // Next.js router gère automatiquement le basePath
     if (!loading && user) {
-      const dashboardPath = buildUrl('/dashboard', basePath)
-      // Utiliser replace au lieu de href pour éviter d'ajouter à l'historique
-      window.location.replace(dashboardPath)
+      router.replace('/dashboard')
     }
-  }, [user, loading])
+  }, [user, loading, router])
 
   // Afficher le login si pas authentifié
   if (loading) {

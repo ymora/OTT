@@ -2,16 +2,15 @@ import './globals.css'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { withBasePath } from '@/lib/utils'
 
 const inter = Inter({ subsets: ['latin'] })
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 const isProduction = process.env.NODE_ENV === 'production'
-const withBase = (path) => `${basePath}${path}`
-const manifestHref = withBase('/manifest.json')
-const swPath = withBase('/sw.js')
-const icon192 = withBase('/icon-192.png')
-const icon512 = withBase('/icon-512.png')
+const manifestHref = withBasePath('/manifest.json')
+const swPath = withBasePath('/sw.js')
+const icon192 = withBasePath('/icon-192.png')
+const icon512 = withBasePath('/icon-512.png')
 
 export const metadata = {
   title: 'OTT Dashboard - HAPPLYZ Medical',

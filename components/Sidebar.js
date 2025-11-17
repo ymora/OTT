@@ -4,9 +4,7 @@ import { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
-const withBase = (path) => `${basePath}${path}`
+import { withBasePath } from '@/lib/utils'
 
 // Menu simplifié - 4 pages principales avec fonctionnalités regroupées
 const menuStructure = [
@@ -103,7 +101,7 @@ export default function Sidebar() {
       {/* Footer Sidebar */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white/90 via-primary-50/30 to-transparent dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-transparent backdrop-blur-sm">
         <a 
-          href={withBase('/DOCUMENTATION_COMPLETE_OTT.html')} 
+          href={withBasePath('/DOCUMENTATION_COMPLETE_OTT.html')} 
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 rounded-lg hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30 transition-all duration-300 hover:scale-[1.02] shadow-sm"
