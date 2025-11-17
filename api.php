@@ -581,17 +581,17 @@ function handleCreateUser() {
                 'phone' => !empty($input['phone']) ? trim($input['phone']) : null
             ]);
         } else {
-            $stmt = $pdo->prepare("
-                INSERT INTO users (email, password_hash, first_name, last_name, role_id)
-                VALUES (:email, :password_hash, :first_name, :last_name, :role_id)
-            ");
-            $stmt->execute([
-                'email' => $input['email'],
-                'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
-                'first_name' => $input['first_name'] ?? '',
-                'last_name' => $input['last_name'] ?? '',
-                'role_id' => $input['role_id'] ?? 4
-            ]);
+        $stmt = $pdo->prepare("
+            INSERT INTO users (email, password_hash, first_name, last_name, role_id)
+            VALUES (:email, :password_hash, :first_name, :last_name, :role_id)
+        ");
+        $stmt->execute([
+            'email' => $input['email'],
+            'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
+            'first_name' => $input['first_name'] ?? '',
+            'last_name' => $input['last_name'] ?? '',
+            'role_id' => $input['role_id'] ?? 4
+        ]);
         }
         
         $user_id = $pdo->lastInsertId();
@@ -667,7 +667,9 @@ function handleUpdateUser($user_id) {
         
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleUpdateUser] Database error: ' . $e->getMessage() . ' | User ID: ' . $user_id . ' | Input: ' . json_encode($input));
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -1966,8 +1968,8 @@ function handleUpdateDeviceConfig($device_id) {
                     // Permettre de mettre à NULL pour réinitialiser
                     $updates[] = "$field = NULL";
                 } else {
-                    $updates[] = "$field = :$field";
-                    $params[$field] = is_array($input[$field]) ? json_encode($input[$field]) : $input[$field];
+                $updates[] = "$field = :$field";
+                $params[$field] = is_array($input[$field]) ? json_encode($input[$field]) : $input[$field];
                 }
             }
         }

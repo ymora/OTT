@@ -43,17 +43,17 @@ function buildIcon(status = 'online', deviceId = null, deviceName = null, isHove
         align-items: center;
         justify-content: center;
       ">
-        <div style="
-          background:${color};
+      <div style="
+        background:${color};
           width:${size}px;
           height:${size}px;
-          border-radius:50%;
+        border-radius:50%;
           border:${borderSize}px solid white;
           box-shadow:0 0 ${shadowSize}px rgba(0,0,0,0.4);
           transition: all 0.3s ease;
           position: relative;
           z-index: 2;
-        "></div>
+      "></div>
         ${label ? `
         <div style="
           position: absolute;
@@ -180,16 +180,16 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
       {enrichedDevices.map(device => {
         const isHovered = hoveredDeviceId === device.id
         return (
-          <Marker
-            key={device.id}
-            position={[device.latitude, device.longitude]}
+        <Marker
+          key={device.id}
+          position={[device.latitude, device.longitude]}
             icon={buildIcon(device.connectionStatus, device.id, device.device_name, isHovered)}
             eventHandlers={{
               click: () => onSelect?.(device),
               mouseover: () => setHoveredDeviceId(device.id),
               mouseout: () => setHoveredDeviceId(null)
             }}
-          >
+        >
           <Popup maxWidth={280}>
             <div className="space-y-2 p-1">
               <div className="flex items-center justify-between gap-2 border-b pb-2">
@@ -233,12 +233,12 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
                   <span className="font-medium text-xs">{device.lastSeenLabel}</span>
                 </div>
                 
-                {device.first_name && (
+              {device.first_name && (
                   <div className="flex items-center justify-between border-t pt-1.5 mt-1.5">
                     <span className="text-gray-600">👤 Patient:</span>
                     <span className="font-medium">{device.first_name} {device.last_name}</span>
                   </div>
-                )}
+              )}
                 
                 {device.sim_iccid && (
                   <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t">
@@ -293,7 +293,7 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
         const avgLng = validLngs.reduce((sum, lng) => sum + lng, 0) / validLngs.length
         // Vérifier que les valeurs finales sont valides
         if (!isNaN(avgLat) && !isNaN(avgLng) && isFinite(avgLat) && isFinite(avgLng)) {
-          return [avgLat, avgLng]
+    return [avgLat, avgLng]
         }
       }
     }

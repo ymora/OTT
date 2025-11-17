@@ -475,22 +475,22 @@ export default function PatientsPage() {
               <tbody>
                 {filteredPatients.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-gray-500">
+                    <td colSpan="6" className="py-8 text-center text-muted">
                       {searchTerm ? 'Aucun patient ne correspond à la recherche' : 'Aucun patient'}
                     </td>
                   </tr>
                 ) : (
                   filteredPatients.map((p, i) => (
-                    <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
-                      <td className="py-3 px-4 font-medium">{p.first_name} {p.last_name}</td>
-                      <td className="py-3 px-4 text-gray-600">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
-                      <td className="py-3 px-4 text-sm text-gray-600">{p.phone || '-'}</td>
-                      <td className="py-3 px-4 text-gray-600">{p.email || '-'}</td>
+                    <tr key={p.id} className="table-row animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
+                      <td className="py-3 px-4 font-medium text-primary">{p.first_name} {p.last_name}</td>
+                      <td className="table-cell">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
+                      <td className="table-cell text-sm">{p.phone || '-'}</td>
+                      <td className="table-cell">{p.email || '-'}</td>
                       <td className="py-3 px-4">
                         {p.device_name ? (
                           <div className="space-y-1">
-                            <p className="font-medium text-gray-900">{p.device_name}</p>
-                            <p className="text-xs text-gray-500 font-mono">{p.sim_iccid}</p>
+                            <p className="font-medium text-primary">{p.device_name}</p>
+                            <p className="text-xs text-muted font-mono">{p.sim_iccid}</p>
                           </div>
                         ) : (
                           <span className="text-sm text-amber-600">Non assigné</span>
@@ -538,11 +538,11 @@ export default function PatientsPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-2xl shadow-2xl w-full max-w-xl p-6 space-y-4 backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50 animate-scale-in">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold">{editingPatient ? 'Modifier le patient' : 'Nouveau patient'}</h2>
-              <button className="text-gray-500 hover:text-gray-900" onClick={() => {
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{editingPatient ? 'Modifier le patient' : 'Nouveau patient'}</h2>
+              <button className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100" onClick={() => {
                 setShowForm(false)
                 setEditingPatient(null)
                 setFormData(emptyForm)
@@ -552,32 +552,81 @@ export default function PatientsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Prénom *</label>
-                <input className="input" value={formData.first_name} onChange={e => handleChange('first_name', e.target.value)} />
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Prénom *</label>
+                <input 
+                  className={`input ${formErrors.first_name ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
+                  value={formData.first_name} 
+                  onChange={e => handleChange('first_name', e.target.value)} 
+                />
+                {formErrors.first_name && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.first_name}</p>
+                )}
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Nom *</label>
-                <input className="input" value={formData.last_name} onChange={e => handleChange('last_name', e.target.value)} />
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Nom *</label>
+                <input 
+                  className={`input ${formErrors.last_name ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
+                  value={formData.last_name} 
+                  onChange={e => handleChange('last_name', e.target.value)} 
+                />
+                {formErrors.last_name && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.last_name}</p>
+                )}
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Date de naissance</label>
-                <input type="date" className="input" value={formData.birth_date} onChange={e => handleChange('birth_date', e.target.value)} />
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Date de naissance</label>
+                <input 
+                  type="date" 
+                  className={`input ${formErrors.birth_date ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
+                  value={formData.birth_date} 
+                  onChange={e => handleChange('birth_date', e.target.value)} 
+                />
+                {formErrors.birth_date && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.birth_date}</p>
+                )}
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Téléphone</label>
-                <input className="input" value={formData.phone} onChange={e => handleChange('phone', e.target.value)} placeholder="+33..." />
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Téléphone</label>
+                <input 
+                  className={`input ${formErrors.phone ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
+                  value={formData.phone} 
+                  onChange={e => handleChange('phone', e.target.value)} 
+                  placeholder="+33..." 
+                />
+                {formErrors.phone && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.phone}</p>
+                )}
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Email</label>
-                <input className="input" type="email" value={formData.email} onChange={e => handleChange('email', e.target.value)} />
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Email</label>
+                <input 
+                  className={`input ${formErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
+                  type="email" 
+                  value={formData.email} 
+                  onChange={e => handleChange('email', e.target.value)} 
+                />
+                {formErrors.email && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.email}</p>
+                )}
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Ville</label>
-                <input className="input" value={formData.city} onChange={e => handleChange('city', e.target.value)} />
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Ville</label>
+                <input 
+                  className="input" 
+                  value={formData.city} 
+                  onChange={e => handleChange('city', e.target.value)} 
+                />
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Code postal</label>
-                <input className="input" value={formData.postal_code} onChange={e => handleChange('postal_code', e.target.value)} />
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Code postal</label>
+                <input 
+                  className={`input ${formErrors.postal_code ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
+                  value={formData.postal_code} 
+                  onChange={e => handleChange('postal_code', e.target.value)} 
+                />
+                {formErrors.postal_code && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.postal_code}</p>
+                )}
               </div>
             </div>
 
@@ -633,11 +682,11 @@ export default function PatientsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-gray-500">Prénom</p>
-                        <p className="font-medium">{selectedPatient.first_name}</p>
+                        <p className="font-medium text-primary">{selectedPatient.first_name}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">Nom</p>
-                        <p className="font-medium">{selectedPatient.last_name}</p>
+                        <p className="font-medium text-primary">{selectedPatient.last_name}</p>
                       </div>
                       {selectedPatient.birth_date && (
                         <div>
@@ -712,7 +761,7 @@ export default function PatientsPage() {
 
                       {/* Types d'alertes */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Types d&apos;alertes</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Types d&apos;alertes</label>
                         <div className="grid grid-cols-2 gap-2">
                           <label className="flex items-center gap-2 text-sm">
                             <input

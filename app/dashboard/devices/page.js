@@ -297,13 +297,13 @@ export default function DevicesPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">🔌 Dispositifs</h1>
-          <p className="text-gray-600 mt-1">{devices.length} dispositif(s) total</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">🔌 Dispositifs</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">{devices.length} dispositif(s) total</p>
         </div>
       </div>
 
       {/* Onglets */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="flex gap-2 overflow-x-auto">
           {visibleTabs.map(tab => (
             <button
@@ -311,8 +311,8 @@ export default function DevicesPage() {
               onClick={() => setTab(tab.id)}
               className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-all ${
                 activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  ? 'border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600'
               }`}
             >
               {tab.label}
@@ -363,7 +363,7 @@ export default function DevicesPage() {
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 assignmentFilter === tab.id
                   ? 'bg-primary-600 text-white shadow-md'
-                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                  : 'bg-white dark:bg-[rgb(var(--night-surface))] text-gray-700 dark:text-[rgb(var(--night-text-primary))] border border-gray-200 dark:border-[rgb(var(--night-border))] hover:bg-gray-50 dark:hover:bg-[rgb(var(--night-surface-hover))]'
               }`}
             >
               {tab.label}
@@ -412,12 +412,12 @@ export default function DevicesPage() {
                   return (
                     <tr 
                       key={device.id} 
-                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+                      className="table-row cursor-pointer"
                       onClick={() => handleShowDetails(device)}
                     >
                       <td className="py-3 px-4">
                         <div>
-                          <p className="font-semibold">{device.device_name || 'Sans nom'}</p>
+                          <p className="font-semibold text-primary">{device.device_name || 'Sans nom'}</p>
                           <p className="text-xs text-gray-500 font-mono">{device.sim_iccid}</p>
                         </div>
                       </td>
@@ -466,17 +466,17 @@ export default function DevicesPage() {
 
       {/* Modal Détails & Journal - accessible depuis tous les onglets */}
       {showDetailsModal && selectedDevice && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[95vh] flex flex-col">
-            <div className="flex-shrink-0 bg-white border-b p-6 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-2xl shadow-2xl w-full max-w-4xl h-[95vh] flex flex-col backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50">
+            <div className="flex-shrink-0 bg-gradient-to-r from-white/90 to-gray-50/50 dark:from-slate-800/90 dark:to-slate-800/70 border-b border-gray-200/80 dark:border-slate-700/50 p-6 flex items-center justify-between backdrop-blur-sm">
               <div>
-                <h2 className="text-2xl font-semibold">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                   🔌 {selectedDevice.device_name || selectedDevice.sim_iccid}
                 </h2>
-                <p className="text-sm text-gray-500">ICCID: {selectedDevice.sim_iccid}</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">ICCID: {selectedDevice.sim_iccid}</p>
               </div>
               <button
-                className="text-gray-500 hover:text-gray-900 text-2xl"
+                className="text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100 text-2xl transition-all duration-200"
                 onClick={() => {
                   setShowDetailsModal(false)
                   setSelectedDevice(null)
@@ -492,14 +492,14 @@ export default function DevicesPage() {
             </div>
 
             {/* Onglets du modal */}
-            <div className="flex-shrink-0 border-b border-gray-200 px-6">
+            <div className="flex-shrink-0 border-b border-gray-200/80 dark:border-slate-700/50 px-6 bg-gradient-to-r from-transparent via-gray-50/30 to-transparent dark:via-slate-800/30">
               <nav className="flex gap-2">
                 <button
                   onClick={() => setModalActiveTab('details')}
                   className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
                     modalActiveTab === 'details'
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                      ? 'border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600'
                   }`}
                 >
                   📊 Détails
@@ -508,8 +508,8 @@ export default function DevicesPage() {
                   onClick={() => setModalActiveTab('alerts')}
                   className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
                     modalActiveTab === 'alerts'
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                      ? 'border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600'
                   }`}
                 >
                   🔔 Alertes ({deviceAlerts.length})
@@ -518,8 +518,8 @@ export default function DevicesPage() {
                   onClick={() => setModalActiveTab('logs')}
                   className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
                     modalActiveTab === 'logs'
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                      ? 'border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600'
                   }`}
                 >
                   📝 Journal ({deviceLogs.length})
@@ -585,9 +585,9 @@ export default function DevicesPage() {
 
                   {modalActiveTab === 'alerts' && (
                     <div className="h-full flex flex-col">
-                      <h3 className="text-lg font-semibold mb-4">🔔 Alertes ({deviceAlerts.length})</h3>
+                      <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">🔔 Alertes ({deviceAlerts.length})</h3>
                       {deviceAlerts.length === 0 ? (
-                        <p className="text-gray-500 text-sm">Aucune alerte active pour ce dispositif</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">Aucune alerte active pour ce dispositif</p>
                       ) : (
                         <div className="flex-1 space-y-3 overflow-y-auto">
                           {deviceAlerts.map((alert, i) => (
@@ -600,13 +600,13 @@ export default function DevicesPage() {
 
                   {modalActiveTab === 'logs' && (
                     <div className="h-full flex flex-col">
-                      <h3 className="text-lg font-semibold mb-4">📝 Journal ({deviceLogs.length})</h3>
+                      <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">📝 Journal ({deviceLogs.length})</h3>
                       {deviceLogs.length === 0 ? (
-                        <p className="text-gray-500 text-sm">Aucun log disponible</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">Aucun log disponible</p>
                       ) : (
                         <div className="flex-1 space-y-2 overflow-y-auto">
                           {deviceLogs.map((log) => (
-                            <div key={log.id} className="border rounded-lg p-3 text-sm">
+                            <div key={log.id} className="border border-gray-200/80 dark:border-slate-700/50 rounded-lg p-3 text-sm bg-gradient-to-br from-white to-gray-50/50 dark:from-slate-800/50 dark:to-slate-800/30 backdrop-blur-sm hover:shadow-md transition-all duration-200">
                               <div className="flex items-center justify-between mb-1">
                                 <span className={`badge ${
                                   log.level === 'ERROR' ? 'badge-error' :
@@ -616,14 +616,14 @@ export default function DevicesPage() {
                                 }`}>
                                   {log.level}
                                 </span>
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
                                   {new Date(log.timestamp).toLocaleString('fr-FR')}
                                 </span>
                               </div>
-                              <p className="font-medium text-gray-900">{log.event_type}</p>
-                              <p className="text-gray-600 mt-1">{log.message}</p>
+                              <p className="font-medium text-gray-900 dark:text-gray-100">{log.event_type}</p>
+                              <p className="text-gray-600 dark:text-gray-300 mt-1">{log.message}</p>
                               {log.details && (
-                                <pre className="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded overflow-x-auto">
+                                <pre className="text-xs text-gray-500 dark:text-gray-400 mt-2 bg-gray-50 dark:bg-gray-900 p-2 rounded overflow-x-auto">
                                   {JSON.stringify(log.details, null, 2)}
                                 </pre>
                               )}
@@ -642,8 +642,8 @@ export default function DevicesPage() {
 
       {/* Modal Assignation */}
       {assignModalOpen && selectedDevice && (
-        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 space-y-4 animate-scale-in">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-xl shadow-2xl w-full max-w-xl p-6 space-y-4 animate-scale-in backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold">
@@ -658,12 +658,12 @@ export default function DevicesPage() {
                   </p>
                 )}
               </div>
-              <button className="text-gray-500 hover:text-gray-700" onClick={closeAssignModal} disabled={assignLoading}>
+              <button className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" onClick={closeAssignModal} disabled={assignLoading}>
                 ✕
               </button>
             </div>
             <form className="space-y-4" onSubmit={handleAssignSubmit}>
-              <label className="text-sm font-medium text-gray-700 w-full">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
                 Patient
                 <select
                   className="input mt-1"
@@ -703,20 +703,20 @@ export default function DevicesPage() {
 
       {/* Modal OTA */}
       {otaModalOpen && otaDevice && (
-        <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 space-y-4 animate-scale-in">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-xl shadow-2xl w-full max-w-xl p-6 space-y-4 animate-scale-in backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-semibold">⬆️ Mise à jour Firmware OTA</h2>
-                <p className="text-sm text-gray-500">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">⬆️ Mise à jour Firmware OTA</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {otaDevice.device_name || otaDevice.sim_iccid}
                 </p>
-                <p className="text-xs text-amber-600 mt-1">
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                   Firmware actuel: <span className="font-mono font-semibold">{otaDevice.firmware_version || 'N/A'}</span>
                 </p>
               </div>
               <button 
-                className="text-gray-500 hover:text-gray-700" 
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" 
                 onClick={closeOTAModal} 
                 disabled={otaLoading[otaDevice.id]}
               >
@@ -724,15 +724,15 @@ export default function DevicesPage() {
               </button>
             </div>
 
-            <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded">
-              <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ Attention</p>
-              <p className="text-xs text-amber-700">
+            <div className="bg-gradient-to-r from-amber-50 to-amber-50/50 dark:from-amber-900/20 dark:to-amber-900/10 border-l-4 border-amber-500 dark:border-amber-400 p-4 rounded backdrop-blur-sm">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ Attention</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300">
                 Une mise à jour OTA avec un firmware incompatible peut planter le dispositif de manière irréversible. 
                 Assurez-vous que le firmware sélectionné est compatible avec ce modèle de dispositif.
               </p>
             </div>
 
-            <label className="text-sm font-medium text-gray-700 w-full">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
               Firmware cible
               <select
                 className="input mt-1"
@@ -757,13 +757,13 @@ export default function DevicesPage() {
               </select>
             </label>
 
-            {selectedFirmware && (
-              <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                <p className="text-xs text-blue-800">
-                  <strong>Mise à jour prévue :</strong> {otaDevice.firmware_version || 'N/A'} → {selectedFirmware}
-                </p>
-              </div>
-            )}
+              {selectedFirmware && (
+                <div className="bg-gradient-to-r from-blue-50 to-blue-50/50 dark:from-blue-900/20 dark:to-blue-900/10 border border-blue-200/80 dark:border-blue-800/50 rounded p-3 backdrop-blur-sm">
+                  <p className="text-xs text-blue-800 dark:text-blue-300">
+                    <strong>Mise à jour prévue :</strong> {otaDevice.firmware_version || 'N/A'} → {selectedFirmware}
+                  </p>
+                </div>
+              )}
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button 

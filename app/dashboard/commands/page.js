@@ -613,12 +613,12 @@ export default function CommandsPage() {
               </thead>
               <tbody>
                 {commands.map((cmd) => (
-                  <tr key={cmd.id} className="border-b hover:bg-gray-50 transition-colors">
+                  <tr key={cmd.id} className="border-b dark:border-[rgb(var(--night-border))] hover:bg-gray-50 dark:hover:bg-[rgb(var(--night-surface-hover))] transition-colors">
                     <td className="py-3 px-4">
-                      <span className="font-medium">{cmd.command}</span>
+                      <span className="font-medium text-primary">{cmd.command}</span>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-medium">{cmd.device_name || cmd.sim_iccid || '—'}</div>
+                      <div className="font-medium text-primary">{cmd.device_name || cmd.sim_iccid || '—'}</div>
                       {cmd.patient_first_name || cmd.patient_last_name ? (
                         <div className="text-xs text-gray-500">
                           {cmd.patient_first_name} {cmd.patient_last_name}

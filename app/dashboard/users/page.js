@@ -45,6 +45,7 @@ export default function UsersPage() {
   const [notificationPrefs, setNotificationPrefs] = useState(defaultNotificationPrefs)
   const [loadingNotifPrefs, setLoadingNotifPrefs] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [formErrors, setFormErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
@@ -117,6 +118,7 @@ export default function UsersPage() {
     })
     setNotificationPrefs(defaultNotificationPrefs)
     setFormError(null)
+    setFormErrors({})
     setShowUserModal(true)
   }
 
@@ -125,6 +127,7 @@ export default function UsersPage() {
     setShowUserModal(false)
     setEditingUser(null)
     setFormError(null)
+    setFormErrors({})
   }
 
   const handleInputChange = (e) => {
@@ -133,10 +136,79 @@ export default function UsersPage() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }))
+    // Effacer l'erreur du champ modifié
+    if (formErrors[name]) {
+      setFormErrors(prev => {
+        const next = { ...prev }
+        delete next[name]
+        return next
+      })
+    }
+  }
+
+  const validateForm = () => {
+    const errors = {}
+    
+    // Prénom obligatoire
+    if (!formData.first_name || formData.first_name.trim().length === 0) {
+      errors.first_name = 'Le prénom est obligatoire'
+    } else if (formData.first_name.trim().length < 2) {
+      errors.first_name = 'Le prénom doit contenir au moins 2 caractères'
+    }
+    
+    // Nom obligatoire
+    if (!formData.last_name || formData.last_name.trim().length === 0) {
+      errors.last_name = 'Le nom est obligatoire'
+    } else if (formData.last_name.trim().length < 2) {
+      errors.last_name = 'Le nom doit contenir au moins 2 caractères'
+    }
+    
+    // Email obligatoire et valide
+    if (!formData.email || formData.email.trim().length === 0) {
+      errors.email = 'L\'email est obligatoire'
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email.trim())) {
+        errors.email = 'Format d\'email invalide (ex: nom@example.com)'
+      }
+    }
+    
+    // Téléphone (optionnel mais doit être valide si renseigné)
+    if (formData.phone && formData.phone.trim().length > 0) {
+      const phoneRegex = /^(\+33|0)[1-9](\d{2}){4}$/
+      const cleanedPhone = formData.phone.replace(/\s/g, '')
+      if (!phoneRegex.test(cleanedPhone)) {
+        errors.phone = 'Format de téléphone invalide (ex: +33612345678 ou 0612345678)'
+      }
+    }
+    
+    // Rôle obligatoire
+    if (!formData.role_id) {
+      errors.role_id = 'Le rôle est obligatoire'
+    }
+    
+    // Mot de passe (obligatoire à la création, optionnel à la modification)
+    if (!editingUser) {
+      if (!formData.password || formData.password.length < 6) {
+        errors.password = 'Le mot de passe doit contenir au moins 6 caractères'
+      }
+    } else if (formData.password && formData.password.length > 0 && formData.password.length < 6) {
+      errors.password = 'Le mot de passe doit contenir au moins 6 caractères'
+    }
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
   }
 
   const handleSubmitUser = async (e) => {
     e.preventDefault()
+    
+    // Valider le formulaire avant de soumettre
+    if (!validateForm()) {
+      setFormError('Veuillez corriger les erreurs dans le formulaire')
+      return
+    }
+    
     setSaving(true)
     setFormError(null)
     
@@ -144,15 +216,15 @@ export default function UsersPage() {
       if (editingUser) {
         // Modification
         const payload = {
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email,
+          first_name: formData.first_name.trim(),
+          last_name: formData.last_name.trim(),
+          email: formData.email.trim(),
           role_id: formData.role_id ? parseInt(formData.role_id, 10) : undefined,
-          is_active: formData.is_active,
-          phone: formData.phone || null
+          is_active: Boolean(formData.is_active), // S'assurer que c'est un booléen explicite
+          phone: formData.phone && formData.phone.trim().length > 0 ? formData.phone.trim() : null
         }
-        if (formData.password.trim().length >= 6) {
-          payload.password = formData.password
+        if (formData.password && formData.password.trim().length >= 6) {
+          payload.password = formData.password.trim()
         }
         
         await fetchJson(
@@ -187,9 +259,12 @@ export default function UsersPage() {
       } else {
         // Création
         const payload = {
-          ...formData,
+          first_name: formData.first_name.trim(),
+          last_name: formData.last_name.trim(),
+          email: formData.email.trim(),
+          password: formData.password.trim(),
           role_id: parseInt(formData.role_id, 10),
-          phone: formData.phone || null
+          phone: formData.phone && formData.phone.trim().length > 0 ? formData.phone.trim() : null
         }
         const response = await fetchJson(
           fetchWithAuth,
@@ -226,9 +301,16 @@ export default function UsersPage() {
       
       setShowUserModal(false)
       setEditingUser(null)
+      setFormErrors({})
       await loadUsers()
     } catch (err) {
-      setFormError(err.message)
+      // Extraire le message d'erreur de la réponse API si disponible
+      let errorMessage = err.message || 'Erreur lors de l\'enregistrement'
+      if (err.error) {
+        errorMessage = err.error
+      }
+      setFormError(errorMessage)
+      console.error('Erreur enregistrement utilisateur:', err)
     } finally {
       setSaving(false)
     }
@@ -246,6 +328,7 @@ export default function UsersPage() {
       is_active: Boolean(user.is_active)
     })
     setFormError(null)
+    setFormErrors({})
     setShowUserModal(true)
     
     // Charger les préférences de notifications
@@ -381,7 +464,7 @@ export default function UsersPage() {
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="py-8 text-center text-gray-500">
+                    <td colSpan="7" className="py-8 text-center text-muted">
                       Aucun utilisateur trouvé
                     </td>
                   </tr>
@@ -389,17 +472,17 @@ export default function UsersPage() {
                   filteredUsers.map((user, i) => (
                     <tr 
                       key={user.id} 
-                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors animate-slide-up"
+                      className="table-row animate-slide-up"
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
                       <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
-                      <td className="py-3 px-4 text-gray-600">{user.email}</td>
+                      <td className="table-cell">{user.email}</td>
                       <td className="py-3 px-4">
                         <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
                           {user.role_name}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
+                      <td className="table-cell text-sm">
                         {user.phone || '-'}
                       </td>
                       <td className="py-3 px-4">
@@ -409,7 +492,7 @@ export default function UsersPage() {
                           <span className="badge text-gray-600 bg-gray-100">❌ Inactif</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
+                      <td className="table-cell text-sm">
                         {user.last_login ? new Date(user.last_login).toLocaleString('fr-FR', { 
                           day: '2-digit', 
                           month: '2-digit', 
@@ -446,8 +529,8 @@ export default function UsersPage() {
       </div>
 
       {showUserModal && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/70 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-[100] flex items-center justify-center p-4 overflow-y-auto backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8 backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
@@ -463,71 +546,96 @@ export default function UsersPage() {
             </div>
             <form className="space-y-4" onSubmit={handleSubmitUser}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Prénom
-                  <input
-                    type="text"
-                    name="first_name"
-                    value={formData.first_name}
-                    onChange={handleInputChange}
-                    className="input mt-1"
-                    required
-                  />
-                </label>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Nom
-                  <input
-                    type="text"
-                    name="last_name"
-                    value={formData.last_name}
-                    onChange={handleInputChange}
-                    className="input mt-1"
-                    required
-                  />
-                </label>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Prénom
+                    <input
+                      type="text"
+                      name="first_name"
+                      value={formData.first_name}
+                      onChange={handleInputChange}
+                      className={`input mt-1 ${formErrors.first_name ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                      required
+                    />
+                  </label>
+                  {formErrors.first_name && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.first_name}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Nom
+                    <input
+                      type="text"
+                      name="last_name"
+                      value={formData.last_name}
+                      onChange={handleInputChange}
+                      className={`input mt-1 ${formErrors.last_name ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                      required
+                    />
+                  </label>
+                  {formErrors.last_name && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.last_name}</p>
+                  )}
+                </div>
               </div>
               
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                Email
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className="input mt-1"
-                  required
-                />
-              </label>
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                  Email
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    className={`input mt-1 ${formErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                    required
+                  />
+                </label>
+                {formErrors.email && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.email}</p>
+                )}
+              </div>
 
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                Téléphone (optionnel, pour SMS)
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone || ''}
-                  onChange={handleInputChange}
-                  className="input mt-1"
-                  placeholder="+33612345678"
-                />
-              </label>
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                  Téléphone (optionnel, pour SMS)
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={formData.phone || ''}
+                    onChange={handleInputChange}
+                    className={`input mt-1 ${formErrors.phone ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                    placeholder="+33612345678"
+                  />
+                </label>
+                {formErrors.phone && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.phone}</p>
+                )}
+              </div>
               
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                Rôle
-                <select
-                  name="role_id"
-                  value={formData.role_id}
-                  onChange={handleInputChange}
-                  className="input mt-1"
-                  required
-                >
-                  <option value="">Choisir un rôle…</option>
-                  {roles.map(role => (
-                    <option key={role.id} value={role.id}>
-                      {role.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                  Rôle
+                  <select
+                    name="role_id"
+                    value={formData.role_id}
+                    onChange={handleInputChange}
+                    className={`input mt-1 ${formErrors.role_id ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                    required
+                  >
+                    <option value="">Choisir un rôle…</option>
+                    {roles.map(role => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {formErrors.role_id && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.role_id}</p>
+                )}
+              </div>
 
               {editingUser && (
                 <label className="flex items-center gap-3 text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -542,18 +650,23 @@ export default function UsersPage() {
                 </label>
               )}
 
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                {editingUser ? 'Nouveau mot de passe (optionnel, 6+ caractères)' : 'Mot de passe (6+ caractères)'}
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="input mt-1"
-                  required={!editingUser}
-                  minLength={6}
-                />
-              </label>
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                  {editingUser ? 'Nouveau mot de passe (optionnel, 6+ caractères)' : 'Mot de passe (6+ caractères)'}
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className={`input mt-1 ${formErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                    required={!editingUser}
+                    minLength={6}
+                  />
+                </label>
+                {formErrors.password && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.password}</p>
+                )}
+              </div>
 
               {formError && (
                 <div className="alert alert-error">
@@ -562,7 +675,7 @@ export default function UsersPage() {
               )}
 
                       {/* Section Notifications */}
-                      <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                      <div className="border-t border-gray-200/80 dark:border-slate-700/50 pt-4 mt-4">
                         <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">📧 Notifications</h3>
                         
                         {editingUser && loadingNotifPrefs ? (
@@ -573,32 +686,32 @@ export default function UsersPage() {
                             <div>
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Canaux activés</label>
                               <div className="grid grid-cols-3 gap-3">
-                                <label className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                <label className="flex items-center gap-2 p-2 bg-gradient-to-r from-gray-50 to-gray-50/50 dark:from-slate-700/50 dark:to-slate-700/30 rounded hover:from-gray-100 hover:to-gray-100/50 dark:hover:from-slate-600 dark:hover:to-slate-600/30 transition-all duration-200 cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={notificationPrefs.email_enabled}
                                     onChange={(e) => setNotificationPrefs(prev => ({ ...prev, email_enabled: e.target.checked }))}
                                     className="form-checkbox"
                                   />
-                                  <span className="text-sm text-gray-900 dark:text-gray-100">✉️ Email</span>
+                                  <span className="text-sm text-gray-900 dark:text-slate-100">✉️ Email</span>
                                 </label>
-                                <label className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                <label className="flex items-center gap-2 p-2 bg-gradient-to-r from-gray-50 to-gray-50/50 dark:from-slate-700/50 dark:to-slate-700/30 rounded hover:from-gray-100 hover:to-gray-100/50 dark:hover:from-slate-600 dark:hover:to-slate-600/30 transition-all duration-200 cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={notificationPrefs.sms_enabled}
                                     onChange={(e) => setNotificationPrefs(prev => ({ ...prev, sms_enabled: e.target.checked }))}
                                     className="form-checkbox"
                                   />
-                                  <span className="text-sm text-gray-900 dark:text-gray-100">📱 SMS</span>
+                                  <span className="text-sm text-gray-900 dark:text-slate-100">📱 SMS</span>
                                 </label>
-                                <label className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                <label className="flex items-center gap-2 p-2 bg-gradient-to-r from-gray-50 to-gray-50/50 dark:from-slate-700/50 dark:to-slate-700/30 rounded hover:from-gray-100 hover:to-gray-100/50 dark:hover:from-slate-600 dark:hover:to-slate-600/30 transition-all duration-200 cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={notificationPrefs.push_enabled}
                                     onChange={(e) => setNotificationPrefs(prev => ({ ...prev, push_enabled: e.target.checked }))}
                                     className="form-checkbox"
                                   />
-                                  <span className="text-sm text-gray-900 dark:text-gray-100">🔔 Push</span>
+                                  <span className="text-sm text-gray-900 dark:text-slate-100">🔔 Push</span>
                                 </label>
                               </div>
                             </div>

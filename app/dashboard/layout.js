@@ -23,10 +23,10 @@ function DashboardLayoutContent({ children }) {
 
   if (REQUIRE_AUTH && loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[rgb(var(--night-bg-start))]">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement...</p>
+          <p className="text-gray-600 dark:text-[rgb(var(--night-text-primary))]">Chargement...</p>
         </div>
       </div>
     )
@@ -35,7 +35,7 @@ function DashboardLayoutContent({ children }) {
   if (REQUIRE_AUTH && !user) return null
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-[rgb(var(--night-bg-start))]">
       <Topbar />
       <div className="flex">
         <Sidebar />

@@ -143,7 +143,7 @@ export default function OTAPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-bold">🔄 Gestion OTA</h1>
+      <h1 className="text-3xl font-bold">🔄 Gestion OTA</h1>
         <p className="text-gray-600 mt-1">Déploiement de firmwares sur les dispositifs</p>
       </div>
 
@@ -177,8 +177,8 @@ export default function OTAPage() {
                 {firmwares.map((fw, i) => (
                   <tr 
                     key={fw.id} 
-                    className={`border-b hover:bg-gray-50 transition-all cursor-pointer ${
-                      selectedFirmware?.id === fw.id ? 'bg-primary-50 border-primary-200' : ''
+                    className={`border-b dark:border-[rgb(var(--night-border))] hover:bg-gray-50 dark:hover:bg-[rgb(var(--night-surface-hover))] transition-all cursor-pointer ${
+                      selectedFirmware?.id === fw.id ? 'bg-primary-50 dark:bg-[rgb(var(--night-blue-start))]/20 border-primary-200 dark:border-[rgb(var(--night-blue-mid))]' : ''
                     }`}
                     onClick={() => setSelectedFirmware(fw)}
                     style={{animationDelay: `${i * 0.05}s`}}
@@ -212,7 +212,7 @@ export default function OTAPage() {
 
       {/* Liste des dispositifs à mettre à jour */}
       {selectedFirmware && (
-        <div className="card">
+      <div className="card">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-semibold">
@@ -255,10 +255,10 @@ export default function OTAPage() {
                   {devicesToUpdate.map((device, i) => (
                     <tr 
                       key={device.id} 
-                      className="border-b hover:bg-gray-50 animate-slide-up"
+                      className="border-b dark:border-[rgb(var(--night-border))] hover:bg-gray-50 dark:hover:bg-[rgb(var(--night-surface-hover))] animate-slide-up"
                       style={{animationDelay: `${i * 0.03}s`}}
                     >
-                      <td className="py-3 px-4 font-medium">
+                      <td className="py-3 px-4 font-medium text-primary">
                         {device.device_name || `Dispositif #${device.id}`}
                       </td>
                       <td className="py-3 px-4 font-mono text-sm text-gray-600">
@@ -299,8 +299,8 @@ export default function OTAPage() {
           <div className="text-center py-8 text-gray-500">
             <p className="text-lg mb-2">👆 Sélectionnez un firmware ci-dessus</p>
             <p className="text-sm">La liste des dispositifs à mettre à jour s&apos;affichera ici</p>
-          </div>
         </div>
+      </div>
       )}
     </div>
   )

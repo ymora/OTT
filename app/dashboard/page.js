@@ -153,7 +153,7 @@ export default function DashboardPage() {
                         const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
                         return (
                           <div key={device.id} className="text-sm">
-                            <p className="font-semibold text-gray-900">{device.device_name || device.sim_iccid}</p>
+                            <p className="font-semibold text-primary">{device.device_name || device.sim_iccid}</p>
                             <p className="text-xs text-gray-500">{battery.toFixed(0)}% restant</p>
                           </div>
                         )
