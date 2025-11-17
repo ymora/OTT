@@ -1,6 +1,7 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
+import { AuthProvider } from '@/contexts/AuthContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -33,7 +34,9 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" sizes="512x512" href={icon512} />
       </head>
       <body className={inter.className}>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
 
         {isProduction && (
           <Script id="sw-register" strategy="afterInteractive">

@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
-import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 // Authentification toujours requise
 const REQUIRE_AUTH = true
@@ -50,10 +50,6 @@ function DashboardLayoutContent({ children }) {
 }
 
 export default function DashboardLayout({ children }) {
-  return (
-    <AuthProvider>
-      <DashboardLayoutContent>{children}</DashboardLayoutContent>
-    </AuthProvider>
-  )
+  return <DashboardLayoutContent>{children}</DashboardLayoutContent>
 }
 

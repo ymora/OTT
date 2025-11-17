@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3003",
     "build": "next build",
     "start": "next start",
     "export": "cross-env NEXT_STATIC_EXPORT=true NEXT_PUBLIC_BASE_PATH=/OTT next build",

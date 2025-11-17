@@ -16,27 +16,37 @@
    return `${API_URL}/${input}`
  }
  
- const buildClientApiUrl = input => {
-   const absoluteUrl = buildAbsoluteApiUrl(input)
-   if (typeof window === 'undefined') {
-     return absoluteUrl
-   }
- 
-   try {
-     const targetUrl = new URL(absoluteUrl)
-     const currentOrigin = window.location.origin
-     const targetOrigin = `${targetUrl.protocol}//${targetUrl.host}`
- 
-     if (targetOrigin === currentOrigin) {
-       return absoluteUrl.replace(currentOrigin, '')
-     }
- 
-     return `${API_PROXY_PREFIX}${targetUrl.pathname}${targetUrl.search}`
-   } catch (error) {
-     console.error('Erreur construction URL API:', error)
-     return absoluteUrl
-   }
- }
+const buildClientApiUrl = input => {
+  const absoluteUrl = buildAbsoluteApiUrl(input)
+  if (typeof window === 'undefined') {
+    return absoluteUrl
+  }
+
+  // En export statique (GitHub Pages), le proxy Next.js n'est pas disponible
+  // Utiliser directement l'API (CORS doit être configuré côté serveur)
+  const isStaticExport = process.env.NEXT_PUBLIC_STATIC_EXPORT === 'true' || 
+                         window.location.hostname === 'ymora.github.io'
+  
+  if (isStaticExport) {
+    return absoluteUrl
+  }
+
+  try {
+    const targetUrl = new URL(absoluteUrl)
+    const currentOrigin = window.location.origin
+    const targetOrigin = `${targetUrl.protocol}//${targetUrl.host}`
+
+    if (targetOrigin === currentOrigin) {
+      return absoluteUrl.replace(currentOrigin, '')
+    }
+
+    // En développement, utiliser le proxy Next.js
+    return `${API_PROXY_PREFIX}${targetUrl.pathname}${targetUrl.search}`
+  } catch (error) {
+    console.error('Erreur construction URL API:', error)
+    return absoluteUrl
+  }
+}
 // Authentification toujours requise
 const REQUIRE_AUTH = true
 

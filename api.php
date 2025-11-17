@@ -8,13 +8,22 @@ require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
 
 // Headers CORS (DOIT être en tout premier)
+// Origines par défaut (production)
 $defaultAllowedOrigins = [
-    'https://ymora.github.io',
-    'http://localhost:3000',
-    'http://localhost:3003',
-    'http://localhost:5173'
+    'https://ymora.github.io'
 ];
 
+// En développement, ajouter localhost
+$isDev = getenv('APP_ENV') !== 'production' && getenv('APP_ENV') !== 'prod';
+if ($isDev) {
+    $defaultAllowedOrigins = array_merge($defaultAllowedOrigins, [
+        'http://localhost:3000',
+        'http://localhost:3003',
+        'http://localhost:5173'
+    ]);
+}
+
+// Origines supplémentaires via variable d'environnement
 $extraOrigins = array_filter(array_map('trim', explode(',', getenv('CORS_ALLOWED_ORIGINS') ?: '')));
 $allowedOrigins = array_unique(array_merge($defaultAllowedOrigins, $extraOrigins));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
@@ -358,8 +367,6 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 // Admin tools
 } elseif(preg_match('#/admin/reset-demo$#', $path) && $method === 'POST') {
     handleResetDemo();
-} elseif(preg_match('#/admin/reset-password$#', $path) && $method === 'POST') {
-    handleResetPassword();
 
 // Audit
 } elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
@@ -1641,67 +1648,6 @@ function handleResetDemo() {
             'error' => 'Demo reset failed',
             'details' => $e->getMessage()
         ]);
-    }
-}
-
-function handleResetPassword() {
-    global $pdo;
-    
-    // Clé secrète pour sécuriser l'endpoint (à définir dans les variables d'environnement)
-    $secretKey = getenv('PASSWORD_RESET_SECRET') ?: 'TEMPORARY_RESET_KEY_CHANGE_IN_PRODUCTION';
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    $providedKey = $input['secret_key'] ?? '';
-    $email = $input['email'] ?? 'ymora@free.fr';
-    $newPassword = $input['password'] ?? 'Ym120879';
-    
-    // Vérifier la clé secrète
-    if ($providedKey !== $secretKey) {
-        http_response_code(403);
-        echo json_encode(['success' => false, 'error' => 'Invalid secret key']);
-        return;
-    }
-    
-    if (empty($email) || empty($newPassword)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Email and password required']);
-        return;
-    }
-    
-    try {
-        // Vérifier que l'utilisateur existe
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = :email");
-        $stmt->execute(['email' => $email]);
-        $user = $stmt->fetch();
-        
-        if (!$user) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'User not found']);
-            return;
-        }
-        
-        // Générer le hash bcrypt
-        $passwordHash = password_hash($newPassword, PASSWORD_BCRYPT);
-        
-        // Mettre à jour le mot de passe
-        $updateStmt = $pdo->prepare("UPDATE users SET password_hash = :password_hash WHERE email = :email");
-        $updateStmt->execute([
-            'email' => $email,
-            'password_hash' => $passwordHash
-        ]);
-        
-        auditLog('admin.password_reset', 'system', $user['id'], null, ['email' => $email]);
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Password reset successfully',
-            'email' => $email
-        ]);
-        
-    } catch(PDOException $e) {
-        error_log('[handleResetPassword] Database error: ' . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
     }
 }
 
