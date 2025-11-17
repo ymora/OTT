@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function Login() {
   const router = useRouter()
+  const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -18,29 +18,14 @@ export default function Login() {
     setError('')
 
     try {
-      const response = await fetch(`${API_URL}/api.php/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      })
-
-      const data = await response.json()
-
-      if (!data.success) {
-        setError('Email ou mot de passe incorrect')
-        setLoading(false)
-        return
-      }
-
-      // Stocker token et user
-      localStorage.setItem('ott_token', data.token)
-      localStorage.setItem('ott_user', JSON.stringify(data.user))
-
+      await login(email, password)
+      setLoading(false)
+      
       // Rediriger vers dashboard (Next.js gère automatiquement le basePath)
       router.push('/dashboard')
 
     } catch (err) {
-      setError('Erreur de connexion au serveur')
+      setError(err.message || 'Erreur de connexion au serveur')
       setLoading(false)
     }
   }

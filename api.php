@@ -11,6 +11,7 @@ require_once __DIR__ . '/bootstrap/database.php';
 $defaultAllowedOrigins = [
     'https://ymora.github.io',
     'http://localhost:3000',
+    'http://localhost:3003',
     'http://localhost:5173'
 ];
 
