@@ -2,32 +2,35 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/AuthContext'
 import Login from '@/components/Login'
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
 export default function HomePage() {
   const router = useRouter()
-  // Authentification toujours requise
-  const requireAuth = true
+  const { user, loading } = useAuth()
 
   useEffect(() => {
-    if (!requireAuth) {
-      // Next.js gère automatiquement le basePath
-      router.push('/dashboard')
+    // Si l'utilisateur est déjà authentifié, rediriger vers le dashboard
+    if (!loading && user) {
+      const dashboardPath = `${basePath}/dashboard`.replace(/\/+/g, '/')
+      window.location.href = dashboardPath
     }
-  }, [router, requireAuth])
+  }, [user, loading])
 
-  // Afficher le login pendant la redirection si auth requise
-  if (requireAuth) {
-    return <Login />
+  // Afficher le login si pas authentifié
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement...</p>
+        </div>
+      </div>
+    )
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-gray-600">Redirection vers le dashboard...</p>
-      </div>
-    </div>
-  )
+  return <Login />
 }
 

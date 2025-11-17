@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+
 export default function Login() {
   const router = useRouter()
   const { login } = useAuth()
@@ -21,8 +23,10 @@ export default function Login() {
       await login(email, password)
       setLoading(false)
       
-      // Rediriger vers dashboard (Next.js gère automatiquement le basePath)
-      router.push('/dashboard')
+      // Rediriger vers dashboard avec basePath explicite
+      const dashboardPath = `${basePath}/dashboard`.replace(/\/+/g, '/')
+      // Utiliser window.location pour forcer la navigation complète
+      window.location.href = dashboardPath
 
     } catch (err) {
       setError(err.message || 'Erreur de connexion au serveur')

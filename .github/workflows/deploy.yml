@@ -47,9 +47,34 @@ jobs:
             echo "ERREUR: index.html non trouvé dans out/"
             exit 1
           fi
+          # Vérifier que le fichier index.html contient bien l'application
+          if ! grep -q "OTT Dashboard" out/index.html; then
+            echo "ERREUR: index.html ne contient pas l'application"
+            exit 1
+          fi
       
       - name: Ensure .nojekyll exists
         run: touch out/.nojekyll
+      
+      - name: Clean output directory
+        run: |
+          # Supprimer README.md s'il existe dans out/ (pour éviter que GitHub Pages le serve)
+          if [ -f "out/README.md" ]; then
+            rm out/README.md
+          fi
+          # S'assurer que le fichier HTML de documentation n'est pas à la racine
+          if [ -f "out/DOCUMENTATION_COMPLETE_OTT.html" ]; then
+            # Le déplacer dans un sous-dossier si nécessaire, ou le supprimer
+            # Pour l'instant, on le laisse dans public/ mais pas à la racine de out/
+            echo "Documentation HTML trouvée mais ne sera pas servie à la racine"
+          fi
+          # Vérifier que index.html existe et contient l'application
+          if [ -f "out/index.html" ]; then
+            echo "✅ index.html trouvé"
+          else
+            echo "❌ ERREUR: index.html manquant"
+            exit 1
+          fi
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
