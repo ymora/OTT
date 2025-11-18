@@ -194,19 +194,56 @@ export default function UserPatientModal({
       }
     }
     
-    // Si email ou phone est modifié, mettre à jour les erreurs de notifications
+    // Si email ou phone est modifié, mettre à jour les erreurs de notifications et désactiver les notifications si invalide
     if (name === 'email' || name === 'phone') {
       setNotificationErrors(prev => {
         const next = { ...prev }
-        // Si email est maintenant renseigné, supprimer l'erreur email
-        if (name === 'email' && value && next.email) {
+        // Si email est maintenant renseigné et valide, supprimer l'erreur email
+        if (name === 'email' && isValidEmail(value) && next.email) {
           delete next.email
         }
-        // Si phone est maintenant renseigné, supprimer l'erreur sms
-        if (name === 'phone' && value && next.sms) {
+        // Si phone est maintenant renseigné et valide, supprimer l'erreur sms
+        if (name === 'phone' && value && isValidPhone(value) && next.sms) {
           delete next.sms
         }
         return next
+      })
+      
+      // Désactiver automatiquement les notifications si l'email ou le téléphone devient invalide
+      setNotificationPrefs(prev => {
+        const updated = { ...prev }
+        if (name === 'email') {
+          if (!isValidEmail(value) && prev.email_enabled) {
+            updated.email_enabled = false
+            // Si aucun service n'est activé, désactiver aussi les alertes
+            if (!updated.sms_enabled && !updated.push_enabled) {
+              updated.notify_battery_low = false
+              updated.notify_device_offline = false
+              updated.notify_abnormal_flow = false
+              if (type === 'user') {
+                updated.notify_new_patient = false
+              } else {
+                updated.notify_alert_critical = false
+              }
+            }
+          }
+        } else if (name === 'phone') {
+          if ((!value || !isValidPhone(value)) && prev.sms_enabled) {
+            updated.sms_enabled = false
+            // Si aucun service n'est activé, désactiver aussi les alertes
+            if (!updated.email_enabled && !updated.push_enabled) {
+              updated.notify_battery_low = false
+              updated.notify_device_offline = false
+              updated.notify_abnormal_flow = false
+              if (type === 'user') {
+                updated.notify_new_patient = false
+              } else {
+                updated.notify_alert_critical = false
+              }
+            }
+          }
+        }
+        return updated
       })
     }
   }
