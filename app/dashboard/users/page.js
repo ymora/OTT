@@ -67,6 +67,9 @@ export default function UsersPage() {
 
   const handleModalSave = async () => {
     setSuccess(editingItem ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
+    // Attendre un peu pour s'assurer que la base de données est bien mise à jour
+    // puis refetch pour recharger les données avec les notifications mises à jour
+    await new Promise(resolve => setTimeout(resolve, 100))
     await refetch()
   }
 

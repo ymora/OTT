@@ -340,50 +340,48 @@ export default function UserPatientModal({
         )
         
         // Sauvegarder les préférences de notifications
-        try {
-          const notifEndpoint = type === 'user'
-            ? `/api.php/users/${editingItem.id}/notifications`
-            : `/api.php/patients/${editingItem.id}/notifications`
-          
-          // S'assurer que toutes les valeurs sont des booléens avant l'envoi
-          // Convertir les chaînes vides en false pour éviter les erreurs SQL
-          const prefsToSave = {
-            email_enabled: Boolean(notificationPrefs.email_enabled ?? false),
-            sms_enabled: Boolean(notificationPrefs.sms_enabled ?? false),
-            push_enabled: Boolean(notificationPrefs.push_enabled ?? false),
-            notify_battery_low: Boolean(notificationPrefs.notify_battery_low ?? false),
-            notify_device_offline: Boolean(notificationPrefs.notify_device_offline ?? false),
-            notify_abnormal_flow: Boolean(notificationPrefs.notify_abnormal_flow ?? false)
-          }
-          
-          // Ajouter phone_number seulement s'il n'est pas vide (unifié - gérer null/undefined)
-          const phoneFromForm = formData.phone && typeof formData.phone === 'string' ? formData.phone.trim() : null
-          const phoneFromPrefs = notificationPrefs.phone_number && typeof notificationPrefs.phone_number === 'string' ? notificationPrefs.phone_number.trim() : null
-          const phoneNumber = phoneFromForm || phoneFromPrefs
-          if (phoneNumber && phoneNumber.length > 0) {
-            prefsToSave.phone_number = phoneNumber
-          }
-          
-          // Ajouter les champs spécifiques selon le type
-          if (type === 'user') {
-            prefsToSave.notify_new_patient = Boolean(notificationPrefs.notify_new_patient ?? false)
-          } else {
-            prefsToSave.notify_alert_critical = Boolean(notificationPrefs.notify_alert_critical ?? false)
-          }
-          
-          await fetchJson(
-            fetchWithAuth,
-            API_URL,
-            notifEndpoint,
-            {
-              method: 'PUT',
-              body: JSON.stringify(prefsToSave)
-            },
-            { requiresAuth: true }
-          )
-        } catch (notifErr) {
-          console.warn('Erreur sauvegarde notifications:', notifErr)
+        // IMPORTANT: Ne pas utiliser try/catch silencieux - si ça échoue, on doit le savoir
+        const notifEndpoint = type === 'user'
+          ? `/api.php/users/${editingItem.id}/notifications`
+          : `/api.php/patients/${editingItem.id}/notifications`
+        
+        // S'assurer que toutes les valeurs sont des booléens avant l'envoi
+        // Convertir les chaînes vides en false pour éviter les erreurs SQL
+        const prefsToSave = {
+          email_enabled: Boolean(notificationPrefs.email_enabled ?? false),
+          sms_enabled: Boolean(notificationPrefs.sms_enabled ?? false),
+          push_enabled: Boolean(notificationPrefs.push_enabled ?? false),
+          notify_battery_low: Boolean(notificationPrefs.notify_battery_low ?? false),
+          notify_device_offline: Boolean(notificationPrefs.notify_device_offline ?? false),
+          notify_abnormal_flow: Boolean(notificationPrefs.notify_abnormal_flow ?? false)
         }
+        
+        // Ajouter phone_number seulement s'il n'est pas vide (unifié - gérer null/undefined)
+        const phoneFromForm = formData.phone && typeof formData.phone === 'string' ? formData.phone.trim() : null
+        const phoneFromPrefs = notificationPrefs.phone_number && typeof notificationPrefs.phone_number === 'string' ? notificationPrefs.phone_number.trim() : null
+        const phoneNumber = phoneFromForm || phoneFromPrefs
+        if (phoneNumber && phoneNumber.length > 0) {
+          prefsToSave.phone_number = phoneNumber
+        }
+        
+        // Ajouter les champs spécifiques selon le type
+        if (type === 'user') {
+          prefsToSave.notify_new_patient = Boolean(notificationPrefs.notify_new_patient ?? false)
+        } else {
+          prefsToSave.notify_alert_critical = Boolean(notificationPrefs.notify_alert_critical ?? false)
+        }
+        
+        // Sauvegarder les notifications - si ça échoue, l'erreur sera propagée
+        await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          notifEndpoint,
+          {
+            method: 'PUT',
+            body: JSON.stringify(prefsToSave)
+          },
+          { requiresAuth: true }
+        )
       } else {
         // Création
         const endpoint = type === 'user' ? '/api.php/users' : '/api.php/patients'
@@ -415,52 +413,50 @@ export default function UserPatientModal({
         )
         
         // Sauvegarder les préférences de notifications pour le nouvel utilisateur/patient
+        // IMPORTANT: Ne pas utiliser try/catch silencieux - si ça échoue, on doit le savoir
         if (response.user_id || response.patient_id) {
-          try {
-            const newId = response.user_id || response.patient_id
-            const notifEndpoint = type === 'user'
-              ? `/api.php/users/${newId}/notifications`
-              : `/api.php/patients/${newId}/notifications`
-            
-            // S'assurer que toutes les valeurs sont des booléens avant l'envoi
-            // Convertir les chaînes vides en false pour éviter les erreurs SQL
-            const prefsToSave = {
-              email_enabled: Boolean(notificationPrefs.email_enabled ?? false),
-              sms_enabled: Boolean(notificationPrefs.sms_enabled ?? false),
-              push_enabled: Boolean(notificationPrefs.push_enabled ?? false),
-              notify_battery_low: Boolean(notificationPrefs.notify_battery_low ?? false),
-              notify_device_offline: Boolean(notificationPrefs.notify_device_offline ?? false),
-              notify_abnormal_flow: Boolean(notificationPrefs.notify_abnormal_flow ?? false)
-            }
-            
-            // Ajouter phone_number seulement s'il n'est pas vide (unifié - gérer null/undefined)
-            const phoneFromForm = formData.phone && typeof formData.phone === 'string' ? formData.phone.trim() : null
-            const phoneFromPrefs = notificationPrefs.phone_number && typeof notificationPrefs.phone_number === 'string' ? notificationPrefs.phone_number.trim() : null
-            const phoneNumber = phoneFromForm || phoneFromPrefs
-            if (phoneNumber && phoneNumber.length > 0) {
-              prefsToSave.phone_number = phoneNumber
-            }
-            
-            // Ajouter les champs spécifiques selon le type
-            if (type === 'user') {
-              prefsToSave.notify_new_patient = Boolean(notificationPrefs.notify_new_patient ?? false)
-            } else {
-              prefsToSave.notify_alert_critical = Boolean(notificationPrefs.notify_alert_critical ?? false)
-            }
-            
-            await fetchJson(
-              fetchWithAuth,
-              API_URL,
-              notifEndpoint,
-              {
-                method: 'PUT',
-                body: JSON.stringify(prefsToSave)
-              },
-              { requiresAuth: true }
-            )
-          } catch (notifErr) {
-            console.warn('Erreur sauvegarde notifications:', notifErr)
+          const newId = response.user_id || response.patient_id
+          const notifEndpoint = type === 'user'
+            ? `/api.php/users/${newId}/notifications`
+            : `/api.php/patients/${newId}/notifications`
+          
+          // S'assurer que toutes les valeurs sont des booléens avant l'envoi
+          // Convertir les chaînes vides en false pour éviter les erreurs SQL
+          const prefsToSave = {
+            email_enabled: Boolean(notificationPrefs.email_enabled ?? false),
+            sms_enabled: Boolean(notificationPrefs.sms_enabled ?? false),
+            push_enabled: Boolean(notificationPrefs.push_enabled ?? false),
+            notify_battery_low: Boolean(notificationPrefs.notify_battery_low ?? false),
+            notify_device_offline: Boolean(notificationPrefs.notify_device_offline ?? false),
+            notify_abnormal_flow: Boolean(notificationPrefs.notify_abnormal_flow ?? false)
           }
+          
+          // Ajouter phone_number seulement s'il n'est pas vide (unifié - gérer null/undefined)
+          const phoneFromForm = formData.phone && typeof formData.phone === 'string' ? formData.phone.trim() : null
+          const phoneFromPrefs = notificationPrefs.phone_number && typeof notificationPrefs.phone_number === 'string' ? notificationPrefs.phone_number.trim() : null
+          const phoneNumber = phoneFromForm || phoneFromPrefs
+          if (phoneNumber && phoneNumber.length > 0) {
+            prefsToSave.phone_number = phoneNumber
+          }
+          
+          // Ajouter les champs spécifiques selon le type
+          if (type === 'user') {
+            prefsToSave.notify_new_patient = Boolean(notificationPrefs.notify_new_patient ?? false)
+          } else {
+            prefsToSave.notify_alert_critical = Boolean(notificationPrefs.notify_alert_critical ?? false)
+          }
+          
+          // Sauvegarder les notifications - si ça échoue, l'erreur sera propagée
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            notifEndpoint,
+            {
+              method: 'PUT',
+              body: JSON.stringify(prefsToSave)
+            },
+            { requiresAuth: true }
+          )
         }
       }
       

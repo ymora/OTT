@@ -126,6 +126,9 @@ export default function PatientsPage() {
 
   const handleModalSave = async () => {
     setSuccess(editingItem ? 'Patient modifié avec succès' : 'Patient créé avec succès')
+    // Attendre un peu pour s'assurer que la base de données est bien mise à jour
+    // puis refetch pour recharger les données avec les notifications mises à jour
+    await new Promise(resolve => setTimeout(resolve, 100))
     await refetch()
   }
 
