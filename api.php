@@ -554,8 +554,8 @@ function handleGetUsers() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     try {
-        // Compter le total
-        $countStmt = $pdo->query("SELECT COUNT(*) FROM users");
+        // Compter le total (exclure soft delete)
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL");
         $total = $countStmt->fetchColumn();
         
         // Utiliser une requête qui fonctionne avec ou sans la colonne phone
@@ -590,6 +590,7 @@ function handleGetUsers() {
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN permissions p ON rp.permission_id = p.id
                 LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
+                WHERE u.deleted_at IS NULL
                 GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
                          u.is_active, u.last_login, u.created_at, r.name, r.description,
                          unp.email_enabled, unp.sms_enabled, unp.push_enabled,
@@ -619,6 +620,7 @@ function handleGetUsers() {
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN permissions p ON rp.permission_id = p.id
                 LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
+                WHERE u.deleted_at IS NULL
                 GROUP BY u.id, u.email, u.first_name, u.last_name, u.password_hash,
                          u.is_active, u.last_login, u.created_at, r.name, r.description,
                          unp.email_enabled, unp.sms_enabled, unp.push_enabled,
@@ -766,7 +768,7 @@ function handleUpdateUser($user_id) {
     $input = json_decode(file_get_contents('php://input'), true);
     
     try {
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id");
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id AND deleted_at IS NULL");
         $stmt->execute(['id' => $user_id]);
         $old_user = $stmt->fetch();
         
@@ -852,7 +854,7 @@ function handleUpdateUser($user_id) {
                     r.name AS role_name
                 FROM users u
                 JOIN roles r ON u.role_id = r.id
-                WHERE u.id = :id
+                WHERE u.id = :id AND u.deleted_at IS NULL
             ");
         } else {
             $updatedStmt = $pdo->prepare("
@@ -862,7 +864,7 @@ function handleUpdateUser($user_id) {
                     r.name AS role_name
                 FROM users u
                 JOIN roles r ON u.role_id = r.id
-                WHERE u.id = :id
+                WHERE u.id = :id AND u.deleted_at IS NULL
             ");
         }
         $updatedStmt->execute(['id' => $user_id]);
@@ -923,7 +925,8 @@ function handleDeleteUser($user_id) {
         }
         
         // Supprimer l'utilisateur
-        $pdo->prepare("DELETE FROM users WHERE id = :id")->execute(['id' => $user_id]);
+        // Soft delete au lieu de DELETE réel
+        $pdo->prepare("UPDATE users SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $user_id]);
         
         auditLog('user.deleted', 'user', $user_id, $user, null);
         echo json_encode(['success' => true, 'message' => 'Utilisateur supprimé avec succès']);
@@ -1009,8 +1012,9 @@ function handleGetDevices() {
                 COALESCE(dc.firmware_version, d.firmware_version) as firmware_version,
                 COALESCE(dc.ota_pending, FALSE) as ota_pending
             FROM devices d
-            LEFT JOIN patients p ON d.patient_id = p.id
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
+            WHERE d.deleted_at IS NULL
             ORDER BY d.last_seen DESC NULLS LAST, d.created_at DESC
         ");
         $devices = $stmt->fetchAll();
@@ -1141,8 +1145,8 @@ function handleUpdateDevice($device_id) {
         $stmt = $pdo->prepare("
             SELECT d.*, p.first_name, p.last_name
             FROM devices d
-            LEFT JOIN patients p ON d.patient_id = p.id
-            WHERE d.id = :id
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            WHERE d.id = :id AND d.deleted_at IS NULL
         ");
         $stmt->execute(['id' => $device_id]);
         $updated = $stmt->fetch();
@@ -1627,8 +1631,8 @@ function handleGetDeviceCommands($iccid) {
                    p.last_name AS patient_last_name
             FROM device_commands dc
             JOIN devices d ON dc.device_id = d.id
-            LEFT JOIN patients p ON d.patient_id = p.id
-            WHERE dc.device_id = :device_id
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            WHERE dc.device_id = :device_id AND d.deleted_at IS NULL
         ";
         $params = ['device_id' => $device['id']];
         if ($statusFilter) {
@@ -1669,8 +1673,8 @@ function handleListAllCommands() {
                    p.last_name AS patient_last_name
             FROM device_commands dc
             JOIN devices d ON dc.device_id = d.id
-            LEFT JOIN patients p ON d.patient_id = p.id
-            WHERE 1=1
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            WHERE d.deleted_at IS NULL
         ";
         $params = [];
         if ($statusFilter) {
@@ -1978,8 +1982,8 @@ function handleGetLogs() {
             SELECT l.*, d.sim_iccid, d.device_name, p.first_name, p.last_name
             FROM device_logs l
             JOIN devices d ON l.device_id = d.id
-            LEFT JOIN patients p ON d.patient_id = p.id
-            WHERE 1=1
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            WHERE d.deleted_at IS NULL
         ";
         
         $params = [];
@@ -2056,8 +2060,8 @@ function handleGetAlerts() {
             SELECT a.*, d.sim_iccid, d.device_name, p.first_name, p.last_name
             FROM alerts a
             JOIN devices d ON a.device_id = d.id
-            LEFT JOIN patients p ON d.patient_id = p.id
-            WHERE 1=1
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            WHERE d.deleted_at IS NULL
         ";
         $params = [];
         
@@ -2143,8 +2147,8 @@ function handleGetPatients() {
             error_log('[handleGetPatients] Table check failed: ' . $e->getMessage());
         }
         
-        // Compter le total AVANT la requête principale
-        $countStmt = $pdo->query("SELECT COUNT(*) FROM patients");
+        // Compter le total AVANT la requête principale (exclure soft delete)
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM patients WHERE deleted_at IS NULL");
         $total = intval($countStmt->fetchColumn());
         
         // Requête optimisée avec pagination et préférences de notifications
@@ -2167,6 +2171,7 @@ function handleGetPatients() {
                        COALESCE(pnp.notify_alert_critical, FALSE) as notify_alert_critical
                 FROM patients p
                 LEFT JOIN patient_notifications_preferences pnp ON p.id = pnp.patient_id
+                WHERE p.deleted_at IS NULL
                 ORDER BY p.last_name, p.first_name
                 LIMIT :limit OFFSET :offset
             ");
@@ -2187,6 +2192,7 @@ function handleGetPatients() {
                        FALSE as notify_abnormal_flow,
                        FALSE as notify_alert_critical
                 FROM patients p
+                WHERE p.deleted_at IS NULL
                 ORDER BY p.last_name, p.first_name
                 LIMIT :limit OFFSET :offset
             ");
@@ -2378,7 +2384,8 @@ function handleDeletePatient($patient_id) {
         }
 
         // Supprimer le patient
-        $pdo->prepare("DELETE FROM patients WHERE id = :id")->execute(['id' => $patient_id]);
+        // Soft delete au lieu de DELETE réel
+        $pdo->prepare("UPDATE patients SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $patient_id]);
 
         auditLog('patient.deleted', 'patient', $patient_id, $patient, null);
         echo json_encode(['success' => true, 'message' => 'Patient supprimé avec succès']);
@@ -2442,7 +2449,8 @@ function handleGetReportsOverview() {
                    d.status,
                    d.last_seen
             FROM patients p
-            LEFT JOIN devices d ON d.patient_id = p.id
+            LEFT JOIN devices d ON d.patient_id = p.id AND d.deleted_at IS NULL
+            WHERE p.deleted_at IS NULL
             ORDER BY p.last_name, p.first_name
         ");
 
@@ -2628,7 +2636,7 @@ function handleGetFirmwares() {
         $stmt = $pdo->query("
             SELECT fv.*, u.email as uploaded_by_email, u.first_name, u.last_name
             FROM firmware_versions fv
-            LEFT JOIN users u ON fv.uploaded_by = u.id
+            LEFT JOIN users u ON fv.uploaded_by = u.id AND u.deleted_at IS NULL
             ORDER BY fv.created_at DESC
         ");
         echo json_encode(['success' => true, 'firmwares' => $stmt->fetchAll()]);
@@ -2969,8 +2977,8 @@ function handleGetNotificationsQueue() {
         $stmt = $pdo->prepare("
             SELECT nq.*, u.email, u.first_name, u.last_name, p.first_name as patient_first_name, p.last_name as patient_last_name
             FROM notifications_queue nq
-            LEFT JOIN users u ON nq.user_id = u.id
-            LEFT JOIN patients p ON nq.patient_id = p.id
+            LEFT JOIN users u ON nq.user_id = u.id AND u.deleted_at IS NULL
+            LEFT JOIN patients p ON nq.patient_id = p.id AND p.deleted_at IS NULL
             ORDER BY nq.created_at DESC
             LIMIT :limit
         ");
@@ -3439,7 +3447,7 @@ function handleGetAuditLogs() {
         $sql = "
             SELECT al.*, u.email, u.first_name, u.last_name
             FROM audit_logs al
-            LEFT JOIN users u ON al.user_id = u.id
+            LEFT JOIN users u ON al.user_id = u.id AND u.deleted_at IS NULL
             WHERE 1=1
         ";
         
@@ -3724,14 +3732,14 @@ function triggerAlertNotifications($pdo, $device_id, $alert_type, $severity, $me
                 SELECT u.id, u.email, u.phone, unp.*
                 FROM users u
                 LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
-                WHERE u.is_active = TRUE
+                WHERE u.is_active = TRUE AND u.deleted_at IS NULL
             ");
         } else {
             $usersStmt = $pdo->prepare("
                 SELECT u.id, u.email, NULL AS phone, unp.*
                 FROM users u
                 LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
-                WHERE u.is_active = TRUE
+                WHERE u.is_active = TRUE AND u.deleted_at IS NULL
             ");
         }
         $usersStmt->execute();
@@ -3795,8 +3803,8 @@ function processNotificationsQueue($pdo, $limit = 50) {
             SELECT nq.*, u.email as user_email, u.phone as user_phone, 
                    p.email as patient_email, p.phone as patient_phone
             FROM notifications_queue nq
-            LEFT JOIN users u ON nq.user_id = u.id
-            LEFT JOIN patients p ON nq.patient_id = p.id
+            LEFT JOIN users u ON nq.user_id = u.id AND u.deleted_at IS NULL
+            LEFT JOIN patients p ON nq.patient_id = p.id AND p.deleted_at IS NULL
             WHERE nq.status = 'pending'
             AND nq.send_after <= NOW()
             AND nq.attempts < nq.max_attempts
