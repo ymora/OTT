@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
+import { isValidEmail, isValidPhone } from '@/lib/utils'
 
 /**
  * Composant modal réutilisable pour créer/modifier des utilisateurs ou patients
@@ -653,14 +654,14 @@ export default function UserPatientModal({
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Canaux activés</label>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className={`flex items-center gap-2 p-2 rounded ${formData.email ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
+                        <label className={`flex items-center gap-2 p-2 rounded ${isValidEmail(formData.email) ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
                           <input
                             type="checkbox"
                             checked={notificationPrefs.email_enabled}
                             onChange={(e) => {
                               const newValue = e.target.checked
-                              if (newValue && !formData.email) {
-                                setNotificationErrors(prev => ({ ...prev, email: 'Email requis pour activer les notifications email' }))
+                              if (newValue && !isValidEmail(formData.email)) {
+                                setNotificationErrors(prev => ({ ...prev, email: 'Email valide requis pour activer les notifications email' }))
                                 return
                               }
                               setNotificationErrors(prev => {
@@ -683,24 +684,29 @@ export default function UserPatientModal({
                               }
                               setNotificationPrefs(updatedPrefs)
                             }}
-                            disabled={!formData.email}
+                            disabled={!isValidEmail(formData.email)}
                             className="form-checkbox"
                           />
                           <span className="text-sm">✉️ Email</span>
                         </label>
+                        {!isValidEmail(formData.email) && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-8">
+                            Saisissez un email valide pour activer les notifications email
+                          </p>
+                        )}
                         {notificationErrors.email && (
                           <p className="text-xs text-red-600 dark:text-red-400 mt-1 ml-8">{notificationErrors.email}</p>
                         )}
                       </div>
                       <div>
-                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                        <label className={`flex items-center gap-2 p-2 rounded ${formData.phone && isValidPhone(formData.phone) ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
                           <input
                             type="checkbox"
                             checked={Boolean(notificationPrefs.sms_enabled)}
                             onChange={(e) => {
                               const newValue = e.target.checked
-                              if (newValue && !formData.phone) {
-                                setNotificationErrors(prev => ({ ...prev, sms: 'Téléphone requis pour activer les notifications SMS' }))
+                              if (newValue && (!formData.phone || !isValidPhone(formData.phone))) {
+                                setNotificationErrors(prev => ({ ...prev, sms: 'Téléphone valide requis pour activer les notifications SMS' }))
                                 return
                               }
                               setNotificationErrors(prev => {
@@ -723,10 +729,16 @@ export default function UserPatientModal({
                               }
                               setNotificationPrefs(updatedPrefs)
                             }}
+                            disabled={!formData.phone || !isValidPhone(formData.phone)}
                             className="form-checkbox"
                           />
                           <span className="text-sm">📱 SMS</span>
                         </label>
+                        {(!formData.phone || !isValidPhone(formData.phone)) && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-8">
+                            Saisissez un numéro de téléphone valide pour activer les notifications SMS
+                          </p>
+                        )}
                         {notificationErrors.sms && (
                           <p className="text-xs text-red-600 dark:text-red-400 mt-1 ml-8">{notificationErrors.sms}</p>
                         )}
