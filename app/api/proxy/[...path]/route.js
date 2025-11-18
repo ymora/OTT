@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import logger from '@/lib/logger'
 
 const DEFAULT_TARGET = 'https://ott-jbln.onrender.com'
 const RAW_TARGET =
@@ -77,7 +78,7 @@ const proxyRequest = async (request, { params }) => {
       headers: responseHeaders
     })
   } catch (error) {
-    console.error('Erreur proxy API:', error)
+    logger.error('Erreur proxy API:', error)
     return NextResponse.json(
       { success: false, error: 'Erreur proxy API', details: error.message },
       { status: 502 }

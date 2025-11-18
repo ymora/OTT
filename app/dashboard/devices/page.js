@@ -11,6 +11,7 @@ import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import { useSerialPort } from '@/components/SerialPortManager'
+import logger from '@/lib/logger'
 
 // Lazy load des composants lourds pour accélérer Fast Refresh
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
@@ -242,7 +243,7 @@ export default function DevicesPage() {
         return virtualDevice
       }
     } catch (err) {
-      console.error('Erreur détection dispositif:', err)
+      logger.error('Erreur détection dispositif:', err)
       return null
     }
   }, [connect, startReading, write, devices])
@@ -266,7 +267,7 @@ export default function DevicesPage() {
       // Détecter le dispositif sur ce port
       await detectDeviceOnPort(selectedPort)
     } catch (err) {
-      console.error('Erreur détection USB:', err)
+      logger.error('Erreur détection USB:', err)
       alert(`Erreur lors de la détection: ${err.message}`)
     } finally {
       setCheckingUSB(false)
@@ -315,7 +316,7 @@ export default function DevicesPage() {
           }
         }
       } catch (err) {
-        console.log('Détection automatique USB:', err.message)
+        logger.debug('Détection automatique USB:', err.message)
       } finally {
         setAutoDetecting(false)
       }
@@ -337,10 +338,10 @@ export default function DevicesPage() {
         const port = event.target
         const device = await detectDeviceOnPort(port)
         if (device) {
-          console.log('Nouveau dispositif USB détecté:', device)
+          logger.log('Nouveau dispositif USB détecté:', device)
         }
       } catch (err) {
-        console.error('Erreur connexion nouveau port:', err)
+        logger.error('Erreur connexion nouveau port:', err)
       }
     }
 
@@ -432,7 +433,7 @@ export default function DevicesPage() {
           successCount++
         } catch (err) {
           errorCount++
-          console.error(`Erreur OTA pour dispositif ${deviceId}:`, err)
+          logger.error(`Erreur OTA pour dispositif ${deviceId}:`, err)
         }
       })
 
@@ -551,7 +552,7 @@ export default function DevicesPage() {
       setDeviceCommands(filteredCommands)
       setDeviceDetails(device)
     } catch (err) {
-      console.error(err)
+      logger.error(err)
     } finally {
       setLoadingDetails(false)
     }
@@ -574,7 +575,7 @@ export default function DevicesPage() {
       )
       setDeviceCommands(filteredCommands)
     } catch (err) {
-      console.error('Erreur chargement commandes:', err)
+      logger.error('Erreur chargement commandes:', err)
     }
   }, [selectedDevice, fetchWithAuth, API_URL])
 
@@ -707,7 +708,7 @@ export default function DevicesPage() {
       })
       setCommandRefreshTick(tick => tick + 1)
     } catch (err) {
-      console.error(err)
+      logger.error(err)
       setCommandError(err.message || 'Erreur lors de l\'envoi de la commande')
     } finally {
       setCreatingCommand(false)
@@ -1718,7 +1719,7 @@ export default function DevicesPage() {
                   setFirmwareUploadSuccess(null)
                 }, 2000)
               } catch (err) {
-                console.error('Erreur upload firmware:', err)
+                logger.error('Erreur upload firmware:', err)
                 setFirmwareUploadError(err.message || 'Erreur lors de l\'upload du firmware')
               } finally {
                 setUploadingFirmware(false)

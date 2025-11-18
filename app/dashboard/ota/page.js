@@ -7,6 +7,7 @@ import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
+import logger from '@/lib/logger'
 
 export default function OTAPage() {
   const { fetchWithAuth, API_URL } = useAuth()
@@ -106,7 +107,7 @@ export default function OTAPage() {
           successCount++
         } catch (err) {
           errorCount++
-          console.error(`Erreur OTA pour dispositif ${deviceId}:`, err)
+          logger.error(`Erreur OTA pour dispositif ${deviceId}:`, err)
         }
       })
 

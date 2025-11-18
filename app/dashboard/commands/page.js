@@ -7,6 +7,7 @@ import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
+import logger from '@/lib/logger'
 
 const commandOptions = [
   { value: 'SET_SLEEP_SECONDS', label: 'Modifier intervalle de sommeil' },
@@ -187,7 +188,7 @@ export default function CommandsPage() {
       setSuccess('Commande créée avec succès')
       setRefreshTick((tick) => tick + 1)
     } catch (err) {
-      console.error(err)
+      logger.error(err)
       setActionError(err.message)
     } finally {
       setCreating(false)

@@ -10,6 +10,7 @@ import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
 import { isTrue } from '@/lib/utils'
+import logger from '@/lib/logger'
 
 export default function UsersPage() {
   const { fetchWithAuth, API_URL, user: currentUser } = useAuth()
@@ -106,7 +107,7 @@ export default function UsersPage() {
         errorMessage = err.error
       }
       setActionError(errorMessage)
-      console.error('Erreur suppression utilisateur:', err)
+      logger.error('Erreur suppression utilisateur:', err)
     } finally {
       setDeleteLoading(false)
     }

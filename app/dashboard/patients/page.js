@@ -10,6 +10,7 @@ import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
 import { isTrue } from '@/lib/utils'
+import logger from '@/lib/logger'
 
 export default function PatientsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
@@ -89,7 +90,7 @@ export default function PatientsPage() {
         )
       } catch (configErr) {
         // Ne pas bloquer si la réinitialisation de la config échoue
-        console.warn('Erreur réinitialisation config dispositif:', configErr)
+        logger.warn('Erreur réinitialisation config dispositif:', configErr)
       }
       
       // Recharger les dispositifs et les patients
@@ -103,7 +104,7 @@ export default function PatientsPage() {
         errorMessage = err.error
       }
       setActionError(errorMessage)
-      console.error('Erreur désassignation dispositif:', err)
+      logger.error('Erreur désassignation dispositif:', err)
     } finally {
       setUnassigningDevice(null)
     }
@@ -166,7 +167,7 @@ export default function PatientsPage() {
         errorMessage = err.error
       }
       setActionError(errorMessage)
-      console.error('Erreur suppression patient:', err)
+      logger.error('Erreur suppression patient:', err)
     } finally {
       setDeleteLoading(false)
     }

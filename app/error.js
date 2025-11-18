@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
+import logger from '@/lib/logger';
 
 export default function Error({ error, reset }) {
   useEffect(() => {
-    console.error('UI error boundary:', error);
+    logger.error('UI error boundary:', error);
   }, [error]);
 
   return (

@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { withBasePath } from '@/lib/utils'
+import logger from '@/lib/logger'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -43,7 +44,7 @@ export default function RootLayout({ children }) {
               const registerSW = () => {
                 if (navigator.serviceWorker.controller) return;
                 navigator.serviceWorker.register('${swPath}').catch(err => {
-                  console.warn('SW registration failed', err);
+                  logger.warn('SW registration failed', err);
                 });
               };
               if (document.readyState === 'complete') {

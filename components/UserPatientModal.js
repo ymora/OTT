@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
 import { isValidEmail, isValidPhone } from '@/lib/utils'
+import logger from '@/lib/logger'
 
 /**
  * Composant modal réutilisable pour créer/modifier des utilisateurs ou patients
@@ -150,7 +151,7 @@ export default function UserPatientModal({
         setNotificationPrefs(loadedPrefs)
       }
     } catch (err) {
-      console.warn('Erreur chargement préférences:', err)
+      logger.warn('Erreur chargement préférences:', err)
     } finally {
       setLoadingNotifPrefs(false)
     }
@@ -468,7 +469,7 @@ export default function UserPatientModal({
         errorMessage = err.error
       }
       setFormError(errorMessage)
-      console.error('Erreur enregistrement:', err)
+      logger.error('Erreur enregistrement:', err)
     } finally {
       setSaving(false)
     }

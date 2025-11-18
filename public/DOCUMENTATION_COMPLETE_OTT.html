@@ -530,6 +530,113 @@ maxime/
         <strong>💡 Évolutivité</strong><br>
         L'infrastructure supporte <strong>jusqu'à 100 dispositifs</strong> sur le plan Render Starter sans surcoût !
     </div>
+    
+    <h3>🤔 Pourquoi GitHub Pages pour le Frontend ?</h3>
+    
+    <p>Vous vous demandez peut-être pourquoi le dashboard est hébergé sur <strong>GitHub Pages</strong> plutôt que sur <strong>Render</strong> ? Voici la comparaison :</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Critère</th>
+                <th>GitHub Pages (actuel)</th>
+                <th>Render (alternative)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Coût</strong></td>
+                <td>✅ <strong>0€/mois</strong> (gratuit)</td>
+                <td>❌ 0€ (Static Site) ou 7€/mois (Web Service)</td>
+            </tr>
+            <tr>
+                <td><strong>Performance</strong></td>
+                <td>✅ CDN global (rapide partout)</td>
+                <td>⚠️ Moins de points de présence</td>
+            </tr>
+            <tr>
+                <td><strong>Déploiement</strong></td>
+                <td>✅ Automatique via GitHub Actions</td>
+                <td>✅ Automatique aussi (via Git)</td>
+            </tr>
+            <tr>
+                <td><strong>Configuration</strong></td>
+                <td>✅ Aucune (juste activer Pages)</td>
+                <td>⚠️ Configuration serveur nécessaire</td>
+            </tr>
+            <tr>
+                <td><strong>HTTPS</strong></td>
+                <td>✅ Automatique</td>
+                <td>✅ Automatique aussi</td>
+            </tr>
+            <tr>
+                <td><strong>BasePath</strong></td>
+                <td>⚠️ Nécessite <code>/OTT</code></td>
+                <td>✅ Pas besoin (domaine dédié)</td>
+            </tr>
+            <tr>
+                <td><strong>Variables d'env serveur</strong></td>
+                <td>❌ Pas disponibles</td>
+                <td>✅ Disponibles</td>
+            </tr>
+            <tr>
+                <td><strong>SSR (Server-Side Rendering)</strong></td>
+                <td>❌ Impossible (site statique)</td>
+                <td>✅ Possible (si Web Service)</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>✅ Recommandation : GitHub Pages</h4>
+    
+    <p>Pour un site statique Next.js (export statique), <strong>GitHub Pages est le meilleur choix</strong> car :</p>
+    
+    <ul>
+        <li>✅ <strong>Gratuit</strong> : pas de coût supplémentaire</li>
+        <li>✅ <strong>CDN global</strong> : meilleure performance mondiale</li>
+        <li>✅ <strong>Simple</strong> : aucune configuration serveur</li>
+        <li>✅ <strong>Fiable</strong> : infrastructure GitHub (99.9% uptime)</li>
+    </ul>
+    
+    <div class="alert alert-warning">
+        <strong>⚠️ Quand utiliser Render pour le frontend ?</strong><br>
+        Migrez vers Render uniquement si vous avez besoin de :
+        <ul>
+            <li>🔧 <strong>Server-Side Rendering (SSR)</strong> : génération de pages côté serveur</li>
+            <li>🔐 <strong>Variables d'environnement serveur</strong> : secrets non exposés au client</li>
+            <li>🌐 <strong>Domaine personnalisé sans basePath</strong> : éviter le <code>/OTT</code> dans l'URL</li>
+            <li>💰 <strong>Budget disponible</strong> : 7€/mois supplémentaire pour un Web Service</li>
+        </ul>
+    </div>
+    
+    <h4>📊 Comparaison des coûts</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Configuration</th>
+                <th>Frontend</th>
+                <th>Backend</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="background: #d4edda;">
+                <td><strong>Configuration actuelle (recommandée)</strong></td>
+                <td>GitHub Pages (0€)</td>
+                <td>Render Starter (7€)</td>
+                <td><strong>7€/mois</strong></td>
+            </tr>
+            <tr>
+                <td>Alternative : Tout sur Render</td>
+                <td>Render Static Site (0€) ou Web Service (7€)</td>
+                <td>Render Starter (7€)</td>
+                <td>7€ ou 14€/mois</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <p><strong>Conclusion :</strong> La configuration actuelle (GitHub Pages + Render API) est optimale pour un site statique Next.js. Pas besoin de changer ! 🎉</p>
 </section>
 
 <!-- ============================================== -->

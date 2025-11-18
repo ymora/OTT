@@ -7,6 +7,7 @@ import { formatDateTime } from '@/lib/utils'
 import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
+import logger from '@/lib/logger'
 
 const actionColors = {
   'user.login': 'border-green-500 bg-green-50 text-green-700',
@@ -44,7 +45,7 @@ export default function AuditPage() {
       // Recharger les logs après suppression
       await refetch()
     } catch (err) {
-      console.error('Erreur réinitialisation:', err)
+      logger.error('Erreur réinitialisation:', err)
       // L'erreur sera gérée par ErrorMessage via le hook (refetch déclenchera une erreur si nécessaire)
     } finally {
       setClearing(false)

@@ -72,7 +72,19 @@ define('DB_NAME', $dbConfig['name']);
 define('DB_USER', $dbConfig['user']);
 define('DB_PASS', $dbConfig['pass']);
 
-define('JWT_SECRET', getenv('JWT_SECRET') ?: 'CHANGEZ_CE_SECRET_EN_PRODUCTION');
+// JWT_SECRET doit être défini en production
+$jwtSecret = getenv('JWT_SECRET');
+if (empty($jwtSecret)) {
+    $isProduction = getenv('APP_ENV') === 'production' || getenv('APP_ENV') === 'prod';
+    if ($isProduction) {
+        http_response_code(500);
+        die(json_encode(['success' => false, 'error' => 'JWT_SECRET must be set in production']));
+    }
+    // En développement, utiliser un secret par défaut (mais loguer un avertissement)
+    $jwtSecret = 'CHANGEZ_CE_SECRET_EN_PRODUCTION';
+    error_log('[SECURITY WARNING] JWT_SECRET not set, using default. This is UNSAFE in production!');
+}
+define('JWT_SECRET', $jwtSecret);
 define('JWT_EXPIRATION', 86400); // 24h
 define('AUTH_DISABLED', getenv('AUTH_DISABLED') === 'true');
 
@@ -149,7 +161,8 @@ function getDemoUser() {
     
     global $pdo;
     try {
-        $stmt = $pdo->query("SELECT * FROM users_with_roles ORDER BY id ASC LIMIT 1");
+        $stmt = $pdo->prepare("SELECT * FROM users_with_roles ORDER BY id ASC LIMIT 1");
+        $stmt->execute();
         $user = $stmt->fetch();
         if ($user) {
             $user['permissions'] = $user['permissions'] ? explode(',', $user['permissions']) : ['*'];
@@ -231,6 +244,66 @@ function requireAdmin() {
     return $user;
 }
 
+// ============================================================================
+// HELPERS - Database
+// ============================================================================
+
+/**
+ * Vérifie si une table existe dans la base de données
+ */
+function tableExists($tableName) {
+    global $pdo;
+    try {
+        $stmt = $pdo->prepare("
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
+                AND table_name = :table_name
+            )
+        ");
+        $stmt->execute(['table_name' => $tableName]);
+        $result = $stmt->fetchColumn();
+        return ($result === true || $result === 't' || $result === 1 || $result === '1');
+    } catch(PDOException $e) {
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log("[tableExists] Error checking table $tableName: " . $e->getMessage());
+        }
+        return false;
+    }
+}
+
+/**
+ * Vérifie si une colonne existe dans une table
+ */
+function columnExists($tableName, $columnName) {
+    global $pdo;
+    try {
+        $stmt = $pdo->prepare("
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name = :table_name
+                AND column_name = :column_name
+            )
+        ");
+        $stmt->execute([
+            'table_name' => $tableName,
+            'column_name' => $columnName
+        ]);
+        $result = $stmt->fetchColumn();
+        return ($result === true || $result === 't' || $result === 1 || $result === '1');
+    } catch(PDOException $e) {
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log("[columnExists] Error checking column $tableName.$columnName: " . $e->getMessage());
+        }
+        return false;
+    }
+}
+
+// ============================================================================
+// HELPERS - Audit
+// ============================================================================
+
 function auditLog($action, $entity_type = null, $entity_id = null, $old_value = null, $new_value = null) {
     global $pdo;
     $user = getCurrentUser();
@@ -299,21 +372,9 @@ function handleRunMigration() {
         // Vérifier les résultats
         $results = [];
         
-        // Vérifier colonne phone
-        try {
-            $stmt = $pdo->query("SELECT phone FROM users LIMIT 1");
-            $results['phone_column'] = 'exists';
-        } catch(PDOException $e) {
-            $results['phone_column'] = 'missing';
-        }
-        
-        // Vérifier table patient_notifications_preferences
-        try {
-            $stmt = $pdo->query("SELECT * FROM patient_notifications_preferences LIMIT 1");
-            $results['patient_notifications_table'] = 'exists';
-        } catch(PDOException $e) {
-            $results['patient_notifications_table'] = 'missing';
-        }
+        // Vérifier colonne phone et table (utilise helpers)
+        $results['phone_column'] = columnExists('users', 'phone') ? 'exists' : 'missing';
+        $results['patient_notifications_table'] = tableExists('patient_notifications_preferences') ? 'exists' : 'missing';
         
         echo json_encode([
             'success' => true,
@@ -555,19 +616,12 @@ function handleGetUsers() {
     
     try {
         // Compter le total (exclure soft delete)
-        $countStmt = $pdo->query("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL");
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL");
+        $countStmt->execute();
         $total = $countStmt->fetchColumn();
         
-        // Utiliser une requête qui fonctionne avec ou sans la colonne phone
-        // On utilise une sous-requête pour détecter la colonne de manière sûre
-        try {
-            // Essayer d'abord avec la colonne phone
-            $testStmt = $pdo->query("SELECT phone FROM users LIMIT 1");
-            $hasPhoneColumn = true;
-        } catch(PDOException $e) {
-            // Si ça échoue, la colonne n'existe pas
-            $hasPhoneColumn = false;
-        }
+        // Vérifier si la colonne phone existe (utilise helper)
+        $hasPhoneColumn = columnExists('users', 'phone');
         
         // Construire la requête selon l'existence de la colonne
         if ($hasPhoneColumn) {
@@ -685,14 +739,8 @@ function handleCreateUser() {
     }
     
     try {
-        // Vérifier si la colonne phone existe
-        $hasPhoneColumn = false;
-        try {
-            $testStmt = $pdo->query("SELECT phone FROM users LIMIT 1");
-            $hasPhoneColumn = true;
-        } catch(PDOException $e) {
-            $hasPhoneColumn = false;
-        }
+        // Vérifier si la colonne phone existe (utilise helper)
+        $hasPhoneColumn = columnExists('users', 'phone');
         
         // Gérer is_active comme boolean (PostgreSQL)
         $isActive = true; // Par défaut
@@ -745,15 +793,8 @@ function handleCreateUser() {
         // Créer les préférences de notifications par défaut (unifié avec handleCreatePatient)
         try {
             // Vérifier si la table existe
-            $checkStmt = $pdo->query("
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                    AND table_name = 'user_notifications_preferences'
-                )
-            ");
-            $hasTable = $checkStmt->fetchColumn();
-            if ($hasTable === true || $hasTable === 't' || $hasTable === 1 || $hasTable === '1') {
+            // Vérifier si la table existe (utilise helper)
+            if (tableExists('user_notifications_preferences')) {
                 $pdo->prepare("
                     INSERT INTO user_notifications_preferences 
                     (user_id, email_enabled, sms_enabled, push_enabled, 
@@ -805,14 +846,8 @@ function handleUpdateUser($user_id) {
             return;
         }
         
-        // Vérifier si la colonne phone existe
-        $hasPhoneColumn = false;
-        try {
-            $testStmt = $pdo->query("SELECT phone FROM users LIMIT 1");
-            $hasPhoneColumn = true;
-        } catch(PDOException $e) {
-            $hasPhoneColumn = false;
-        }
+        // Vérifier si la colonne phone existe (utilise helper)
+        $hasPhoneColumn = columnExists('users', 'phone');
         
         $updates = [];
         $params = ['id' => $user_id];
@@ -975,7 +1010,7 @@ function handleGetRoles() {
     requireAuth();
     
     try {
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT r.*, COALESCE(STRING_AGG(p.code, ','), '') as permissions
             FROM roles r
             LEFT JOIN role_permissions rp ON r.id = rp.role_id
@@ -983,6 +1018,7 @@ function handleGetRoles() {
             GROUP BY r.id
             ORDER BY r.id
         ");
+        $stmt->execute();
         echo json_encode(['success' => true, 'roles' => $stmt->fetchAll()]);
     } catch(PDOException $e) {
         http_response_code(500);
@@ -997,7 +1033,8 @@ function handleGetPermissions() {
     requirePermission('users.roles');
     
     try {
-        $stmt = $pdo->query("SELECT * FROM permissions ORDER BY category, code");
+        $stmt = $pdo->prepare("SELECT * FROM permissions ORDER BY category, code");
+        $stmt->execute();
         echo json_encode(['success' => true, 'permissions' => $stmt->fetchAll()]);
     } catch(PDOException $e) {
         http_response_code(500);
@@ -1018,7 +1055,7 @@ function handleGetDevices() {
     
     try {
         // Requête simplifiée et robuste - éviter duplication firmware_version
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT 
                 d.id,
                 d.sim_iccid,
@@ -1044,6 +1081,7 @@ function handleGetDevices() {
             WHERE d.deleted_at IS NULL
             ORDER BY d.last_seen DESC NULLS LAST, d.created_at DESC
         ");
+        $stmt->execute();
         $devices = $stmt->fetchAll();
         echo json_encode(['success' => true, 'devices' => $devices]);
     } catch(PDOException $e) {
@@ -1849,9 +1887,29 @@ function handleResetDemo() {
         'roles'
     ];
 
+    // Whitelist des tables autorisées pour TRUNCATE (sécurité)
+    $allowedTables = [
+        'devices', 'measurements', 'alerts', 'device_commands', 'device_logs',
+        'device_configurations', 'patients', 'users', 'user_notifications_preferences',
+        'patient_notifications_preferences', 'notifications_queue', 'audit_logs',
+        'firmware_versions', 'role_permissions', 'permissions', 'roles'
+    ];
+    
+    // Valider que toutes les tables demandées sont dans la whitelist
+    $invalidTables = array_diff($tables, $allowedTables);
+    if (!empty($invalidTables)) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Unauthorized table(s): ' . implode(', ', $invalidTables)
+        ]);
+        return;
+    }
+
     $startedAt = microtime(true);
 
     try {
+        // TRUNCATE sécurisé : tables validées via whitelist
         $pdo->exec('TRUNCATE TABLE ' . implode(', ', $tables) . ' RESTART IDENTITY CASCADE');
         runSqlFile($pdo, 'base_seed.sql');
         runSqlFile($pdo, 'demo_seed.sql');
@@ -2058,13 +2116,15 @@ function handleGetLatestMeasurements() {
     global $pdo;
     
     try {
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT m.*, d.sim_iccid, d.device_name
             FROM measurements m
             JOIN devices d ON m.device_id = d.id
             WHERE m.timestamp >= NOW() - INTERVAL '24 HOURS'
+            AND d.deleted_at IS NULL
             ORDER BY m.timestamp DESC
         ");
+        $stmt->execute();
         echo json_encode(['success' => true, 'measurements' => $stmt->fetchAll()]);
     } catch(PDOException $e) {
         http_response_code(500);
@@ -2149,33 +2209,12 @@ function handleGetPatients() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     try {
-        // Vérifier si la table patient_notifications_preferences existe
-        // Utiliser une requête système PostgreSQL pour vérifier l'existence
-        $hasNotificationsTable = false;
-        try {
-            $checkStmt = $pdo->query("
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'patient_notifications_preferences'
-                )
-            ");
-            $result = $checkStmt->fetchColumn();
-            // PostgreSQL retourne 't' pour true, 'f' pour false, ou un booléen selon la version
-            $hasNotificationsTable = ($result === true || $result === 't' || $result === 1 || $result === '1');
-            
-            // Log pour debug
-            if (getenv('DEBUG_ERRORS') === 'true') {
-                error_log('[handleGetPatients] Table check result: ' . var_export($result, true) . ' -> hasNotificationsTable: ' . ($hasNotificationsTable ? 'yes' : 'no'));
-            }
-        } catch(PDOException $e) {
-            // Si la vérification échoue, on assume que la table n'existe pas
-            $hasNotificationsTable = false;
-            error_log('[handleGetPatients] Table check failed: ' . $e->getMessage());
-        }
+        // Vérifier si la table existe (utilise helper)
+        $hasNotificationsTable = tableExists('patient_notifications_preferences');
         
         // Compter le total AVANT la requête principale (exclure soft delete)
-        $countStmt = $pdo->query("SELECT COUNT(*) FROM patients WHERE deleted_at IS NULL");
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE deleted_at IS NULL");
+        $countStmt->execute();
         $total = intval($countStmt->fetchColumn());
         
         // Requête optimisée avec pagination et préférences de notifications
@@ -2288,13 +2327,8 @@ function handleCreatePatient() {
         // Créer les préférences de notifications par défaut (unifié avec handleCreateUser)
         try {
             // Vérifier si la table existe
-            $checkStmt = $pdo->query("
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                    AND table_name = 'patient_notifications_preferences'
-                )
-            ");
+            // Utiliser helper pour vérifier la table
+            $hasTable = tableExists('patient_notifications_preferences');
             $hasTable = $checkStmt->fetchColumn();
             if ($hasTable === true || $hasTable === 't' || $hasTable === 1 || $hasTable === '1') {
                 $pdo->prepare("
@@ -2429,16 +2463,30 @@ function handleGetReportsOverview() {
     requirePermission('reports.view');
 
     try {
+        // Optimisation : requêtes combinées pour réduire les appels DB
+        $statsQuery = $pdo->prepare("
+            SELECT 
+                (SELECT COUNT(*) FROM devices WHERE deleted_at IS NULL) as devices_total,
+                (SELECT COUNT(*) FROM devices WHERE status = 'active' AND deleted_at IS NULL) as devices_active,
+                (SELECT COUNT(*) FROM alerts WHERE status = 'unresolved') as alerts_unresolved,
+                (SELECT COUNT(*) FROM measurements WHERE timestamp >= NOW() - INTERVAL '24 HOURS') as measurements_24h,
+                (SELECT COALESCE(AVG(flowrate), 0) FROM measurements WHERE timestamp >= NOW() - INTERVAL '24 HOURS') as avg_flowrate_24h,
+                (SELECT COALESCE(AVG(battery), 0) FROM measurements WHERE battery IS NOT NULL AND timestamp >= NOW() - INTERVAL '24 HOURS') as avg_battery_24h
+        ");
+        $statsQuery->execute();
+        $statsRow = $statsQuery->fetch();
+        
         $stats = [
-            'devices_total' => (int)$pdo->query("SELECT COUNT(*) FROM devices")->fetchColumn(),
-            'devices_active' => (int)$pdo->query("SELECT COUNT(*) FROM devices WHERE status = 'active'")->fetchColumn(),
-            'alerts_unresolved' => (int)$pdo->query("SELECT COUNT(*) FROM alerts WHERE status = 'unresolved'")->fetchColumn(),
-            'measurements_24h' => (int)$pdo->query("SELECT COUNT(*) FROM measurements WHERE timestamp >= NOW() - INTERVAL '24 HOURS'")->fetchColumn(),
-            'avg_flowrate_24h' => round((float)$pdo->query("SELECT AVG(flowrate) FROM measurements WHERE timestamp >= NOW() - INTERVAL '24 HOURS'")->fetchColumn(), 2),
-            'avg_battery_24h' => round((float)$pdo->query("SELECT AVG(battery) FROM measurements WHERE battery IS NOT NULL AND timestamp >= NOW() - INTERVAL '24 HOURS'")->fetchColumn(), 2)
+            'devices_total' => (int)$statsRow['devices_total'],
+            'devices_active' => (int)$statsRow['devices_active'],
+            'alerts_unresolved' => (int)$statsRow['alerts_unresolved'],
+            'measurements_24h' => (int)$statsRow['measurements_24h'],
+            'avg_flowrate_24h' => round((float)$statsRow['avg_flowrate_24h'], 2),
+            'avg_battery_24h' => round((float)$statsRow['avg_battery_24h'], 2)
         ];
 
-        $trendStmt = $pdo->query("
+        // Utiliser prepare() pour toutes les requêtes (bonne pratique)
+        $trendStmt = $pdo->prepare("
             SELECT DATE(timestamp) AS day,
                    ROUND(AVG(flowrate)::numeric, 2) AS avg_flowrate,
                    ROUND(AVG(battery)::numeric, 2) AS avg_battery
@@ -2447,27 +2495,31 @@ function handleGetReportsOverview() {
             GROUP BY day
             ORDER BY day
         ");
+        $trendStmt->execute();
 
-        $topDevicesStmt = $pdo->query("
+        $topDevicesStmt = $pdo->prepare("
             SELECT d.id, d.device_name, d.sim_iccid, d.latitude, d.longitude, d.status,
                    ROUND(AVG(m.flowrate)::numeric, 2) AS avg_flowrate,
                    ROUND(AVG(m.battery)::numeric, 2) AS avg_battery,
                    MAX(m.timestamp) AS last_measurement
             FROM devices d
             LEFT JOIN measurements m ON m.device_id = d.id
+            WHERE d.deleted_at IS NULL
             GROUP BY d.id
             ORDER BY last_measurement DESC NULLS LAST
             LIMIT 5
         ");
+        $topDevicesStmt->execute();
 
-        $severityStmt = $pdo->query("
+        $severityStmt = $pdo->prepare("
             SELECT severity, COUNT(*) AS count
             FROM alerts
             WHERE status = 'unresolved'
             GROUP BY severity
         ");
+        $severityStmt->execute();
 
-        $assignmentStmt = $pdo->query("
+        $assignmentStmt = $pdo->prepare("
             SELECT p.id AS patient_id,
                    p.first_name,
                    p.last_name,
@@ -2480,6 +2532,7 @@ function handleGetReportsOverview() {
             WHERE p.deleted_at IS NULL
             ORDER BY p.last_name, p.first_name
         ");
+        $assignmentStmt->execute();
 
         echo json_encode([
             'success' => true,
@@ -2660,12 +2713,13 @@ function handleGetFirmwares() {
     requireAdmin();
     
     try {
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT fv.*, u.email as uploaded_by_email, u.first_name, u.last_name
             FROM firmware_versions fv
             LEFT JOIN users u ON fv.uploaded_by = u.id AND u.deleted_at IS NULL
             ORDER BY fv.created_at DESC
         ");
+        $stmt->execute();
         echo json_encode(['success' => true, 'firmwares' => $stmt->fetchAll()]);
     } catch(PDOException $e) {
         http_response_code(500);
@@ -3042,15 +3096,8 @@ function handleGetUserNotifications($user_id) {
         // Vérifier si la table user_notifications_preferences existe
         $hasNotificationsTable = false;
         try {
-            $checkStmt = $pdo->query("
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                    AND table_name = 'user_notifications_preferences'
-                )
-            ");
-            $result = $checkStmt->fetchColumn();
-            $hasNotificationsTable = ($result === true || $result === 't' || $result === 1 || $result === '1');
+            // Utiliser helper pour vérifier la table
+            $hasNotificationsTable = tableExists('user_notifications_preferences');
         } catch(PDOException $e) {
             $hasNotificationsTable = false;
             if (getenv('DEBUG_ERRORS') === 'true') {
@@ -3254,26 +3301,8 @@ function handleGetPatientNotifications($patient_id) {
     requirePermission('patients.view');
     
     try {
-        // Vérifier si la table patient_notifications_preferences existe
-        $hasNotificationsTable = false;
-        try {
-            $checkStmt = $pdo->query("
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                    AND table_name = 'patient_notifications_preferences'
-                )
-            ");
-            $result = $checkStmt->fetchColumn();
-            $hasNotificationsTable = ($result === true || $result === 't' || $result === 1 || $result === '1');
-        } catch(PDOException $e) {
-            $hasNotificationsTable = false;
-            if (getenv('DEBUG_ERRORS') === 'true') {
-                error_log('[handleGetPatientNotifications] Table check failed: ' . $e->getMessage());
-            }
-        }
-        
-        if (!$hasNotificationsTable) {
+        // Vérifier si la table existe (utilise helper)
+        if (!tableExists('patient_notifications_preferences')) {
             // Table n'existe pas encore, retourner des valeurs par défaut
             $defaultPrefs = [
                 'patient_id' => $patient_id,
@@ -3357,26 +3386,8 @@ function handleUpdatePatientNotifications($patient_id) {
             return;
         }
         
-        // Vérifier si la table existe (unifié avec handleUpdateUserNotifications)
-        $hasNotificationsTable = false;
-        try {
-            $checkStmt = $pdo->query("
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                    AND table_name = 'patient_notifications_preferences'
-                )
-            ");
-            $result = $checkStmt->fetchColumn();
-            $hasNotificationsTable = ($result === true || $result === 't' || $result === 1 || $result === '1');
-        } catch(PDOException $e) {
-            $hasNotificationsTable = false;
-            if (getenv('DEBUG_ERRORS') === 'true') {
-                error_log('[handleUpdatePatientNotifications] Table check failed: ' . $e->getMessage());
-            }
-        }
-        
-        if (!$hasNotificationsTable) {
+        // Vérifier si la table existe (utilise helper)
+        if (!tableExists('patient_notifications_preferences')) {
             http_response_code(503);
             echo json_encode(['success' => false, 'error' => 'Notifications table not available']);
             return;
@@ -3746,14 +3757,8 @@ function triggerAlertNotifications($pdo, $device_id, $alert_type, $severity, $me
         
         // Notifications pour les utilisateurs (médecins, techniciens, admins)
         // Récupérer tous les utilisateurs actifs avec leurs préférences
-        // Vérifier si la colonne phone existe
-        $hasPhoneColumn = false;
-        try {
-            $testStmt = $pdo->query("SELECT phone FROM users LIMIT 1");
-            $hasPhoneColumn = true;
-        } catch(PDOException $e) {
-            $hasPhoneColumn = false;
-        }
+        // Vérifier si la colonne phone existe (utilise helper)
+        $hasPhoneColumn = columnExists('users', 'phone');
         
         if ($hasPhoneColumn) {
             $usersStmt = $pdo->prepare("

@@ -6,6 +6,7 @@
  */
 
 import React from 'react'
+import logger from '@/lib/logger'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -18,7 +19,7 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('ErrorBoundary caught:', error, errorInfo)
+    logger.error('ErrorBoundary caught:', error, errorInfo)
     this.setState({ error, errorInfo })
   }
 
