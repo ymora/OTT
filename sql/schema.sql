@@ -393,10 +393,10 @@ ON CONFLICT (id) DO UPDATE SET
 
 INSERT INTO devices (id, sim_iccid, device_serial, device_name, patient_id, installation_date, first_use_date, last_seen, last_battery, latitude, longitude)
 VALUES
-  (1, '89330123456789012345', 'OTT-PIERRE-001', 'OTT Pierre Paris', 1, NOW() - INTERVAL '45 days', NOW() - INTERVAL '120 days', NOW(), 85.5, 48.8566, 2.3522),
-  (2, '89330123456789012346', 'OTT-PAUL-002', 'OTT Paul Lyon', 2, NOW() - INTERVAL '30 days', NOW() - INTERVAL '90 days', NOW() - INTERVAL '2 hours', 72.3, 45.7640, 4.8357),
-  (3, '89330123456789012347', 'OTT-JACQUES-003', 'OTT Jacques Marseille', 3, NOW() - INTERVAL '60 days', NOW() - INTERVAL '150 days', NOW() - INTERVAL '5 hours', 68.9, 43.2965, 5.3698),
-  (4, '89330123456789019999', 'OTT-STOCK-004', 'OTT Stock Bordeaux', NULL, NULL, NULL, NOW() - INTERVAL '1 day', 55.0, 44.8378, -0.5792)
+  (1, '89330123456789012345', 'OTT-001', 'OTT-01', 1, NOW() - INTERVAL '45 days', NOW() - INTERVAL '120 days', NOW(), 85.5, 48.8566, 2.3522),
+  (2, '89330123456789012346', 'OTT-002', 'OTT-02', 2, NOW() - INTERVAL '30 days', NOW() - INTERVAL '90 days', NOW() - INTERVAL '2 hours', 72.3, 45.7640, 4.8357),
+  (3, '89330123456789012347', 'OTT-003', 'OTT-03', 3, NOW() - INTERVAL '60 days', NOW() - INTERVAL '150 days', NOW() - INTERVAL '5 hours', 68.9, 43.2965, 5.3698),
+  (4, '89330123456789019999', 'OTT-004', 'OTT-04', NULL, NULL, NULL, NOW() - INTERVAL '1 day', 55.0, 44.8378, -0.5792)
 ON CONFLICT (id) DO UPDATE SET 
   device_name = EXCLUDED.device_name,
   patient_id = EXCLUDED.patient_id;
@@ -430,8 +430,8 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO alerts (id, device_id, type, severity, message, status, created_at)
 VALUES
-  ('ALERT-001', 1, 'low_battery', 'medium', 'Batterie en dessous de 20% pour OTT Pierre Paris', 'unresolved', NOW() - INTERVAL '15 minutes'),
-  ('ALERT-002', 2, 'device_offline', 'high', 'Dispositif OTT Paul Lyon hors ligne depuis 3h', 'unresolved', NOW() - INTERVAL '2 hours'),
+  ('ALERT-001', 1, 'low_battery', 'medium', 'Batterie en dessous de 20% pour OTT-01', 'unresolved', NOW() - INTERVAL '15 minutes'),
+  ('ALERT-002', 2, 'device_offline', 'high', 'Dispositif OTT-02 hors ligne depuis 3h', 'unresolved', NOW() - INTERVAL '2 hours'),
   ('ALERT-003', 4, 'device_offline', 'medium', 'Boîtier en stock sans patient, vérification requise', 'unresolved', NOW() - INTERVAL '1 day'),
   ('ALERT-004', 3, 'abnormal_flowrate', 'critical', 'Variation de débit anormale détectée', 'unresolved', NOW() - INTERVAL '45 minutes'),
   ('ALERT-005', 2, 'low_battery', 'low', 'Batterie revenue à 30% - alerte clôturée', 'resolved', NOW() - INTERVAL '1 day')
