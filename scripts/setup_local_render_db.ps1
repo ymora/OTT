@@ -1,7 +1,8 @@
 # ============================================================================
 # Configuration API locale avec base de donnees Render
 # ============================================================================
-# Configure l'API PHP locale pour utiliser la base PostgreSQL Render
+# Configure l'API PHP locale pour utiliser la base PostgreSQL Render (PRODUCTION)
+# ATTENTION: Une seule base de donnees est utilisee (celle de Render)
 # ============================================================================
 
 Write-Host "Configuration API locale avec base de donnees Render" -ForegroundColor Cyan
