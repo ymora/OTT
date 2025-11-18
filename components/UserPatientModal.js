@@ -847,6 +847,20 @@ export default function UserPatientModal({
                         )}
                       </div>
                     </div>
+                    
+                    {/* Avertissement si canal activé mais aucune alerte */}
+                    {((notificationPrefs.email_enabled || notificationPrefs.sms_enabled || notificationPrefs.push_enabled) && 
+                      !notificationPrefs.notify_battery_low && 
+                      !notificationPrefs.notify_device_offline && 
+                      !notificationPrefs.notify_abnormal_flow && 
+                      !(type === 'user' ? notificationPrefs.notify_new_patient : notificationPrefs.notify_alert_critical)) && (
+                      <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                          ⚠️ <strong>Important :</strong> Vous avez activé un canal de notification (Email/SMS/Push), mais aucun type d&apos;alerte n&apos;est activé. 
+                          Activez au moins un type d&apos;alerte ci-dessous pour recevoir des notifications, sinon cela ne servira à rien.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Types d'alertes */}
