@@ -52,13 +52,8 @@ function Stop-Ports {
 function Restart-Docker {
     Write-Info "Redemarrage de PostgreSQL Docker..."
     if (Get-Command docker -ErrorAction SilentlyContinue) {
-        $container = docker ps -a --filter "name=ott-db" --format "{{.Names}}" 2>&1
-        if ($container -match "ott-db") {
-            docker restart ott-db 2>&1 | Out-Null
-            Write-Success "  Conteneur ott-db redemarre"
-        } else {
-            Write-Warning "  Conteneur ott-db non trouve (ignorer si non utilise)"
-        }
+        # Base de données locale Docker supprimée - utilisation de la base Render uniquement
+        Write-Info "  Base de données: Render PostgreSQL (production)"
     } else {
         Write-Warning "  Docker non installe (ignorer si non utilise)"
     }

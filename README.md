@@ -246,7 +246,7 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 
 2. **Secrets backend obligatoires**  
    - `JWT_SECRET` doit être régénéré par projet (`openssl rand -hex 32`).  
-   - `DB_HOST/NAME/USER/PASS` = secrets Render Postgres (ou Docker Compose).  
+   - `DB_HOST/NAME/USER/PASS` = secrets Render Postgres.  
    - `AUTH_DISABLED=false` en production (sinon accès libre).
 
 3. **Comptes de démonstration**  

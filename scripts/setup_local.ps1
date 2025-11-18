@@ -44,48 +44,16 @@ Write-Host ""
 if ($useLocalAPI -eq "O" -or $useLocalAPI -eq "o") {
     Write-Host "📝 Configuration Backend (API PHP locale)..." -ForegroundColor Cyan
     
-    $useDockerDB = Read-Host "Utiliser PostgreSQL Docker local ? [O/n] (défaut: O)"
-    if ($useDockerDB -eq "" -or $useDockerDB -eq "O" -or $useDockerDB -eq "o") {
-        Write-Host "  → Configuration pour PostgreSQL Docker (localhost:5432)" -ForegroundColor Green
-        
-        $dbConfig = @"
-# Configuration Backend OTT - Développement Local
-# Pour utiliser avec Docker PostgreSQL
-DB_TYPE=pgsql
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=ott_data
-DB_USER=postgres
-DB_PASS=postgres
-
-# Ou utiliser DATABASE_URL (prioritaire si défini)
-# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ott_data
-
-# JWT (générer avec: openssl rand -hex 32)
-JWT_SECRET=dev_secret_key_changez_en_production
-
-# Auth (désactivé pour développement)
-AUTH_DISABLED=true
-
-# CORS
-CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
-
-# Debug
-DEBUG_ERRORS=true
-"@
-        
-        $dbConfig | Out-File -FilePath ".env.php" -Encoding UTF8 -Force
-        Write-Host "  ✓ Fichier .env.php créé pour l'API PHP" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "  💡 Pour utiliser l'API PHP localement:" -ForegroundColor Yellow
-        Write-Host "     - Installez PHP 8.2+ avec extension pgsql" -ForegroundColor Gray
-        Write-Host "     - Lancez: php -S localhost:8080 -t . api.php" -ForegroundColor Gray
-        Write-Host "     - Ou utilisez un serveur web (Apache/Nginx)" -ForegroundColor Gray
-    } else {
-        Write-Host "  → Configuration pour PostgreSQL Render" -ForegroundColor Green
-        Write-Host "  ⚠️  Vous devrez définir les variables d'environnement manuellement" -ForegroundColor Yellow
-        Write-Host "     DB_HOST, DB_NAME, DB_USER, DB_PASS depuis Render" -ForegroundColor Gray
-    }
+    Write-Host "  → Configuration pour PostgreSQL Render (PRODUCTION)" -ForegroundColor Green
+    Write-Host "  ⚠️  Une seule base de données est utilisée (celle de Render)" -ForegroundColor Yellow
+    Write-Host "     Vous devrez définir les variables d'environnement manuellement:" -ForegroundColor Yellow
+    Write-Host "     DB_HOST, DB_NAME, DB_USER, DB_PASS depuis Render" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  💡 Pour utiliser l'API PHP localement:" -ForegroundColor Yellow
+    Write-Host "     - Installez PHP 8.2+ avec extension pgsql" -ForegroundColor Gray
+    Write-Host "     - Créez .env.php avec les credentials Render" -ForegroundColor Gray
+    Write-Host "     - Lancez: php -S localhost:8080 -t . api.php" -ForegroundColor Gray
+    Write-Host "     - Ou utilisez un serveur web (Apache/Nginx)" -ForegroundColor Gray
 }
 
 Write-Host ""
