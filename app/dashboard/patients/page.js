@@ -4,42 +4,30 @@ import { useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
 import { useApiData, useFilter } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
+import UserPatientModal from '@/components/UserPatientModal'
+import { isTrue } from '@/lib/utils'
 
 // Lazy load Chart pour accélérer Fast Refresh
 const Chart = dynamic(() => import('@/components/Chart'), { ssr: false })
 
 export default function PatientsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
-  const router = useRouter()
   const [success, setSuccess] = useState(null)
-  const [actionError, setActionError] = useState(null) // Erreurs d'actions (création, modification, etc.)
+  const [actionError, setActionError] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const emptyForm = useMemo(() => ({
-    first_name: '',
-    last_name: '',
-    birth_date: '',
-    phone: '',
-    email: '',
-    city: '',
-    postal_code: ''
-  }), [])
-  const [formData, setFormData] = useState(emptyForm)
-  const [formErrors, setFormErrors] = useState({})
-  const [selectedPatient, setSelectedPatient] = useState(null)
   const [editingPatient, setEditingPatient] = useState(null)
   const [deletingPatient, setDeletingPatient] = useState(null)
+  const [selectedPatient, setSelectedPatient] = useState(null)
   const [patientDetails, setPatientDetails] = useState(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [patientNotifPrefs, setPatientNotifPrefs] = useState({
     email_enabled: true,
-    sms_enabled: true, // Activé par défaut
+    sms_enabled: true,
     push_enabled: false,
     notify_battery_low: true,
     notify_device_offline: true,
@@ -148,109 +136,24 @@ export default function PatientsPage() {
     }
   }
 
-  const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    // Effacer l'erreur du champ quand l'utilisateur modifie
-    if (formErrors[field]) {
-      setFormErrors(prev => {
-        const next = { ...prev }
-        delete next[field]
-        return next
-      })
-    }
+  const openCreateModal = () => {
+    setEditingPatient(null)
+    setShowForm(true)
   }
 
-  const validateForm = () => {
-    const errors = {}
-    
-    // Prénom obligatoire
-    if (!formData.first_name || formData.first_name.trim().length === 0) {
-      errors.first_name = 'Le prénom est obligatoire'
-    } else if (formData.first_name.trim().length < 2) {
-      errors.first_name = 'Le prénom doit contenir au moins 2 caractères'
-    }
-    
-    // Nom obligatoire
-    if (!formData.last_name || formData.last_name.trim().length === 0) {
-      errors.last_name = 'Le nom est obligatoire'
-    } else if (formData.last_name.trim().length < 2) {
-      errors.last_name = 'Le nom doit contenir au moins 2 caractères'
-    }
-    
-    // Email (optionnel mais doit être valide si renseigné)
-    if (formData.email && formData.email.trim().length > 0) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(formData.email.trim())) {
-        errors.email = 'Format d\'email invalide (ex: nom@example.com)'
-      }
-    }
-    
-    // Téléphone (optionnel mais doit être valide si renseigné)
-    if (formData.phone && formData.phone.trim().length > 0) {
-      const phoneRegex = /^(\+33|0)[1-9](\d{2}){4}$/
-      const cleanedPhone = formData.phone.replace(/\s/g, '')
-      if (!phoneRegex.test(cleanedPhone)) {
-        errors.phone = 'Format de téléphone invalide (ex: +33612345678 ou 0612345678)'
-      }
-    }
-    
-    // Code postal (optionnel mais doit être valide si renseigné)
-    if (formData.postal_code && formData.postal_code.trim().length > 0) {
-      const postalRegex = /^\d{5}$/
-      if (!postalRegex.test(formData.postal_code.trim())) {
-        errors.postal_code = 'Le code postal doit contenir 5 chiffres'
-      }
-    }
-    
-    // Date de naissance (optionnel mais doit être valide si renseigné)
-    if (formData.birth_date && formData.birth_date.trim().length > 0) {
-      const birthDate = new Date(formData.birth_date)
-      const today = new Date()
-      if (isNaN(birthDate.getTime())) {
-        errors.birth_date = 'Date de naissance invalide'
-      } else if (birthDate > today) {
-        errors.birth_date = 'La date de naissance ne peut pas être dans le futur'
-      } else {
-        const age = today.getFullYear() - birthDate.getFullYear()
-        if (age > 150) {
-          errors.birth_date = 'Date de naissance invalide (âge > 150 ans)'
-        }
-      }
-    }
-    
-    setFormErrors(errors)
-    return Object.keys(errors).length === 0
+  const handleEdit = (patient) => {
+    setEditingPatient(patient)
+    setShowForm(true)
   }
 
-  const handleCreatePatient = async () => {
-    setActionError(null)
-    setFormErrors({})
-    
-    if (!validateForm()) {
-      setActionError('Veuillez corriger les erreurs dans le formulaire')
-      return
-    }
-    
-    try {
-      setSaving(true)
-      setActionError(null)
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        '/api.php/patients',
-        { method: 'POST', body: JSON.stringify(formData) },
-        { requiresAuth: true }
-      )
-      setShowForm(false)
-      setFormData(emptyForm)
-      setFormErrors({})
-      setSuccess('Patient créé avec succès')
-      refetch()
-    } catch (err) {
-      setActionError(err.message)
-    } finally {
-      setSaving(false)
-    }
+  const closeForm = () => {
+    setShowForm(false)
+    setEditingPatient(null)
+  }
+
+  const handleModalSave = async () => {
+    setSuccess(editingPatient ? 'Patient modifié avec succès' : 'Patient créé avec succès')
+    await refetch()
   }
 
   const savePatientNotifications = async () => {
@@ -272,54 +175,6 @@ export default function PatientsPage() {
     }
   }
 
-  const handleEdit = (patient) => {
-    setEditingPatient(patient)
-    setFormData({
-      first_name: patient.first_name || '',
-      last_name: patient.last_name || '',
-      birth_date: patient.birth_date ? patient.birth_date.split('T')[0] : '',
-      phone: patient.phone || '',
-      email: patient.email || '',
-      city: patient.city || '',
-      postal_code: patient.postal_code || ''
-    })
-    setFormErrors({})
-    setShowForm(true)
-  }
-
-  const handleUpdatePatient = async () => {
-    if (!editingPatient) return
-    
-    setActionError(null)
-    setFormErrors({})
-    
-    if (!validateForm()) {
-      setActionError('Veuillez corriger les erreurs dans le formulaire')
-      return
-    }
-    
-    try {
-      setSaving(true)
-      setActionError(null)
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/patients/${editingPatient.id}`,
-        { method: 'PUT', body: JSON.stringify(formData) },
-        { requiresAuth: true }
-      )
-      setShowForm(false)
-      setEditingPatient(null)
-      setFormData(emptyForm)
-      setFormErrors({})
-      setSuccess('Patient modifié avec succès')
-      refetch()
-    } catch (err) {
-      setActionError(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleDelete = async (patient) => {
     if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer le patient "${patient.first_name} ${patient.last_name}" ?\n\nCette action est irréversible.`)) {
@@ -433,12 +288,9 @@ export default function PatientsPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button className="btn-primary" onClick={() => {
-          setEditingPatient(null)
-          setFormData(emptyForm)
-          setFormErrors({})
-          setShowForm(true)
-        }}>➕ Nouveau Patient</button>
+        <button className="btn-primary" onClick={openCreateModal}>
+          ➕ Nouveau Patient
+        </button>
       </div>
 
       <div className="card">
@@ -456,14 +308,18 @@ export default function PatientsPage() {
                   <th className="text-left py-3 px-4">Date Naissance</th>
                   <th className="text-left py-3 px-4">Téléphone</th>
                   <th className="text-left py-3 px-4">Email</th>
+                  <th className="text-left py-3 px-4">Ville</th>
+                  <th className="text-left py-3 px-4">Code Postal</th>
                   <th className="text-left py-3 px-4">Dispositif</th>
+                  <th className="text-left py-3 px-4">Notifications</th>
+                  <th className="text-left py-3 px-4">Types d'alertes</th>
                   <th className="text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredPatients.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-muted">
+                    <td colSpan="10" className="py-8 text-center text-muted">
                       {searchTerm ? 'Aucun patient ne correspond à la recherche' : 'Aucun patient'}
                     </td>
                   </tr>
@@ -474,6 +330,8 @@ export default function PatientsPage() {
                       <td className="table-cell">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
                       <td className="table-cell text-sm">{p.phone || '-'}</td>
                       <td className="table-cell">{p.email || '-'}</td>
+                      <td className="table-cell text-sm">{p.city || '-'}</td>
+                      <td className="table-cell text-sm">{p.postal_code || '-'}</td>
                       <td className="py-3 px-4">
                         {p.device_name ? (
                           <div className="space-y-1">
@@ -483,6 +341,47 @@ export default function PatientsPage() {
                         ) : (
                           <span className="text-sm text-amber-600">Non assigné</span>
                         )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          {isTrue(p.email_enabled) ? (
+                            <span className="text-lg" title="Email activé">✉️</span>
+                          ) : (
+                            <span className="text-lg opacity-30" title="Email désactivé">✉️</span>
+                          )}
+                          {isTrue(p.sms_enabled) ? (
+                            <span className="text-lg" title="SMS activé">📱</span>
+                          ) : (
+                            <span className="text-lg opacity-30" title="SMS désactivé">📱</span>
+                          )}
+                          {isTrue(p.push_enabled) ? (
+                            <span className="text-lg" title="Push activé">🔔</span>
+                          ) : (
+                            <span className="text-lg opacity-30" title="Push désactivé">🔔</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {isTrue(p.notify_battery_low) && (
+                            <span className="text-xs" title="Batterie faible">🔋</span>
+                          )}
+                          {isTrue(p.notify_device_offline) && (
+                            <span className="text-xs" title="Dispositif hors ligne">📴</span>
+                          )}
+                          {isTrue(p.notify_abnormal_flow) && (
+                            <span className="text-xs" title="Débit anormal">⚠️</span>
+                          )}
+                          {isTrue(p.notify_alert_critical) && (
+                            <span className="text-xs" title="Alerte critique">🚨</span>
+                          )}
+                          {!isTrue(p.notify_battery_low) && 
+                           !isTrue(p.notify_device_offline) && 
+                           !isTrue(p.notify_abnormal_flow) && 
+                           !isTrue(p.notify_alert_critical) && (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
@@ -525,121 +424,16 @@ export default function PatientsPage() {
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-2xl shadow-2xl w-full max-w-xl p-6 space-y-4 backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50 animate-scale-in">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{editingPatient ? 'Modifier le patient' : 'Nouveau patient'}</h2>
-              <button className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100" onClick={() => {
-                setShowForm(false)
-                setEditingPatient(null)
-                setFormData(emptyForm)
-                setFormErrors({})
-              }}>✖</button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Prénom *</label>
-                <input 
-                  className={`input ${formErrors.first_name ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
-                  value={formData.first_name} 
-                  onChange={e => handleChange('first_name', e.target.value)} 
-                />
-                {formErrors.first_name && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.first_name}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Nom *</label>
-                <input 
-                  className={`input ${formErrors.last_name ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
-                  value={formData.last_name} 
-                  onChange={e => handleChange('last_name', e.target.value)} 
-                />
-                {formErrors.last_name && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.last_name}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Date de naissance</label>
-                <input 
-                  type="date" 
-                  className={`input ${formErrors.birth_date ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
-                  value={formData.birth_date} 
-                  onChange={e => handleChange('birth_date', e.target.value)} 
-                />
-                {formErrors.birth_date && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.birth_date}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Téléphone</label>
-                <input 
-                  className={`input ${formErrors.phone ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
-                  value={formData.phone} 
-                  onChange={e => handleChange('phone', e.target.value)} 
-                  placeholder="+33..." 
-                />
-                {formErrors.phone && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.phone}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Email</label>
-                <input 
-                  className={`input ${formErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
-                  type="email" 
-                  value={formData.email} 
-                  onChange={e => handleChange('email', e.target.value)} 
-                />
-                {formErrors.email && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.email}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Ville</label>
-                <input 
-                  className="input" 
-                  value={formData.city} 
-                  onChange={e => handleChange('city', e.target.value)} 
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Code postal</label>
-                <input 
-                  className={`input ${formErrors.postal_code ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`} 
-                  value={formData.postal_code} 
-                  onChange={e => handleChange('postal_code', e.target.value)} 
-                />
-                {formErrors.postal_code && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.postal_code}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button 
-                className="btn-secondary" 
-                onClick={() => {
-                  setShowForm(false)
-                  setFormData(emptyForm)
-                  setFormErrors({})
-                }}
-              >
-                Annuler
-              </button>
-              <button 
-                className="btn-primary" 
-                onClick={editingPatient ? handleUpdatePatient : handleCreatePatient} 
-                disabled={saving}
-              >
-                {saving ? (editingPatient ? 'Modification...' : 'Création...') : '✅ Enregistrer'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <UserPatientModal
+        isOpen={showForm}
+        onClose={closeForm}
+        editingItem={editingPatient}
+        type="patient"
+        onSave={handleModalSave}
+        fetchWithAuth={fetchWithAuth}
+        API_URL={API_URL}
+        roles={[]}
+      />
 
       {selectedPatient && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">

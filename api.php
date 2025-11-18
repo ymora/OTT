@@ -506,13 +506,20 @@ function handleGetUsers() {
                     u.is_active, u.last_login, u.created_at,
                     r.name AS role_name,
                     r.description AS role_description,
-                    COALESCE(STRING_AGG(p.code, ','), '') AS permissions
+                    COALESCE(STRING_AGG(p.code, ','), '') AS permissions,
+                    unp.email_enabled, unp.sms_enabled, unp.push_enabled,
+                    unp.notify_battery_low, unp.notify_device_offline, 
+                    unp.notify_abnormal_flow, unp.notify_new_patient
                 FROM users u
                 JOIN roles r ON u.role_id = r.id
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN permissions p ON rp.permission_id = p.id
+                LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
                 GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
-                         u.is_active, u.last_login, u.created_at, r.name, r.description
+                         u.is_active, u.last_login, u.created_at, r.name, r.description,
+                         unp.email_enabled, unp.sms_enabled, unp.push_enabled,
+                         unp.notify_battery_low, unp.notify_device_offline, 
+                         unp.notify_abnormal_flow, unp.notify_new_patient
                 ORDER BY u.created_at DESC
                 LIMIT :limit OFFSET :offset
             ");
@@ -524,13 +531,20 @@ function handleGetUsers() {
                     u.is_active, u.last_login, u.created_at,
                     r.name AS role_name,
                     r.description AS role_description,
-                    COALESCE(STRING_AGG(p.code, ','), '') AS permissions
+                    COALESCE(STRING_AGG(p.code, ','), '') AS permissions,
+                    unp.email_enabled, unp.sms_enabled, unp.push_enabled,
+                    unp.notify_battery_low, unp.notify_device_offline, 
+                    unp.notify_abnormal_flow, unp.notify_new_patient
                 FROM users u
                 JOIN roles r ON u.role_id = r.id
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN permissions p ON rp.permission_id = p.id
+                LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
                 GROUP BY u.id, u.email, u.first_name, u.last_name, u.password_hash,
-                         u.is_active, u.last_login, u.created_at, r.name, r.description
+                         u.is_active, u.last_login, u.created_at, r.name, r.description,
+                         unp.email_enabled, unp.sms_enabled, unp.push_enabled,
+                         unp.notify_battery_low, unp.notify_device_offline, 
+                         unp.notify_abnormal_flow, unp.notify_new_patient
                 ORDER BY u.created_at DESC
                 LIMIT :limit OFFSET :offset
             ");
@@ -609,7 +623,11 @@ function handleCreateUser() {
         }
         
         $user_id = $pdo->lastInsertId();
-        $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user_id]);
+        // Créer avec valeurs par défaut (SMS activé)
+        $pdo->prepare("
+            INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
+            VALUES (:user_id, TRUE, TRUE, TRUE)
+        ")->execute(['user_id' => $user_id]);
         
         auditLog('user.created', 'user', $user_id, null, $input);
         echo json_encode(['success' => true, 'user_id' => $user_id]);
@@ -1930,15 +1948,19 @@ function handleGetPatients() {
         $countStmt = $pdo->query("SELECT COUNT(*) FROM patients");
         $total = $countStmt->fetchColumn();
         
-        // Requête optimisée avec pagination
+        // Requête optimisée avec pagination et préférences de notifications
         $stmt = $pdo->prepare("
             SELECT p.*, 
                    (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
                    (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d,
                    (SELECT id FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_id,
                    (SELECT device_name FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_name,
-                   (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid
+                   (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid,
+                   pnp.email_enabled, pnp.sms_enabled, pnp.push_enabled,
+                   pnp.notify_battery_low, pnp.notify_device_offline, 
+                   pnp.notify_abnormal_flow, pnp.notify_alert_critical
             FROM patients p
+            LEFT JOIN patient_notifications_preferences pnp ON p.id = pnp.patient_id
             ORDER BY p.last_name, p.first_name
             LIMIT :limit OFFSET :offset
         ");
@@ -2516,7 +2538,11 @@ function handleGetNotificationPreferences() {
         $prefs = $stmt->fetch();
         
         if (!$prefs) {
-            $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user['id']]);
+            // Créer avec valeurs par défaut (SMS activé)
+            $pdo->prepare("
+                INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
+                VALUES (:user_id, TRUE, TRUE, TRUE)
+            ")->execute(['user_id' => $user['id']]);
             $stmt->execute(['user_id' => $user['id']]);
             $prefs = $stmt->fetch();
         }
@@ -2535,15 +2561,22 @@ function handleUpdateNotificationPreferences() {
     $input = json_decode(file_get_contents('php://input'), true);
     
     try {
-        // Vérifier/créer les préférences
-        $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
-        $stmt->execute(['user_id' => $user['id']]);
-        if (!$stmt->fetch()) {
-            $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user['id']]);
+        $user_id = $user['id'];
+        
+        // Vérifier/créer les préférences (avec SMS activé par défaut)
+        $checkStmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
+        $checkStmt->execute(['user_id' => $user_id]);
+        if (!$checkStmt->fetch()) {
+            // Créer avec valeurs par défaut (SMS activé)
+            $insertStmt = $pdo->prepare("
+                INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
+                VALUES (:user_id, TRUE, TRUE, TRUE)
+            ");
+            $insertStmt->execute(['user_id' => $user_id]);
         }
         
         $updates = [];
-        $params = ['user_id' => $user['id']];
+        $params = ['user_id' => $user_id];
         
         $allowed = ['email_enabled', 'sms_enabled', 'push_enabled', 'phone_number',
                     'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow',
@@ -2551,14 +2584,29 @@ function handleUpdateNotificationPreferences() {
         
         foreach ($allowed as $field) {
             if (isset($input[$field])) {
-                // Pour PostgreSQL, utiliser TRUE/FALSE pour les booléens
-                if (is_bool($input[$field])) {
-                    $updates[] = "$field = " . ($input[$field] ? 'TRUE' : 'FALSE');
-                } elseif ($input[$field] === null || $input[$field] === '') {
+                $value = $input[$field];
+                
+                // Détecter les champs booléens
+                $isBooleanField = in_array($field, ['email_enabled', 'sms_enabled', 'push_enabled', 
+                    'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow', 'notify_new_patient']);
+                
+                if ($isBooleanField) {
+                    // Convertir en booléen (gérer string "true"/"false", 0/1, etc.)
+                    $boolValue = false;
+                    if (is_bool($value)) {
+                        $boolValue = $value;
+                    } elseif (is_string($value)) {
+                        $boolValue = in_array(strtolower($value), ['true', '1', 'yes', 'on']);
+                    } elseif (is_numeric($value)) {
+                        $boolValue = (int)$value !== 0;
+                    }
+                    // Pour PostgreSQL, utiliser TRUE/FALSE directement dans la requête
+                    $updates[] = "$field = " . ($boolValue ? 'TRUE' : 'FALSE');
+                } elseif ($value === null || $value === '') {
                     $updates[] = "$field = NULL";
                 } else {
                     $updates[] = "$field = :$field";
-                    $params[$field] = $input[$field];
+                    $params[$field] = $value;
                 }
             }
         }
@@ -2569,12 +2617,16 @@ function handleUpdateNotificationPreferences() {
             return;
         }
         
-        $stmt = $pdo->prepare("UPDATE user_notifications_preferences SET " . implode(', ', $updates) . " WHERE user_id = :user_id");
+        $sql = "UPDATE user_notifications_preferences SET " . implode(', ', $updates) . " WHERE user_id = :user_id";
+        $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         
         echo json_encode(['success' => true]);
     } catch(PDOException $e) {
         error_log('[handleUpdateNotificationPreferences] Database error: ' . $e->getMessage());
+        error_log('[handleUpdateNotificationPreferences] SQL: ' . ($sql ?? 'N/A'));
+        error_log('[handleUpdateNotificationPreferences] Params: ' . json_encode($params ?? []));
+        error_log('[handleUpdateNotificationPreferences] Input: ' . json_encode($input ?? []));
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         echo json_encode(['success' => false, 'error' => $errorMsg]);
@@ -2682,8 +2734,11 @@ function handleGetUserNotifications($user_id) {
         $prefs = $stmt->fetch();
         
         if (!$prefs) {
-            // Créer des préférences par défaut
-            $pdo->prepare("INSERT INTO user_notifications_preferences (user_id) VALUES (:user_id)")->execute(['user_id' => $user_id]);
+            // Créer avec valeurs par défaut (SMS activé)
+            $pdo->prepare("
+                INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
+                VALUES (:user_id, TRUE, TRUE, TRUE)
+            ")->execute(['user_id' => $user_id]);
             $stmt->execute(['user_id' => $user_id]);
             $prefs = $stmt->fetch();
         }
@@ -2715,7 +2770,11 @@ function handleUpdateUserNotifications($user_id) {
         $checkStmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
         $checkStmt->execute(['user_id' => $user_id]);
         if (!$checkStmt->fetch()) {
-            $insertStmt = $pdo->prepare("INSERT INTO user_notifications_preferences (user_id, sms_enabled) VALUES (:user_id, TRUE)");
+            // Créer avec valeurs par défaut (SMS activé)
+            $insertStmt = $pdo->prepare("
+                INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
+                VALUES (:user_id, TRUE, TRUE, TRUE)
+            ");
             $insertStmt->execute(['user_id' => $user_id]);
         }
         
