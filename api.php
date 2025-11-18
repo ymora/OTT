@@ -3363,7 +3363,7 @@ function handleUpdatePatientNotifications($patient_id) {
         $updates = [];
         $params = ['patient_id' => $patient_id];
         
-        $allowed = ['email_enabled', 'sms_enabled', 'push_enabled',
+        $allowed = ['email_enabled', 'sms_enabled', 'push_enabled', 'phone_number',
                     'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow',
                     'notify_alert_critical', 'quiet_hours_start', 'quiet_hours_end'];
         
@@ -3416,6 +3416,7 @@ function handleUpdatePatientNotifications($patient_id) {
         error_log('[handleUpdatePatientNotifications] Database error: ' . $e->getMessage());
         error_log('[handleUpdatePatientNotifications] SQL: ' . ($sql ?? 'N/A'));
         error_log('[handleUpdatePatientNotifications] Params: ' . json_encode($params ?? []));
+        error_log('[handleUpdatePatientNotifications] Input: ' . json_encode($input ?? []));
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         echo json_encode(['success' => false, 'error' => $errorMsg]);
