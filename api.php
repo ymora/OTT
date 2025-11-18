@@ -2951,24 +2951,92 @@ function handleGetUserNotifications($user_id) {
     requirePermission('users.view');
     
     try {
+        // Vérifier si la table user_notifications_preferences existe
+        $hasNotificationsTable = false;
+        try {
+            $checkStmt = $pdo->query("
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                    AND table_name = 'user_notifications_preferences'
+                )
+            ");
+            $result = $checkStmt->fetchColumn();
+            $hasNotificationsTable = ($result === true || $result === 't' || $result === 1 || $result === '1');
+        } catch(PDOException $e) {
+            $hasNotificationsTable = false;
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[handleGetUserNotifications] Table check failed: ' . $e->getMessage());
+            }
+        }
+        
+        if (!$hasNotificationsTable) {
+            // Table n'existe pas encore, retourner des valeurs par défaut
+            $defaultPrefs = [
+                'user_id' => $user_id,
+                'email_enabled' => false,
+                'sms_enabled' => false,
+                'push_enabled' => false,
+                'phone_number' => null,
+                'notify_battery_low' => false,
+                'notify_device_offline' => false,
+                'notify_abnormal_flow' => false,
+                'notify_new_patient' => false,
+                'quiet_hours_start' => null,
+                'quiet_hours_end' => null,
+                'created_at' => null,
+                'updated_at' => null
+            ];
+            echo json_encode(['success' => true, 'preferences' => $defaultPrefs]);
+            return;
+        }
+        
         $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
         $stmt->execute(['user_id' => $user_id]);
         $prefs = $stmt->fetch();
         
         if (!$prefs) {
-            // Créer avec valeurs par défaut (toutes désactivées)
-            $pdo->prepare("
-                INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
-                VALUES (:user_id, TRUE, TRUE, TRUE)
-            ")->execute(['user_id' => $user_id]);
-            $stmt->execute(['user_id' => $user_id]);
-            $prefs = $stmt->fetch();
+            // Créer des préférences par défaut avec valeurs explicites du schéma
+            try {
+                $pdo->prepare("
+                    INSERT INTO user_notifications_preferences 
+                    (user_id, email_enabled, sms_enabled, push_enabled, 
+                     notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_new_patient) 
+                    VALUES (:user_id, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
+                ")->execute(['user_id' => $user_id]);
+                $stmt->execute(['user_id' => $user_id]);
+                $prefs = $stmt->fetch();
+            } catch(PDOException $e) {
+                // Si l'insertion échoue (par exemple user n'existe pas), retourner des valeurs par défaut
+                if (getenv('DEBUG_ERRORS') === 'true') {
+                    error_log('[handleGetUserNotifications] Insert failed: ' . $e->getMessage());
+                }
+                $defaultPrefs = [
+                    'user_id' => $user_id,
+                    'email_enabled' => false,
+                    'sms_enabled' => false,
+                    'push_enabled' => false,
+                    'phone_number' => null,
+                    'notify_battery_low' => false,
+                    'notify_device_offline' => false,
+                    'notify_abnormal_flow' => false,
+                    'notify_new_patient' => false,
+                    'quiet_hours_start' => null,
+                    'quiet_hours_end' => null,
+                    'created_at' => null,
+                    'updated_at' => null
+                ];
+                echo json_encode(['success' => true, 'preferences' => $defaultPrefs]);
+                return;
+            }
         }
         
         echo json_encode(['success' => true, 'preferences' => $prefs]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleGetUserNotifications] Database error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
