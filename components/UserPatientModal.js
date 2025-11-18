@@ -134,9 +134,18 @@ export default function UserPatientModal({
       )
       
       if (data.preferences) {
-        // S'assurer que toutes les valeurs sont des booléens
+        // Convertir les booléens correctement, garder les strings (phone_number) et autres types
         const loadedPrefs = Object.fromEntries(
-          Object.entries(data.preferences).map(([key, value]) => [key, Boolean(value)])
+          Object.entries(data.preferences).map(([key, value]) => {
+            // Champs booléens
+            if (['email_enabled', 'sms_enabled', 'push_enabled', 
+                 'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow',
+                 'notify_new_patient', 'notify_alert_critical'].includes(key)) {
+              return [key, Boolean(value)]
+            }
+            // Autres champs (phone_number, quiet_hours_start, quiet_hours_end, etc.) - garder tel quel
+            return [key, value]
+          })
         )
         setNotificationPrefs(loadedPrefs)
       }
