@@ -821,15 +821,28 @@ function handleUpdateUser($user_id) {
         $stmt->execute($params);
         
         // Récupérer l'utilisateur mis à jour pour le retourner
-        $updatedStmt = $pdo->prepare("
-            SELECT 
-                u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
-                u.is_active, u.last_login, u.created_at,
-                r.name AS role_name
-            FROM users u
-            JOIN roles r ON u.role_id = r.id
-            WHERE u.id = :id
-        ");
+        // Construire la requête selon l'existence de la colonne phone
+        if ($hasPhoneColumn) {
+            $updatedStmt = $pdo->prepare("
+                SELECT 
+                    u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
+                    u.is_active, u.last_login, u.created_at,
+                    r.name AS role_name
+                FROM users u
+                JOIN roles r ON u.role_id = r.id
+                WHERE u.id = :id
+            ");
+        } else {
+            $updatedStmt = $pdo->prepare("
+                SELECT 
+                    u.id, u.email, u.first_name, u.last_name, NULL AS phone, u.password_hash,
+                    u.is_active, u.last_login, u.created_at,
+                    r.name AS role_name
+                FROM users u
+                JOIN roles r ON u.role_id = r.id
+                WHERE u.id = :id
+            ");
+        }
         $updatedStmt->execute(['id' => $user_id]);
         $updated_user = $updatedStmt->fetch();
         
@@ -3458,12 +3471,30 @@ function triggerAlertNotifications($pdo, $device_id, $alert_type, $severity, $me
         
         // Notifications pour les utilisateurs (médecins, techniciens, admins)
         // Récupérer tous les utilisateurs actifs avec leurs préférences
-        $usersStmt = $pdo->prepare("
-            SELECT u.id, u.email, u.phone, unp.*
-            FROM users u
-            LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
-            WHERE u.is_active = TRUE
-        ");
+        // Vérifier si la colonne phone existe
+        $hasPhoneColumn = false;
+        try {
+            $testStmt = $pdo->query("SELECT phone FROM users LIMIT 1");
+            $hasPhoneColumn = true;
+        } catch(PDOException $e) {
+            $hasPhoneColumn = false;
+        }
+        
+        if ($hasPhoneColumn) {
+            $usersStmt = $pdo->prepare("
+                SELECT u.id, u.email, u.phone, unp.*
+                FROM users u
+                LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
+                WHERE u.is_active = TRUE
+            ");
+        } else {
+            $usersStmt = $pdo->prepare("
+                SELECT u.id, u.email, NULL AS phone, unp.*
+                FROM users u
+                LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
+                WHERE u.is_active = TRUE
+            ");
+        }
         $usersStmt->execute();
         $users = $usersStmt->fetchAll();
         
