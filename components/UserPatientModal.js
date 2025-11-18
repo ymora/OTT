@@ -347,9 +347,11 @@ export default function UserPatientModal({
             notify_abnormal_flow: Boolean(notificationPrefs.notify_abnormal_flow ?? false)
           }
           
-          // Ajouter phone_number seulement s'il n'est pas vide
-          const phoneNumber = formData.phone?.trim() || notificationPrefs.phone_number?.trim()
-          if (phoneNumber) {
+          // Ajouter phone_number seulement s'il n'est pas vide (unifié - gérer null/undefined)
+          const phoneFromForm = formData.phone && typeof formData.phone === 'string' ? formData.phone.trim() : null
+          const phoneFromPrefs = notificationPrefs.phone_number && typeof notificationPrefs.phone_number === 'string' ? notificationPrefs.phone_number.trim() : null
+          const phoneNumber = phoneFromForm || phoneFromPrefs
+          if (phoneNumber && phoneNumber.length > 0) {
             prefsToSave.phone_number = phoneNumber
           }
           
@@ -422,9 +424,11 @@ export default function UserPatientModal({
               notify_abnormal_flow: Boolean(notificationPrefs.notify_abnormal_flow ?? false)
             }
             
-            // Ajouter phone_number seulement s'il n'est pas vide
-            const phoneNumber = formData.phone?.trim() || notificationPrefs.phone_number?.trim()
-            if (phoneNumber) {
+            // Ajouter phone_number seulement s'il n'est pas vide (unifié - gérer null/undefined)
+            const phoneFromForm = formData.phone && typeof formData.phone === 'string' ? formData.phone.trim() : null
+            const phoneFromPrefs = notificationPrefs.phone_number && typeof notificationPrefs.phone_number === 'string' ? notificationPrefs.phone_number.trim() : null
+            const phoneNumber = phoneFromForm || phoneFromPrefs
+            if (phoneNumber && phoneNumber.length > 0) {
               prefsToSave.phone_number = phoneNumber
             }
             
