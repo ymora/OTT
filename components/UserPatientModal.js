@@ -700,7 +700,13 @@ export default function UserPatientModal({
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Canaux activés</label>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className={`flex items-center gap-2 p-2 rounded ${isValidEmail(formData.email) ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
+                        <label className={`flex items-center gap-2 p-2 rounded transition-colors ${
+                          notificationPrefs.email_enabled && isValidEmail(formData.email)
+                            ? 'bg-blue-100 border-2 border-blue-500 text-blue-900 font-semibold'
+                            : isValidEmail(formData.email)
+                            ? 'bg-gray-50 border border-gray-200'
+                            : 'bg-gray-100 opacity-50 border border-gray-200'
+                        }`}>
                           <input
                             type="checkbox"
                             checked={notificationPrefs.email_enabled}
@@ -745,7 +751,13 @@ export default function UserPatientModal({
                         )}
                       </div>
                       <div>
-                        <label className={`flex items-center gap-2 p-2 rounded ${formData.phone && isValidPhone(formData.phone) ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
+                        <label className={`flex items-center gap-2 p-2 rounded transition-colors ${
+                          notificationPrefs.sms_enabled && formData.phone && isValidPhone(formData.phone)
+                            ? 'bg-blue-100 border-2 border-blue-500 text-blue-900 font-semibold'
+                            : formData.phone && isValidPhone(formData.phone)
+                            ? 'bg-gray-50 border border-gray-200'
+                            : 'bg-gray-100 opacity-50 border border-gray-200'
+                        }`}>
                           <input
                             type="checkbox"
                             checked={Boolean(notificationPrefs.sms_enabled)}
@@ -790,7 +802,11 @@ export default function UserPatientModal({
                         )}
                       </div>
                       <div>
-                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                        <label className={`flex items-center gap-2 p-2 rounded transition-colors ${
+                          notificationPrefs.push_enabled
+                            ? 'bg-blue-100 border-2 border-blue-500 text-blue-900 font-semibold'
+                            : 'bg-gray-50 border border-gray-200'
+                        }`}>
                           <input
                             type="checkbox"
                             checked={notificationPrefs.push_enabled}

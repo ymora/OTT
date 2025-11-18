@@ -109,16 +109,21 @@ export default function NotificationsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {['email_enabled','sms_enabled','push_enabled'].map(field => (
-              <label key={field} className="flex items-center gap-3">
+              <label key={field} className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                preferences[field]
+                  ? 'bg-blue-100 border-2 border-blue-500 text-blue-900 font-semibold'
+                  : 'bg-gray-50 border border-gray-200 text-gray-700'
+              }`}>
                 <input
                   type="checkbox"
                   checked={!!preferences[field]}
                   onChange={() => handleToggle(field)}
+                  className="w-4 h-4"
                 />
-                <span className="text-sm font-medium text-gray-700">
-                  {field === 'email_enabled' && 'Email'}
-                  {field === 'sms_enabled' && 'SMS'}
-                  {field === 'push_enabled' && 'Push (PWA)'}
+                <span className="text-sm font-medium">
+                  {field === 'email_enabled' && '✉️ Email'}
+                  {field === 'sms_enabled' && '📱 SMS'}
+                  {field === 'push_enabled' && '🔔 Push (PWA)'}
                 </span>
               </label>
             ))}

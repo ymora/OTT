@@ -202,9 +202,9 @@ export default function UsersPage() {
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           {isTrue(user.email_enabled) ? (
-                            <span className="text-lg" title="Email activé">✉️</span>
+                            <span className="text-lg font-bold text-gray-900" title="Email activé">✉️</span>
                           ) : (
-                            <span className="text-lg opacity-40 grayscale" title="Email désactivé">✉️</span>
+                            <span className="text-lg opacity-30 grayscale" title="Email désactivé">✉️</span>
                           )}
                           {isTrue(user.sms_enabled) ? (
                             <span className="text-lg" title="SMS activé">📱</span>

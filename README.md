@@ -115,17 +115,16 @@ git push origin main
 
 | Variable | Description | Valeur recommandée |
 |----------|-------------|--------------------|
-| `NEXT_PUBLIC_API_URL` | URL publique de l’API PHP | `https://ott-jbln.onrender.com` |
-| ~~`NEXT_PUBLIC_REQUIRE_AUTH`~~ | ~~Forcer la page de connexion~~ | **Déprécié** - L'authentification est maintenant toujours requise |
-| `NEXT_STATIC_EXPORT` | Activé automatiquement par `npm run export` | *(géré par le script)* |
+| `NEXT_PUBLIC_API_URL` | URL de l'API (Render) | `https://ott-jbln.onrender.com` |
+| `NEXT_PUBLIC_ENABLE_DEMO_RESET` | Activer le bouton "Réinitialiser démo" dans l'admin | `false` (ou `true` pour tests) |
 
+**Fichier `.env.local` minimal :**
 ```bash
-cat > .env.local <<'EOF'
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
-# NEXT_PUBLIC_REQUIRE_AUTH n'est plus utilisé - l'auth est toujours requise
 NEXT_PUBLIC_ENABLE_DEMO_RESET=false
-EOF
 ```
+
+**Note :** `NEXT_PUBLIC_REQUIRE_AUTH` n'existe plus - l'authentification est toujours requise.
 
 ### Backend – variables Render (Docker service)
 
@@ -145,39 +144,42 @@ EOF
 
 ---
 
-## 🗄️ Base PostgreSQL (migration unique)
+## 🗄️ Base PostgreSQL
 
-1. Récupérer l’URL Render (`postgresql://.../ott_data`).
-2. Appliquer la structure **et** les données anonymisées en une seule commande :
-   ```bash
-   psql $DATABASE_URL -f sql/schema.sql
-   ```
-   > Le fichier `sql/schema.sql` contient désormais l’intégralité du schéma, des triggers et des seeds (rôles, permissions, comptes démo, patients, dispositifs, firmwares…).
-3. Vérifier :
-   ```bash
-   psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"
-   psql $DATABASE_URL -c "SELECT * FROM users_with_roles;"
-   ```
+### ✅ Configuration Simple : Utiliser Render pour Tout
 
-### Base PostgreSQL locale (Docker Compose)
+**Vous n'avez PAS besoin de Docker !** Utilisez Render pour tout (développement ET production).
 
-#### Pour une base **NOUVELLE** (première installation)
+#### 1. Appliquer la migration sur Render (une seule fois)
 
-1. Lancer l'instance : `docker compose up -d db`
-2. Initialiser complètement : `./scripts/docker_init_db.sh` (ou `.ps1` sur Windows)
-   - Applique `schema.sql` + `migration_optimisations.sql`
-   - Crée les tables, index, triggers, fonctions
-   - Demande confirmation si la base contient déjà des données
-3. Démarrer l'API : `docker compose up -d api`
+**Sur Windows PowerShell :**
+```powershell
+# Récupérer DATABASE_URL depuis Render Dashboard
+# Render > PostgreSQL > Connect > Internal Database URL
 
-#### Pour une base **EXISTANTE** (mise à jour uniquement)
+.\scripts\migrate_render.ps1 -DATABASE_URL "postgresql://..."
+```
 
-1. Vérifier que Docker est démarré : `docker compose ps`
-2. Appliquer la migration d'optimisations : `./scripts/docker_migrate.sh` (ou `.ps1` sur Windows)
-   - Vérifie que la base existe
-   - Applique uniquement `migration_optimisations.sql` (idempotent)
-   - Ne modifie pas les données existantes
-3. Vérifier : `docker compose exec db psql -U postgres -d ott_data -c "\dt"`
+**Sur Linux/Mac :**
+```bash
+DATABASE_URL="postgresql://..." ./scripts/db_migrate.sh
+```
+
+#### 2. Configurer le frontend (`.env.local`)
+
+```bash
+NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
+```
+
+**C'est tout !** Le frontend local utilisera l'API Render qui utilise la base Render.
+
+### Base Docker (Optionnel - Seulement si pas d'internet)
+
+**Docker n'est PAS nécessaire** si vous avez internet. Utilisez-le seulement si :
+- Vous développez sans connexion internet
+- Vous voulez tester des modifications sans affecter Render
+
+Si vous utilisez Docker, vous aurez 2 bases séparées (Docker local ≠ Render production).
 
 #### Commandes utiles
 

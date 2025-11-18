@@ -666,6 +666,24 @@ function handleCreateUser() {
         return;
     }
     
+    // Vérifier si l'email existe déjà (avant de créer)
+    try {
+        $checkStmt = $pdo->prepare("SELECT id FROM users WHERE email = :email AND deleted_at IS NULL");
+        $checkStmt->execute(['email' => trim($input['email'])]);
+        $existingUser = $checkStmt->fetch();
+        if ($existingUser) {
+            http_response_code(409);
+            echo json_encode([
+                'success' => false, 
+                'error' => 'Cet email est déjà utilisé par un autre utilisateur'
+            ]);
+            return;
+        }
+    } catch(PDOException $e) {
+        // Si la vérification échoue, continuer quand même (la contrainte unique le détectera)
+        error_log('[handleCreateUser] Email check failed: ' . $e->getMessage());
+    }
+    
     try {
         // Vérifier si la colonne phone existe
         $hasPhoneColumn = false;
@@ -754,10 +772,19 @@ function handleCreateUser() {
         echo json_encode(['success' => true, 'user_id' => $user_id]);
         
     } catch(PDOException $e) {
-        http_response_code($e->getCode() == 23000 ? 409 : 500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : ($e->getCode() == 23000 ? 'Email exists' : 'Database error');
-        error_log('[handleCreateUser] Database error: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        // Gérer les erreurs de contrainte unique (fallback si la vérification préalable a échoué)
+        if ($e->getCode() == 23000 || strpos($e->getMessage(), '23505') !== false || strpos($e->getMessage(), 'duplicate key') !== false) {
+            http_response_code(409);
+            echo json_encode([
+                'success' => false, 
+                'error' => 'Cet email est déjà utilisé par un autre utilisateur'
+            ]);
+        } else {
+            http_response_code(500);
+            $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur lors de la création de l\'utilisateur';
+            error_log('[handleCreateUser] Database error: ' . $e->getMessage());
+            echo json_encode(['success' => false, 'error' => $errorMsg]);
+        }
     }
 }
 
@@ -3330,26 +3357,43 @@ function handleUpdatePatientNotifications($patient_id) {
             return;
         }
         
-        // Vérifier/créer les préférences avec toutes les valeurs par défaut (unifié)
+        // Vérifier si la table existe (unifié avec handleUpdateUserNotifications)
+        $hasNotificationsTable = false;
         try {
-            $stmt = $pdo->prepare("SELECT * FROM patient_notifications_preferences WHERE patient_id = :patient_id");
-            $stmt->execute(['patient_id' => $patient_id]);
-            if (!$stmt->fetch()) {
-                // Créer avec valeurs par défaut (toutes désactivées, unifié avec handleCreatePatient)
-                $pdo->prepare("
-                    INSERT INTO patient_notifications_preferences 
-                    (patient_id, email_enabled, sms_enabled, push_enabled, 
-                     notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_alert_critical) 
-                    VALUES (:patient_id, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
-                ")->execute(['patient_id' => $patient_id]);
-            }
+            $checkStmt = $pdo->query("
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                    AND table_name = 'patient_notifications_preferences'
+                )
+            ");
+            $result = $checkStmt->fetchColumn();
+            $hasNotificationsTable = ($result === true || $result === 't' || $result === 1 || $result === '1');
         } catch(PDOException $e) {
-            // Si la table n'existe pas, retourner une erreur claire
+            $hasNotificationsTable = false;
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[handleUpdatePatientNotifications] Table check failed: ' . $e->getMessage());
+            }
+        }
+        
+        if (!$hasNotificationsTable) {
             http_response_code(503);
-            $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Notifications table not available';
-            error_log('[handleUpdatePatientNotifications] Database error: ' . $e->getMessage());
-            echo json_encode(['success' => false, 'error' => $errorMsg]);
+            echo json_encode(['success' => false, 'error' => 'Notifications table not available']);
             return;
+        }
+        
+        // Vérifier/créer les préférences avec toutes les valeurs par défaut (unifié)
+        $checkStmt = $pdo->prepare("SELECT * FROM patient_notifications_preferences WHERE patient_id = :patient_id");
+        $checkStmt->execute(['patient_id' => $patient_id]);
+        if (!$checkStmt->fetch()) {
+            // Créer avec valeurs par défaut (toutes désactivées, unifié avec handleCreatePatient)
+            $insertStmt = $pdo->prepare("
+                INSERT INTO patient_notifications_preferences 
+                (patient_id, email_enabled, sms_enabled, push_enabled, 
+                 notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_alert_critical) 
+                VALUES (:patient_id, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
+            ");
+            $insertStmt->execute(['patient_id' => $patient_id]);
         }
         
         $updates = [];
