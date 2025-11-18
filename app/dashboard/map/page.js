@@ -25,7 +25,7 @@ export default function MapPage() {
   useEffect(() => {
     if (!selectedDevice && devices.length > 0) {
       setSelectedDevice(devices[0])
-    }
+        }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devices.length])
 

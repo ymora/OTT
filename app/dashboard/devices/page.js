@@ -71,6 +71,16 @@ export default function DevicesPage() {
   const [showFlashUSBModal, setShowFlashUSBModal] = useState(false)
   const [deviceForFlash, setDeviceForFlash] = useState(null)
   
+  // Modal Upload Firmware
+  const [showUploadFirmwareModal, setShowUploadFirmwareModal] = useState(false)
+  const [firmwareFile, setFirmwareFile] = useState(null)
+  const [firmwareVersion, setFirmwareVersion] = useState('')
+  const [firmwareReleaseNotes, setFirmwareReleaseNotes] = useState('')
+  const [firmwareIsStable, setFirmwareIsStable] = useState(false)
+  const [uploadingFirmware, setUploadingFirmware] = useState(false)
+  const [firmwareUploadError, setFirmwareUploadError] = useState(null)
+  const [firmwareUploadSuccess, setFirmwareUploadSuccess] = useState(null)
+  
   // État pour le formulaire de commandes dans le modal
   const [commandForm, setCommandForm] = useState({
     command: 'SET_SLEEP_SECONDS',
@@ -473,6 +483,32 @@ export default function DevicesPage() {
       return matchesSearch && matchesAssignment
     })
   }, [allDevices, searchTerm, assignmentFilter])
+
+  // Trouver la dernière version de firmware disponible
+  const latestFirmwareVersion = useMemo(() => {
+    if (!firmwares || firmwares.length === 0) return null
+    
+    // Trier les versions par ordre décroissant (semantic versioning)
+    const sorted = [...firmwares].sort((a, b) => {
+      const versionA = a.version || '0.0.0'
+      const versionB = b.version || '0.0.0'
+      
+      // Comparer les versions (ex: "1.2.3" -> [1, 2, 3])
+      const partsA = versionA.split('.').map(Number)
+      const partsB = versionB.split('.').map(Number)
+      
+      for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+        const partA = partsA[i] || 0
+        const partB = partsB[i] || 0
+        if (partA !== partB) {
+          return partB - partA // Décroissant
+        }
+      }
+      return 0
+    })
+    
+    return sorted[0]?.version || null
+  }, [firmwares])
 
   // Dispositifs qui ont un firmware différent du sélectionné (inclure les virtuels et N/A)
   const devicesToUpdate = useMemo(() => {
@@ -884,6 +920,19 @@ export default function DevicesPage() {
               {Object.keys(otaDeploying).length > 0 ? '⏳ Déploiement...' : `🚀 Flasher tous (${devicesToUpdate.length})`}
             </button>
           )}
+          {isAdmin && (
+            <button
+              onClick={() => {
+                setShowUploadFirmwareModal(true)
+                setFirmwareUploadError(null)
+                setFirmwareUploadSuccess(null)
+              }}
+              className="btn-secondary text-sm whitespace-nowrap"
+              title="Uploader un nouveau firmware"
+            >
+              📤 Upload Firmware
+            </button>
+          )}
         </div>
       </div>
 
@@ -980,11 +1029,15 @@ export default function DevicesPage() {
                           : 'Jamais'}
                       </td>
                       <td className="py-3 px-4">
-                        <span className="text-sm font-mono">{device.firmware_version || 'N/A'}</span>
+                        {device.isVirtual && latestFirmwareVersion ? (
+                          <span className="text-sm font-mono text-primary">Flash (v{latestFirmwareVersion})</span>
+                        ) : (
+                          <span className="text-sm font-mono">{device.firmware_version || 'N/A'}</span>
+                        )}
                         {device.ota_pending && (
                           <span className="badge badge-warning text-xs ml-2">OTA en attente</span>
                         )}
-                        {needsUpdate && (
+                        {needsUpdate && !device.isVirtual && (
                           <span className="badge badge-info text-xs ml-2">→ v{selectedFirmwareVersion}</span>
                         )}
                       </td>
@@ -1558,6 +1611,243 @@ export default function DevicesPage() {
         }}
         device={deviceForFlash || usbVirtualDevice || usbConnectedDevice}
       />
+
+      {/* Modal Upload Firmware */}
+      {showUploadFirmwareModal && (
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-[100] flex items-center justify-center p-4 overflow-y-auto backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8 backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">📤 Upload Firmware</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Téléverser un nouveau firmware pour les dispositifs OTT
+                </p>
+              </div>
+              <button 
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" 
+                onClick={() => {
+                  setShowUploadFirmwareModal(false)
+                  setFirmwareFile(null)
+                  setFirmwareVersion('')
+                  setFirmwareReleaseNotes('')
+                  setFirmwareIsStable(false)
+                  setFirmwareUploadError(null)
+                  setFirmwareUploadSuccess(null)
+                }}
+                disabled={uploadingFirmware}
+              >
+                ✕
+              </button>
+            </div>
+
+            {firmwareUploadError && (
+              <div className="alert alert-warning">
+                <strong>Erreur :</strong> {firmwareUploadError}
+              </div>
+            )}
+
+            {firmwareUploadSuccess && (
+              <div className="alert alert-success">
+                {firmwareUploadSuccess}
+              </div>
+            )}
+
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              
+              if (!firmwareFile) {
+                setFirmwareUploadError('Veuillez sélectionner un fichier firmware')
+                return
+              }
+
+              if (!firmwareVersion.trim()) {
+                setFirmwareUploadError('Veuillez saisir une version (ex: 1.0.0)')
+                return
+              }
+
+              const versionRegex = /^\d+\.\d+\.\d+$/
+              if (!versionRegex.test(firmwareVersion.trim())) {
+                setFirmwareUploadError('Le format de version doit être X.Y.Z (ex: 1.0.0)')
+                return
+              }
+
+              setUploadingFirmware(true)
+              setFirmwareUploadError(null)
+              setFirmwareUploadSuccess(null)
+
+              try {
+                const formData = new FormData()
+                formData.append('firmware', firmwareFile)
+                formData.append('version', firmwareVersion.trim())
+                formData.append('release_notes', firmwareReleaseNotes.trim())
+                formData.append('is_stable', firmwareIsStable ? 'true' : 'false')
+
+                const token = localStorage.getItem('token')
+                if (!token) {
+                  throw new Error('Token d\'authentification manquant')
+                }
+
+                const response = await fetch(`${API_URL}/api.php/firmwares`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: formData
+                })
+
+                const data = await response.json()
+
+                if (!response.ok || !data.success) {
+                  throw new Error(data.error || 'Erreur lors de l\'upload')
+                }
+
+                setFirmwareUploadSuccess(`✅ Firmware v${firmwareVersion} uploadé avec succès !`)
+                setFirmwareFile(null)
+                setFirmwareVersion('')
+                setFirmwareReleaseNotes('')
+                setFirmwareIsStable(false)
+                const fileInput = document.getElementById('firmware-file-upload')
+                if (fileInput) fileInput.value = ''
+                
+                // Recharger les firmwares
+                await refetch()
+                
+                // Fermer le modal après 2 secondes
+                setTimeout(() => {
+                  setShowUploadFirmwareModal(false)
+                  setFirmwareUploadSuccess(null)
+                }, 2000)
+              } catch (err) {
+                console.error('Erreur upload firmware:', err)
+                setFirmwareUploadError(err.message || 'Erreur lors de l\'upload du firmware')
+              } finally {
+                setUploadingFirmware(false)
+              }
+            }} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Fichier firmware (.bin) *
+                </label>
+                <input
+                  id="firmware-file-upload"
+                  type="file"
+                  accept=".bin"
+                  onChange={(e) => {
+                    const selectedFile = e.target.files[0]
+                    if (selectedFile) {
+                      if (!selectedFile.name.endsWith('.bin')) {
+                        setFirmwareUploadError('Le fichier doit être un fichier .bin')
+                        setFirmwareFile(null)
+                        return
+                      }
+                      setFirmwareFile(selectedFile)
+                      setFirmwareUploadError(null)
+                    }
+                  }}
+                  disabled={uploadingFirmware}
+                  className="input"
+                  required
+                />
+                {firmwareFile && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                    📄 {firmwareFile.name} ({(firmwareFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </p>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Sélectionnez le fichier firmware compilé (.bin) à uploader
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Version (X.Y.Z) *
+                </label>
+                <input
+                  type="text"
+                  value={firmwareVersion}
+                  onChange={(e) => setFirmwareVersion(e.target.value)}
+                  placeholder="1.0.0"
+                  disabled={uploadingFirmware}
+                  className="input"
+                  required
+                  pattern="^\d+\.\d+\.\d+$"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Format: X.Y.Z (ex: 1.0.0, 2.1.3)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Notes de version (optionnel)
+                </label>
+                <textarea
+                  value={firmwareReleaseNotes}
+                  onChange={(e) => setFirmwareReleaseNotes(e.target.value)}
+                  placeholder="Corrections de bugs, nouvelles fonctionnalités..."
+                  disabled={uploadingFirmware}
+                  className="input min-h-[100px]"
+                  rows={4}
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Description des changements apportés dans cette version
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="firmware-is-stable"
+                  checked={firmwareIsStable}
+                  onChange={(e) => setFirmwareIsStable(e.target.checked)}
+                  disabled={uploadingFirmware}
+                  className="h-4 w-4 text-primary-600 dark:text-primary-400 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="firmware-is-stable" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Version stable
+                </label>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  (Coché = stable, décoché = beta)
+                </span>
+              </div>
+
+              <div className="bg-gradient-to-r from-amber-50 to-amber-50/50 dark:from-amber-900/20 dark:to-amber-900/10 border-l-4 border-amber-500 dark:border-amber-400 p-4 rounded backdrop-blur-sm">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ Attention</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Assurez-vous que le firmware est compatible avec les dispositifs OTT avant de l&apos;uploader. 
+                  Un firmware incompatible peut planter les dispositifs de manière irréversible.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowUploadFirmwareModal(false)
+                    setFirmwareFile(null)
+                    setFirmwareVersion('')
+                    setFirmwareReleaseNotes('')
+                    setFirmwareIsStable(false)
+                    setFirmwareUploadError(null)
+                    setFirmwareUploadSuccess(null)
+                  }}
+                  disabled={uploadingFirmware}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingFirmware || !firmwareFile || !firmwareVersion.trim()}
+                  className="btn-primary"
+                >
+                  {uploadingFirmware ? '⏳ Upload en cours...' : '📤 Uploader le firmware'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

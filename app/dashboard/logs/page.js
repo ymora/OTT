@@ -39,7 +39,7 @@ export default function LogsPage() {
     },
     filterFn: (items, filters) => {
       return items.filter(log => {
-        const level = (log.level || 'INFO').toUpperCase()
+    const level = (log.level || 'INFO').toUpperCase()
         if (filters.type && filters.type !== 'ALL' && level !== filters.type) return false
         if (filters.device && filters.device !== 'ALL' && String(log.device_id) !== filters.device) return false
         return true

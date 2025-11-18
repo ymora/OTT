@@ -43,8 +43,8 @@ export default function AlertsPage() {
       return items.filter(a => {
         if (filters.severity && filters.severity !== 'ALL' && a.severity !== filters.severity) return false
         if (filters.device && filters.device !== 'ALL' && String(a.device_id) !== filters.device) return false
-        return true
-      })
+      return true
+    })
     }
   })
 
@@ -100,7 +100,7 @@ export default function AlertsPage() {
             </div>
           ) : (
             filteredItems.map((alert, i) => (
-              <AlertCard key={alert.id} alert={alert} delay={i * 0.03} />
+            <AlertCard key={alert.id} alert={alert} delay={i * 0.03} />
             ))
           )}
         </div>

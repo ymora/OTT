@@ -145,16 +145,14 @@ EOF
 
 ---
 
-## 🗄️ Base PostgreSQL (schema + seeds)
+## 🗄️ Base PostgreSQL (migration unique)
 
 1. Récupérer l’URL Render (`postgresql://.../ott_data`).
-2. Appliquer la structure + données anonymisées :
+2. Appliquer la structure **et** les données anonymisées en une seule commande :
    ```bash
-   DATABASE_URL="postgresql://..." ./scripts/db_migrate.sh --seed
-   # ou
    psql $DATABASE_URL -f sql/schema.sql
-   psql $DATABASE_URL -f sql/demo_seed.sql
    ```
+   > Le fichier `sql/schema.sql` contient désormais l’intégralité du schéma, des triggers et des seeds (rôles, permissions, comptes démo, patients, dispositifs, firmwares…).
 3. Vérifier :
    ```bash
    psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"

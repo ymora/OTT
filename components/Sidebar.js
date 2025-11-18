@@ -35,13 +35,6 @@ const menuStructure = [
     permission: 'users.view',
     description: 'Gestion des utilisateurs (audit, notifications, paramètres)'
   },
-  {
-    name: 'Upload Firmware',
-    icon: '📤',
-    path: '/dashboard/firmware-upload',
-    permission: null, // Visible par tous mais action réservée aux admins
-    description: 'Téléverser un nouveau firmware (réservé aux administrateurs)'
-  },
 ]
 
 export default function Sidebar() {

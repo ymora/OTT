@@ -15,8 +15,8 @@ export default function UsersPage() {
   const { fetchWithAuth, API_URL, user: currentUser } = useAuth()
   const [actionError, setActionError] = useState(null)
   const [success, setSuccess] = useState(null)
-  const [showUserModal, setShowUserModal] = useState(false)
-  const [editingUser, setEditingUser] = useState(null)
+  const [showModal, setShowModal] = useState(false)
+  const [editingItem, setEditingItem] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   // Charger les données avec useApiData
@@ -51,26 +51,26 @@ export default function UsersPage() {
   }
 
   const openCreateModal = () => {
-    setEditingUser(null)
-    setShowUserModal(true)
+    setEditingItem(null)
+    setShowModal(true)
   }
 
   const openEditModal = (user) => {
-    setEditingUser(user)
-    setShowUserModal(true)
+    setEditingItem(user)
+    setShowModal(true)
   }
 
-  const closeUserModal = () => {
-    setShowUserModal(false)
-    setEditingUser(null)
+  const closeModal = () => {
+    setShowModal(false)
+    setEditingItem(null)
   }
 
   const handleModalSave = async () => {
-    setSuccess(editingUser ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
+    setSuccess(editingItem ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
     await refetch()
   }
 
-  const handleDeleteUser = async (userToDelete) => {
+  const handleDelete = async (userToDelete) => {
     if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer l'utilisateur "${userToDelete.first_name} ${userToDelete.last_name}" ?\n\nCette action est irréversible.`)) {
       return
     }
@@ -88,8 +88,8 @@ export default function UsersPage() {
       if (response.success) {
         setSuccess('Utilisateur supprimé avec succès')
         refetch()
-        if (showUserModal && editingUser) {
-          closeUserModal()
+        if (showModal && editingItem && editingItem.id === userToDelete.id) {
+          closeModal()
         }
       } else {
         setActionError(response.error || 'Erreur lors de la suppression')
@@ -109,10 +109,6 @@ export default function UsersPage() {
     }
   }
 
-  const handleDeleteUserFromEdit = async () => {
-    if (!editingUser) return
-    await handleDeleteUser(editingUser)
-  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -151,13 +147,13 @@ export default function UsersPage() {
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4">Nom</th>
-                  <th className="text-left py-3 px-4">Email</th>
                   <th className="text-left py-3 px-4">Rôle</th>
+                  <th className="text-left py-3 px-4">Email</th>
                   <th className="text-left py-3 px-4">Téléphone</th>
-                  <th className="text-left py-3 px-4">Notifications</th>
-                  <th className="text-left py-3 px-4">Types d'alertes</th>
                   <th className="text-left py-3 px-4">Statut</th>
                   <th className="text-left py-3 px-4">Dernière connexion</th>
+                  <th className="text-left py-3 px-4">Notifications</th>
+                  <th className="text-left py-3 px-4">Types d'alertes</th>
                   <th className="text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
@@ -176,31 +172,46 @@ export default function UsersPage() {
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
                       <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
-                      <td className="table-cell">{user.email}</td>
                       <td className="py-3 px-4">
                         <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
                           {user.role_name}
                         </span>
                       </td>
+                      <td className="table-cell">{user.email}</td>
                       <td className="table-cell text-sm">
                         {user.phone || '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {user.is_active ? (
+                          <span className="badge badge-success">✅ Actif</span>
+                        ) : (
+                          <span className="badge text-gray-600 bg-gray-100">❌ Inactif</span>
+                        )}
+                      </td>
+                      <td className="table-cell text-sm">
+                        {user.last_login ? new Date(user.last_login).toLocaleString('fr-FR', { 
+                          day: '2-digit', 
+                          month: '2-digit', 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        }) : 'Jamais'}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           {isTrue(user.email_enabled) ? (
                             <span className="text-lg" title="Email activé">✉️</span>
                           ) : (
-                            <span className="text-lg opacity-30" title="Email désactivé">✉️</span>
+                            <span className="text-lg opacity-40 grayscale" title="Email désactivé">✉️</span>
                           )}
                           {isTrue(user.sms_enabled) ? (
                             <span className="text-lg" title="SMS activé">📱</span>
                           ) : (
-                            <span className="text-lg opacity-30" title="SMS désactivé">📱</span>
+                            <span className="text-lg opacity-40 grayscale" title="SMS désactivé">📱</span>
                           )}
                           {isTrue(user.push_enabled) ? (
                             <span className="text-lg" title="Push activé">🔔</span>
                           ) : (
-                            <span className="text-lg opacity-30" title="Push désactivé">🔔</span>
+                            <span className="text-lg opacity-40 grayscale" title="Push désactivé">🔔</span>
                           )}
                         </div>
                       </td>
@@ -227,21 +238,6 @@ export default function UsersPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        {user.is_active ? (
-                          <span className="badge badge-success">✅ Actif</span>
-                        ) : (
-                          <span className="badge text-gray-600 bg-gray-100">❌ Inactif</span>
-                        )}
-                      </td>
-                      <td className="table-cell text-sm">
-                        {user.last_login ? new Date(user.last_login).toLocaleString('fr-FR', { 
-                          day: '2-digit', 
-                          month: '2-digit', 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        }) : 'Jamais'}
-                      </td>
-                      <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -252,7 +248,7 @@ export default function UsersPage() {
                           </button>
                           <button
                             className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                            onClick={() => handleDeleteUser(user)}
+                            onClick={() => handleDelete(user)}
                             disabled={deleteLoading || currentUser?.role_name !== 'admin' || user.id === currentUser?.id}
                             title={currentUser?.role_name === 'admin' && user.id !== currentUser?.id ? "Supprimer l'utilisateur" : user.id === currentUser?.id ? "Vous ne pouvez pas supprimer votre propre compte" : "Réservé aux administrateurs"}
                           >
@@ -270,9 +266,9 @@ export default function UsersPage() {
       </div>
 
       <UserPatientModal
-        isOpen={showUserModal}
-        onClose={closeUserModal}
-        editingItem={editingUser}
+        isOpen={showModal}
+        onClose={closeModal}
+        editingItem={editingItem}
         type="user"
         onSave={handleModalSave}
         fetchWithAuth={fetchWithAuth}

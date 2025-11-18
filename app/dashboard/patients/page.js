@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import dynamic from 'next/dynamic'
 import { useApiData, useFilter } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
@@ -12,29 +11,13 @@ import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
 import { isTrue } from '@/lib/utils'
 
-// Lazy load Chart pour accélérer Fast Refresh
-const Chart = dynamic(() => import('@/components/Chart'), { ssr: false })
-
 export default function PatientsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
   const [success, setSuccess] = useState(null)
   const [actionError, setActionError] = useState(null)
-  const [showForm, setShowForm] = useState(false)
-  const [editingPatient, setEditingPatient] = useState(null)
-  const [deletingPatient, setDeletingPatient] = useState(null)
-  const [selectedPatient, setSelectedPatient] = useState(null)
-  const [patientDetails, setPatientDetails] = useState(null)
-  const [loadingDetails, setLoadingDetails] = useState(false)
-  const [patientNotifPrefs, setPatientNotifPrefs] = useState({
-    email_enabled: true,
-    sms_enabled: true,
-    push_enabled: false,
-    notify_battery_low: true,
-    notify_device_offline: true,
-    notify_abnormal_flow: true,
-    notify_alert_critical: true
-  })
-  const [savingNotifPrefs, setSavingNotifPrefs] = useState(false)
+  const [showModal, setShowModal] = useState(false)
+  const [editingItem, setEditingItem] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [unassigningDevice, setUnassigningDevice] = useState(null)
 
   // Charger les données avec useApiData
@@ -65,16 +48,6 @@ export default function PatientsPage() {
     }
   })
 
-  // Fonctions utilitaires pour le calcul des valeurs
-  const getDeviceStatus = (lastSeen) => {
-    if (!lastSeen) return false
-    return new Date(lastSeen) > new Date(Date.now() - 15 * 60 * 1000)
-  }
-
-  const getBatteryValue = (battery) => {
-    if (typeof battery === 'number') return battery
-    return parseFloat(battery) || 0
-  }
 
   const handleUnassignDevice = async (device) => {
     if (!confirm(`⚠️ Êtes-vous sûr de vouloir désassigner le dispositif "${device.device_name || device.sim_iccid}" du patient ?\n\nLe dispositif sera réinitialisé avec les paramètres d'origine et disponible pour une nouvelle assignation.`)) {
@@ -137,44 +110,24 @@ export default function PatientsPage() {
   }
 
   const openCreateModal = () => {
-    setEditingPatient(null)
-    setShowForm(true)
+    setEditingItem(null)
+    setShowModal(true)
   }
 
-  const handleEdit = (patient) => {
-    setEditingPatient(patient)
-    setShowForm(true)
+  const openEditModal = (patient) => {
+    setEditingItem(patient)
+    setShowModal(true)
   }
 
-  const closeForm = () => {
-    setShowForm(false)
-    setEditingPatient(null)
+  const closeModal = () => {
+    setShowModal(false)
+    setEditingItem(null)
   }
 
   const handleModalSave = async () => {
-    setSuccess(editingPatient ? 'Patient modifié avec succès' : 'Patient créé avec succès')
+    setSuccess(editingItem ? 'Patient modifié avec succès' : 'Patient créé avec succès')
     await refetch()
   }
-
-  const savePatientNotifications = async () => {
-    if (!selectedPatient) return
-    try {
-      setSavingNotifPrefs(true)
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/patients/${selectedPatient.id}/notifications`,
-        { method: 'PUT', body: JSON.stringify(patientNotifPrefs) },
-        { requiresAuth: true }
-      )
-      setSuccess('Préférences de notifications enregistrées')
-    } catch (err) {
-      setActionError(err.message)
-    } finally {
-      setSavingNotifPrefs(false)
-    }
-  }
-
 
   const handleDelete = async (patient) => {
     if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer le patient "${patient.first_name} ${patient.last_name}" ?\n\nCette action est irréversible.`)) {
@@ -182,7 +135,7 @@ export default function PatientsPage() {
     }
 
     try {
-      setDeletingPatient(patient.id)
+      setDeleteLoading(true)
       setActionError(null)
       setSuccess(null)
       const response = await fetchJson(
@@ -195,6 +148,9 @@ export default function PatientsPage() {
       if (response.success) {
         setSuccess(response.message || 'Patient supprimé avec succès')
         refetch()
+        if (showModal && editingItem && editingItem.id === patient.id) {
+          closeModal()
+        }
       } else {
         setActionError(response.error || 'Erreur lors de la suppression')
       }
@@ -209,65 +165,7 @@ export default function PatientsPage() {
       setActionError(errorMessage)
       console.error('Erreur suppression patient:', err)
     } finally {
-      setDeletingPatient(null)
-    }
-  }
-
-  const handleShowDetails = async (patient) => {
-    setSelectedPatient(patient)
-    setLoadingDetails(true)
-    setPatientDetails(null)
-    try {
-      const [devicesData, alertsData, measurementsData, notifData] = await Promise.all([
-        fetchJson(fetchWithAuth, API_URL, '/api.php/devices'),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/alerts'),
-        fetchJson(fetchWithAuth, API_URL, '/api.php/measurements/latest'),
-        fetchJson(fetchWithAuth, API_URL, `/api.php/patients/${patient.id}/notifications`).catch(() => ({ preferences: null }))
-      ])
-      
-      // Charger les préférences de notifications
-      if (notifData.preferences) {
-        setPatientNotifPrefs(notifData.preferences)
-      } else {
-        // Valeurs par défaut
-        setPatientNotifPrefs({
-          email_enabled: !!patient.email,
-          sms_enabled: !!patient.phone,
-          push_enabled: false,
-          notify_battery_low: true,
-          notify_device_offline: true,
-          notify_abnormal_flow: true,
-          notify_alert_critical: true
-        })
-      }
-      
-      const patientDevice = (devicesData.devices || []).find(d => 
-        d.patient_id === patient.id || (d.first_name === patient.first_name && d.last_name === patient.last_name)
-      )
-      const patientAlerts = (alertsData.alerts || []).filter(a => 
-        patientDevice && a.device_id === patientDevice.id
-      )
-      const patientMeasurements = (measurementsData.measurements || []).filter(m =>
-        patientDevice && m.device_id === patientDevice.id
-      ).slice(0, 100)
-      
-      setPatientDetails({
-        device: patientDevice,
-        alerts: patientAlerts,
-        measurements: patientMeasurements,
-        stats: {
-          totalMeasurements: patientMeasurements.length,
-          avgFlowrate: patientMeasurements.length > 0
-            ? (patientMeasurements.reduce((sum, m) => sum + (m.flowrate || 0), 0) / patientMeasurements.length).toFixed(2)
-            : 0,
-          lastMeasurement: patientMeasurements.length > 0 ? patientMeasurements[0].timestamp : null
-        }
-      })
-    } catch (err) {
-      console.error(err)
-      setActionError('Erreur lors du chargement des détails')
-    } finally {
-      setLoadingDetails(false)
+      setDeleteLoading(false)
     }
   }
 
@@ -280,12 +178,10 @@ export default function PatientsPage() {
       {/* Recherche et Nouveau Patient sur la même ligne */}
       <div className="flex flex-col md:flex-row gap-3">
         <div className="flex-1">
-          <input
-            type="text"
-            className="input"
-            placeholder="Rechercher un patient..."
+          <SearchBar
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={setSearchTerm}
+            placeholder="Rechercher un patient..."
           />
         </div>
         <button className="btn-primary" onClick={openCreateModal}>
@@ -306,8 +202,8 @@ export default function PatientsPage() {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4">Nom</th>
                   <th className="text-left py-3 px-4">Date Naissance</th>
-                  <th className="text-left py-3 px-4">Téléphone</th>
                   <th className="text-left py-3 px-4">Email</th>
+                  <th className="text-left py-3 px-4">Téléphone</th>
                   <th className="text-left py-3 px-4">Ville</th>
                   <th className="text-left py-3 px-4">Code Postal</th>
                   <th className="text-left py-3 px-4">Dispositif</th>
@@ -328,8 +224,8 @@ export default function PatientsPage() {
                     <tr key={p.id} className="table-row animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
                       <td className="py-3 px-4 font-medium text-primary">{p.first_name} {p.last_name}</td>
                       <td className="table-cell">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
-                      <td className="table-cell text-sm">{p.phone || '-'}</td>
                       <td className="table-cell">{p.email || '-'}</td>
+                      <td className="table-cell text-sm">{p.phone || '-'}</td>
                       <td className="table-cell text-sm">{p.city || '-'}</td>
                       <td className="table-cell text-sm">{p.postal_code || '-'}</td>
                       <td className="py-3 px-4">
@@ -347,17 +243,17 @@ export default function PatientsPage() {
                           {isTrue(p.email_enabled) ? (
                             <span className="text-lg" title="Email activé">✉️</span>
                           ) : (
-                            <span className="text-lg opacity-30" title="Email désactivé">✉️</span>
+                            <span className="text-lg opacity-40 grayscale" title="Email désactivé">✉️</span>
                           )}
                           {isTrue(p.sms_enabled) ? (
                             <span className="text-lg" title="SMS activé">📱</span>
                           ) : (
-                            <span className="text-lg opacity-30" title="SMS désactivé">📱</span>
+                            <span className="text-lg opacity-40 grayscale" title="SMS désactivé">📱</span>
                           )}
                           {isTrue(p.push_enabled) ? (
                             <span className="text-lg" title="Push activé">🔔</span>
                           ) : (
-                            <span className="text-lg opacity-30" title="Push désactivé">🔔</span>
+                            <span className="text-lg opacity-40 grayscale" title="Push désactivé">🔔</span>
                           )}
                         </div>
                       </td>
@@ -400,7 +296,7 @@ export default function PatientsPage() {
                           })()}
                           <button
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            onClick={() => handleEdit(p)}
+                            onClick={() => openEditModal(p)}
                             title="Modifier le patient"
                           >
                             <span className="text-lg">✏️</span>
@@ -408,10 +304,10 @@ export default function PatientsPage() {
                           <button
                             className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                             onClick={() => handleDelete(p)}
-                            disabled={deletingPatient === p.id || devices.some(d => d.patient_id === p.id)}
+                            disabled={deleteLoading || devices.some(d => d.patient_id === p.id)}
                             title={devices.some(d => d.patient_id === p.id) ? "Impossible de supprimer un patient avec un dispositif assigné. Désassignez d'abord le dispositif." : "Supprimer le patient"}
                           >
-                            <span className="text-lg">{deletingPatient === p.id ? '⏳' : '🗑️'}</span>
+                            <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
                           </button>
                         </div>
                       </td>
@@ -425,280 +321,15 @@ export default function PatientsPage() {
       </div>
 
       <UserPatientModal
-        isOpen={showForm}
-        onClose={closeForm}
-        editingItem={editingPatient}
+        isOpen={showModal}
+        onClose={closeModal}
+        editingItem={editingItem}
         type="patient"
         onSave={handleModalSave}
         fetchWithAuth={fetchWithAuth}
         API_URL={API_URL}
         roles={[]}
       />
-
-      {selectedPatient && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
-              <h2 className="text-2xl font-semibold">
-                👤 Détails Patient : {selectedPatient.first_name} {selectedPatient.last_name}
-              </h2>
-              <button 
-                className="text-gray-500 hover:text-gray-900 text-2xl" 
-                onClick={() => {
-                  setSelectedPatient(null)
-                  setPatientDetails(null)
-                }}
-              >
-                ✖
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {loadingDetails ? (
-                <div className="animate-shimmer h-64"></div>
-              ) : patientDetails ? (
-                <>
-                  {/* Informations patient */}
-                  <div className="card">
-                    <h3 className="text-lg font-semibold mb-4">📋 Informations</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-muted">Prénom</p>
-                        <p className="font-medium text-primary">{selectedPatient.first_name}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Nom</p>
-                        <p className="font-medium text-primary">{selectedPatient.last_name}</p>
-                      </div>
-                      {selectedPatient.birth_date && (
-                        <div>
-                          <p className="text-sm text-muted">Date de naissance</p>
-                          <p className="font-medium text-primary">{new Date(selectedPatient.birth_date).toLocaleDateString('fr-FR')}</p>
-                        </div>
-                      )}
-                      {selectedPatient.phone && (
-                        <div>
-                          <p className="text-sm text-muted">Téléphone</p>
-                          <p className="font-medium text-primary">{selectedPatient.phone}</p>
-                        </div>
-                      )}
-                      {selectedPatient.email && (
-                        <div>
-                          <p className="text-sm text-muted">Email</p>
-                          <p className="font-medium text-primary">{selectedPatient.email}</p>
-                        </div>
-                      )}
-                      {(selectedPatient.city || selectedPatient.postal_code) && (
-                        <div>
-                          <p className="text-sm text-muted">Adresse</p>
-                          <p className="font-medium text-primary">
-                            {selectedPatient.city || ''} {selectedPatient.postal_code || ''}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Notifications */}
-                  <div className="card">
-                    <h3 className="text-lg font-semibold mb-4">📧 Notifications</h3>
-                    <div className="space-y-4">
-                      {/* Canaux de notification */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Canaux activés</label>
-                        <div className="grid grid-cols-3 gap-3">
-                          <label className={`flex items-center gap-2 p-2 rounded ${selectedPatient.email ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
-                            <input
-                              type="checkbox"
-                              checked={patientNotifPrefs.email_enabled && !!selectedPatient.email}
-                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, email_enabled: e.target.checked }))}
-                              disabled={!selectedPatient.email}
-                              className="form-checkbox"
-                            />
-                            <span className="text-sm">✉️ Email</span>
-                            {!selectedPatient.email && <span className="text-xs text-gray-400">(non renseigné)</span>}
-                          </label>
-                          <label className={`flex items-center gap-2 p-2 rounded ${selectedPatient.phone ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
-                            <input
-                              type="checkbox"
-                              checked={patientNotifPrefs.sms_enabled && !!selectedPatient.phone}
-                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, sms_enabled: e.target.checked }))}
-                              disabled={!selectedPatient.phone}
-                              className="form-checkbox"
-                            />
-                            <span className="text-sm">📱 SMS</span>
-                            {!selectedPatient.phone && <span className="text-xs text-gray-400">(non renseigné)</span>}
-                          </label>
-                          <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            <input
-                              type="checkbox"
-                              checked={patientNotifPrefs.push_enabled}
-                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, push_enabled: e.target.checked }))}
-                              className="form-checkbox"
-                            />
-                            <span className="text-sm">🔔 Push</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* Types d'alertes */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Types d&apos;alertes</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label className="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={patientNotifPrefs.notify_battery_low}
-                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, notify_battery_low: e.target.checked }))}
-                              className="form-checkbox"
-                            />
-                            🔋 Batterie faible
-                          </label>
-                          <label className="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={patientNotifPrefs.notify_device_offline}
-                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, notify_device_offline: e.target.checked }))}
-                              className="form-checkbox"
-                            />
-                            📴 Dispositif hors ligne
-                          </label>
-                          <label className="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={patientNotifPrefs.notify_abnormal_flow}
-                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, notify_abnormal_flow: e.target.checked }))}
-                              className="form-checkbox"
-                            />
-                            ⚠️ Débit anormal
-                          </label>
-                          <label className="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={patientNotifPrefs.notify_alert_critical}
-                              onChange={(e) => setPatientNotifPrefs(prev => ({ ...prev, notify_alert_critical: e.target.checked }))}
-                              className="form-checkbox"
-                            />
-                            🚨 Alerte critique
-                          </label>
-                        </div>
-                      </div>
-
-                      <button
-                        className="btn-primary text-sm"
-                        onClick={savePatientNotifications}
-                        disabled={savingNotifPrefs}
-                      >
-                        {savingNotifPrefs ? 'Enregistrement...' : '💾 Enregistrer les préférences'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Dispositif associé */}
-                  <div className="card">
-                    <h3 className="text-lg font-semibold mb-4">🔌 Dispositif</h3>
-                    {patientDetails.device ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-lg">{patientDetails.device.device_name || 'Dispositif sans nom'}</p>
-                            <p className="text-sm text-gray-500">ICCID: {patientDetails.device.sim_iccid}</p>
-                          </div>
-                          <span className={`badge ${patientDetails.device.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
-                            {patientDetails.device.status || 'inconnu'}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <p className="text-gray-500">Batterie</p>
-                            <p className="font-medium">{patientDetails.device.last_battery ? `${patientDetails.device.last_battery.toFixed(1)}%` : 'N/A'}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-500">Dernière connexion</p>
-                            <p className="font-medium">
-                              {patientDetails.device.last_seen 
-                                ? new Date(patientDetails.device.last_seen).toLocaleString('fr-FR')
-                                : 'Jamais'}
-                            </p>
-                          </div>
-                        </div>
-                        {patientDetails.device.latitude && patientDetails.device.longitude && (
-                          <a
-                            href={`/dashboard/map?deviceId=${patientDetails.device.id}`}
-                            className="btn-secondary text-sm inline-block"
-                          >
-                            📍 Voir sur la carte
-                          </a>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-amber-600">Aucun dispositif attribué à ce patient</p>
-                    )}
-                  </div>
-
-                  {/* Statistiques */}
-                  {patientDetails.device && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="card">
-                        <p className="text-sm text-gray-500">Mesures totales</p>
-                        <p className="text-2xl font-semibold">{patientDetails.stats.totalMeasurements}</p>
-                      </div>
-                      <div className="card">
-                        <p className="text-sm text-gray-500">Débit moyen</p>
-                        <p className="text-2xl font-semibold">{patientDetails.stats.avgFlowrate} L/min</p>
-                      </div>
-                      <div className="card">
-                        <p className="text-sm text-gray-500">Batterie actuelle</p>
-                        <p className="text-2xl font-semibold">
-                          {patientDetails.device.last_battery ? `${patientDetails.device.last_battery.toFixed(0)}%` : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Alertes */}
-                  {patientDetails.alerts.length > 0 && (
-                    <div className="card">
-                      <h3 className="text-lg font-semibold mb-4">🚨 Alertes ({patientDetails.alerts.length})</h3>
-                      <div className="space-y-2">
-                        {patientDetails.alerts.slice(0, 5).map(alert => (
-                          <div key={alert.id} className="border rounded-lg p-3">
-                            <div className="flex items-center justify-between">
-                              <p className="font-medium">{alert.message}</p>
-                              <span className={`badge ${
-                                alert.severity === 'critical' ? 'badge-error' :
-                                alert.severity === 'high' ? 'badge-warning' :
-                                'badge-info'
-                              }`}>
-                                {alert.severity}
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {new Date(alert.created_at).toLocaleString('fr-FR')}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Graphique mesures récentes */}
-                  {patientDetails.measurements.length > 0 && (
-                    <div className="card">
-                      <h3 className="text-lg font-semibold mb-4">📈 Mesures récentes</h3>
-                      <div className="h-64">
-                        <Chart data={patientDetails.measurements} type="flowrate" />
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="text-gray-500">Aucune donnée disponible</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

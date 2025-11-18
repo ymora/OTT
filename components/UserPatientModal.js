@@ -38,9 +38,10 @@ export default function UserPatientModal({
     notify_battery_low: true,
     notify_device_offline: true,
     notify_abnormal_flow: true,
-    notify_new_patient: type === 'user' ? false : undefined,
-    notify_alert_critical: type === 'patient' ? true : undefined
+    notify_new_patient: type === 'user' ? false : false,
+    notify_alert_critical: type === 'patient' ? true : false
   })
+  const [notificationErrors, setNotificationErrors] = useState({})
 
   // Initialiser le formulaire
   useEffect(() => {
@@ -82,7 +83,7 @@ export default function UserPatientModal({
           phone: '',
           password: '',
           role_id: '',
-          is_active: true
+          is_active: true // Visible aussi en création maintenant
         })
       } else {
         setFormData({
@@ -96,21 +97,22 @@ export default function UserPatientModal({
         })
       }
       
-      // Réinitialiser les préférences avec valeurs par défaut du schéma
+      // Réinitialiser les préférences avec valeurs par défaut du schéma (tout désactivé)
       setNotificationPrefs({
-        email_enabled: true,
-        sms_enabled: true,
-        push_enabled: type === 'user' ? true : false,
-        notify_battery_low: true,
-        notify_device_offline: true,
-        notify_abnormal_flow: true,
-        notify_new_patient: type === 'user' ? false : undefined,
-        notify_alert_critical: type === 'patient' ? true : undefined
+        email_enabled: false,
+        sms_enabled: false,
+        push_enabled: false,
+        notify_battery_low: false,
+        notify_device_offline: false,
+        notify_abnormal_flow: false,
+        notify_new_patient: false,
+        notify_alert_critical: false
       })
     }
     
     setFormErrors({})
     setFormError(null)
+    setNotificationErrors({})
   }, [isOpen, editingItem, type, roles])
 
   const loadNotificationPrefs = async () => {
@@ -131,7 +133,11 @@ export default function UserPatientModal({
       )
       
       if (data.preferences) {
-        setNotificationPrefs(data.preferences)
+        // S'assurer que toutes les valeurs sont des booléens
+        const loadedPrefs = Object.fromEntries(
+          Object.entries(data.preferences).map(([key, value]) => [key, Boolean(value)])
+        )
+        setNotificationPrefs(loadedPrefs)
       }
     } catch (err) {
       console.warn('Erreur chargement préférences:', err)
@@ -142,15 +148,63 @@ export default function UserPatientModal({
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
-    setFormData(prev => ({
-      ...prev,
+    const newFormData = {
+      ...formData,
       [name]: type === 'checkbox' ? checked : value
-    }))
+    }
+    setFormData(newFormData)
+    
     // Effacer l'erreur du champ modifié
     if (formErrors[name]) {
       setFormErrors(prev => {
         const next = { ...prev }
         delete next[name]
+        return next
+      })
+    }
+    
+    // Validation en temps réel pour le mot de passe
+    if (name === 'password' && type === 'user') {
+      if (value && value.length > 0 && value.length < 6) {
+        setFormErrors(prev => ({
+          ...prev,
+          password: 'Le mot de passe doit contenir au moins 6 caractères'
+        }))
+      } else if (value && value.length >= 6) {
+        // Supprimer l'erreur si le mot de passe est valide
+        setFormErrors(prev => {
+          const next = { ...prev }
+          delete next.password
+          return next
+        })
+      } else if (!value && !editingItem) {
+        // Erreur seulement si création et champ vide
+        setFormErrors(prev => ({
+          ...prev,
+          password: 'Le mot de passe est obligatoire'
+        }))
+      } else if (!value && editingItem) {
+        // Pas d'erreur si modification et champ vide (optionnel)
+        setFormErrors(prev => {
+          const next = { ...prev }
+          delete next.password
+          return next
+        })
+      }
+    }
+    
+    // Si email ou phone est modifié, mettre à jour les erreurs de notifications
+    if (name === 'email' || name === 'phone') {
+      setNotificationErrors(prev => {
+        const next = { ...prev }
+        // Si email est maintenant renseigné, supprimer l'erreur email
+        if (name === 'email' && value && next.email) {
+          delete next.email
+        }
+        // Si phone est maintenant renseigné, supprimer l'erreur sms
+        if (name === 'phone' && value && next.sms) {
+          delete next.sms
+        }
         return next
       })
     }
@@ -214,7 +268,7 @@ export default function UserPatientModal({
           last_name: formData.last_name.trim(),
           email: formData.email.trim(),
           role_id: formData.role_id ? parseInt(formData.role_id, 10) : undefined,
-          is_active: Boolean(formData.is_active),
+          is_active: formData.is_active !== undefined && formData.is_active !== null ? Boolean(formData.is_active) : true,
           phone: formData.phone && formData.phone.trim().length > 0 ? formData.phone.trim() : null
         } : {
           first_name: formData.first_name.trim(),
@@ -244,16 +298,37 @@ export default function UserPatientModal({
             ? `/api.php/users/${editingItem.id}/notifications`
             : `/api.php/patients/${editingItem.id}/notifications`
           
+          // S'assurer que toutes les valeurs sont des booléens avant l'envoi
+          // Convertir les chaînes vides en false pour éviter les erreurs SQL
+          const prefsToSave = {
+            email_enabled: Boolean(notificationPrefs.email_enabled ?? false),
+            sms_enabled: Boolean(notificationPrefs.sms_enabled ?? false),
+            push_enabled: Boolean(notificationPrefs.push_enabled ?? false),
+            notify_battery_low: Boolean(notificationPrefs.notify_battery_low ?? false),
+            notify_device_offline: Boolean(notificationPrefs.notify_device_offline ?? false),
+            notify_abnormal_flow: Boolean(notificationPrefs.notify_abnormal_flow ?? false)
+          }
+          
+          // Ajouter phone_number seulement s'il n'est pas vide
+          const phoneNumber = formData.phone?.trim() || notificationPrefs.phone_number?.trim()
+          if (phoneNumber) {
+            prefsToSave.phone_number = phoneNumber
+          }
+          
+          // Ajouter les champs spécifiques selon le type
+          if (type === 'user') {
+            prefsToSave.notify_new_patient = Boolean(notificationPrefs.notify_new_patient ?? false)
+          } else {
+            prefsToSave.notify_alert_critical = Boolean(notificationPrefs.notify_alert_critical ?? false)
+          }
+          
           await fetchJson(
             fetchWithAuth,
             API_URL,
             notifEndpoint,
             {
               method: 'PUT',
-              body: JSON.stringify({
-                ...notificationPrefs,
-                phone_number: formData.phone || notificationPrefs.phone_number || ''
-              })
+              body: JSON.stringify(prefsToSave)
             },
             { requiresAuth: true }
           )
@@ -270,6 +345,7 @@ export default function UserPatientModal({
           email: formData.email.trim(),
           password: formData.password.trim(),
           role_id: parseInt(formData.role_id, 10),
+          is_active: formData.is_active !== undefined && formData.is_active !== null ? Boolean(formData.is_active) : true,
           phone: formData.phone && formData.phone.trim().length > 0 ? formData.phone.trim() : null
         } : {
           first_name: formData.first_name.trim(),
@@ -297,16 +373,37 @@ export default function UserPatientModal({
               ? `/api.php/users/${newId}/notifications`
               : `/api.php/patients/${newId}/notifications`
             
+            // S'assurer que toutes les valeurs sont des booléens avant l'envoi
+            // Convertir les chaînes vides en false pour éviter les erreurs SQL
+            const prefsToSave = {
+              email_enabled: Boolean(notificationPrefs.email_enabled ?? false),
+              sms_enabled: Boolean(notificationPrefs.sms_enabled ?? false),
+              push_enabled: Boolean(notificationPrefs.push_enabled ?? false),
+              notify_battery_low: Boolean(notificationPrefs.notify_battery_low ?? false),
+              notify_device_offline: Boolean(notificationPrefs.notify_device_offline ?? false),
+              notify_abnormal_flow: Boolean(notificationPrefs.notify_abnormal_flow ?? false)
+            }
+            
+            // Ajouter phone_number seulement s'il n'est pas vide
+            const phoneNumber = formData.phone?.trim() || notificationPrefs.phone_number?.trim()
+            if (phoneNumber) {
+              prefsToSave.phone_number = phoneNumber
+            }
+            
+            // Ajouter les champs spécifiques selon le type
+            if (type === 'user') {
+              prefsToSave.notify_new_patient = Boolean(notificationPrefs.notify_new_patient ?? false)
+            } else {
+              prefsToSave.notify_alert_critical = Boolean(notificationPrefs.notify_alert_critical ?? false)
+            }
+            
             await fetchJson(
               fetchWithAuth,
               API_URL,
               notifEndpoint,
               {
                 method: 'PUT',
-                body: JSON.stringify({
-                  ...notificationPrefs,
-                  phone_number: formData.phone || notificationPrefs.phone_number || ''
-                })
+                body: JSON.stringify(prefsToSave)
               },
               { requiresAuth: true }
             )
@@ -392,75 +489,79 @@ export default function UserPatientModal({
           {/* Champs spécifiques utilisateur */}
           {type === 'user' && (
             <>
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                  Email *
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email || ''}
-                    onChange={handleInputChange}
-                    className={`input mt-1 ${formErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
-                    required
-                  />
-                </label>
-                {formErrors.email && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.email}</p>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                    Email *
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email || ''}
+                      onChange={handleInputChange}
+                      className={`input mt-1 ${formErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                      required
+                    />
+                  </label>
+                  {formErrors.email && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.email}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                    Rôle *
+                    <select
+                      name="role_id"
+                      value={formData.role_id || ''}
+                      onChange={handleInputChange}
+                      className={`input mt-1 ${formErrors.role_id ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                      required
+                    >
+                      <option value="">Choisir un rôle…</option>
+                      {roles.map(role => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {formErrors.role_id && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.role_id}</p>
+                  )}
+                </div>
               </div>
 
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                  Rôle *
-                  <select
-                    name="role_id"
-                    value={formData.role_id || ''}
-                    onChange={handleInputChange}
-                    className={`input mt-1 ${formErrors.role_id ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
-                    required
-                  >
-                    <option value="">Choisir un rôle…</option>
-                    {roles.map(role => (
-                      <option key={role.id} value={role.id}>
-                        {role.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {formErrors.role_id && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.role_id}</p>
-                )}
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                    {editingItem ? 'Nouveau mot de passe (optionnel, 6+ caractères)' : 'Mot de passe (6+ caractères) *'}
+                    <input
+                      type="password"
+                      name="password"
+                      value={formData.password || ''}
+                      onChange={handleInputChange}
+                      className={`input mt-1 ${formErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                      required={!editingItem}
+                      minLength={6}
+                    />
+                  </label>
+                  {formErrors.password && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.password}</p>
+                  )}
+                </div>
 
-              {editingItem && (
-                <label className="flex items-center gap-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <input
-                    type="checkbox"
-                    name="is_active"
-                    checked={formData.is_active}
-                    onChange={handleInputChange}
-                    className="form-checkbox h-4 w-4 text-primary-600 dark:text-primary-400"
-                  />
-                  Compte actif
-                </label>
-              )}
-
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                  {editingItem ? 'Nouveau mot de passe (optionnel, 6+ caractères)' : 'Mot de passe (6+ caractères) *'}
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password || ''}
-                    onChange={handleInputChange}
-                    className={`input mt-1 ${formErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
-                    required={!editingItem}
-                    minLength={6}
-                  />
-                </label>
-                {formErrors.password && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.password}</p>
-                )}
+                <div className="flex items-end">
+                  <label className="flex items-center gap-3 text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                    <input
+                      type="checkbox"
+                      name="is_active"
+                      checked={formData.is_active !== undefined ? formData.is_active : true}
+                      onChange={handleInputChange}
+                      className="form-checkbox h-4 w-4 text-primary-600 dark:text-primary-400"
+                    />
+                    Compte actif
+                  </label>
+                </div>
               </div>
             </>
           )}
@@ -540,110 +641,292 @@ export default function UserPatientModal({
           <ErrorMessage error={formError} onClose={() => setFormError(null)} />
 
           {/* Section Notifications */}
-          {editingItem && (
-            <div className="border-t border-gray-200/80 dark:border-slate-700/50 pt-4 mt-4">
-              <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">📧 Notifications</h3>
-              
-              {loadingNotifPrefs ? (
-                <div className="text-sm text-gray-500 dark:text-gray-400">Chargement des préférences...</div>
-              ) : (
+          <div className="border-t border-gray-200/80 dark:border-slate-700/50 pt-4 mt-4">
+            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">📧 Notifications</h3>
+            
+            {editingItem && loadingNotifPrefs ? (
+              <div className="text-sm text-gray-500 dark:text-gray-400">Chargement des préférences...</div>
+            ) : (
                 <div className="space-y-4">
                   {/* Canaux de notification */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Canaux activés</label>
                     <div className="grid grid-cols-3 gap-3">
-                      <label className={`flex items-center gap-2 p-2 rounded ${formData.email ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={notificationPrefs.email_enabled}
-                          onChange={(e) => setNotificationPrefs(prev => ({ ...prev, email_enabled: e.target.checked }))}
-                          disabled={!formData.email}
-                          className="form-checkbox"
-                        />
-                        <span className="text-sm">✉️ Email</span>
-                        {!formData.email && <span className="text-xs text-gray-400">(non renseigné)</span>}
-                      </label>
-                      <label className={`flex items-center gap-2 p-2 rounded ${formData.phone ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={notificationPrefs.sms_enabled}
-                          onChange={(e) => setNotificationPrefs(prev => ({ ...prev, sms_enabled: e.target.checked }))}
-                          disabled={!formData.phone}
-                          className="form-checkbox"
-                        />
-                        <span className="text-sm">📱 SMS</span>
-                        {!formData.phone && <span className="text-xs text-gray-400">(non renseigné)</span>}
-                      </label>
-                      <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                        <input
-                          type="checkbox"
-                          checked={notificationPrefs.push_enabled}
-                          onChange={(e) => setNotificationPrefs(prev => ({ ...prev, push_enabled: e.target.checked }))}
-                          className="form-checkbox"
-                        />
-                        <span className="text-sm">🔔 Push</span>
-                      </label>
+                      <div>
+                        <label className={`flex items-center gap-2 p-2 rounded ${formData.email ? 'bg-gray-50' : 'bg-gray-100 opacity-50'}`}>
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.email_enabled}
+                            onChange={(e) => {
+                              const newValue = e.target.checked
+                              if (newValue && !formData.email) {
+                                setNotificationErrors(prev => ({ ...prev, email: 'Email requis pour activer les notifications email' }))
+                                return
+                              }
+                              setNotificationErrors(prev => {
+                                const next = { ...prev }
+                                delete next.email
+                                delete next.alerts
+                                return next
+                              })
+                              const updatedPrefs = { ...notificationPrefs, email_enabled: newValue }
+                              // Si aucun service n'est activé après cette modification, désactiver les alertes
+                              if (!newValue && !updatedPrefs.sms_enabled && !updatedPrefs.push_enabled) {
+                                updatedPrefs.notify_battery_low = false
+                                updatedPrefs.notify_device_offline = false
+                                updatedPrefs.notify_abnormal_flow = false
+                                if (type === 'user') {
+                                  updatedPrefs.notify_new_patient = false
+                                } else {
+                                  updatedPrefs.notify_alert_critical = false
+                                }
+                              }
+                              setNotificationPrefs(updatedPrefs)
+                            }}
+                            disabled={!formData.email}
+                            className="form-checkbox"
+                          />
+                          <span className="text-sm">✉️ Email</span>
+                        </label>
+                        {notificationErrors.email && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1 ml-8">{notificationErrors.email}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(notificationPrefs.sms_enabled)}
+                            onChange={(e) => {
+                              const newValue = e.target.checked
+                              if (newValue && !formData.phone) {
+                                setNotificationErrors(prev => ({ ...prev, sms: 'Téléphone requis pour activer les notifications SMS' }))
+                                return
+                              }
+                              setNotificationErrors(prev => {
+                                const next = { ...prev }
+                                delete next.sms
+                                delete next.alerts
+                                return next
+                              })
+                              const updatedPrefs = { ...notificationPrefs, sms_enabled: newValue }
+                              // Si aucun service n'est activé après cette modification, désactiver les alertes
+                              if (!newValue && !updatedPrefs.email_enabled && !updatedPrefs.push_enabled) {
+                                updatedPrefs.notify_battery_low = false
+                                updatedPrefs.notify_device_offline = false
+                                updatedPrefs.notify_abnormal_flow = false
+                                if (type === 'user') {
+                                  updatedPrefs.notify_new_patient = false
+                                } else {
+                                  updatedPrefs.notify_alert_critical = false
+                                }
+                              }
+                              setNotificationPrefs(updatedPrefs)
+                            }}
+                            className="form-checkbox"
+                          />
+                          <span className="text-sm">📱 SMS</span>
+                        </label>
+                        {notificationErrors.sms && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1 ml-8">{notificationErrors.sms}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                          <input
+                            type="checkbox"
+                            checked={notificationPrefs.push_enabled}
+                            onChange={async (e) => {
+                              const newValue = e.target.checked
+                              if (newValue) {
+                                // Vérifier le support des notifications push
+                                if (typeof window === 'undefined' || !('Notification' in window)) {
+                                  setNotificationErrors(prev => ({ ...prev, push: 'Votre navigateur ne supporte pas les notifications push' }))
+                                  return
+                                }
+                                if (!('serviceWorker' in navigator)) {
+                                  setNotificationErrors(prev => ({ ...prev, push: 'Service Worker non disponible (nécessite HTTPS)' }))
+                                  return
+                                }
+                                // Vérifier la permission
+                                if (Notification.permission === 'denied') {
+                                  setNotificationErrors(prev => ({ ...prev, push: 'Notifications push refusées. Autorisez-les dans les paramètres du navigateur.' }))
+                                  return
+                                }
+                                if (Notification.permission === 'default') {
+                                  try {
+                                    const permission = await Notification.requestPermission()
+                                    if (permission !== 'granted') {
+                                      setNotificationErrors(prev => ({ ...prev, push: 'Permission de notification refusée' }))
+                                      return
+                                    }
+                                  } catch (err) {
+                                    setNotificationErrors(prev => ({ ...prev, push: 'Erreur lors de la demande de permission' }))
+                                    return
+                                  }
+                                }
+                              }
+                              setNotificationErrors(prev => {
+                                const next = { ...prev }
+                                delete next.push
+                                delete next.alerts
+                                return next
+                              })
+                              const updatedPrefs = { ...notificationPrefs, push_enabled: newValue }
+                              // Si aucun service n'est activé après cette modification, désactiver les alertes
+                              if (!newValue && !updatedPrefs.email_enabled && !updatedPrefs.sms_enabled) {
+                                updatedPrefs.notify_battery_low = false
+                                updatedPrefs.notify_device_offline = false
+                                updatedPrefs.notify_abnormal_flow = false
+                                if (type === 'user') {
+                                  updatedPrefs.notify_new_patient = false
+                                } else {
+                                  updatedPrefs.notify_alert_critical = false
+                                }
+                              }
+                              setNotificationPrefs(updatedPrefs)
+                            }}
+                            className="form-checkbox"
+                          />
+                          <span className="text-sm">🔔 Push</span>
+                          {typeof window !== 'undefined' && (!('Notification' in window) || !('serviceWorker' in navigator)) && (
+                            <span className="text-xs text-gray-400">(non supporté)</span>
+                          )}
+                        </label>
+                        {notificationErrors.push && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1 ml-8">{notificationErrors.push}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {/* Types d'alertes */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Types d&apos;alertes</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Types d&apos;alertes
+                      {(!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) && (
+                        <span className="text-xs text-red-600 dark:text-red-400 ml-2">
+                          ⚠️ Activez au moins un service (Email/SMS/Push) pour activer les alertes
+                        </span>
+                      )}
+                    </label>
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="flex items-center gap-2 text-sm">
+                      <label className={`flex items-center gap-2 text-sm ${(!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) ? 'opacity-50' : ''}`}>
                         <input
                           type="checkbox"
-                          checked={notificationPrefs.notify_battery_low}
-                          onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_battery_low: e.target.checked }))}
+                          checked={Boolean(notificationPrefs.notify_battery_low)}
+                          disabled={!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled}
+                          onChange={(e) => {
+                            if (!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) {
+                              setNotificationErrors(prev => ({ ...prev, alerts: 'Activez au moins un service de notification pour activer les alertes' }))
+                              return
+                            }
+                            setNotificationErrors(prev => {
+                              const next = { ...prev }
+                              delete next.alerts
+                              return next
+                            })
+                            setNotificationPrefs(prev => ({ ...prev, notify_battery_low: e.target.checked }))
+                          }}
                           className="form-checkbox"
                         />
                         🔋 Batterie faible
                       </label>
-                      <label className="flex items-center gap-2 text-sm">
+                      <label className={`flex items-center gap-2 text-sm ${(!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) ? 'opacity-50' : ''}`}>
                         <input
                           type="checkbox"
-                          checked={notificationPrefs.notify_device_offline}
-                          onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_device_offline: e.target.checked }))}
+                          checked={Boolean(notificationPrefs.notify_device_offline)}
+                          disabled={!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled}
+                          onChange={(e) => {
+                            if (!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) {
+                              setNotificationErrors(prev => ({ ...prev, alerts: 'Activez au moins un service de notification pour activer les alertes' }))
+                              return
+                            }
+                            setNotificationErrors(prev => {
+                              const next = { ...prev }
+                              delete next.alerts
+                              return next
+                            })
+                            setNotificationPrefs(prev => ({ ...prev, notify_device_offline: e.target.checked }))
+                          }}
                           className="form-checkbox"
                         />
                         📴 Dispositif hors ligne
                       </label>
-                      <label className="flex items-center gap-2 text-sm">
+                      <label className={`flex items-center gap-2 text-sm ${(!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) ? 'opacity-50' : ''}`}>
                         <input
                           type="checkbox"
-                          checked={notificationPrefs.notify_abnormal_flow}
-                          onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_abnormal_flow: e.target.checked }))}
+                          checked={Boolean(notificationPrefs.notify_abnormal_flow)}
+                          disabled={!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled}
+                          onChange={(e) => {
+                            if (!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) {
+                              setNotificationErrors(prev => ({ ...prev, alerts: 'Activez au moins un service de notification pour activer les alertes' }))
+                              return
+                            }
+                            setNotificationErrors(prev => {
+                              const next = { ...prev }
+                              delete next.alerts
+                              return next
+                            })
+                            setNotificationPrefs(prev => ({ ...prev, notify_abnormal_flow: e.target.checked }))
+                          }}
                           className="form-checkbox"
                         />
                         ⚠️ Débit anormal
                       </label>
                       {type === 'user' ? (
-                        <label className="flex items-center gap-2 text-sm">
+                        <label className={`flex items-center gap-2 text-sm ${(!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) ? 'opacity-50' : ''}`}>
                           <input
                             type="checkbox"
-                            checked={notificationPrefs.notify_new_patient}
-                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_new_patient: e.target.checked }))}
+                            checked={Boolean(notificationPrefs.notify_new_patient)}
+                            disabled={!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled}
+                            onChange={(e) => {
+                              if (!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) {
+                                setNotificationErrors(prev => ({ ...prev, alerts: 'Activez au moins un service de notification pour activer les alertes' }))
+                                return
+                              }
+                              setNotificationErrors(prev => {
+                                const next = { ...prev }
+                                delete next.alerts
+                                return next
+                              })
+                              setNotificationPrefs(prev => ({ ...prev, notify_new_patient: e.target.checked }))
+                            }}
                             className="form-checkbox"
                           />
                           👤 Nouveau patient
                         </label>
                       ) : (
-                        <label className="flex items-center gap-2 text-sm">
+                        <label className={`flex items-center gap-2 text-sm ${(!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) ? 'opacity-50' : ''}`}>
                           <input
                             type="checkbox"
-                            checked={notificationPrefs.notify_alert_critical}
-                            onChange={(e) => setNotificationPrefs(prev => ({ ...prev, notify_alert_critical: e.target.checked }))}
+                            checked={Boolean(notificationPrefs.notify_alert_critical)}
+                            disabled={!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled}
+                            onChange={(e) => {
+                              if (!notificationPrefs.email_enabled && !notificationPrefs.sms_enabled && !notificationPrefs.push_enabled) {
+                                setNotificationErrors(prev => ({ ...prev, alerts: 'Activez au moins un service de notification pour activer les alertes' }))
+                                return
+                              }
+                              setNotificationErrors(prev => {
+                                const next = { ...prev }
+                                delete next.alerts
+                                return next
+                              })
+                              setNotificationPrefs(prev => ({ ...prev, notify_alert_critical: e.target.checked }))
+                            }}
                             className="form-checkbox"
                           />
                           🚨 Alerte critique
                         </label>
                       )}
                     </div>
+                    {notificationErrors.alerts && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-2">{notificationErrors.alerts}</p>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button

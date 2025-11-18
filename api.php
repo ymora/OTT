@@ -265,6 +265,73 @@ function runSqlFile(PDO $pdo, $filename) {
     $pdo->exec($sql);
 }
 
+function handleRunMigration() {
+    global $pdo;
+    
+    $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? null;
+    $allowWithoutAuth = in_array($remoteAddr, ['127.0.0.1', '::1', 'localhost'], true) || AUTH_DISABLED || getenv('ALLOW_MIGRATION_ENDPOINT') === 'true';
+    $currentUser = getCurrentUser();
+    $isAdmin = $currentUser && $currentUser['role_name'] === 'admin';
+    
+    if (!$allowWithoutAuth && !$isAdmin) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Forbidden: admin only']);
+        return;
+    }
+    
+    $migrationFile = SQL_BASE_DIR . '/schema.sql';
+    
+    if (!file_exists($migrationFile)) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Migration file not found']);
+        return;
+    }
+    
+    try {
+        $sql = file_get_contents($migrationFile);
+        if ($sql === false) {
+            throw new RuntimeException("Unable to read migration file");
+        }
+        
+        // Exécuter la migration
+        $pdo->exec($sql);
+        
+        // Vérifier les résultats
+        $results = [];
+        
+        // Vérifier colonne phone
+        try {
+            $stmt = $pdo->query("SELECT phone FROM users LIMIT 1");
+            $results['phone_column'] = 'exists';
+        } catch(PDOException $e) {
+            $results['phone_column'] = 'missing';
+        }
+        
+        // Vérifier table patient_notifications_preferences
+        try {
+            $stmt = $pdo->query("SELECT * FROM patient_notifications_preferences LIMIT 1");
+            $results['patient_notifications_table'] = 'exists';
+        } catch(PDOException $e) {
+            $results['patient_notifications_table'] = 'missing';
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Migration executed successfully',
+            'results' => $results
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Migration error';
+        error_log('[handleRunMigration] Error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    } catch(Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
 // ============================================================================
 // ROUTER
 // ============================================================================
@@ -402,6 +469,10 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 } elseif(preg_match('#/reports/overview$#', $path) && $method === 'GET') {
     handleGetReportsOverview();
 
+// Migration (temporaire - à supprimer après exécution)
+} elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {
+    handleRunMigration();
+
 } else {
     http_response_code(404);
     echo json_encode(['success' => false, 'error' => 'Endpoint not found']);
@@ -507,9 +578,13 @@ function handleGetUsers() {
                     r.name AS role_name,
                     r.description AS role_description,
                     COALESCE(STRING_AGG(p.code, ','), '') AS permissions,
-                    unp.email_enabled, unp.sms_enabled, unp.push_enabled,
-                    unp.notify_battery_low, unp.notify_device_offline, 
-                    unp.notify_abnormal_flow, unp.notify_new_patient
+                    COALESCE(unp.email_enabled, FALSE) as email_enabled,
+                    COALESCE(unp.sms_enabled, FALSE) as sms_enabled,
+                    COALESCE(unp.push_enabled, FALSE) as push_enabled,
+                    COALESCE(unp.notify_battery_low, FALSE) as notify_battery_low,
+                    COALESCE(unp.notify_device_offline, FALSE) as notify_device_offline,
+                    COALESCE(unp.notify_abnormal_flow, FALSE) as notify_abnormal_flow,
+                    COALESCE(unp.notify_new_patient, FALSE) as notify_new_patient
                 FROM users u
                 JOIN roles r ON u.role_id = r.id
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
@@ -532,9 +607,13 @@ function handleGetUsers() {
                     r.name AS role_name,
                     r.description AS role_description,
                     COALESCE(STRING_AGG(p.code, ','), '') AS permissions,
-                    unp.email_enabled, unp.sms_enabled, unp.push_enabled,
-                    unp.notify_battery_low, unp.notify_device_offline, 
-                    unp.notify_abnormal_flow, unp.notify_new_patient
+                    COALESCE(unp.email_enabled, FALSE) as email_enabled,
+                    COALESCE(unp.sms_enabled, FALSE) as sms_enabled,
+                    COALESCE(unp.push_enabled, FALSE) as push_enabled,
+                    COALESCE(unp.notify_battery_low, FALSE) as notify_battery_low,
+                    COALESCE(unp.notify_device_offline, FALSE) as notify_device_offline,
+                    COALESCE(unp.notify_abnormal_flow, FALSE) as notify_abnormal_flow,
+                    COALESCE(unp.notify_new_patient, FALSE) as notify_new_patient
                 FROM users u
                 JOIN roles r ON u.role_id = r.id
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
@@ -595,10 +674,28 @@ function handleCreateUser() {
             $hasPhoneColumn = false;
         }
         
+        // Gérer is_active comme boolean (PostgreSQL)
+        $isActive = true; // Par défaut
+        if (array_key_exists('is_active', $input)) {
+            $value = $input['is_active'];
+            if (is_bool($value)) {
+                $isActive = $value;
+            } elseif (is_string($value)) {
+                $trimmed = trim($value);
+                if ($trimmed === '' || $trimmed === 'false' || $trimmed === '0' || $trimmed === 'off' || $trimmed === 'no') {
+                    $isActive = false;
+                } else {
+                    $isActive = in_array(strtolower($trimmed), ['true', '1', 'yes', 'on']);
+                }
+            } elseif (is_numeric($value)) {
+                $isActive = (int)$value !== 0;
+            }
+        }
+        
         if ($hasPhoneColumn) {
             $stmt = $pdo->prepare("
-                INSERT INTO users (email, password_hash, first_name, last_name, role_id, phone)
-                VALUES (:email, :password_hash, :first_name, :last_name, :role_id, :phone)
+                INSERT INTO users (email, password_hash, first_name, last_name, role_id, phone, is_active)
+                VALUES (:email, :password_hash, :first_name, :last_name, :role_id, :phone, :is_active)
             ");
             $stmt->execute([
                 'email' => $input['email'],
@@ -606,27 +703,29 @@ function handleCreateUser() {
                 'first_name' => $input['first_name'] ?? '',
                 'last_name' => $input['last_name'] ?? '',
                 'role_id' => $input['role_id'] ?? 3, // technicien par défaut (viewer supprimé)
-                'phone' => !empty($input['phone']) ? trim($input['phone']) : null
+                'phone' => !empty($input['phone']) ? trim($input['phone']) : null,
+                'is_active' => $isActive
             ]);
         } else {
-        $stmt = $pdo->prepare("
-            INSERT INTO users (email, password_hash, first_name, last_name, role_id)
-            VALUES (:email, :password_hash, :first_name, :last_name, :role_id)
-        ");
-        $stmt->execute([
-            'email' => $input['email'],
-            'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
-            'first_name' => $input['first_name'] ?? '',
-            'last_name' => $input['last_name'] ?? '',
-            'role_id' => $input['role_id'] ?? 3 // technicien par défaut (viewer supprimé)
-        ]);
+            $stmt = $pdo->prepare("
+                INSERT INTO users (email, password_hash, first_name, last_name, role_id, is_active)
+                VALUES (:email, :password_hash, :first_name, :last_name, :role_id, :is_active)
+            ");
+            $stmt->execute([
+                'email' => $input['email'],
+                'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
+                'first_name' => $input['first_name'] ?? '',
+                'last_name' => $input['last_name'] ?? '',
+                'role_id' => $input['role_id'] ?? 3, // technicien par défaut (viewer supprimé)
+                'is_active' => $isActive
+            ]);
         }
         
         $user_id = $pdo->lastInsertId();
         // Créer avec valeurs par défaut (SMS activé)
         $pdo->prepare("
             INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
-            VALUES (:user_id, TRUE, TRUE, TRUE)
+            VALUES (:user_id, FALSE, FALSE, FALSE)
         ")->execute(['user_id' => $user_id]);
         
         auditLog('user.created', 'user', $user_id, null, $input);
@@ -667,11 +766,38 @@ function handleUpdateUser($user_id) {
         $updates = [];
         $params = ['id' => $user_id];
         
-        foreach(['first_name', 'last_name', 'email', 'role_id', 'is_active'] as $field) {
+        // Champs texte normaux
+        foreach(['first_name', 'last_name', 'email', 'role_id'] as $field) {
             if (isset($input[$field])) {
                 $updates[] = "$field = :$field";
                 $params[$field] = $input[$field];
             }
+        }
+        
+        // Gérer is_active comme boolean (PostgreSQL)
+        if (array_key_exists('is_active', $input)) {
+            $isActive = false;
+            $value = $input['is_active'];
+            
+            // Ignorer les valeurs null ou undefined
+            if ($value === null || $value === '') {
+                // Ne pas mettre à jour si valeur vide/null
+                // Mais si c'est explicitement false, on doit le traiter
+                // On considère que '' signifie false pour les checkboxes
+                $isActive = false;
+            } elseif (is_bool($value)) {
+                $isActive = $value;
+            } elseif (is_string($value)) {
+                $trimmed = trim($value);
+                if ($trimmed === '' || $trimmed === 'false' || $trimmed === '0' || $trimmed === 'off' || $trimmed === 'no') {
+                    $isActive = false;
+                } else {
+                    $isActive = in_array(strtolower($trimmed), ['true', '1', 'yes', 'on']);
+                }
+            } elseif (is_numeric($value)) {
+                $isActive = (int)$value !== 0;
+            }
+            $updates[] = "is_active = " . ($isActive ? 'TRUE' : 'FALSE');
         }
         
         // Gérer le champ phone si la colonne existe
@@ -694,8 +820,21 @@ function handleUpdateUser($user_id) {
         $stmt = $pdo->prepare("UPDATE users SET " . implode(', ', $updates) . " WHERE id = :id");
         $stmt->execute($params);
         
+        // Récupérer l'utilisateur mis à jour pour le retourner
+        $updatedStmt = $pdo->prepare("
+            SELECT 
+                u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
+                u.is_active, u.last_login, u.created_at,
+                r.name AS role_name
+            FROM users u
+            JOIN roles r ON u.role_id = r.id
+            WHERE u.id = :id
+        ");
+        $updatedStmt->execute(['id' => $user_id]);
+        $updated_user = $updatedStmt->fetch();
+        
         auditLog('user.updated', 'user', $user_id, $old_user, $input);
-        echo json_encode(['success' => true]);
+        echo json_encode(['success' => true, 'user' => $updated_user]);
         
     } catch(PDOException $e) {
         http_response_code(500);
@@ -1944,44 +2083,105 @@ function handleGetPatients() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     try {
-        // Compter le total
+        // Vérifier si la table patient_notifications_preferences existe
+        // Utiliser une requête système PostgreSQL pour vérifier l'existence
+        $hasNotificationsTable = false;
+        try {
+            $checkStmt = $pdo->query("
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'patient_notifications_preferences'
+                )
+            ");
+            $result = $checkStmt->fetchColumn();
+            // PostgreSQL retourne 't' pour true, 'f' pour false, ou un booléen selon la version
+            $hasNotificationsTable = ($result === true || $result === 't' || $result === 1 || $result === '1');
+            
+            // Log pour debug
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[handleGetPatients] Table check result: ' . var_export($result, true) . ' -> hasNotificationsTable: ' . ($hasNotificationsTable ? 'yes' : 'no'));
+            }
+        } catch(PDOException $e) {
+            // Si la vérification échoue, on assume que la table n'existe pas
+            $hasNotificationsTable = false;
+            error_log('[handleGetPatients] Table check failed: ' . $e->getMessage());
+        }
+        
+        // Compter le total AVANT la requête principale
         $countStmt = $pdo->query("SELECT COUNT(*) FROM patients");
-        $total = $countStmt->fetchColumn();
+        $total = intval($countStmt->fetchColumn());
         
         // Requête optimisée avec pagination et préférences de notifications
-        $stmt = $pdo->prepare("
-            SELECT p.*, 
-                   (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
-                   (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d,
-                   (SELECT id FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_id,
-                   (SELECT device_name FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_name,
-                   (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid,
-                   pnp.email_enabled, pnp.sms_enabled, pnp.push_enabled,
-                   pnp.notify_battery_low, pnp.notify_device_offline, 
-                   pnp.notify_abnormal_flow, pnp.notify_alert_critical
-            FROM patients p
-            LEFT JOIN patient_notifications_preferences pnp ON p.id = pnp.patient_id
-            ORDER BY p.last_name, p.first_name
-            LIMIT :limit OFFSET :offset
-        ");
+        // Utiliser COALESCE pour retourner les valeurs par défaut du schéma si NULL
+        // TOUJOURS utiliser la version sans JOIN si la table n'existe pas
+        if ($hasNotificationsTable) {
+            $stmt = $pdo->prepare("
+                SELECT p.*, 
+                       (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
+                       (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d,
+                       (SELECT id FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_id,
+                       (SELECT device_name FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_name,
+                       (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid,
+                       COALESCE(pnp.email_enabled, FALSE) as email_enabled,
+                       COALESCE(pnp.sms_enabled, FALSE) as sms_enabled,
+                       COALESCE(pnp.push_enabled, FALSE) as push_enabled,
+                       COALESCE(pnp.notify_battery_low, FALSE) as notify_battery_low,
+                       COALESCE(pnp.notify_device_offline, FALSE) as notify_device_offline,
+                       COALESCE(pnp.notify_abnormal_flow, FALSE) as notify_abnormal_flow,
+                       COALESCE(pnp.notify_alert_critical, FALSE) as notify_alert_critical
+                FROM patients p
+                LEFT JOIN patient_notifications_preferences pnp ON p.id = pnp.patient_id
+                ORDER BY p.last_name, p.first_name
+                LIMIT :limit OFFSET :offset
+            ");
+        } else {
+            // Fallback si la table n'existe pas encore
+            $stmt = $pdo->prepare("
+                SELECT p.*, 
+                       (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
+                       (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d,
+                       (SELECT id FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_id,
+                       (SELECT device_name FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_name,
+                       (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid,
+                       FALSE as email_enabled,
+                       FALSE as sms_enabled,
+                       FALSE as push_enabled,
+                       FALSE as notify_battery_low,
+                       FALSE as notify_device_offline,
+                       FALSE as notify_abnormal_flow,
+                       FALSE as notify_alert_critical
+                FROM patients p
+                ORDER BY p.last_name, p.first_name
+                LIMIT :limit OFFSET :offset
+            ");
+        }
+        
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         
+        $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Log pour debug (seulement si DEBUG_ERRORS est activé)
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleGetPatients] Total patients: ' . $total . ' | Found: ' . count($patients) . ' | Has notifications table: ' . ($hasNotificationsTable ? 'yes' : 'no'));
+        }
+        
         echo json_encode([
             'success' => true, 
-            'patients' => $stmt->fetchAll(),
+            'patients' => $patients,
             'pagination' => [
-                'total' => intval($total),
+                'total' => $total,
                 'limit' => $limit,
                 'offset' => $offset,
                 'has_more' => ($offset + $limit) < $total
             ]
-        ]);
+        ], JSON_UNESCAPED_UNICODE);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        error_log('[handleGetPatients] ' . $e->getMessage());
+        error_log('[handleGetPatients] Database error: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
@@ -2041,14 +2241,16 @@ function handleUpdatePatient($patient_id) {
             return;
         }
 
-        $fields = ['first_name','last_name','birth_date','phone','email','city','postal_code','address','notes'];
+        // Champs texte normaux
+        $textFields = ['first_name','last_name','birth_date','phone','email','city','postal_code','address','notes'];
         $updates = [];
         $params = ['id' => $patient_id];
 
-        foreach ($fields as $field) {
+        foreach ($textFields as $field) {
             if (array_key_exists($field, $input)) {
                 $updates[] = "$field = :$field";
-                $params[$field] = $input[$field];
+                // Gérer les valeurs null/vides
+                $params[$field] = ($input[$field] === '' || $input[$field] === null) ? null : $input[$field];
             }
         }
 
@@ -2058,10 +2260,12 @@ function handleUpdatePatient($patient_id) {
         }
 
         $pdo->prepare("
-            UPDATE patients SET " . implode(',', $updates) . ", updated_at = NOW()
+            UPDATE patients SET " . implode(', ', $updates) . ", updated_at = NOW()
             WHERE id = :id
         ")->execute($params);
 
+        // Récupérer le patient mis à jour
+        $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id");
         $stmt->execute(['id' => $patient_id]);
         $updated = $stmt->fetch();
         auditLog('patient.updated', 'patient', $patient_id, $patient, $updated);
@@ -2538,10 +2742,10 @@ function handleGetNotificationPreferences() {
         $prefs = $stmt->fetch();
         
         if (!$prefs) {
-            // Créer avec valeurs par défaut (SMS activé)
+            // Créer avec valeurs par défaut (toutes désactivées)
             $pdo->prepare("
                 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
-                VALUES (:user_id, TRUE, TRUE, TRUE)
+                VALUES (:user_id, FALSE, FALSE, FALSE)
             ")->execute(['user_id' => $user['id']]);
             $stmt->execute(['user_id' => $user['id']]);
             $prefs = $stmt->fetch();
@@ -2567,10 +2771,10 @@ function handleUpdateNotificationPreferences() {
         $checkStmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
         $checkStmt->execute(['user_id' => $user_id]);
         if (!$checkStmt->fetch()) {
-            // Créer avec valeurs par défaut (SMS activé)
+            // Créer avec valeurs par défaut (toutes désactivées)
             $insertStmt = $pdo->prepare("
                 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
-                VALUES (:user_id, TRUE, TRUE, TRUE)
+                VALUES (:user_id, FALSE, FALSE, FALSE)
             ");
             $insertStmt->execute(['user_id' => $user_id]);
         }
@@ -2591,12 +2795,17 @@ function handleUpdateNotificationPreferences() {
                     'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow', 'notify_new_patient']);
                 
                 if ($isBooleanField) {
-                    // Convertir en booléen (gérer string "true"/"false", 0/1, etc.)
+                    // Convertir en booléen (gérer string "true"/"false", 0/1, chaîne vide, etc.)
                     $boolValue = false;
                     if (is_bool($value)) {
                         $boolValue = $value;
                     } elseif (is_string($value)) {
-                        $boolValue = in_array(strtolower($value), ['true', '1', 'yes', 'on']);
+                        // Chaîne vide = false
+                        if ($value === '') {
+                            $boolValue = false;
+                        } else {
+                            $boolValue = in_array(strtolower(trim($value)), ['true', '1', 'yes', 'on']);
+                        }
                     } elseif (is_numeric($value)) {
                         $boolValue = (int)$value !== 0;
                     }
@@ -2734,7 +2943,7 @@ function handleGetUserNotifications($user_id) {
         $prefs = $stmt->fetch();
         
         if (!$prefs) {
-            // Créer avec valeurs par défaut (SMS activé)
+            // Créer avec valeurs par défaut (toutes désactivées)
             $pdo->prepare("
                 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
                 VALUES (:user_id, TRUE, TRUE, TRUE)
@@ -2770,10 +2979,10 @@ function handleUpdateUserNotifications($user_id) {
         $checkStmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
         $checkStmt->execute(['user_id' => $user_id]);
         if (!$checkStmt->fetch()) {
-            // Créer avec valeurs par défaut (SMS activé)
+            // Créer avec valeurs par défaut (toutes désactivées)
             $insertStmt = $pdo->prepare("
                 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
-                VALUES (:user_id, TRUE, TRUE, TRUE)
+                VALUES (:user_id, FALSE, FALSE, FALSE)
             ");
             $insertStmt->execute(['user_id' => $user_id]);
         }
@@ -2794,12 +3003,17 @@ function handleUpdateUserNotifications($user_id) {
                     'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow', 'notify_new_patient']);
                 
                 if ($isBooleanField) {
-                    // Convertir en booléen (gérer string "true"/"false", 0/1, etc.)
+                    // Convertir en booléen (gérer string "true"/"false", 0/1, chaîne vide, etc.)
                     $boolValue = false;
                     if (is_bool($value)) {
                         $boolValue = $value;
                     } elseif (is_string($value)) {
-                        $boolValue = in_array(strtolower($value), ['true', '1', 'yes', 'on']);
+                        // Chaîne vide = false
+                        if ($value === '') {
+                            $boolValue = false;
+                        } else {
+                            $boolValue = in_array(strtolower(trim($value)), ['true', '1', 'yes', 'on']);
+                        }
                     } elseif (is_numeric($value)) {
                         $boolValue = (int)$value !== 0;
                     }
@@ -2849,8 +3063,13 @@ function handleGetPatientNotifications($patient_id) {
         $prefs = $stmt->fetch();
         
         if (!$prefs) {
-            // Créer des préférences par défaut
-            $pdo->prepare("INSERT INTO patient_notifications_preferences (patient_id) VALUES (:patient_id)")->execute(['patient_id' => $patient_id]);
+            // Créer des préférences par défaut avec valeurs explicites du schéma
+            $pdo->prepare("
+                INSERT INTO patient_notifications_preferences 
+                (patient_id, email_enabled, sms_enabled, push_enabled, 
+                 notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_alert_critical) 
+                VALUES (:patient_id, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
+            ")->execute(['patient_id' => $patient_id]);
             $stmt->execute(['patient_id' => $patient_id]);
             $prefs = $stmt->fetch();
         }
@@ -2878,11 +3097,16 @@ function handleUpdatePatientNotifications($patient_id) {
             return;
         }
         
-        // Vérifier/créer les préférences
+        // Vérifier/créer les préférences avec valeurs par défaut explicites
         $stmt = $pdo->prepare("SELECT * FROM patient_notifications_preferences WHERE patient_id = :patient_id");
         $stmt->execute(['patient_id' => $patient_id]);
         if (!$stmt->fetch()) {
-            $pdo->prepare("INSERT INTO patient_notifications_preferences (patient_id) VALUES (:patient_id)")->execute(['patient_id' => $patient_id]);
+            $pdo->prepare("
+                INSERT INTO patient_notifications_preferences 
+                (patient_id, email_enabled, sms_enabled, push_enabled, 
+                 notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_alert_critical) 
+                VALUES (:patient_id, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
+            ")->execute(['patient_id' => $patient_id]);
         }
         
         $updates = [];
@@ -2901,12 +3125,17 @@ function handleUpdatePatientNotifications($patient_id) {
                     'notify_battery_low', 'notify_device_offline', 'notify_abnormal_flow', 'notify_alert_critical']);
                 
                 if ($isBooleanField) {
-                    // Convertir en booléen (gérer string "true"/"false", 0/1, etc.)
+                    // Convertir en booléen (gérer string "true"/"false", 0/1, chaîne vide, etc.)
                     $boolValue = false;
                     if (is_bool($value)) {
                         $boolValue = $value;
                     } elseif (is_string($value)) {
-                        $boolValue = in_array(strtolower($value), ['true', '1', 'yes', 'on']);
+                        // Chaîne vide = false
+                        if ($value === '') {
+                            $boolValue = false;
+                        } else {
+                            $boolValue = in_array(strtolower(trim($value)), ['true', '1', 'yes', 'on']);
+                        }
                     } elseif (is_numeric($value)) {
                         $boolValue = (int)$value !== 0;
                     }
@@ -3186,21 +3415,21 @@ function triggerAlertNotifications($pdo, $device_id, $alert_type, $severity, $me
             // Si pas de préférences, créer avec valeurs par défaut
             if (!$patientPrefs) {
                 $pdo->prepare("
-                    INSERT INTO patient_notifications_preferences (patient_id, email_enabled, sms_enabled, notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_alert_critical)
-                    VALUES (:patient_id, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE)
+                    INSERT INTO patient_notifications_preferences (patient_id, email_enabled, sms_enabled, push_enabled, notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_alert_critical)
+                    VALUES (:patient_id, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
                 ")->execute(['patient_id' => $device['patient_id']]);
-                $patientPrefs = ['email_enabled' => true, 'sms_enabled' => true, 'notify_battery_low' => true, 'notify_device_offline' => true, 'notify_abnormal_flow' => true, 'notify_alert_critical' => true];
+                $patientPrefs = ['email_enabled' => false, 'sms_enabled' => false, 'push_enabled' => false, 'notify_battery_low' => false, 'notify_device_offline' => false, 'notify_abnormal_flow' => false, 'notify_alert_critical' => false];
             }
             
             // Vérifier si cette alerte doit être notifiée au patient
             $shouldNotify = false;
-            if ($alert_type === 'low_battery' && ($patientPrefs['notify_battery_low'] ?? true)) {
+            if ($alert_type === 'low_battery' && ($patientPrefs['notify_battery_low'] ?? false)) {
                 $shouldNotify = true;
-            } elseif ($alert_type === 'device_offline' && ($patientPrefs['notify_device_offline'] ?? true)) {
+            } elseif ($alert_type === 'device_offline' && ($patientPrefs['notify_device_offline'] ?? false)) {
                 $shouldNotify = true;
-            } elseif ($alert_type === 'abnormal_flow' && ($patientPrefs['notify_abnormal_flow'] ?? true)) {
+            } elseif ($alert_type === 'abnormal_flow' && ($patientPrefs['notify_abnormal_flow'] ?? false)) {
                 $shouldNotify = true;
-            } elseif ($severity === 'critical' && ($patientPrefs['notify_alert_critical'] ?? true)) {
+            } elseif ($severity === 'critical' && ($patientPrefs['notify_alert_critical'] ?? false)) {
                 $shouldNotify = true;
             }
             
@@ -3246,11 +3475,11 @@ function triggerAlertNotifications($pdo, $device_id, $alert_type, $severity, $me
             
             // Vérifier les préférences spécifiques
             $shouldNotifyUser = false;
-            if ($alert_type === 'low_battery' && ($user['notify_battery_low'] ?? true)) {
+            if ($alert_type === 'low_battery' && ($user['notify_battery_low'] ?? false)) {
                 $shouldNotifyUser = true;
-            } elseif ($alert_type === 'device_offline' && ($user['notify_device_offline'] ?? true)) {
+            } elseif ($alert_type === 'device_offline' && ($user['notify_device_offline'] ?? false)) {
                 $shouldNotifyUser = true;
-            } elseif ($alert_type === 'abnormal_flow' && ($user['notify_abnormal_flow'] ?? true)) {
+            } elseif ($alert_type === 'abnormal_flow' && ($user['notify_abnormal_flow'] ?? false)) {
                 $shouldNotifyUser = true;
             } elseif ($severity === 'critical') {
                 $shouldNotifyUser = true; // Toujours notifier les alertes critiques
