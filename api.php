@@ -623,7 +623,7 @@ function handleGetUsers() {
         // Vérifier si la colonne phone existe (utilise helper)
         $hasPhoneColumn = columnExists('users', 'phone');
         
-        // Construire la requête selon l'existence de la colonne
+        // Requête unifiée : retourner phone si la colonne existe, sinon NULL
         if ($hasPhoneColumn) {
             $stmt = $pdo->prepare("
                 SELECT 
@@ -654,7 +654,7 @@ function handleGetUsers() {
                 LIMIT :limit OFFSET :offset
             ");
         } else {
-            // Version sans colonne phone - utiliser NULL AS phone
+            // Version sans colonne phone - retourner NULL AS phone
             $stmt = $pdo->prepare("
                 SELECT 
                     u.id, u.email, u.first_name, u.last_name, NULL AS phone, u.password_hash,

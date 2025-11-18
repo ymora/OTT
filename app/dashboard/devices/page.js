@@ -284,7 +284,7 @@ export default function DevicesPage() {
 
   // Détection automatique au chargement (ports déjà autorisés)
   useEffect(() => {
-    if (!isSupported || !autoDetecting || loading) return
+    if (!isSupported || !autoDetecting) return
 
     const autoDetect = async () => {
       try {
@@ -302,7 +302,10 @@ export default function DevicesPage() {
           // Filtrer les ports USB
           if (info.usbVendorId || info.usbProductId) {
             const device = await detectDeviceOnPort(p)
-            if (device) break // Arrêter au premier dispositif trouvé
+            if (device) {
+              setAutoDetecting(false)
+              return // Arrêter au premier dispositif trouvé
+            }
           }
         }
 
@@ -312,7 +315,11 @@ export default function DevicesPage() {
           const info = firstPort.getInfo()
           if (!info.usbVendorId && !info.usbProductId) {
             // Port série non-USB, essayer quand même
-            await detectDeviceOnPort(firstPort)
+            const device = await detectDeviceOnPort(firstPort)
+            if (device) {
+              setAutoDetecting(false)
+              return
+            }
           }
         }
       } catch (err) {
@@ -322,11 +329,13 @@ export default function DevicesPage() {
       }
     }
 
-    // Attendre que les devices soient chargés
-    if (devices.length > 0 || !loading) {
+    // Attendre un peu que les devices soient chargés, puis détecter
+    const timer = setTimeout(() => {
       autoDetect()
-    }
-  }, [isSupported, autoDetecting, devices, loading, detectDeviceOnPort, usbConnectedDevice, usbVirtualDevice])
+    }, 500) // Délai de 500ms pour laisser le temps aux données de charger
+
+    return () => clearTimeout(timer)
+  }, [isSupported, autoDetecting, detectDeviceOnPort, usbConnectedDevice, usbVirtualDevice])
 
   // Écouter les nouveaux ports connectés
   useEffect(() => {

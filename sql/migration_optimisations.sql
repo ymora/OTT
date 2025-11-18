@@ -30,8 +30,9 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- 2. COLONNES MANQUANTES - TABLES EXISTANTES
 -- ============================================================================
 
--- Table users : timezone
+-- Table users : timezone et phone (si manquant)
 ALTER TABLE users 
+  ADD COLUMN IF NOT EXISTS phone VARCHAR(20),
   ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Europe/Paris',
   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 

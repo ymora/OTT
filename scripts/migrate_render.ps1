@@ -32,6 +32,7 @@ if (-not $DATABASE_URL) {
 # Vérifier que les fichiers SQL existent
 $SCHEMA_FILE = Join-Path $PSScriptRoot "..\sql\schema.sql"
 $MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_optimisations.sql"
+$PHONE_MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_add_phone_users.sql"
 
 if (-not (Test-Path $SCHEMA_FILE)) {
     Write-Host "❌ Fichier SQL introuvable: $SCHEMA_FILE" -ForegroundColor Red
@@ -111,6 +112,18 @@ try {
     }
     Write-Host ""
 
+    # 2.5. Appliquer la migration phone (si nécessaire)
+    if (Test-Path $PHONE_MIGRATION_FILE) {
+        Write-Host "2️⃣.5 Application de la migration phone (users)..." -ForegroundColor Yellow
+        $phoneMigrationResult = Invoke-PSQL -DatabaseUrl $DATABASE_URL -File $PHONE_MIGRATION_FILE 2>&1
+        if ($LASTEXITCODE -eq 0 -or $phoneMigrationResult -match "NOTICE.*ajoutée|NOTICE.*existe") {
+            Write-Host "   ✅ Migration phone appliquée" -ForegroundColor Green
+        } else {
+            Write-Host "   ⚠️  Migration phone (vérifiez les messages)" -ForegroundColor Yellow
+        }
+    }
+    Write-Host ""
+
     # 3. Vérifier
     Write-Host "3️⃣  Vérification..." -ForegroundColor Yellow
     $checkResult = Invoke-PSQL -DatabaseUrl $DATABASE_URL -Command "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public';" 2>&1
@@ -123,6 +136,14 @@ try {
             Write-Host "   ✅ Table patient_notifications_preferences existe" -ForegroundColor Green
         } else {
             Write-Host "   ⚠️  Table patient_notifications_preferences non trouvée" -ForegroundColor Yellow
+        }
+        
+        # Vérifier la colonne phone dans users
+        $phoneColumnCheck = Invoke-PSQL -DatabaseUrl $DATABASE_URL -Command "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'phone');" 2>&1
+        if ($phoneColumnCheck -match 't|true|1') {
+            Write-Host "   ✅ Colonne phone existe dans users" -ForegroundColor Green
+        } else {
+            Write-Host "   ⚠️  Colonne phone non trouvée dans users" -ForegroundColor Yellow
         }
     }
     Write-Host ""
