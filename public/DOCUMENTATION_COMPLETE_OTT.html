@@ -1318,20 +1318,26 @@ EOF
     </div>
 
     <h4>Base PostgreSQL locale (Docker Compose)</h4>
+    
+    <p><strong>Pour une base NOUVELLE (première installation) :</strong></p>
     <ol>
-        <li><code>docker compose up -d db</code> (fichier racine) pour lancer Postgres 15.</li>
-        <li>Exporter les variables reconnues par l’API :
-            <pre>
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_NAME=ott_data
-export DB_USER=postgres
-export DB_PASS=postgres
-            </pre>
-        </li>
-        <li>Appliquer schéma + seeds : <code>./scripts/db_migrate.sh --seed</code>.</li>
-        <li>Réinitialiser totalement : <code>docker compose down -v</code>.</li>
+        <li>Démarrer Docker : <code>docker compose up -d db</code></li>
+        <li>Initialiser complètement : <code>./scripts/docker_init_db.sh</code> (ou <code>.ps1</code> sur Windows)</li>
+        <li>Démarrer l'API : <code>docker compose up -d api</code></li>
     </ol>
+    
+    <p><strong>Pour une base EXISTANTE (mise à jour uniquement) :</strong></p>
+    <ol>
+        <li>Vérifier que Docker est démarré : <code>docker compose ps</code></li>
+        <li>Appliquer la migration : <code>./scripts/docker_migrate.sh</code> (ou <code>.ps1</code> sur Windows)</li>
+        <li>Vérifier : <code>docker compose exec db psql -U postgres -d ott_data -c "\dt"</code></li>
+    </ol>
+    
+    <div class="alert alert-info">
+        <strong>📖 Voir <code>README.md</code> section "Base PostgreSQL locale" pour plus de détails</strong><br>
+        Les scripts Docker gèrent automatiquement les migrations et préservent vos données existantes.
+    </div>
+    
     <p><strong>Note :</strong> la compatibilité MySQL/PDO a été retirée. Toutes les installations (Render ou locales) doivent désormais utiliser PostgreSQL.</p>
     
     <h3>📡 Firmware OTA & Commandes</h3>

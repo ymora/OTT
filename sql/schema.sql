@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS patient_notifications_preferences (
   email_enabled BOOLEAN DEFAULT FALSE,
   sms_enabled BOOLEAN DEFAULT FALSE,
   push_enabled BOOLEAN DEFAULT FALSE,
+  phone_number VARCHAR(20),
   notify_battery_low BOOLEAN DEFAULT FALSE,
   notify_device_offline BOOLEAN DEFAULT FALSE,
   notify_abnormal_flow BOOLEAN DEFAULT FALSE,
@@ -304,6 +305,7 @@ FROM users u
 JOIN roles r ON u.role_id = r.id
 LEFT JOIN role_permissions rp ON r.id = rp.role_id
 LEFT JOIN permissions p ON rp.permission_id = p.id
+WHERE u.deleted_at IS NULL
 GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash, 
          u.is_active, u.last_login, u.created_at, r.name, r.description;
 

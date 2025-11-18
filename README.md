@@ -161,24 +161,32 @@ EOF
 
 ### Base PostgreSQL locale (Docker Compose)
 
-1. Lancer l’instance : `docker compose up -d db`
-2. Exporter (ou définir dans `.env`) les variables attendues par l’API :
-   ```bash
-   export DB_HOST=localhost
-   export DB_PORT=5432
-   export DB_NAME=ott_data
-   export DB_USER=postgres
-   export DB_PASS=postgres
-   ```
-3. Initialiser les données : `./scripts/db_migrate.sh --seed`
-4. Réinitialiser complètement : `docker compose down -v`
-5. Visualiser la base dans un navigateur :
-   ```bash
-   docker run -d --name ott-db-viewer -p 8081:8081 ^
-     -e PGWEB_DATABASE_URL="postgres://postgres:postgres@host.docker.internal:55432/ott_data?sslmode=disable" ^
-     sosedoff/pgweb
-   # Ouvrir http://localhost:8081 (stopper via: docker stop ott-db-viewer)
-   ```
+#### Pour une base **NOUVELLE** (première installation)
+
+1. Lancer l'instance : `docker compose up -d db`
+2. Initialiser complètement : `./scripts/docker_init_db.sh` (ou `.ps1` sur Windows)
+   - Applique `schema.sql` + `migration_optimisations.sql`
+   - Crée les tables, index, triggers, fonctions
+   - Demande confirmation si la base contient déjà des données
+3. Démarrer l'API : `docker compose up -d api`
+
+#### Pour une base **EXISTANTE** (mise à jour uniquement)
+
+1. Vérifier que Docker est démarré : `docker compose ps`
+2. Appliquer la migration d'optimisations : `./scripts/docker_migrate.sh` (ou `.ps1` sur Windows)
+   - Vérifie que la base existe
+   - Applique uniquement `migration_optimisations.sql` (idempotent)
+   - Ne modifie pas les données existantes
+3. Vérifier : `docker compose exec db psql -U postgres -d ott_data -c "\dt"`
+
+#### Commandes utiles
+
+- Voir les logs : `docker compose logs -f db`
+- Accéder à la base : `docker compose exec db psql -U postgres -d ott_data`
+- Réinitialiser complètement : `docker compose down -v && docker compose up -d db`
+- Visualiser la base (pgweb) : `docker compose up -d pgweb` puis http://localhost:8081
+
+**⚠️ Important :** Les scripts Docker préservent vos données. La migration est idempotente (peut être réexécutée sans erreur).
 
 > ℹ️ Tous les scripts contenus dans `sql/` sont **100 % anonymisés** (ICCID simulés, e-mails génériques, mots de passe uniquement sous forme de hash bcrypt). Aucun secret de production n’est versionné.
 
