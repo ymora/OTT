@@ -37,16 +37,13 @@ desktop.ini
 temp/
 tmp/
 
-# Hardware / Firmware (stockés hors repo)
-hardware/
-!hardware/README.md
-
-# Firmwares - CODE SOURCE INTERDIT
+# Firmwares
 *.bin
 firmwares/*.bin
-*.ino
-*.cpp
-*.h
+
+# Artefacts volumineux conservés hors du dépôt principal
+docs/
+external/
 
 # Backup
 *.backup
@@ -55,7 +52,3 @@ backup_*.sql
 # Fichiers temporaires
 *.tmp
 temp/
-
-# Bibliothèques firmware déplacées (dépot privé)
-external/
-docs/

@@ -1104,10 +1104,19 @@ function handleCreateDevice() {
     $device_serial = trim($input['device_serial'] ?? '');
     $patient_id = $input['patient_id'] ?? null;
 
-    if (strlen($sim_iccid) < 10) {
+    // Validation ICCID : soit vide/null (dispositif USB non flashé), soit valide (min 10 caractères)
+    if ($sim_iccid !== '' && $sim_iccid !== null && strlen($sim_iccid) < 10) {
         http_response_code(422);
-        echo json_encode(['success' => false, 'error' => 'SIM ICCID invalide']);
+        echo json_encode(['success' => false, 'error' => 'SIM ICCID invalide (minimum 10 caractères)']);
         return;
+    }
+    
+    // Si pas d'ICCID, générer un identifiant temporaire unique pour permettre la création
+    if (empty($sim_iccid) || $sim_iccid === null) {
+        // Générer un ICCID temporaire basé sur le device_serial ou device_name
+        $tempIdentifier = $device_serial ? substr($device_serial, -8) : 
+                        ($device_name ? preg_replace('/[^0-9A-Za-z]/', '', substr($device_name, -8)) : '');
+        $sim_iccid = 'TEMP-' . str_pad($tempIdentifier ?: uniqid(), 15, '0', STR_PAD_LEFT);
     }
 
     $patientParam = null;

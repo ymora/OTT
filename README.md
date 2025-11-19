@@ -244,8 +244,9 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 - `sql/create_demo_user.sql` - Création utilisateur `demo@example.com`
 - `sql/UPDATE_PASSWORDS_RENDER.sql` - Rotation de mots de passe Render
 - `public/manifest.json` / `public/sw.js` - PWA installable
-- `hardware/` (ignoré) - dépôt externe pour firmware/CAO
-- `external/` → déplacé dans le dépôt privé `ott-hardware/firmware/external` (libs TinyGSM et patchs modem)
+- `hardware/` - CAD + doc modem + firmware ESP32/SIM7600 (`cad/`, `docs/`, `firmware/`, `scripts/`)
+  - `hardware/firmware/fw_ott_optimized` contient le firmware complet (OTA, commandes, streaming USB)
+  - `hardware/firmware/external/TinyGSM*` embarque la lib TinyGSM patchée utilisée par l'ESP32
 
 ---
 
@@ -327,6 +328,27 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 - ✅ Configuration par défaut embarquée (ICCID/APN/SIM PIN=1234 + JWT optionnel via macros `OTT_DEFAULT_*`) pour boîtiers prêts à l’emploi sans commande distante
 - ✅ Protocoles API alignés : headers `X-Device-ICCID`, payload `device_sim_iccid` + `payload{flowrate,battery,signal_*}`, prise en charge des réponses `/devices/{iccid}/commands/pending`
 - ✅ Reconfiguration distante des secrets APN/JWT/ICCID/serial/PIN SIM et paramètres runtime (watchdog, OTA, mesures) stockés en NVS
+- ✅ **Mode streaming USB** : brancher l’OTT en USB, ouvrir un moniteur série 115200 puis taper `usb` + Entrée <3s → 1 mesure/s en JSON (`interval=<ms>`, `once`, `exit`)
+
+#### Mode streaming USB – mode opératoire
+
+1. Alimenter l’OTT via USB et ouvrir un moniteur série 115200 bauds (Arduino IDE, screen, dashboard Web Serial…).
+2. Dès l’affichage de la bannière `[BOOT]`, taper `usb` puis Entrée (délai ~3 secondes).
+3. Le firmware reste éveillé et publie une mesure par seconde au format JSON + une ligne lisible.
+
+Commandes durant la session :
+
+- `once` → envoie immédiatement une mesure
+- `interval=<ms>` → change l’intervalle (200 à 10000 ms, défaut 1000 ms)
+- `help` → affiche l’aide
+- `exit` / `usb_stream_off` → quitte le streaming et redémarre pour reprendre le cycle 4G/deep sleep
+
+📁 Sources : `hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino`
+
+💻 Côté dashboard (`/dashboard/devices`), une carte « Streaming USB temps réel » permet de :
+- détecter le port USB via Web Serial (Chrome/Edge) ;
+- lancer l’écoute (`▶ Écouter`) et visualiser en direct débit/batterie (chart + tableau) ;
+- consulter les logs série récents sans quitter le navigateur.
 
 ### 🔌 API Backend
 - ✅ REST API avec JWT (désactivable via `AUTH_DISABLED=true`)

@@ -900,6 +900,36 @@ ICCID: 89330123456789012345
 [INFO] HTTP 200 - Données envoyées OK
 [INFO] Sleep 300s...
     </pre>
+
+    <h3>🔌 Mode streaming USB (nouveau)</h3>
+
+    <p>Pour afficher les mesures en continu via USB (sans passer par la 4G) :</p>
+
+    <ol>
+        <li>Brancher le boîtier OTT en USB et ouvrir un moniteur série (115200 bauds).</li>
+        <li>Pendant la bannière <code>[BOOT]</code> (≈3 secondes), taper <code>usb</code> puis Entrée.</li>
+        <li>Le firmware reste éveillé et publie une mesure par seconde (JSON + ligne lisible).</li>
+    </ol>
+
+    <p><strong>Commandes disponibles :</strong></p>
+    <ul>
+        <li><code>once</code> : mesure immédiate</li>
+        <li><code>interval=&lt;ms&gt;</code> : ajuster l'intervalle (200 à 10 000 ms, défaut 1 000 ms)</li>
+        <li><code>help</code> : afficher l'aide</li>
+        <li><code>exit</code> / <code>usb_stream_off</code> : quitter le streaming et redémarrer pour reprendre le cycle 4G</li>
+    </ul>
+
+    <div class="alert alert-info">
+        <strong>Astuce :</strong> le dashboard intègre aussi un assistant USB (Web Serial) pour détecter ICCID/serial, mais le mode streaming reste accessible depuis n'importe quel terminal série.
+    </div>
+    
+    <p>Depuis le dashboard (menu <strong>Dispositifs</strong>), la carte «&nbsp;Streaming USB temps réel&nbsp;» permet :</p>
+    <ul>
+        <li>d’autoriser le port via Web Serial (Chrome/Edge) ;</li>
+        <li>de lancer l’écoute en direct (bouton <em>▶ Écouter</em>) ;</li>
+        <li>de visualiser le débit/batterie sur des graphiques et l’historique des mesures USB ;</li>
+        <li>de consulter les logs série récents sans quitter le navigateur.</li>
+    </ul>
     
     <h3>⚠️ Watchdog Anti-Freeze</h3>
     

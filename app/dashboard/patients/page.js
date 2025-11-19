@@ -30,7 +30,7 @@ export default function PatientsPage() {
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
     ['/api.php/patients', '/api.php/devices'],
-    { requiresAuth: false }
+    { requiresAuth: true }
   )
 
   // Rafraîchissement automatique toutes les 30 secondes
@@ -40,6 +40,30 @@ export default function PatientsPage() {
     }, 30000) // 30 secondes
     
     return () => clearInterval(interval)
+  }, [refetch])
+
+  useEffect(() => {
+    const handleDevicesUpdated = () => {
+      refetch()
+    }
+
+    const handleStorageUpdate = (event) => {
+      if (event.key === 'ott-devices-last-update') {
+        refetch()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('ott-devices-updated', handleDevicesUpdated)
+      window.addEventListener('storage', handleStorageUpdate)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('ott-devices-updated', handleDevicesUpdated)
+        window.removeEventListener('storage', handleStorageUpdate)
+      }
+    }
   }, [refetch])
 
   const patients = data?.patients?.patients || []
@@ -181,8 +205,9 @@ export default function PatientsPage() {
 
   const openAssignModal = (patient) => {
     setSelectedPatientForAssign(patient)
-    setShowAssignModal(true)
     setActionError(null)
+    refetch()
+    setShowAssignModal(true)
   }
 
   const closeAssignModal = () => {

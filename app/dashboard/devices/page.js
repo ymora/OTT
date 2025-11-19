@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -55,6 +55,14 @@ export default function DevicesPage() {
   const [checkingUSB, setCheckingUSB] = useState(false)
   const [usbPortInfo, setUsbPortInfo] = useState(null)
   const [autoDetecting, setAutoDetecting] = useState(true)
+  const [usbStreamStatus, setUsbStreamStatus] = useState('idle') // idle | connecting | waiting | running
+  const [usbStreamMeasurements, setUsbStreamMeasurements] = useState([])
+  const [usbStreamLogs, setUsbStreamLogs] = useState([])
+  const [usbStreamError, setUsbStreamError] = useState(null)
+  const [usbStreamLastMeasurement, setUsbStreamLastMeasurement] = useState(null)
+  const [usbStreamLastUpdate, setUsbStreamLastUpdate] = useState(null)
+  const usbStreamStopRef = useRef(null)
+  const usbStreamBufferRef = useRef('')
   
   const [searchTerm, setSearchTerm] = useState('')
   const [assignmentFilter, setAssignmentFilter] = useState('all')
@@ -141,6 +149,16 @@ export default function DevicesPage() {
   const [deleteSuccess, setDeleteSuccess] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deviceToDelete, setDeviceToDelete] = useState(null)
+  const notifyDevicesUpdated = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('ott-devices-updated'))
+      try {
+        window.localStorage.setItem('ott-devices-last-update', Date.now().toString())
+      } catch (err) {
+        logger.warn('Impossible d\'écrire dans localStorage pour la sync devices:', err)
+      }
+    }
+  }, [])
 
   // Charger les données initiales avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -332,39 +350,99 @@ export default function DevicesPage() {
         logger.log('🔌 Dispositif USB connecté (enregistré):', foundDevice.device_name || foundDevice.sim_iccid)
         return foundDevice
       } else {
-        // Créer un dispositif virtuel même si aucune donnée n'a été détectée
-        // Cela permet d'afficher le dispositif USB même s'il ne répond pas aux commandes AT
-        const deviceIdentifier = iccid ? iccid.slice(-4) : 
-                                deviceSerial ? deviceSerial.slice(-4) : 
+        // Créer le dispositif dans la base de données pour qu'il soit assignable
+        const deviceIdentifier = iccid && iccid !== 'N/A' && iccid.length >= 10 ? iccid.slice(-4) : 
+                                deviceSerial && deviceSerial !== 'N/A' ? deviceSerial.slice(-4) : 
                                 portInfo.usbVendorId && portInfo.usbProductId ? 
                                   `${portInfo.usbVendorId.toString(16)}:${portInfo.usbProductId.toString(16)}` : 
                                   'UNKNOWN'
         
-        const virtualDevice = {
-          id: 'usb_virtual_' + Date.now(),
-          device_name: `USB-${deviceIdentifier}`,
-          sim_iccid: iccid || 'N/A',
-          device_serial: deviceSerial || 'N/A',
-          firmware_version: firmwareVersion || 'N/A',
-          status: 'usb_connected',
-          last_seen: new Date().toISOString(),
-          last_battery: null,
-          patient_id: null,
-          isVirtual: true,
-          usbPortInfo: portInfo
+        const deviceName = `USB-${deviceIdentifier}`
+        const simIccid = (iccid && iccid !== 'N/A' && iccid.length >= 10) ? iccid : null
+        
+        try {
+          logger.log('📝 Création du dispositif USB dans la base de données...')
+          const createdDevice = await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            '/api.php/devices',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                device_name: deviceName,
+                sim_iccid: simIccid,
+                device_serial: (deviceSerial && deviceSerial !== 'N/A') ? deviceSerial : null,
+                firmware_version: (firmwareVersion && firmwareVersion !== 'N/A') ? firmwareVersion : null,
+                status: 'inactive' // Dispositif USB non encore actif en radio
+              })
+            },
+            { requiresAuth: true }
+          )
+          
+          if (createdDevice.device) {
+            logger.log('✅ Dispositif USB créé dans la base:', createdDevice.device.id)
+            setUsbConnectedDevice(createdDevice.device)
+            setUsbVirtualDevice(null)
+            // Recharger les dispositifs pour mettre à jour la liste
+            await refetch()
+            notifyDevicesUpdated()
+            return createdDevice.device
+          }
+        } catch (createErr) {
+          // Si la création échoue (dispositif déjà existant par exemple), essayer de le retrouver
+          if (createErr.error && createErr.error.includes('déjà utilisé')) {
+            logger.log('⚠️ Dispositif déjà existant, recherche en cours...')
+            // Recharger et chercher à nouveau
+            await refetch()
+            const devicesResponse = await fetchJson(
+              fetchWithAuth,
+              API_URL,
+              '/api.php/devices',
+              { method: 'GET' },
+              { requiresAuth: true }
+            )
+            const allDevicesFromApi = devicesResponse.devices || []
+            const existingDevice = allDevicesFromApi.find(d => 
+              (simIccid && d.sim_iccid && d.sim_iccid.includes(simIccid)) ||
+              (deviceSerial && d.device_serial && d.device_serial.includes(deviceSerial)) ||
+              (d.device_name && d.device_name.includes(deviceIdentifier))
+            )
+            if (existingDevice) {
+              logger.log('✅ Dispositif existant trouvé:', existingDevice.device_name || existingDevice.sim_iccid)
+              setUsbConnectedDevice(existingDevice)
+              setUsbVirtualDevice(null)
+              await refetch()
+              notifyDevicesUpdated()
+              return existingDevice
+            }
+          }
+          logger.warn('⚠️ Erreur création dispositif USB en base:', createErr)
+          // Si la création échoue, créer un dispositif virtuel temporaire
+          const virtualDevice = {
+            id: 'usb_virtual_' + Date.now(),
+            device_name: deviceName,
+            sim_iccid: simIccid || 'N/A',
+            device_serial: deviceSerial || 'N/A',
+            firmware_version: firmwareVersion || 'N/A',
+            status: 'usb_connected',
+            last_seen: new Date().toISOString(),
+            last_battery: null,
+            patient_id: null,
+            isVirtual: true,
+            usbPortInfo: portInfo
+          }
+          setUsbVirtualDevice(virtualDevice)
+          setUsbConnectedDevice(null)
+          logger.log('🔌 Dispositif USB virtuel créé (non enregistré):', virtualDevice.device_name)
+          logger.log('   ⚠️ Ce dispositif virtuel ne peut pas être assigné à un patient')
+          return virtualDevice
         }
-        setUsbVirtualDevice(virtualDevice)
-        setUsbConnectedDevice(null)
-        logger.log('🔌 Dispositif USB virtuel créé:', virtualDevice.device_name)
-        logger.log('   Détails:', { iccid, deviceSerial, firmwareVersion, portInfo })
-        logger.log('   Dispositif virtuel ajouté à la liste (devrait apparaître dans le tableau)')
-        return virtualDevice
       }
     } catch (err) {
       logger.error('Erreur détection dispositif:', err)
       return null
     }
-  }, [connect, startReading, write, devices])
+  }, [connect, startReading, write, devices, fetchWithAuth, API_URL, refetch])
 
   // Détecter le dispositif connecté en USB (pour autoriser un nouveau port)
   const detectUSBDevice = useCallback(async () => {
@@ -430,16 +508,136 @@ export default function DevicesPage() {
     }
   }, [isSupported, requestPort, detectDeviceOnPort])
 
+  const appendUsbStreamLog = useCallback((line) => {
+    if (!line) return
+    setUsbStreamLogs(prev => {
+      const next = [...prev, { id: `${Date.now()}-${Math.random()}`, line, timestamp: Date.now() }]
+      return next.slice(-80)
+    })
+  }, [])
+
+  const ensurePortReady = useCallback(async () => {
+    if (!isSupported) {
+      throw new Error('Web Serial API non supportée par ce navigateur')
+    }
+
+    if (port && isConnected) return port
+
+    if (port && !isConnected) {
+      const reconnected = await connect(port, 115200)
+      if (reconnected) return port
+    }
+
+    const selectedPort = await requestPort()
+    if (!selectedPort) {
+      throw new Error('Aucun port USB sélectionné')
+    }
+
+    const connected = await connect(selectedPort, 115200)
+    if (!connected) {
+      throw new Error('Impossible de se connecter au port USB sélectionné')
+    }
+
+    return selectedPort
+  }, [connect, isConnected, isSupported, port, requestPort])
+
+  const processUsbStreamLine = useCallback((line) => {
+    if (!line) return
+    const trimmed = line.trim()
+    if (!trimmed) return
+
+    if (trimmed.startsWith('{') && trimmed.includes('"mode"')) {
+      try {
+        const payload = JSON.parse(trimmed)
+        if (payload.mode === 'usb_stream') {
+          const measurement = {
+            id: `usb-${payload.seq ?? Date.now()}`,
+            seq: payload.seq ?? null,
+            timestamp: Date.now(),
+            flowrate: payload.flow_lpm ?? payload.flowrate ?? payload.flow ?? null,
+            battery: payload.battery_percent ?? payload.battery ?? null,
+            rssi: payload.rssi ?? null,
+            interval: payload.interval_ms ?? payload.interval ?? null,
+            raw: payload,
+          }
+
+          setUsbStreamMeasurements(prev => {
+            const next = [...prev, measurement]
+            return next.slice(-120)
+          })
+          setUsbStreamLastMeasurement(measurement)
+          setUsbStreamLastUpdate(Date.now())
+          setUsbStreamError(null)
+          setUsbStreamStatus('running')
+          return
+        }
+      } catch (err) {
+        appendUsbStreamLog(`⚠️ JSON invalide: ${trimmed}`)
+        return
+      }
+    }
+
+    appendUsbStreamLog(trimmed)
+  }, [appendUsbStreamLog])
+
+  const handleUsbStreamChunk = useCallback((chunk) => {
+    usbStreamBufferRef.current += chunk
+    const parts = usbStreamBufferRef.current.split(/\r?\n/)
+    usbStreamBufferRef.current = parts.pop() ?? ''
+    parts.forEach(line => processUsbStreamLine(line))
+  }, [processUsbStreamLine])
+
+  const stopUsbStreaming = useCallback(() => {
+    if (usbStreamStopRef.current) {
+      usbStreamStopRef.current()
+      usbStreamStopRef.current = null
+    }
+    setUsbStreamStatus('idle')
+  }, [])
+
+  const startUsbStreaming = useCallback(async () => {
+    try {
+      setUsbStreamError(null)
+      setUsbStreamStatus('connecting')
+      await ensurePortReady()
+
+      if (usbStreamStopRef.current) {
+        usbStreamStopRef.current()
+        usbStreamStopRef.current = null
+      }
+
+      usbStreamBufferRef.current = ''
+      setUsbStreamMeasurements([])
+      setUsbStreamLogs([])
+      setUsbStreamLastMeasurement(null)
+      setUsbStreamLastUpdate(null)
+
+      const stop = await startReading(handleUsbStreamChunk)
+      usbStreamStopRef.current = stop
+      setUsbStreamStatus('waiting')
+    } catch (err) {
+      setUsbStreamError(err.message || 'Impossible de démarrer le streaming USB')
+      setUsbStreamStatus('idle')
+    }
+  }, [ensurePortReady, handleUsbStreamChunk, startReading])
+
   // Déconnecter le port USB
   const disconnectUSB = useCallback(async () => {
     await disconnect()
+    stopUsbStreaming()
     setUsbConnectedDevice(null)
     setUsbVirtualDevice(null)
     setUsbPortInfo(null)
-  }, [disconnect])
+  }, [disconnect, stopUsbStreaming])
 
-  // Détection automatique au chargement (ports déjà autorisés)
+  // Détection automatique au chargement et au retour sur la page (ports déjà autorisés)
   useEffect(() => {
+    // Réactiver la détection quand on revient sur la page (si pas de dispositif déjà connecté)
+    if (isSupported && !autoDetecting && !usbConnectedDevice && !usbVirtualDevice && !loading) {
+      logger.log('🔄 Réactivation de la détection automatique USB...')
+      setAutoDetecting(true)
+    }
+    
     if (!isSupported) {
       logger.debug('Web Serial API non supporté')
       setAutoDetecting(false)
@@ -512,18 +710,18 @@ export default function DevicesPage() {
     }
 
     // Attendre que les devices soient chargés, puis détecter
-    // Augmenter le délai pour laisser plus de temps
+    // Délai réduit pour détection plus rapide
     const timer = setTimeout(() => {
       if (devices.length > 0 || !loading) {
         autoDetect()
       } else {
-        // Si toujours en chargement après 2s, essayer quand même
-        setTimeout(() => autoDetect(), 2000)
+        // Si toujours en chargement après 1s, essayer quand même
+        setTimeout(() => autoDetect(), 1000)
       }
-    }, 1000) // Délai de 1s pour laisser le temps aux données de charger
+    }, 500) // Délai réduit pour détection plus rapide
 
     return () => clearTimeout(timer)
-  }, [isSupported, autoDetecting, detectDeviceOnPort, usbConnectedDevice, usbVirtualDevice, devices, loading])
+  }, [isSupported, autoDetecting, detectDeviceOnPort, usbConnectedDevice, usbVirtualDevice, devices, loading, refetch])
 
   // Écouter les nouveaux ports connectés (événement navigateur)
   useEffect(() => {
@@ -636,6 +834,8 @@ export default function DevicesPage() {
       
       // Recharger les dispositifs
       await refetch()
+      notifyDevicesUpdated()
+      notifyDevicesUpdated()
     } catch (err) {
       // Extraire le message d'erreur de la réponse API si disponible
       const errorMessage = err.message || 'Erreur lors du déploiement OTA'
@@ -770,6 +970,7 @@ export default function DevicesPage() {
       )
       
       await refetch()
+      notifyDevicesUpdated()
       setDeleteSuccess('Dispositif supprimé avec succès')
       setShowDeleteModal(false)
       setDeviceToDelete(null)
@@ -1129,6 +1330,7 @@ export default function DevicesPage() {
       setSelectedDevice(null)
       setAssignForm({ patient_id: '' })
       await refetch()
+      notifyDevicesUpdated()
     } catch (err) {
       setAssignError(err.message)
     } finally {
@@ -1155,6 +1357,17 @@ export default function DevicesPage() {
     return { label: `${batteryNum.toFixed(0)}%`, color: 'text-green-600' }
   }
 
+  const getUsbStreamStatusBadge = () => {
+    const map = {
+      idle: { label: 'En attente', color: 'bg-gray-100 text-gray-700' },
+      connecting: { label: 'Connexion...', color: 'bg-blue-100 text-blue-700' },
+      waiting: { label: 'En attente de données', color: 'bg-amber-100 text-amber-700' },
+      running: { label: 'Flux en direct', color: 'bg-green-100 text-green-700' },
+      error: { label: 'Erreur', color: 'bg-red-100 text-red-700' }
+    }
+    return map[usbStreamStatus] || map.idle
+  }
+
   const isAdmin = user?.role_name === 'admin'
 
   return (
@@ -1174,6 +1387,152 @@ export default function DevicesPage() {
             {usbConnectedDevice && ` - ${usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid}`}
             {usbVirtualDevice && ` - ${usbVirtualDevice.device_name} (Non enregistré)`}
           </span>
+        )}
+      </div>
+
+      {/* Streaming USB */}
+      <div className="card space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">⚡ Streaming USB temps réel</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 max-w-2xl">
+              Branchez l’OTT en USB, ouvrez un moniteur série (115200&nbsp;bauds), puis tapez <code className="px-1 bg-gray-100 rounded text-xs">usb</code> + Entrée dans les 3&nbsp;secondes suivant le boot pour activer le mode streaming.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getUsbStreamStatusBadge().color}`}>
+              {getUsbStreamStatusBadge().label}
+            </span>
+            <button
+              onClick={() => (usbStreamStatus === 'running' || usbStreamStatus === 'waiting') ? stopUsbStreaming() : startUsbStreaming()}
+              disabled={!isSupported || usbStreamStatus === 'connecting'}
+              className={`btn-primary text-sm ${( !isSupported ) ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              {(usbStreamStatus === 'running' || usbStreamStatus === 'waiting') ? '⏹️ Arrêter' : '▶️ Écouter'}
+            </button>
+            <button
+              onClick={detectUSBDevice}
+              className="btn-secondary text-sm"
+              disabled={checkingUSB || !isSupported}
+            >
+              {checkingUSB ? '⏳ Scan...' : '🔍 Détecter'}
+            </button>
+          </div>
+        </div>
+
+        {!isSupported && (
+          <div className="alert alert-warning">
+            Le navigateur utilisé ne supporte pas l’API Web Serial. Utilisez Chrome ou Edge (desktop) pour accéder au streaming USB.
+          </div>
+        )}
+
+        {usbStreamError && (
+          <div className="alert alert-warning">
+            {usbStreamError}
+          </div>
+        )}
+
+        {isSupported && usbStreamStatus === 'idle' && (
+          <div className="alert alert-info text-sm">
+            1) Appuyez sur <strong>Reset</strong> sur le boîtier → 2) Tapez <code className="px-1 bg-gray-100 rounded text-xs">usb</code> + Entrée sur le terminal → 3) Cliquez sur «&nbsp;Écouter&nbsp;» pour afficher les mesures en continu.
+          </div>
+        )}
+
+        {isSupported && (
+          <>
+            {usbStreamMeasurements.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="rounded-2xl border border-gray-200 dark:border-slate-700 p-4 bg-gray-50 dark:bg-slate-900/30">
+                  <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3">Dernière mesure</h3>
+                  {usbStreamLastMeasurement ? (
+                    <div className="space-y-2 text-gray-900 dark:text-gray-100">
+                      <p className="text-3xl font-bold">
+                        {usbStreamLastMeasurement.flowrate !== null && usbStreamLastMeasurement.flowrate !== undefined
+                          ? `${Number(usbStreamLastMeasurement.flowrate).toFixed(2)} L/min`
+                          : '—'}
+                      </p>
+                      <p className="text-sm">
+                        Batterie&nbsp;: {usbStreamLastMeasurement.battery !== null && usbStreamLastMeasurement.battery !== undefined
+                          ? `${Number(usbStreamLastMeasurement.battery).toFixed(1)}%`
+                          : 'N/A'}
+                      </p>
+                      <p className="text-sm">RSSI : {usbStreamLastMeasurement.rssi ?? 'N/A'} dBm</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Seq #{usbStreamLastMeasurement.seq ?? '—'} • Intervalle {usbStreamLastMeasurement.interval ?? '?'} ms
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Reçu à {new Date(usbStreamLastMeasurement.timestamp).toLocaleTimeString('fr-FR')}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">En attente d’une première mesure...</p>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 dark:border-slate-700 p-4">
+                  <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">Débit instantané</h3>
+                  <Chart data={usbStreamMeasurements.map(m => ({ ...m, flowrate: m.flowrate, timestamp: m.timestamp }))} type="flowrate" />
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 dark:border-slate-700 p-4">
+                  <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">Batterie instantanée</h3>
+                  <Chart data={usbStreamMeasurements.map(m => ({ ...m, battery: m.battery, timestamp: m.timestamp }))} type="battery" />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-gray-300 dark:border-slate-700 p-4 text-sm text-gray-600 dark:text-gray-300">
+                En attente d’un JSON <code className="px-1 bg-gray-100 rounded text-xs">{"{ \"mode\":\"usb_stream\", ... }"}</code>. Assurez-vous d’avoir activé le mode USB côté firmware puis cliquez sur «&nbsp;Écouter&nbsp;».
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-gray-200 dark:border-slate-700 p-4">
+                <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">Dernières mesures</h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-500 dark:text-gray-400">
+                        <th className="py-1">Heure</th>
+                        <th className="py-1">Débit</th>
+                        <th className="py-1">Batterie</th>
+                        <th className="py-1">RSSI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usbStreamMeasurements.slice(-8).reverse().map(entry => (
+                        <tr key={entry.id} className="border-t border-gray-100 dark:border-slate-800">
+                          <td className="py-1 font-mono text-xs">{new Date(entry.timestamp).toLocaleTimeString('fr-FR')}</td>
+                          <td className="py-1">{entry.flowrate !== null && entry.flowrate !== undefined ? `${Number(entry.flowrate).toFixed(2)} L/min` : '—'}</td>
+                          <td className="py-1">{entry.battery !== null && entry.battery !== undefined ? `${Number(entry.battery).toFixed(1)}%` : '—'}</td>
+                          <td className="py-1">{entry.rssi ?? '—'} dBm</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 dark:border-slate-700 p-4">
+                <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">Logs série (USB)</h3>
+                <div className="h-48 overflow-y-auto bg-black text-green-400 font-mono text-xs rounded-xl p-3">
+                  {usbStreamLogs.length === 0 ? (
+                    <p className="text-gray-400 text-center mt-10">
+                      {usbStreamStatus === 'running' || usbStreamStatus === 'waiting'
+                        ? 'En attente de logs...'
+                        : 'Cliquez sur « Écouter » pour afficher les logs.'}
+                    </p>
+                  ) : (
+                    usbStreamLogs.map(log => (
+                      <div key={log.id} className="mb-1">
+                        <span className="text-gray-500">[{new Date(log.timestamp).toLocaleTimeString('fr-FR')}]</span>{' '}
+                        {log.line}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -2157,6 +2516,7 @@ export default function DevicesPage() {
                 
                 // Recharger les firmwares
                 await refetch()
+                notifyDevicesUpdated()
                 
                 // Fermer le modal après 2 secondes
                 setTimeout(() => {
