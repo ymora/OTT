@@ -318,7 +318,7 @@ export default function PatientsPage() {
                   <th className="text-left py-3 px-4">Code Postal</th>
                   <th className="text-left py-3 px-4">Dispositif</th>
                   <th className="text-left py-3 px-4">Notifications</th>
-                  <th className="text-left py-3 px-4">Types d'alertes</th>
+                  <th className="text-left py-3 px-4">Types d&apos;alertes</th>
                   <th className="text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
@@ -562,7 +562,7 @@ export default function PatientsPage() {
                 </p>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
-                ⚠️ Le dispositif sera réinitialisé avec les paramètres d'origine et disponible pour une nouvelle assignation.
+                ⚠️ Le dispositif sera réinitialisé avec les paramètres d&apos;origine et disponible pour une nouvelle assignation.
               </p>
             </div>
 

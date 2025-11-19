@@ -442,7 +442,7 @@ export default function DevicesPage() {
       logger.error('Erreur détection dispositif:', err)
       return null
     }
-  }, [connect, startReading, write, devices, fetchWithAuth, API_URL, refetch])
+  }, [connect, startReading, write, devices, fetchWithAuth, API_URL, refetch, notifyDevicesUpdated])
 
   // Détecter le dispositif connecté en USB (pour autoriser un nouveau port)
   const detectUSBDevice = useCallback(async () => {
@@ -1689,7 +1689,7 @@ export default function DevicesPage() {
               </p>
               {deviceToDelete.patient_id && (
                 <p className="text-sm text-red-600 dark:text-red-400 mt-2 font-semibold">
-                  ❌ Ce dispositif est assigné à un patient. Désassignez-le d'abord avant de le supprimer.
+                  ❌ Ce dispositif est assigné à un patient. Désassignez-le d&apos;abord avant de le supprimer.
                 </p>
               )}
             </div>

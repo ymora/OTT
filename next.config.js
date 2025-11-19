@@ -5,7 +5,7 @@ const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true'
 const basePath = (isDev || !isStaticExport) ? '' : '/OTT'
 
 const nextConfig = {
-  output: isStaticExport ? 'export' : undefined,
+  output: isStaticExport ? 'export' : 'standalone',
   images: {
     unoptimized: true
   },

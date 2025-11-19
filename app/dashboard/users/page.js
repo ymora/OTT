@@ -157,7 +157,7 @@ export default function UsersPage() {
                   <th className="text-left py-3 px-4">Statut</th>
                   <th className="text-left py-3 px-4">Dernière connexion</th>
                   <th className="text-left py-3 px-4">Notifications</th>
-                  <th className="text-left py-3 px-4">Types d'alertes</th>
+                  <th className="text-left py-3 px-4">Types d&apos;alertes</th>
                   <th className="text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
