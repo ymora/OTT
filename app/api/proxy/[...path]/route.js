@@ -8,6 +8,7 @@ const RAW_TARGET =
   process.env.NEXT_PUBLIC_API_URL ||
   DEFAULT_TARGET
 const API_PROXY_TARGET = (RAW_TARGET || DEFAULT_TARGET).replace(/\/$/, '')
+
 const upstreamBase = new URL(`${API_PROXY_TARGET}/`)
 
 const HOP_BY_HOP_HEADERS = [
