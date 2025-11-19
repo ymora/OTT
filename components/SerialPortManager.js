@@ -47,6 +47,25 @@ export function useSerialPort() {
 
     try {
       setError(null)
+      
+      // Vérifier si le port est déjà ouvert
+      // Si readable et writable existent, le port est déjà ouvert
+      if (portToUse.readable && portToUse.writable) {
+        // Port déjà ouvert, réutiliser
+        // Créer le writer
+        const writer = portToUse.writable.getWriter()
+        writerRef.current = writer
+
+        // Créer le reader
+        const reader = portToUse.readable.getReader()
+        readerRef.current = reader
+
+        setIsConnected(true)
+        setPort(portToUse)
+        return true
+      }
+      
+      // Ouvrir le port
       await portToUse.open({ baudRate })
 
       // Créer le writer
@@ -61,6 +80,22 @@ export function useSerialPort() {
       setPort(portToUse)
       return true
     } catch (err) {
+      // Si le port est déjà ouvert, essayer de réutiliser
+      if (err.name === 'InvalidStateError' && portToUse.readable && portToUse.writable) {
+        try {
+          const writer = portToUse.writable.getWriter()
+          writerRef.current = writer
+          const reader = portToUse.readable.getReader()
+          readerRef.current = reader
+          setIsConnected(true)
+          setPort(portToUse)
+          return true
+        } catch (retryErr) {
+          setError(`Erreur de connexion (port déjà ouvert): ${retryErr.message}`)
+          setIsConnected(false)
+          return false
+        }
+      }
       setError(`Erreur de connexion: ${err.message}`)
       setIsConnected(false)
       return false

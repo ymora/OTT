@@ -243,6 +243,7 @@
         <li><a href="#api">🔌 API Backend</a></li>
         <li><a href="#dashboard-react">⚛️ Dashboard React</a></li>
         <li><a href="#deployment">☁️ Déploiement</a></li>
+        <li><a href="#security">🔒 Sécurité</a></li>
         <li><a href="#troubleshooting">🐛 Dépannage</a></li>
     </ul>
 </nav>
@@ -1102,7 +1103,9 @@ GET    /api.php/audit                    # Journal d'audit complet
 GET    /api.php/audit/user/:id           # Audit d'un utilisateur spécifique
     </pre>
     
-    <h3>🔒 Sécurité</h3>
+    <h3>🔒 Sécurité (Résumé)</h3>
+    
+    <p>Pour une documentation complète de toutes les mesures de sécurité, voir la section <a href="#security">🔒 Configuration Sécurité</a>.</p>
     
     <ul>
         <li>✅ <strong>HTTPS obligatoire</strong> (certificat Let's Encrypt sur Render)</li>
@@ -1112,6 +1115,9 @@ GET    /api.php/audit/user/:id           # Audit d'un utilisateur spécifique
         <li>✅ <strong>Rate limiting</strong> (max 100 req/min par IP)</li>
         <li>✅ <strong>CORS configuré</strong> pour GitHub Pages</li>
         <li>✅ <strong>SQL injection protection</strong> (prepared statements)</li>
+        <li>✅ <strong>Protection OTA</strong> (vérifications batterie, hors ligne, etc.)</li>
+        <li>✅ <strong>Soft delete</strong> (suppression logique, données récupérables)</li>
+        <li>✅ <strong>Audit complet</strong> (toutes les actions tracées)</li>
     </ul>
     
     <h3>📧 Notifications</h3>
@@ -2293,7 +2299,297 @@ SELECT id, email, first_name, last_name FROM users;
         <li>Si ça fonctionne : ✅ Configuration terminée !</li>
     </ol>
     
-    <h3>🔐 Bonnes Pratiques Sécurité</h3>
+    <h3>🛡️ Sécurité Complète de l'Application</h3>
+    
+    <p>L'application OTT implémente une sécurité multi-niveaux pour protéger les données médicales sensibles et garantir l'intégrité du système.</p>
+    
+    <h4>1. 🔐 Authentification et Autorisation</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Mesure</th>
+                <th>Implémentation</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>JWT (JSON Web Tokens)</strong></td>
+                <td>Tokens signés avec HMAC-SHA256, expiration 24h, vérification côté serveur</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Passwords hashés</strong></td>
+                <td>Bcrypt avec cost 10, jamais stockés en clair</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Système de permissions</strong></td>
+                <td>Rôles (admin, technicien) avec permissions granulaires (users.manage, devices.ota, etc.)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Vérification d'activité</strong></td>
+                <td>Seuls les utilisateurs actifs (<code>is_active = TRUE</code>) peuvent se connecter</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Audit des connexions</strong></td>
+                <td>Toutes les tentatives de connexion (succès/échec) sont enregistrées dans <code>audit_logs</code></td>
+                <td>✅ Implémenté</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>2. 🛡️ Protection des Données</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Mesure</th>
+                <th>Implémentation</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>SQL Injection Protection</strong></td>
+                <td>100% des requêtes utilisent <code>PDO::prepare()</code> avec paramètres liés (<code>bindValue</code>)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Soft Delete</strong></td>
+                <td>Suppression logique via <code>deleted_at</code> au lieu de DELETE physique, données récupérables</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Validation des données</strong></td>
+                <td>Validation stricte des ICCID (max 20 chars), emails, téléphones, etc. avant insertion</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Protection TRUNCATE</strong></td>
+                <td>Whitelist stricte des tables autorisées pour <code>TRUNCATE</code> (reset demo uniquement)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Transactions SQL</strong></td>
+                <td>Opérations critiques (logs, mesures) dans transactions avec rollback automatique en cas d'erreur</td>
+                <td>✅ Implémenté</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>3. 📡 Sécurité OTA (Over-The-Air Updates)</h4>
+    
+    <p>Le système empêche les mises à jour OTA risquées avec des vérifications strictes :</p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Vérification</th>
+                <th>Seuil/Condition</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Dispositif hors ligne</strong></td>
+                <td>Dernier contact > 6 heures</td>
+                <td>❌ Bloque OTA, message d'erreur explicite</td>
+            </tr>
+            <tr>
+                <td><strong>Batterie faible</strong></td>
+                <td>Niveau batterie < 20%</td>
+                <td>❌ Bloque OTA, message d'erreur avec niveau actuel</td>
+            </tr>
+            <tr>
+                <td><strong>OTA déjà en cours</strong></td>
+                <td><code>ota_pending = TRUE</code></td>
+                <td>❌ Bloque nouvelle OTA, affiche version en cours</td>
+            </tr>
+            <tr>
+                <td><strong>Dispositif jamais vu</strong></td>
+                <td><code>last_seen IS NULL</code></td>
+                <td>❌ Bloque OTA, nécessite contact initial</td>
+            </tr>
+            <tr>
+                <td><strong>Dispositif virtuel USB</strong></td>
+                <td><code>isVirtual = TRUE</code></td>
+                <td>❌ Bloque OTA, redirige vers flash USB</td>
+            </tr>
+            <tr>
+                <td><strong>Firmware inexistant</strong></td>
+                <td>Version non trouvée dans <code>firmware_versions</code></td>
+                <td>❌ Bloque OTA, erreur 404</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <p><strong>Implémentation :</strong> Vérifications côté <strong>frontend</strong> (boutons désactivés, tooltips explicites) ET côté <strong>backend</strong> (API retourne erreurs HTTP 400/409 avec messages détaillés).</p>
+    
+    <h4>4. 🚨 Sécurité des Alertes</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Mesure</th>
+                <th>Implémentation</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Validation des données</strong></td>
+                <td>ICCID validé (max 20 chars), niveau/type d'événement requis, détails JSON validé</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Auto-enregistrement sécurisé</strong></td>
+                <td>Dispositifs inconnus créés automatiquement avec transactions SQL (race condition gérée)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Isolation des données</strong></td>
+                <td>Chaque dispositif ne peut créer que ses propres alertes (via ICCID unique)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>5. 🌐 Sécurité Réseau</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Mesure</th>
+                <th>Implémentation</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>HTTPS obligatoire</strong></td>
+                <td>Certificat Let's Encrypt sur Render, redirection HTTP → HTTPS</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>CORS configuré</strong></td>
+                <td>Origines autorisées : GitHub Pages + localhost (dev), validation stricte de l'Origin</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Headers sécurisés</strong></td>
+                <td>Content-Type JSON, Vary: Origin, Access-Control-Max-Age configuré</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Preflight OPTIONS</strong></td>
+                <td>Gestion correcte des requêtes CORS preflight (204 No Content)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>6. 🔍 Audit et Traçabilité</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Mesure</th>
+                <th>Implémentation</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Journal d'audit complet</strong></td>
+                <td>Toutes les actions utilisateur (CRUD) enregistrées avec IP, User-Agent, anciennes/nouvelles valeurs</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Traçabilité des connexions</strong></td>
+                <td>Succès/échecs de connexion, mise à jour de <code>last_login</code></td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Historique des modifications</strong></td>
+                <td>Tables d'historique pour dispositifs, patients, utilisateurs (si activées)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>7. 🔒 Sécurité des Variables d'Environnement</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Variable</th>
+                <th>Protection</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>JWT_SECRET</strong></td>
+                <td>Obligatoire en production, erreur 500 si manquant, warning en dev</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>DATABASE_URL</strong></td>
+                <td>Validation du format, erreur 500 si configuration manquante</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Clés API (SendGrid, Twilio)</strong></td>
+                <td>Stockées en variables d'environnement, jamais dans le code</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>DEBUG_ERRORS</strong></td>
+                <td>Désactivé par défaut, messages d'erreur génériques en production</td>
+                <td>✅ Implémenté</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>8. 🛡️ Protection Frontend</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Mesure</th>
+                <th>Implémentation</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Validation côté client</strong></td>
+                <td>Vérifications avant envoi (OTA, formulaires), messages d'erreur explicites</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Boutons désactivés</strong></td>
+                <td>Actions risquées désactivées si conditions non remplies (OTA, suppression)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Tooltips informatifs</strong></td>
+                <td>Explications claires des raisons de désactivation (batterie, hors ligne, etc.)</td>
+                <td>✅ Implémenté</td>
+            </tr>
+            <tr>
+                <td><strong>Gestion des erreurs</strong></td>
+                <td>Messages d'erreur utilisateur-friendly, pas d'exposition de détails techniques</td>
+                <td>✅ Implémenté</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>9. 🔐 Bonnes Pratiques Sécurité</h4>
     
     <table>
         <thead>
@@ -2333,12 +2629,89 @@ SELECT id, email, first_name, last_name FROM users;
             </tr>
         </tbody>
     </table>
+    
+    <h4>10. 🔐 Contrôle d'Accès par Rôle</h4>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Opération</th>
+                <th>Admin</th>
+                <th>Technicien</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Lecture (devices, patients, users)</strong></td>
+                <td>✅ Accès complet</td>
+                <td>✅ Accès complet</td>
+            </tr>
+            <tr>
+                <td><strong>Gestion utilisateurs</strong></td>
+                <td>✅ CRUD complet</td>
+                <td>❌ Lecture seule</td>
+            </tr>
+            <tr>
+                <td><strong>Gestion patients</strong></td>
+                <td>✅ CRUD complet</td>
+                <td>✅ CRUD complet</td>
+            </tr>
+            <tr>
+                <td><strong>Gestion dispositifs</strong></td>
+                <td>✅ CRUD complet</td>
+                <td>✅ CRUD complet</td>
+            </tr>
+            <tr>
+                <td><strong>Déclencher OTA</strong></td>
+                <td>✅ Autorisé</td>
+                <td>✅ Autorisé (avec vérifications sécurité)</td>
+            </tr>
+            <tr>
+                <td><strong>Upload firmware</strong></td>
+                <td>✅ Autorisé</td>
+                <td>❌ Réservé admin</td>
+            </tr>
+            <tr>
+                <td><strong>Commandes dispositifs</strong></td>
+                <td>✅ Autorisé</td>
+                <td>✅ Autorisé</td>
+            </tr>
+            <tr>
+                <td><strong>Reset demo</strong></td>
+                <td>✅ Autorisé (si ENABLE_DEMO_RESET=true)</td>
+                <td>❌ Réservé admin</td>
+            </tr>
+            <tr>
+                <td><strong>Consultation audit logs</strong></td>
+                <td>✅ Accès complet</td>
+                <td>✅ Accès complet</td>
+            </tr>
+        </tbody>
+    </table>
 
     <div class="alert alert-warning">
         <strong>🔒 Contrôle d'accès renforcé :</strong><br>
-        Toutes les opérations critiques (commandes descendantes, OTA, configuration distante, upload firmware)
-        sont exclusivement réservées aux comptes <strong>Admin</strong>. Les rôles Médecin, Technicien ou Viewer
-        disposent d'un accès lecture/diagnostic mais ne peuvent déclencher d'action.
+        Toutes les opérations critiques (upload firmware, reset demo) sont exclusivement réservées aux comptes <strong>Admin</strong>.
+        Les opérations OTA et commandes sont accessibles aux techniciens mais avec des vérifications de sécurité strictes
+        (dispositif en ligne, batterie suffisante, etc.).
+    </div>
+    
+    <h4>11. 📋 Checklist Sécurité Production</h4>
+    
+    <div class="alert alert-info">
+        <strong>✅ Avant la mise en production, vérifier :</strong>
+        <ul style="margin-top: 1rem; padding-left: 2rem;">
+            <li>✅ <code>JWT_SECRET</code> défini et unique (min 32 caractères aléatoires)</li>
+            <li>✅ Tous les mots de passe par défaut remplacés (voir procédure ci-dessus)</li>
+            <li>✅ <code>DEBUG_ERRORS=false</code> (pas d'exposition d'erreurs SQL)</li>
+            <li>✅ <code>AUTH_DISABLED=false</code> (authentification activée)</li>
+            <li>✅ <code>ENABLE_DEMO_RESET=false</code> (désactiver reset demo en production)</li>
+            <li>✅ HTTPS activé (certificat Let's Encrypt sur Render)</li>
+            <li>✅ CORS configuré uniquement pour les origines autorisées</li>
+            <li>✅ Variables d'environnement sensibles (clés API) configurées sur Render</li>
+            <li>✅ Base de données PostgreSQL avec sauvegardes automatiques activées</li>
+            <li>✅ Audit logs activés et consultables</li>
+        </ul>
     </div>
 </section>
 

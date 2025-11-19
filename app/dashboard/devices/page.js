@@ -148,10 +148,15 @@ export default function DevicesPage() {
     try {
       const portInfo = targetPort.getInfo()
       setUsbPortInfo(portInfo)
+      logger.log('🔌 Connexion au port:', portInfo)
       
       // Connecter automatiquement
       const connected = await connect(targetPort, 115200)
-      if (!connected) return null
+      if (!connected) {
+        logger.warn('❌ Échec de connexion au port')
+        return null
+      }
+      logger.log('✅ Port connecté, envoi des commandes AT...')
 
       // Lire l'ICCID/serial/firmware
       let iccid = null
@@ -187,47 +192,79 @@ export default function DevicesPage() {
         }
       })
 
+      // Attendre un peu que la connexion soit stable
+      await new Promise(resolve => setTimeout(resolve, 300))
+      
       // Envoyer les commandes AT pour obtenir les infos
+      logger.log('📤 Envoi des commandes AT...')
       await write('AT\r\n') // Test de connexion
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 800))
       await write('AT+CCID\r\n')
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 2000))
       await write('AT+GSN\r\n')
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 2000))
       await write('AT+CGMR\r\n') // Version firmware modem
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 2000))
       await write('AT+GMR\r\n') // Version firmware alternative
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 2000))
       await write('ATI\r\n') // Informations générales
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 2000))
       // Commandes custom OTT si disponibles
       await write('AT+FIRMWARE?\r\n')
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 2000))
       await write('AT+VERSION?\r\n')
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 2000))
       await write('AT+FWVER?\r\n')
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Attendre un peu pour recevoir les dernières réponses
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
       if (stopReading) stopReading()
+
+      // Log des données brutes reçues (premiers 500 caractères pour debug)
+      logger.log('📥 Données brutes reçues (preview):', receivedData.substring(0, 500))
+      
+      // Log des données détectées
+      logger.log('📊 Données détectées:', { iccid, deviceSerial, firmwareVersion, receivedDataLength: receivedData.length })
+      
+      // Si aucune donnée reçue, avertir
+      if (receivedData.length === 0) {
+        logger.warn('⚠️ Aucune donnée reçue du dispositif. Vérifiez la connexion et le baudrate.')
+      }
 
       // Chercher dans la base
       let foundDevice = null
       if (iccid) {
         foundDevice = devices.find(d => d.sim_iccid && d.sim_iccid.includes(iccid))
+        if (foundDevice) {
+          logger.log('✅ Dispositif trouvé par ICCID:', foundDevice.device_name || foundDevice.sim_iccid)
+        }
       }
       if (!foundDevice && deviceSerial) {
         foundDevice = devices.find(d => d.device_serial && d.device_serial.includes(deviceSerial))
+        if (foundDevice) {
+          logger.log('✅ Dispositif trouvé par Serial:', foundDevice.device_name || foundDevice.device_serial)
+        }
       }
 
       if (foundDevice) {
         setUsbConnectedDevice(foundDevice)
         setUsbVirtualDevice(null)
+        logger.log('🔌 Dispositif USB connecté (enregistré):', foundDevice.device_name || foundDevice.sim_iccid)
         return foundDevice
       } else {
-        // Créer un dispositif virtuel avec la version réelle du firmware
+        // Créer un dispositif virtuel même si aucune donnée n'a été détectée
+        // Cela permet d'afficher le dispositif USB même s'il ne répond pas aux commandes AT
+        const deviceIdentifier = iccid ? iccid.slice(-4) : 
+                                deviceSerial ? deviceSerial.slice(-4) : 
+                                portInfo.usbVendorId && portInfo.usbProductId ? 
+                                  `${portInfo.usbVendorId.toString(16)}:${portInfo.usbProductId.toString(16)}` : 
+                                  'UNKNOWN'
+        
         const virtualDevice = {
           id: 'usb_virtual_' + Date.now(),
-          device_name: `USB-${iccid ? iccid.slice(-4) : deviceSerial || 'UNKNOWN'}`,
+          device_name: `USB-${deviceIdentifier}`,
           sim_iccid: iccid || 'N/A',
           device_serial: deviceSerial || 'N/A',
           firmware_version: firmwareVersion || 'N/A',
@@ -240,6 +277,9 @@ export default function DevicesPage() {
         }
         setUsbVirtualDevice(virtualDevice)
         setUsbConnectedDevice(null)
+        logger.log('🔌 Dispositif USB virtuel créé:', virtualDevice.device_name)
+        logger.log('   Détails:', { iccid, deviceSerial, firmwareVersion, portInfo })
+        logger.log('   Dispositif virtuel ajouté à la liste (devrait apparaître dans le tableau)')
         return virtualDevice
       }
     } catch (err) {
@@ -256,21 +296,59 @@ export default function DevicesPage() {
     }
 
     setCheckingUSB(true)
+    setAutoDetecting(true)
     try {
-      // Demander l'accès au port
+      logger.log('🔍 Détection USB manuelle demandée...')
+      
+      // D'abord, vérifier les ports déjà autorisés
+      const existingPorts = await navigator.serial.getPorts()
+      logger.log(`📡 Ports déjà autorisés: ${existingPorts.length}`)
+      
+      // Si des ports existent, essayer de les utiliser d'abord
+      if (existingPorts.length > 0) {
+        logger.log('🔌 Tentative avec les ports déjà autorisés...')
+        for (const p of existingPorts) {
+          try {
+            const device = await detectDeviceOnPort(p)
+            if (device) {
+              logger.log('✅ Dispositif trouvé sur port existant:', device.device_name || device.sim_iccid)
+              setCheckingUSB(false)
+              setAutoDetecting(false)
+              return
+            }
+          } catch (portErr) {
+            logger.warn('Erreur sur port existant:', portErr.message)
+            // Continuer avec le port suivant
+          }
+        }
+      }
+      
+      // Si aucun dispositif trouvé, demander un nouveau port
+      logger.log('📱 Aucun dispositif trouvé, demande d\'autorisation d\'un nouveau port...')
       const selectedPort = await requestPort()
       if (!selectedPort) {
+        logger.debug('Aucun port sélectionné par l\'utilisateur')
         setCheckingUSB(false)
+        setAutoDetecting(false)
         return
       }
 
+      logger.log('✅ Port sélectionné, détection en cours...')
       // Détecter le dispositif sur ce port
-      await detectDeviceOnPort(selectedPort)
+      const device = await detectDeviceOnPort(selectedPort)
+      if (device) {
+        logger.log('✅ Dispositif détecté:', device.device_name || device.sim_iccid)
+      }
     } catch (err) {
-      logger.error('Erreur détection USB:', err)
-      alert(`Erreur lors de la détection: ${err.message}`)
+      if (err.name === 'NotFoundError') {
+        logger.debug('Aucun port sélectionné')
+      } else {
+        logger.error('Erreur détection USB:', err)
+        alert(`Erreur lors de la détection: ${err.message}`)
+      }
     } finally {
       setCheckingUSB(false)
+      setAutoDetecting(false)
     }
   }, [isSupported, requestPort, detectDeviceOnPort])
 
@@ -284,28 +362,50 @@ export default function DevicesPage() {
 
   // Détection automatique au chargement (ports déjà autorisés)
   useEffect(() => {
-    if (!isSupported || !autoDetecting) return
+    if (!isSupported) {
+      logger.debug('Web Serial API non supporté')
+      setAutoDetecting(false)
+      return
+    }
+
+    if (!autoDetecting) return
 
     const autoDetect = async () => {
       try {
+        logger.log('🔍 Détection automatique USB en cours...')
+        
         // Récupérer les ports déjà autorisés (sans interaction utilisateur)
         const ports = await navigator.serial.getPorts()
+        logger.log(`📡 Ports trouvés: ${ports.length}`)
         
         if (ports.length === 0) {
+          logger.debug('Aucun port série autorisé trouvé - la détection automatique nécessite une première autorisation manuelle')
+          logger.log('💡 Cliquez sur "🔌 Détecter USB" pour autoriser le port la première fois')
           setAutoDetecting(false)
           return
         }
 
         // Essayer tous les ports USB connectés
         for (const p of ports) {
-          const info = p.getInfo()
-          // Filtrer les ports USB
-          if (info.usbVendorId || info.usbProductId) {
-            const device = await detectDeviceOnPort(p)
-            if (device) {
-              setAutoDetecting(false)
-              return // Arrêter au premier dispositif trouvé
+          try {
+            const info = p.getInfo()
+            logger.log(`🔌 Test port: vendorId=${info.usbVendorId}, productId=${info.usbProductId}`)
+            
+            // Filtrer les ports USB
+            if (info.usbVendorId || info.usbProductId) {
+              logger.log('📱 Tentative de détection sur port USB...')
+              const device = await detectDeviceOnPort(p)
+              if (device) {
+                logger.log('✅ Dispositif détecté:', device.device_name || device.sim_iccid)
+                setAutoDetecting(false)
+                return // Arrêter au premier dispositif trouvé
+              } else {
+                logger.debug('Aucun dispositif détecté sur ce port')
+              }
             }
+          } catch (portErr) {
+            logger.warn('Erreur sur un port:', portErr.message)
+            // Continuer avec le port suivant
           }
         }
 
@@ -315,56 +415,126 @@ export default function DevicesPage() {
           const info = firstPort.getInfo()
           if (!info.usbVendorId && !info.usbProductId) {
             // Port série non-USB, essayer quand même
+            logger.log('📱 Tentative sur port série non-USB...')
             const device = await detectDeviceOnPort(firstPort)
             if (device) {
+              logger.log('✅ Dispositif détecté sur port série:', device.device_name || device.sim_iccid)
               setAutoDetecting(false)
               return
             }
           }
         }
+        
+        logger.debug('Aucun dispositif détecté sur les ports disponibles')
       } catch (err) {
-        logger.debug('Détection automatique USB:', err.message)
+        logger.error('Erreur détection automatique USB:', err)
       } finally {
         setAutoDetecting(false)
       }
     }
 
-    // Attendre un peu que les devices soient chargés, puis détecter
+    // Attendre que les devices soient chargés, puis détecter
+    // Augmenter le délai pour laisser plus de temps
     const timer = setTimeout(() => {
-      autoDetect()
-    }, 500) // Délai de 500ms pour laisser le temps aux données de charger
+      if (devices.length > 0 || !loading) {
+        autoDetect()
+      } else {
+        // Si toujours en chargement après 2s, essayer quand même
+        setTimeout(() => autoDetect(), 2000)
+      }
+    }, 1000) // Délai de 1s pour laisser le temps aux données de charger
 
     return () => clearTimeout(timer)
-  }, [isSupported, autoDetecting, detectDeviceOnPort, usbConnectedDevice, usbVirtualDevice])
+  }, [isSupported, autoDetecting, detectDeviceOnPort, usbConnectedDevice, usbVirtualDevice, devices, loading])
 
-  // Écouter les nouveaux ports connectés
+  // Écouter les nouveaux ports connectés (événement navigateur)
   useEffect(() => {
     if (!isSupported) return
 
     const handleConnect = async (event) => {
       try {
-        // Nouveau port détecté, essayer de se connecter automatiquement
-        const port = event.target
-        const device = await detectDeviceOnPort(port)
-        if (device) {
-          logger.log('Nouveau dispositif USB détecté:', device)
+        logger.log('🔌 Nouveau port USB connecté détecté par le navigateur')
+        // Le port est dans event.target
+        if (event.target) {
+          logger.log('📱 Tentative de détection automatique sur le nouveau port...')
+          const device = await detectDeviceOnPort(event.target)
+          if (device) {
+            logger.log('✅ Dispositif détecté sur le nouveau port:', device.device_name || device.sim_iccid)
+            setAutoDetecting(false)
+          }
         }
       } catch (err) {
-        logger.error('Erreur connexion nouveau port:', err)
+        logger.error('Erreur lors de la détection du nouveau port:', err)
       }
     }
 
-    navigator.serial.addEventListener('connect', handleConnect)
+    // Écouter l'événement 'connect' du navigateur
+    if (navigator.serial && typeof navigator.serial.addEventListener === 'function') {
+      navigator.serial.addEventListener('connect', handleConnect)
+      logger.log('👂 Écoute des événements de connexion USB activée')
+    }
+
     return () => {
-      navigator.serial.removeEventListener('connect', handleConnect)
+      if (navigator.serial && typeof navigator.serial.removeEventListener === 'function') {
+        navigator.serial.removeEventListener('connect', handleConnect)
+      }
     }
   }, [isSupported, detectDeviceOnPort])
+
+  // Vérifier si un dispositif peut recevoir une mise à jour OTA
+  const canReceiveOTA = useCallback((device) => {
+    // Dispositif virtuel USB ne peut pas recevoir OTA (seulement USB)
+    if (device.isVirtual) {
+      return { can: false, reason: 'Dispositif USB virtuel - utilisez le flash USB' }
+    }
+    
+    // Vérifier si OTA déjà en cours
+    if (device.ota_pending) {
+      return { 
+        can: false, 
+        reason: `Mise à jour OTA déjà en cours (v${device.target_firmware_version || 'N/A'})` 
+      }
+    }
+    
+    // Vérifier si le dispositif est hors ligne
+    if (!device.last_seen) {
+      return { can: false, reason: 'Dispositif jamais vu en ligne' }
+    }
+    
+    const hoursSinceLastSeen = (Date.now() - new Date(device.last_seen).getTime()) / (1000 * 60 * 60)
+    if (hoursSinceLastSeen > 6) {
+      return { 
+        can: false, 
+        reason: `Dispositif hors ligne depuis ${Math.round(hoursSinceLastSeen * 10) / 10}h (max: 6h)` 
+      }
+    }
+    
+    // Vérifier la batterie
+    if (device.last_battery !== null && device.last_battery !== undefined) {
+      const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery)
+      if (!isNaN(battery) && battery < 20) {
+        return { 
+          can: false, 
+          reason: `Batterie trop faible (${Math.round(battery)}%) - minimum requis: 20%` 
+        }
+      }
+    }
+    
+    return { can: true }
+  }, [])
 
   // Fonction pour déclencher OTA sur un dispositif
   const handleOTA = async (device, e) => {
     e.stopPropagation() // Empêcher l'ouverture du modal
     if (!selectedFirmwareVersion) {
       setOtaError('Veuillez sélectionner un firmware')
+      return
+    }
+
+    // Vérifier les conditions avant d'envoyer la requête
+    const check = canReceiveOTA(device)
+    if (!check.can) {
+      setOtaError(`❌ ${check.reason}`)
       return
     }
 
@@ -389,7 +559,9 @@ export default function DevicesPage() {
       // Recharger les dispositifs
       await refetch()
     } catch (err) {
-      setOtaError(err.message || 'Erreur lors du déploiement OTA')
+      // Extraire le message d'erreur de la réponse API si disponible
+      const errorMessage = err.message || 'Erreur lors du déploiement OTA'
+      setOtaError(`❌ ${errorMessage}`)
     } finally {
       setOtaDeploying(prev => {
         const next = { ...prev }
@@ -404,10 +576,25 @@ export default function DevicesPage() {
     e.stopPropagation()
     if (!selectedFirmwareVersion || devicesToUpdate.length === 0) return
 
-    const confirmMessage = `⚠️ ATTENTION : Déploiement massif OTA\n\n` +
+    // Filtrer les dispositifs qui peuvent recevoir OTA
+    const eligibleDevices = devicesToUpdate.filter(d => canReceiveOTA(d).can)
+    const ineligibleDevices = devicesToUpdate.filter(d => !canReceiveOTA(d).can)
+    
+    if (eligibleDevices.length === 0) {
+      const reasons = [...new Set(ineligibleDevices.map(d => canReceiveOTA(d).reason))]
+      setOtaError(`❌ Aucun dispositif éligible pour OTA. Raisons: ${reasons.join('; ')}`)
+      return
+    }
+
+    let confirmMessage = `⚠️ ATTENTION : Déploiement massif OTA\n\n` +
       `Firmware: v${selectedFirmwareVersion}\n` +
-      `Dispositifs concernés: ${devicesToUpdate.length}\n\n` +
-      `Cette opération va déployer le firmware sur TOUS les dispositifs listés.\n` +
+      `Dispositifs éligibles: ${eligibleDevices.length} / ${devicesToUpdate.length}\n\n`
+    
+    if (ineligibleDevices.length > 0) {
+      confirmMessage += `⚠️ ${ineligibleDevices.length} dispositif(s) seront ignorés (hors ligne, batterie faible, OTA en cours, etc.)\n\n`
+    }
+    
+    confirmMessage += `Cette opération va déployer le firmware sur ${eligibleDevices.length} dispositif(s) éligible(s).\n` +
       `Cela peut planter les dispositifs si le firmware est incompatible.\n\n` +
       `Êtes-vous sûr de vouloir continuer ?`
 
@@ -415,19 +602,20 @@ export default function DevicesPage() {
 
     setOtaError(null)
     setOtaMessage(null)
-    const allDeviceIds = devicesToUpdate.map(d => d.id)
+    const eligibleDeviceIds = eligibleDevices.map(d => d.id)
     
-    // Marquer tous comme en cours de déploiement
+    // Marquer tous les éligibles comme en cours de déploiement
     const deployingState = {}
-    allDeviceIds.forEach(id => { deployingState[id] = true })
+    eligibleDeviceIds.forEach(id => { deployingState[id] = true })
     setOtaDeploying(deployingState)
 
     let successCount = 0
     let errorCount = 0
+    let skippedCount = ineligibleDevices.length
 
     try {
-      // Déployer sur tous les dispositifs en parallèle
-      const promises = allDeviceIds.map(async (deviceId) => {
+      // Déployer sur tous les dispositifs éligibles en parallèle
+      const promises = eligibleDeviceIds.map(async (deviceId) => {
         try {
           await fetchJson(
             fetchWithAuth,
@@ -448,10 +636,17 @@ export default function DevicesPage() {
 
       await Promise.all(promises)
 
+      let message = `✅ OTA v${selectedFirmwareVersion} programmé : ${successCount} succès`
+      if (errorCount > 0) {
+        message += `, ${errorCount} erreur(s)`
+      }
+      if (skippedCount > 0) {
+        message += `, ${skippedCount} ignoré(s) (hors ligne/batterie faible/OTA en cours)`
+      }
       if (errorCount === 0) {
-        setOtaMessage(`✅ OTA v${selectedFirmwareVersion} programmé avec succès sur ${successCount} dispositif(s)`)
+        setOtaMessage(message)
       } else {
-        setOtaError(`⚠️ Déploiement partiel : ${successCount} succès, ${errorCount} erreur(s)`)
+        setOtaError(message)
       }
 
       // Recharger les dispositifs
@@ -479,16 +674,23 @@ export default function DevicesPage() {
   const filteredDevices = useMemo(() => {
     const needle = searchTerm.toLowerCase()
     return allDevices.filter(d => {
-      const matchesSearch =
+      // Les dispositifs virtuels USB doivent toujours apparaître (sauf si recherche spécifique)
+      const isVirtualUSB = d.isVirtual && d.status === 'usb_connected'
+      
+      // Si recherche vide, inclure tous les dispositifs (y compris virtuels)
+      // Si recherche non vide, vérifier si le dispositif virtuel matche
+      const matchesSearch = searchTerm === '' || 
         d.device_name?.toLowerCase().includes(needle) ||
-    d.sim_iccid?.includes(searchTerm) ||
-        `${d.first_name || ''} ${d.last_name || ''}`.toLowerCase().includes(needle)
+        d.sim_iccid?.includes(searchTerm) ||
+        `${d.first_name || ''} ${d.last_name || ''}`.toLowerCase().includes(needle) ||
+        (isVirtualUSB && (d.device_name?.toLowerCase().includes(needle) || 'usb'.includes(needle)))
 
       const isAssigned = Boolean(d.patient_id)
       const matchesAssignment =
         assignmentFilter === 'all' ||
         (assignmentFilter === 'assigned' && isAssigned) ||
-        (assignmentFilter === 'unassigned' && !isAssigned)
+        (assignmentFilter === 'unassigned' && !isAssigned) ||
+        (isVirtualUSB && assignmentFilter === 'unassigned') // Dispositifs virtuels = non assignés
 
       return matchesSearch && matchesAssignment
     })
@@ -888,6 +1090,24 @@ export default function DevicesPage() {
             </button>
           ))}
         </div>
+        
+        {/* Bouton détection USB manuelle */}
+        {isSupported && (
+          <button
+            onClick={() => {
+              setAutoDetecting(true)
+              detectUSBDevice()
+            }}
+            disabled={checkingUSB || autoDetecting}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              checkingUSB || autoDetecting
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
+            }`}
+          >
+            {checkingUSB || autoDetecting ? '🔍 Détection...' : '🔌 Détecter USB'}
+          </button>
+        )}
 
         <div className="flex-1 max-w-md">
           <input
@@ -901,9 +1121,14 @@ export default function DevicesPage() {
 
         {/* Sélecteur de firmware pour OTA */}
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-            Firmware OTA:
-          </label>
+          <div className="flex flex-col">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+              Firmware OTA (à distance) 📡:
+            </label>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Mise à jour via réseau 4G/WiFi
+            </span>
+          </div>
           <select
             value={selectedFirmwareVersion}
             onChange={(e) => {
@@ -912,6 +1137,7 @@ export default function DevicesPage() {
               setOtaError(null)
             }}
             className="input min-w-[150px]"
+            title="Sélectionnez un firmware pour mise à jour OTA (Over-The-Air) à distance"
           >
             <option value="">— Sélectionner —</option>
             {firmwares.map(fw => (
@@ -925,9 +1151,9 @@ export default function DevicesPage() {
               onClick={handleOTAAll}
               disabled={Object.keys(otaDeploying).length > 0}
               className="btn-primary text-sm whitespace-nowrap"
-              title={`Flasher tous les ${devicesToUpdate.length} dispositifs concernés`}
+              title={`Déployer OTA (à distance) sur tous les ${devicesToUpdate.length} dispositifs concernés via réseau 4G/WiFi`}
             >
-              {Object.keys(otaDeploying).length > 0 ? '⏳ Déploiement...' : `🚀 Flasher tous (${devicesToUpdate.length})`}
+              {Object.keys(otaDeploying).length > 0 ? '⏳ Déploiement...' : `📡 OTA tous (${devicesToUpdate.length})`}
             </button>
           )}
           {isAdmin && (
@@ -1054,16 +1280,28 @@ export default function DevicesPage() {
                       {selectedFirmwareVersion && (
                         <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
-                            {needsUpdate || device.firmware_version === 'N/A' || device.firmware_version === 'n/a' ? (
-                              <button
-                                onClick={(e) => handleOTA(device, e)}
-                                disabled={isDeploying}
-                                className="btn-primary text-xs px-3 py-1"
-                                title={`Flasher OTA vers v${selectedFirmwareVersion}`}
-                              >
-                                {isDeploying ? '⏳' : '⬆️ OTA'}
-                              </button>
-                            ) : (
+                            {needsUpdate || device.firmware_version === 'N/A' || device.firmware_version === 'n/a' ? (() => {
+                              const otaCheck = canReceiveOTA(device)
+                              const isDisabled = isDeploying || !otaCheck.can
+                              return (
+                                <button
+                                  onClick={(e) => handleOTA(device, e)}
+                                  disabled={isDisabled}
+                                  className={`text-xs px-3 py-1 ${
+                                    isDisabled 
+                                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                      : 'btn-primary'
+                                  }`}
+                                  title={
+                                    isDisabled 
+                                      ? `❌ ${otaCheck.reason}` 
+                                      : `Mise à jour OTA (Over-The-Air) à distance via réseau 4G/WiFi vers v${selectedFirmwareVersion}`
+                                  }
+                                >
+                                  {isDeploying ? '⏳' : '📡 OTA'}
+                                </button>
+                              )
+                            })() : (
                               <span className="text-xs text-gray-400">✓ À jour</span>
                             )}
                             <button
@@ -1074,7 +1312,7 @@ export default function DevicesPage() {
                                 setShowFlashUSBModal(true)
                               }}
                               className="btn-secondary text-xs px-3 py-1"
-                              title="Flasher via USB"
+                              title="Flash USB local : mise à jour via câble USB (nécessite connexion physique)"
                               disabled={device.isVirtual && !isConnected}
                             >
                               🔌 USB
@@ -1382,7 +1620,10 @@ export default function DevicesPage() {
                               </div>
 
                               <div>
-                                <p className="text-sm font-semibold text-primary mb-3">⬆️ OTA par défaut</p>
+                                <p className="text-sm font-semibold text-primary mb-1">📡 Configuration OTA (Over-The-Air)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                                  Mise à jour à distance via réseau 4G/WiFi
+                                </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   <input className="input" placeholder="URL primaire" value={commandForm.configOtaPrimaryUrl} onChange={(e) => setCommandForm((prev) => ({ ...prev, configOtaPrimaryUrl: e.target.value }))} />
                                   <input className="input" placeholder="URL fallback" value={commandForm.configOtaFallbackUrl} onChange={(e) => setCommandForm((prev) => ({ ...prev, configOtaFallbackUrl: e.target.value }))} />
@@ -1424,7 +1665,12 @@ export default function DevicesPage() {
                           {commandForm.command === 'OTA_REQUEST' && (
                             <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4 space-y-3">
                               <div className="bg-orange-100 dark:bg-orange-900/30 border-l-4 border-orange-500 dark:border-orange-400 p-3 rounded">
-                                <p className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">⚠️ Mise à jour OTA</p>
+                                <div className="mb-2">
+                                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">📡 Mise à jour OTA (Over-The-Air)</p>
+                                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                                    Mise à jour à distance via réseau 4G/WiFi. Le dispositif télécharge et installe le firmware automatiquement.
+                                  </p>
+                                </div>
                                 <p className="text-xs text-orange-700 dark:text-orange-300">
                                   Laisser l&apos;URL vide pour utiliser la configuration stockée dans le dispositif.
                                 </p>
