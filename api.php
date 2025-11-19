@@ -451,12 +451,6 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleCreateDevice();
 } elseif(preg_match('#/devices/measurements$#', $path) && $method === 'POST') {
     handlePostMeasurement();
-} elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'POST') {
-    handleCreateDeviceCommand($m[1]);
-} elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceCommands($m[1]);
-} elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands/pending$#', $path, $m) && $method === 'GET') {
-    handleGetPendingCommands($m[1]);
 } elseif(preg_match('#/devices/commands$#', $path) && $method === 'GET') {
     handleListAllCommands();
 } elseif(preg_match('#/devices/commands/ack$#', $path) && $method === 'POST') {
@@ -465,6 +459,18 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handlePostLog();
 } elseif(preg_match('#/logs$#', $path) && $method === 'GET') {
     handleGetLogs();
+} elseif(preg_match('#/devices/(\d+)/config$#', $path, $m) && $method === 'GET') {
+    handleGetDeviceConfig($m[1]);
+} elseif(preg_match('#/devices/(\d+)/config$#', $path, $m) && $method === 'PUT') {
+    handleUpdateDeviceConfig($m[1]);
+} elseif(preg_match('#/devices/(\d+)/ota$#', $path, $m) && $method === 'POST') {
+    handleTriggerOTA($m[1]);
+} elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'POST') {
+    handleCreateDeviceCommand($m[1]);
+} elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'GET') {
+    handleGetDeviceCommands($m[1]);
+} elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands/pending$#', $path, $m) && $method === 'GET') {
+    handleGetPendingCommands($m[1]);
 } elseif(preg_match('#/device/(\d+)$#', $path, $m) && $method === 'GET') {
     handleGetDeviceHistory($m[1]);
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PUT') {
@@ -472,13 +478,7 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteDevice($m[1]);
 
-// OTA & Config
-} elseif(preg_match('#/devices/(\d+)/config$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceConfig($m[1]);
-} elseif(preg_match('#/devices/(\d+)/config$#', $path, $m) && $method === 'PUT') {
-    handleUpdateDeviceConfig($m[1]);
-} elseif(preg_match('#/devices/(\d+)/ota$#', $path, $m) && $method === 'POST') {
-    handleTriggerOTA($m[1]);
+// Firmwares
 } elseif(preg_match('#/firmwares$#', $path) && $method === 'GET') {
     handleGetFirmwares();
 } elseif(preg_match('#/firmwares/(\d+)/download$#', $path, $matches) && $method === 'GET') {
