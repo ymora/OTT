@@ -1370,16 +1370,14 @@ export default function DevicesPage() {
                 <th className="text-left py-3 px-4">Batterie</th>
                 <th className="text-left py-3 px-4">Dernier contact</th>
                 <th className="text-left py-3 px-4">Firmware</th>
-                {selectedFirmwareVersion && (
-                  <th className="text-right py-3 px-4">Flash</th>
-                )}
+                <th className="text-right py-3 px-4">Flash</th>
                 <th className="text-right py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredDevices.length === 0 ? (
                 <tr>
-                  <td colSpan={selectedFirmwareVersion ? 8 : 7} className="py-8 text-center text-gray-500">
+                  <td colSpan={8} className="py-8 text-center text-gray-500">
                     Aucun dispositif trouvé
                   </td>
                 </tr>
@@ -1450,22 +1448,11 @@ export default function DevicesPage() {
                           : 'Jamais'}
                       </td>
                       <td className="py-3 px-4">
-                        {device.isVirtual && latestFirmwareVersion ? (
-                          <span className="text-sm font-mono text-primary">Flash (v{latestFirmwareVersion})</span>
-                        ) : (
-                          <span className="text-sm font-mono">{device.firmware_version || 'N/A'}</span>
-                        )}
-                        {device.ota_pending && (
-                          <span className="badge badge-warning text-xs ml-2">OTA en attente</span>
-                        )}
-                        {needsUpdate && !device.isVirtual && (
-                          <span className="badge badge-info text-xs ml-2">→ v{selectedFirmwareVersion}</span>
-                        )}
+                        <span className="text-sm font-mono">{device.firmware_version || 'N/A'}</span>
                       </td>
-                      {selectedFirmwareVersion && (
-                        <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
-                            {needsUpdate || device.firmware_version === 'N/A' || device.firmware_version === 'n/a' ? (() => {
+                            {selectedFirmwareVersion && (needsUpdate || device.firmware_version === 'N/A' || device.firmware_version === 'n/a') ? (() => {
                               const otaCheck = canReceiveOTA(device)
                               const isDisabled = isDeploying || !otaCheck.can
                               return (
@@ -1486,9 +1473,9 @@ export default function DevicesPage() {
                                   {isDeploying ? '⏳' : '📡 OTA'}
                                 </button>
                               )
-                            })() : (
+                            })() : selectedFirmwareVersion && !needsUpdate && device.firmware_version !== 'N/A' && device.firmware_version !== 'n/a' ? (
                               <span className="text-xs text-gray-400">✓ À jour</span>
-                            )}
+                            ) : null}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -1508,7 +1495,6 @@ export default function DevicesPage() {
                             </button>
                           </div>
                         </td>
-                      )}
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           <button

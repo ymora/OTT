@@ -435,13 +435,13 @@ export default function PatientsPage() {
       />
 
       {/* Modal d'assignation de dispositif */}
-      {showAssignModal && selectedPatientForAssign && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4">
-              🔗 Assigner un dispositif à {selectedPatientForAssign.first_name} {selectedPatientForAssign.last_name}
-            </h2>
-            
+      <Modal
+        isOpen={showAssignModal}
+        onClose={closeAssignModal}
+        title={selectedPatientForAssign ? `🔗 Assigner un dispositif à ${selectedPatientForAssign.first_name} ${selectedPatientForAssign.last_name}` : ''}
+      >
+        {selectedPatientForAssign && (
+          <>
             {actionError && (
               <div className="alert alert-warning mb-4">
                 {actionError}
@@ -506,18 +506,18 @@ export default function PatientsPage() {
                 </div>
               </>
             )}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
       {/* Modal de désassignation de dispositif */}
-      {showUnassignModal && selectedDeviceForUnassign && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4">
-              🔓 Désassigner le dispositif
-            </h2>
-            
+      <Modal
+        isOpen={showUnassignModal}
+        onClose={closeUnassignModal}
+        title="🔓 Désassigner le dispositif"
+      >
+        {selectedDeviceForUnassign && (
+          <>
             {actionError && (
               <div className="alert alert-warning mb-4">
                 {actionError}
@@ -557,9 +557,9 @@ export default function PatientsPage() {
                 {unassigningDevice === selectedDeviceForUnassign.id ? '⏳ Désassignation...' : '🔓 Désassigner'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   )
 }

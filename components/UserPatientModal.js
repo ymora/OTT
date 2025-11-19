@@ -33,6 +33,9 @@ export default function UserPatientModal({
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [loadingNotifPrefs, setLoadingNotifPrefs] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
+  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [notificationPrefs, setNotificationPrefs] = useState({
     email_enabled: true,
     sms_enabled: true,
@@ -61,6 +64,7 @@ export default function UserPatientModal({
           role_id: roles.find(r => r.name === editingItem.role_name)?.id || '',
           is_active: Boolean(editingItem.is_active)
         })
+        setPasswordConfirm('')
       } else {
         setFormData({
           first_name: editingItem.first_name || '',
@@ -87,6 +91,7 @@ export default function UserPatientModal({
           role_id: '',
           is_active: true // Visible aussi en création maintenant
         })
+        setPasswordConfirm('')
       } else {
         setFormData({
           first_name: '',
@@ -115,6 +120,9 @@ export default function UserPatientModal({
     setFormErrors({})
     setFormError(null)
     setNotificationErrors({})
+    setShowPassword(false)
+    setShowPasswordConfirm(false)
+    setPasswordConfirm('')
   }, [isOpen, editingItem, type, roles])
 
   const loadNotificationPrefs = async () => {
@@ -186,6 +194,12 @@ export default function UserPatientModal({
         setFormErrors(prev => {
           const next = { ...prev }
           delete next.password
+          // Vérifier aussi la confirmation si elle existe
+          if (passwordConfirm && passwordConfirm !== value) {
+            next.passwordConfirm = 'Les mots de passe ne correspondent pas'
+          } else {
+            delete next.passwordConfirm
+          }
           return next
         })
       } else if (!value && !editingItem) {
@@ -199,6 +213,7 @@ export default function UserPatientModal({
         setFormErrors(prev => {
           const next = { ...prev }
           delete next.password
+          delete next.passwordConfirm
           return next
         })
       }
@@ -276,6 +291,19 @@ export default function UserPatientModal({
       }
       if (!editingItem && (!formData.password || formData.password.length < 6)) {
         errors.password = 'Le mot de passe doit contenir au moins 6 caractères'
+      }
+      // Validation confirmation mot de passe
+      if (formData.password && formData.password.length >= 6) {
+        if (!editingItem && (!passwordConfirm || passwordConfirm !== formData.password)) {
+          errors.passwordConfirm = 'Les mots de passe ne correspondent pas'
+        }
+        if (editingItem && passwordConfirm && passwordConfirm !== formData.password) {
+          errors.passwordConfirm = 'Les mots de passe ne correspondent pas'
+        }
+        // Si en édition et qu'un mot de passe est saisi, la confirmation est requise
+        if (editingItem && formData.password && formData.password.length > 0 && !passwordConfirm) {
+          errors.passwordConfirm = 'Veuillez confirmer le mot de passe'
+        }
       }
       if (!formData.role_id) {
         errors.role_id = 'Le rôle est obligatoire'
@@ -582,19 +610,74 @@ export default function UserPatientModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                    {editingItem ? 'Nouveau mot de passe (optionnel, 6+ caractères)' : 'Mot de passe (6+ caractères) *'}
-                    <input
-                      type="password"
-                      name="password"
-                      value={formData.password || ''}
-                      onChange={handleInputChange}
-                      className={`input mt-1 ${formErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
-                      required={!editingItem}
-                      minLength={6}
-                    />
+                    {editingItem ? 'Nouveau mot de passe' : 'Mot de passe *'}
+                    <div className="relative mt-1">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        name="password"
+                        value={formData.password || ''}
+                        onChange={handleInputChange}
+                        placeholder={editingItem ? 'Optionnel, 6+ caractères' : '6+ caractères'}
+                        className={`input pr-10 ${formErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                        required={!editingItem}
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      >
+                        {showPassword ? '👁️' : '👁️‍🗨️'}
+                      </button>
+                    </div>
                   </label>
                   {formErrors.password && (
                     <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.password}</p>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                    {editingItem ? 'Confirmer le nouveau mot de passe' : 'Confirmer le mot de passe *'}
+                    <div className="relative mt-1">
+                      <input
+                        type={showPasswordConfirm ? 'text' : 'password'}
+                        value={passwordConfirm}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          setPasswordConfirm(value)
+                          // Validation en temps réel
+                          if (formData.password && value !== formData.password) {
+                            setFormErrors(prev => ({
+                              ...prev,
+                              passwordConfirm: 'Les mots de passe ne correspondent pas'
+                            }))
+                          } else {
+                            setFormErrors(prev => {
+                              const next = { ...prev }
+                              delete next.passwordConfirm
+                              return next
+                            })
+                          }
+                        }}
+                        placeholder={editingItem ? 'Optionnel, 6+ caractères' : '6+ caractères'}
+                        className={`input pr-10 ${formErrors.passwordConfirm ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                        required={!editingItem || (editingItem && formData.password && formData.password.length > 0)}
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        title={showPasswordConfirm ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      >
+                        {showPasswordConfirm ? '👁️' : '👁️‍🗨️'}
+                      </button>
+                    </div>
+                  </label>
+                  {formErrors.passwordConfirm && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.passwordConfirm}</p>
                   )}
                 </div>
 
