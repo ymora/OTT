@@ -10,8 +10,10 @@ import FlashUSBModal from '@/components/FlashUSBModal'
 import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
+import SuccessMessage from '@/components/SuccessMessage'
 import { useSerialPort } from '@/components/SerialPortManager'
 import logger from '@/lib/logger'
+import Modal from '@/components/Modal'
 
 // Lazy load des composants lourds pour accélérer Fast Refresh
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
@@ -132,12 +134,28 @@ export default function DevicesPage() {
   
   // Focus sur la carte
   const [focusDeviceId, setFocusDeviceId] = useState(null)
+  
+  // État pour la suppression
+  const [deletingDevice, setDeletingDevice] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
+  const [deleteSuccess, setDeleteSuccess] = useState(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deviceToDelete, setDeviceToDelete] = useState(null)
 
   // Charger les données initiales avec useApiData
   const { data, loading, error, refetch } = useApiData(
     ['/api.php/devices', '/api.php/patients', '/api.php/firmwares'],
     { requiresAuth: true }
   )
+
+  // Rafraîchissement automatique toutes les 30 secondes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch()
+    }, 30000) // 30 secondes
+    
+    return () => clearInterval(interval)
+  }, [refetch])
 
   const devices = data?.devices?.devices || []
   const patients = data?.patients?.patients || []
@@ -158,47 +176,75 @@ export default function DevicesPage() {
       }
       logger.log('✅ Port connecté, envoi des commandes AT...')
 
-      // Lire l'ICCID/serial/firmware
+      // Lire l'ICCID/serial/firmware en continu
       let iccid = null
       let deviceSerial = null
       let firmwareVersion = null
       let receivedData = ''
+      let lastDataUpdate = Date.now()
 
       const stopReading = await startReading((data) => {
         receivedData += data
-        // ICCID
-        const iccidMatch = receivedData.match(/\+CCID:\s*(\d+)/i) || receivedData.match(/(\d{19,20})/)
-        if (iccidMatch) {
-          iccid = iccidMatch[1]
+        lastDataUpdate = Date.now()
+        
+        // Log en temps réel pour debug (limité pour éviter le spam)
+        if (receivedData.length % 100 === 0) {
+          logger.debug('📥 Données reçues:', receivedData.length, 'caractères')
         }
-        // Serial
-        const serialMatch = receivedData.match(/SERIAL[:\s]+([A-Z0-9\-]+)/i) || receivedData.match(/IMEI[:\s]+([A-Z0-9]+)/i)
-        if (serialMatch) {
-          deviceSerial = serialMatch[1]
+        
+        // ICCID - plusieurs formats possibles
+        // Format AT+CCID: 89330123456789012345
+        const iccidMatch1 = receivedData.match(/\+CCID[:\s]+(\d{19,20})/i)
+        // Format CCID: 89330123456789012345
+        const iccidMatch2 = receivedData.match(/CCID[:\s]+(\d{19,20})/i)
+        // Format brut: 89330123456789012345 (19-20 chiffres consécutifs)
+        const iccidMatch3 = receivedData.match(/(\d{19,20})/)
+        // Format JSON: "iccid":"89330123456789012345"
+        const iccidMatch4 = receivedData.match(/["']iccid["'][:\s]+["']?(\d{19,20})["']?/i)
+        // Format sim_iccid dans JSON
+        const iccidMatch5 = receivedData.match(/["']sim_iccid["'][:\s]+["']?(\d{19,20})["']?/i)
+        
+        const iccidMatch = iccidMatch1 || iccidMatch2 || iccidMatch4 || iccidMatch5 || iccidMatch3
+        if (iccidMatch && iccidMatch[1]) {
+          const newIccid = iccidMatch[1].trim()
+          // Vérifier que c'est un ICCID valide (19-20 chiffres)
+          if (newIccid.length >= 19 && newIccid.length <= 20 && /^\d+$/.test(newIccid)) {
+            iccid = newIccid
+            logger.log('✅ ICCID détecté:', iccid)
+          }
         }
-        // Firmware version (plusieurs formats possibles)
-        // Chercher dans différents formats de réponse AT
+        
+        // Serial - plusieurs formats
+        const serialMatch = receivedData.match(/SERIAL[:\s=]+([A-Z0-9\-]+)/i) || 
+                           receivedData.match(/IMEI[:\s=]+([A-Z0-9]+)/i) ||
+                           receivedData.match(/["']serial["'][:\s]+["']?([A-Z0-9\-]+)["']?/i)
+        if (serialMatch && serialMatch[1]) {
+          deviceSerial = serialMatch[1].trim()
+          logger.log('✅ Serial détecté:', deviceSerial)
+        }
+        
+        // Firmware version - plusieurs formats
         const fwMatch = receivedData.match(/FIRMWARE[:\s=]+([\d.]+)/i) || 
                        receivedData.match(/VERSION[:\s=]+([\d.]+)/i) ||
                        receivedData.match(/FWVER[:\s=]+([\d.]+)/i) ||
                        receivedData.match(/\+CGMR[:\s]+([^\r\n]+)/i) ||
                        receivedData.match(/\+GMR[:\s]+([^\r\n]+)/i) ||
+                       receivedData.match(/["']firmware_version["'][:\s]+["']?([\d.]+)["']?/i) ||
                        receivedData.match(/v?(\d+\.\d+\.\d+)/i) ||
-                       receivedData.match(/(\d+\.\d+\.\d+)/) // Format simple X.Y.Z
-        if (fwMatch) {
-          firmwareVersion = fwMatch[1].trim()
-          // Nettoyer la version (enlever les espaces, caractères non désirés)
-          firmwareVersion = firmwareVersion.replace(/[^\d.]/g, '').substring(0, 20)
+                       receivedData.match(/(\d+\.\d+\.\d+)/)
+        if (fwMatch && fwMatch[1]) {
+          firmwareVersion = fwMatch[1].trim().replace(/[^\d.]/g, '').substring(0, 20)
+          logger.log('✅ Firmware détecté:', firmwareVersion)
         }
       })
 
       // Attendre un peu que la connexion soit stable
-      await new Promise(resolve => setTimeout(resolve, 300))
+      await new Promise(resolve => setTimeout(resolve, 500))
       
       // Envoyer les commandes AT pour obtenir les infos
       logger.log('📤 Envoi des commandes AT...')
       await write('AT\r\n') // Test de connexion
-      await new Promise(resolve => setTimeout(resolve, 800))
+      await new Promise(resolve => setTimeout(resolve, 1000))
       await write('AT+CCID\r\n')
       await new Promise(resolve => setTimeout(resolve, 2000))
       await write('AT+GSN\r\n')
@@ -217,20 +263,52 @@ export default function DevicesPage() {
       await write('AT+FWVER?\r\n')
       await new Promise(resolve => setTimeout(resolve, 2000))
       
-      // Attendre un peu pour recevoir les dernières réponses
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Continuer à écouter pendant 5 secondes supplémentaires pour capturer les données en continu
+      // (le firmware peut envoyer des mesures en continu)
+      logger.log('👂 Écoute continue des données série (5 secondes)...')
+      await new Promise(resolve => setTimeout(resolve, 5000))
+      
+      // Vérifier si de nouvelles données arrivent encore
+      const checkInterval = setInterval(() => {
+        const timeSinceLastData = Date.now() - lastDataUpdate
+        if (timeSinceLastData > 2000) {
+          // Pas de nouvelles données depuis 2 secondes, on peut arrêter
+          clearInterval(checkInterval)
+        }
+      }, 500)
+      
+      // Attendre encore 2 secondes pour être sûr d'avoir toutes les données
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      clearInterval(checkInterval)
 
       if (stopReading) stopReading()
 
-      // Log des données brutes reçues (premiers 500 caractères pour debug)
-      logger.log('📥 Données brutes reçues (preview):', receivedData.substring(0, 500))
+      // Log des données brutes reçues (premiers 1000 caractères pour debug)
+      logger.log('📥 Données brutes reçues (' + receivedData.length + ' caractères):')
+      logger.log(receivedData.substring(0, 1000))
+      if (receivedData.length > 1000) {
+        logger.log('... (tronqué, ' + (receivedData.length - 1000) + ' caractères supplémentaires)')
+      }
       
       // Log des données détectées
-      logger.log('📊 Données détectées:', { iccid, deviceSerial, firmwareVersion, receivedDataLength: receivedData.length })
+      logger.log('📊 Données détectées:', { 
+        iccid: iccid || 'NON TROUVÉ', 
+        deviceSerial: deviceSerial || 'NON TROUVÉ', 
+        firmwareVersion: firmwareVersion || 'NON TROUVÉ', 
+        receivedDataLength: receivedData.length 
+      })
       
       // Si aucune donnée reçue, avertir
       if (receivedData.length === 0) {
-        logger.warn('⚠️ Aucune donnée reçue du dispositif. Vérifiez la connexion et le baudrate.')
+        logger.warn('⚠️ Aucune donnée reçue du dispositif. Vérifiez:')
+        logger.warn('   1. Le câble USB est bien connecté')
+        logger.warn('   2. Le dispositif est allumé')
+        logger.warn('   3. Le baudrate est correct (115200)')
+        logger.warn('   4. Le port série n\'est pas utilisé par un autre programme')
+      } else if (!iccid && !deviceSerial) {
+        logger.warn('⚠️ Données reçues mais ICCID/Serial non détecté.')
+        logger.warn('   Les données reçues peuvent être dans un format non reconnu.')
+        logger.warn('   Vérifiez les logs ci-dessus pour voir le format exact.')
       }
 
       // Chercher dans la base
@@ -380,7 +458,7 @@ export default function DevicesPage() {
         
         if (ports.length === 0) {
           logger.debug('Aucun port série autorisé trouvé - la détection automatique nécessite une première autorisation manuelle')
-          logger.log('💡 Cliquez sur "🔌 Détecter USB" pour autoriser le port la première fois')
+          logger.log('💡 Pour autoriser un port USB la première fois, connectez votre dispositif et autorisez-le dans la popup du navigateur')
           setAutoDetecting(false)
           return
         }
@@ -659,6 +737,62 @@ export default function DevicesPage() {
     }
   }
 
+  // Fonction pour ouvrir le modal de suppression
+  const openDeleteModal = (device) => {
+    setDeviceToDelete(device)
+    setShowDeleteModal(true)
+    setDeleteError(null)
+    setDeleteSuccess(null)
+  }
+
+  // Fonction pour fermer le modal de suppression
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false)
+    setDeviceToDelete(null)
+    setDeleteError(null)
+  }
+
+  // Fonction pour supprimer un dispositif
+  const handleDeleteDevice = async () => {
+    if (!deviceToDelete) return
+
+    try {
+      setDeletingDevice(deviceToDelete.id)
+      setDeleteError(null)
+      setDeleteSuccess(null)
+      
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${deviceToDelete.id}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      
+      await refetch()
+      setDeleteSuccess('Dispositif supprimé avec succès')
+      setShowDeleteModal(false)
+      setDeviceToDelete(null)
+      
+      // Fermer le modal de détails si c'était le dispositif supprimé
+      if (showDetailsModal && selectedDevice && selectedDevice.id === deviceToDelete.id) {
+        setShowDetailsModal(false)
+        setSelectedDevice(null)
+      }
+    } catch (err) {
+      let errorMessage = 'Erreur lors de la suppression du dispositif'
+      if (err.message) {
+        errorMessage = err.message
+      } else if (err.error) {
+        errorMessage = err.error
+      }
+      setDeleteError(errorMessage)
+      logger.error('Erreur suppression dispositif:', err)
+    } finally {
+      setDeletingDevice(null)
+    }
+  }
+
   // Les données sont chargées automatiquement par useApiData
 
   // Combiner les dispositifs réels avec le dispositif virtuel USB
@@ -754,7 +888,14 @@ export default function DevicesPage() {
         fetchJson(fetchWithAuth, API_URL, `/api.php/devices/commands?limit=100`, {}, { requiresAuth: true }).catch(() => ({ commands: [] }))
       ])
       setDeviceLogs(logsData.logs || [])
-      setDeviceAlerts((alertsData.alerts || []).filter(a => a.status !== 'resolved'))
+      // Filtrer les alertes pour ce dispositif uniquement (double vérification côté client)
+      const allAlerts = alertsData.alerts || []
+      const filteredAlerts = allAlerts.filter(a => {
+        // Vérifier que l'alerte appartient bien à ce dispositif
+        const alertDeviceId = a.device_id || a.deviceId
+        return String(alertDeviceId) === String(device.id) && a.status !== 'resolved'
+      })
+      setDeviceAlerts(filteredAlerts)
       setDeviceMeasurements(historyData.measurements || [])
       // Filtrer les commandes pour ce dispositif uniquement
       const filteredCommands = (commandsData.commands || []).filter(cmd => 
@@ -1090,24 +1231,6 @@ export default function DevicesPage() {
             </button>
           ))}
         </div>
-        
-        {/* Bouton détection USB manuelle */}
-        {isSupported && (
-          <button
-            onClick={() => {
-              setAutoDetecting(true)
-              detectUSBDevice()
-            }}
-            disabled={checkingUSB || autoDetecting}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              checkingUSB || autoDetecting
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-            }`}
-          >
-            {checkingUSB || autoDetecting ? '🔍 Détection...' : '🔌 Détecter USB'}
-          </button>
-        )}
 
         <div className="flex-1 max-w-md">
           <input
@@ -1172,6 +1295,67 @@ export default function DevicesPage() {
         </div>
       </div>
 
+      {/* Messages d'erreur et de succès */}
+      <ErrorMessage error={deleteError} onClose={() => setDeleteError(null)} />
+      <SuccessMessage message={deleteSuccess} onClose={() => setDeleteSuccess(null)} />
+
+      {/* Modal de suppression de dispositif */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={closeDeleteModal}
+        title={deviceToDelete ? `🗑️ Supprimer le dispositif` : ''}
+      >
+        {deviceToDelete && (
+          <>
+            {deleteError && (
+              <div className="alert alert-warning mb-4">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mb-4">
+              <p className="text-gray-700 dark:text-gray-300 mb-2">
+                Êtes-vous sûr de vouloir supprimer le dispositif :
+              </p>
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                <p className="font-medium text-primary">
+                  {deviceToDelete.device_name || deviceToDelete.sim_iccid}
+                </p>
+                <p className="text-xs text-muted font-mono mt-1">
+                  {deviceToDelete.sim_iccid}
+                </p>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
+                ⚠️ Cette action est irréversible et supprimera toutes les mesures et alertes associées.
+              </p>
+              {deviceToDelete.patient_id && (
+                <p className="text-sm text-red-600 dark:text-red-400 mt-2 font-semibold">
+                  ❌ Ce dispositif est assigné à un patient. Désassignez-le d'abord avant de le supprimer.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                className="btn-secondary"
+                onClick={closeDeleteModal}
+                disabled={deletingDevice === deviceToDelete.id}
+              >
+                Annuler
+              </button>
+              <button
+                className="btn-primary bg-red-500 hover:bg-red-600"
+                onClick={handleDeleteDevice}
+                disabled={deletingDevice === deviceToDelete.id || deviceToDelete.patient_id}
+                title={deviceToDelete.patient_id ? "Impossible de supprimer un dispositif assigné" : ""}
+              >
+                {deletingDevice === deviceToDelete.id ? '⏳ Suppression...' : '🗑️ Supprimer'}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
+
       {/* Tableau */}
       {loading ? (
         <div className="card animate-shimmer h-64"></div>
@@ -1187,14 +1371,15 @@ export default function DevicesPage() {
                 <th className="text-left py-3 px-4">Dernier contact</th>
                 <th className="text-left py-3 px-4">Firmware</th>
                 {selectedFirmwareVersion && (
-                  <th className="text-right py-3 px-4">Actions</th>
+                  <th className="text-right py-3 px-4">Flash</th>
                 )}
+                <th className="text-right py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredDevices.length === 0 ? (
                 <tr>
-                  <td colSpan={selectedFirmwareVersion ? 7 : 6} className="py-8 text-center text-gray-500">
+                  <td colSpan={selectedFirmwareVersion ? 8 : 7} className="py-8 text-center text-gray-500">
                     Aucun dispositif trouvé
                   </td>
                 </tr>
@@ -1311,15 +1496,34 @@ export default function DevicesPage() {
                                 setDeviceForFlash(device.isVirtual ? null : device)
                                 setShowFlashUSBModal(true)
                               }}
-                              className="btn-secondary text-xs px-3 py-1"
+                              className={`text-xs px-3 py-1 ${
+                                (device.isVirtual && !isConnected)
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                  : 'btn-primary'
+                              }`}
                               title="Flash USB local : mise à jour via câble USB (nécessite connexion physique)"
                               disabled={device.isVirtual && !isConnected}
                             >
-                              🔌 USB
+                              📡 USB
                             </button>
                           </div>
                         </td>
                       )}
+                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openDeleteModal(device)
+                            }}
+                            disabled={deletingDevice === device.id || device.isVirtual}
+                            className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                            title={device.isVirtual ? "Impossible de supprimer un dispositif virtuel USB" : "Supprimer le dispositif"}
+                          >
+                            <span className="text-lg">{deletingDevice === device.id ? '⏳' : '🗑️'}</span>
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   )
                 })

@@ -469,6 +469,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleGetDeviceHistory($m[1]);
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateDevice($m[1]);
+} elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    handleDeleteDevice($m[1]);
 
 // OTA & Config
 } elseif(preg_match('#/devices/(\d+)/config$#', $path, $m) && $method === 'GET') {
@@ -1221,6 +1223,51 @@ function handleUpdateDevice($device_id) {
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleDeleteDevice($device_id) {
+    global $pdo;
+    requirePermission('devices.delete');
+    
+    try {
+        // Vérifier que le dispositif existe
+        $stmt = $pdo->prepare("SELECT * FROM devices WHERE id = :id AND deleted_at IS NULL");
+        $stmt->execute(['id' => $device_id]);
+        $device = $stmt->fetch();
+        
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Dispositif introuvable']);
+            return;
+        }
+        
+        // Vérifier si le dispositif est assigné à un patient
+        if ($device['patient_id']) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false, 
+                'error' => 'Impossible de supprimer un dispositif assigné à un patient. Désassignez d\'abord le dispositif.'
+            ]);
+            return;
+        }
+        
+        // Soft delete : mettre deleted_at à NOW()
+        $pdo->prepare("UPDATE devices SET deleted_at = NOW() WHERE id = :id")
+            ->execute(['id' => $device_id]);
+        
+        // Enregistrer dans l'audit
+        auditLog('device.deleted', 'device', $device_id, $device, null);
+        
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Dispositif supprimé avec succès'
+        ]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleDeleteDevice] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -2140,6 +2187,7 @@ function handleGetAlerts() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     $status = isset($_GET['status']) ? $_GET['status'] : null;
     $severity = isset($_GET['severity']) ? $_GET['severity'] : null;
+    $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
     
     try {
         // Construire la requête avec filtres
@@ -2151,6 +2199,12 @@ function handleGetAlerts() {
             WHERE d.deleted_at IS NULL
         ";
         $params = [];
+        
+        // Filtrer par device_id si fourni
+        if ($device_id) {
+            $sql .= " AND a.device_id = :device_id";
+            $params['device_id'] = $device_id;
+        }
         
         // Ne retourner que les alertes actives (non résolues) par défaut
         // Le statut "resolved" n'est plus utilisé - les alertes disparaissent quand elles ne sont plus pertinentes

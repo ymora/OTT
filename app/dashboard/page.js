@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import StatsCard from '@/components/StatsCard'
 import AlertCard from '@/components/AlertCard'
@@ -16,6 +16,15 @@ export default function DashboardPage() {
     ['/api.php/devices', '/api.php/alerts'],
     { requiresAuth: false }
   )
+
+  // Rafraîchissement automatique toutes les 30 secondes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch()
+    }, 30000) // 30 secondes
+    
+    return () => clearInterval(interval)
+  }, [refetch])
 
   const devices = data?.devices?.devices || []
   const alerts = useMemo(() => {
