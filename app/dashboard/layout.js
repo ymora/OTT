@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
 import { useAuth } from '@/contexts/AuthContext'
+import { UsbProvider } from '@/contexts/UsbContext'
 
 // Authentification toujours requise
 const REQUIRE_AUTH = true
@@ -35,17 +36,19 @@ function DashboardLayoutContent({ children }) {
   if (REQUIRE_AUTH && !user) return null
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[rgb(var(--night-bg-start))]">
-      <Topbar />
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 p-6 ml-64 mt-16">
-          <div className="max-w-7xl mx-auto">
-            {children}
-          </div>
-        </main>
+    <UsbProvider>
+      <div className="min-h-screen bg-gray-50 dark:bg-[rgb(var(--night-bg-start))]">
+        <Topbar />
+        <div className="flex">
+          <Sidebar />
+          <main className="flex-1 p-6 ml-64 mt-16">
+            <div className="max-w-7xl mx-auto">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </UsbProvider>
   )
 }
 

@@ -923,13 +923,19 @@ ICCID: 89330123456789012345
         <strong>Astuce :</strong> le dashboard intègre aussi un assistant USB (Web Serial) pour détecter ICCID/serial, mais le mode streaming reste accessible depuis n'importe quel terminal série.
     </div>
     
-    <p>Depuis le dashboard (menu <strong>Dispositifs</strong>), la carte «&nbsp;Streaming USB temps réel&nbsp;» permet :</p>
+    <p><strong>💻 Côté dashboard (v3.2) :</strong></p>
     <ul>
-        <li>d’autoriser le port via Web Serial (Chrome/Edge) ;</li>
-        <li>de lancer l’écoute en direct (bouton <em>▶ Écouter</em>) ;</li>
-        <li>de visualiser le débit/batterie sur des graphiques et l’historique des mesures USB ;</li>
-        <li>de consulter les logs série récents sans quitter le navigateur.</li>
+        <li><strong>Onglet "Streaming USB"</strong> dans le modal de détails du dispositif (visible uniquement pour le dispositif réellement connecté en USB)</li>
+        <li><strong>Détection automatique permanente</strong> : le système détecte automatiquement les dispositifs USB connectés (vérification toutes les 5 secondes)</li>
+        <li><strong>Démarrage automatique</strong> : le streaming démarre automatiquement quand un dispositif USB est détecté</li>
+        <li><strong>Contexte global UsbContext</strong> : gestion de l'état USB en permanence sur toutes les pages du dashboard</li>
+        <li>Visualisation en direct : débit/batterie (graphiques + tableau), logs série en temps réel</li>
+        <li>Autorisation du port via Web Serial (Chrome/Edge uniquement)</li>
     </ul>
+    
+    <div class="alert alert-info">
+        <strong>🆕 Nouveauté v3.2 :</strong> Le streaming USB a été déplacé de la page principale vers le modal de détails du dispositif pour une meilleure organisation. Le système reconnaît automatiquement le dispositif connecté et n'affiche l'onglet que pour celui-ci.
+    </div>
     
     <h3>⚠️ Watchdog Anti-Freeze</h3>
     
@@ -1183,9 +1189,45 @@ TWILIO_PHONE_NUMBER=+33123456789
         <li><strong>Next.js 14</strong> - Framework React avec App Router et export statique</li>
         <li><strong>Tailwind CSS</strong> - Design system utility-first</li>
         <li><strong>Chart.js</strong> - Graphiques interactifs</li>
-        <li><strong>React Context</strong> - Gestion d'état (AuthContext)</li>
+        <li><strong>React Context</strong> - Gestion d'état (AuthContext, UsbContext)</li>
         <li><strong>Service Worker</strong> - PWA avec cache offline</li>
+        <li><strong>Web Serial API</strong> - Communication USB directe avec les dispositifs</li>
     </ul>
+    
+    <h3>🔌 UsbContext (v3.2 - Nouveau)</h3>
+    
+    <p>Le <code>UsbContext</code> est un contexte React global qui gère l'état USB en permanence sur toutes les pages du dashboard :</p>
+    
+    <ul>
+        <li><strong>Détection automatique permanente</strong> : Vérification toutes les 5 secondes des ports USB connectés</li>
+        <li><strong>Streaming USB</strong> : Gestion du streaming de données en temps réel</li>
+        <li><strong>État global</strong> : Dispositif connecté, statut streaming, mesures, logs</li>
+        <li><strong>Reconnaissance intelligente</strong> : Détection automatique des dispositifs par ICCID/Serial</li>
+        <li><strong>Démarrage automatique</strong> : Le streaming démarre automatiquement quand un dispositif USB est détecté</li>
+    </ul>
+    
+    <p><strong>Utilisation :</strong></p>
+    
+    <pre>
+import { useUsb } from '@/contexts/UsbContext'
+
+function MyComponent() {
+  const {
+    usbConnectedDevice,
+    usbStreamStatus,
+    usbStreamMeasurements,
+    startUsbStreaming,
+    stopUsbStreaming
+  } = useUsb()
+  
+  // Le contexte est disponible sur toutes les pages du dashboard
+  // grâce au UsbProvider dans app/dashboard/layout.js
+}
+    </pre>
+    
+    <div class="alert alert-info">
+        <strong>🆕 Nouveauté v3.2 :</strong> Le streaming USB a été déplacé de la page principale vers l'onglet "Streaming USB" du modal de détails du dispositif. Le système reconnaît automatiquement le dispositif connecté et n'affiche l'onglet que pour celui-ci.
+    </div>
     
     <h3>📱 12 Pages Complètes</h3>
     

@@ -282,7 +282,7 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 
 ---
 
-## 🆕 Améliorations Récentes (v3.1)
+## 🆕 Améliorations Récentes (v3.2)
 
 ### Interface Utilisateur
 - **Menu réorganisé** : passage de 14 onglets à 5 sections principales avec sous-menus déroulants
@@ -442,5 +442,26 @@ Commandes durant la session :
 
 ---
 
-**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.1 - React + Next.js + Render Cloud
+**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.2 - React + Next.js + Render Cloud
+
+---
+
+## 🆕 Nouveautés v3.2
+
+### Architecture USB Améliorée
+- **UsbContext global** : Contexte React pour gérer l'état USB en permanence sur toutes les pages
+- **Détection automatique permanente** : Vérification toutes les 5 secondes des ports USB connectés
+- **Streaming USB dans le modal** : Déplacé de la page principale vers l'onglet "Streaming USB" du modal de détails
+- **Reconnaissance intelligente** : Le streaming USB n'est visible que pour le dispositif réellement connecté
+- **Démarrage automatique** : Le streaming démarre automatiquement quand un dispositif USB est détecté
+
+### Gestion des Dispositifs
+- **Évite les doublons** : Meilleure gestion des dispositifs USB (virtuel vs réel)
+- **Recherche améliorée** : Détection par ICCID, Serial, ou nom avec correspondance partielle
+- **Gestion d'erreurs** : Gestion automatique des erreurs "ICCID déjà utilisé" avec recherche du dispositif existant
+
+### Optimisations Code
+- **Réduction duplication** : Migration vers `useUsb()` pour éliminer ~500 lignes de code dupliqué
+- **Code mort supprimé** : Nettoyage des fonctions non utilisées
+- **Imports optimisés** : Suppression des imports inutilisés
 

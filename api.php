@@ -2392,8 +2392,7 @@ function handleCreatePatient() {
             // Vérifier si la table existe
             // Utiliser helper pour vérifier la table
             $hasTable = tableExists('patient_notifications_preferences');
-            $hasTable = $checkStmt->fetchColumn();
-            if ($hasTable === true || $hasTable === 't' || $hasTable === 1 || $hasTable === '1') {
+            if ($hasTable) {
                 $pdo->prepare("
                     INSERT INTO patient_notifications_preferences 
                     (patient_id, email_enabled, sms_enabled, push_enabled, 
