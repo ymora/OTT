@@ -26,7 +26,8 @@ export default function UserPatientModal({
   onSave,
   fetchWithAuth,
   API_URL,
-  roles = []
+  roles = [],
+  currentUser = null
 }) {
   const [formData, setFormData] = useState({})
   const [formErrors, setFormErrors] = useState({})
@@ -60,7 +61,7 @@ export default function UserPatientModal({
           last_name: editingItem.last_name || '',
           email: editingItem.email || '',
           phone: editingItem.phone || '',
-          password: '',
+          password: undefined, // Ne pas initialiser le mot de passe en mode édition
           role_id: roles.find(r => r.name === editingItem.role_name)?.id || '',
           is_active: Boolean(editingItem.is_active)
         })
@@ -77,8 +78,27 @@ export default function UserPatientModal({
         })
       }
       
-      // Charger les préférences de notifications
-      loadNotificationPrefs()
+      // Initialiser les préférences de notifications directement depuis editingItem si disponibles
+      // Cela évite le chargement en 2 temps
+      if (editingItem.email_enabled !== undefined || editingItem.sms_enabled !== undefined) {
+        // Les données de notifications sont déjà dans editingItem
+        setNotificationPrefs({
+          email_enabled: Boolean(editingItem.email_enabled),
+          sms_enabled: Boolean(editingItem.sms_enabled),
+          push_enabled: Boolean(editingItem.push_enabled),
+          notify_battery_low: Boolean(editingItem.notify_battery_low),
+          notify_device_offline: Boolean(editingItem.notify_device_offline),
+          notify_abnormal_flow: Boolean(editingItem.notify_abnormal_flow),
+          notify_new_patient: Boolean(editingItem.notify_new_patient),
+          notify_alert_critical: Boolean(editingItem.notify_alert_critical),
+          phone_number: editingItem.phone_number || '',
+          quiet_hours_start: editingItem.quiet_hours_start || '',
+          quiet_hours_end: editingItem.quiet_hours_end || ''
+        })
+      } else {
+        // Si les données ne sont pas disponibles, charger depuis l'API
+        loadNotificationPrefs()
+      }
     } else {
       // Mode création
       if (type === 'user') {
@@ -87,7 +107,7 @@ export default function UserPatientModal({
           last_name: '',
           email: '',
           phone: '',
-          password: '',
+          password: undefined, // Ne pas initialiser le mot de passe en mode édition
           role_id: '',
           is_active: true // Visible aussi en création maintenant
         })
@@ -123,7 +143,7 @@ export default function UserPatientModal({
     setShowPassword(false)
     setShowPasswordConfirm(false)
     setPasswordConfirm('')
-  }, [isOpen, editingItem, type, roles])
+  }, [isOpen, editingItem, type, roles]) // loadNotificationPrefs retiré des dépendances car appelé conditionnellement
 
   const loadNotificationPrefs = async () => {
     if (!editingItem?.id) return
@@ -292,6 +312,14 @@ export default function UserPatientModal({
       if (!editingItem && (!formData.password || formData.password.length < 6)) {
         errors.password = 'Le mot de passe doit contenir au moins 6 caractères'
       }
+      
+      // Empêcher un admin de désactiver son propre compte
+      if (type === 'user' && editingItem && currentUser && editingItem.id === currentUser.id) {
+        if (formData.is_active === false) {
+          errors.is_active = 'Vous ne pouvez pas désactiver votre propre compte'
+        }
+      }
+      
       // Validation confirmation mot de passe
       if (formData.password && formData.password.length >= 6) {
         if (!editingItem && (!passwordConfirm || passwordConfirm !== formData.password)) {
@@ -344,7 +372,10 @@ export default function UserPatientModal({
           last_name: formData.last_name.trim(),
           email: formData.email.trim(),
           role_id: formData.role_id ? parseInt(formData.role_id, 10) : undefined,
-          is_active: formData.is_active !== undefined && formData.is_active !== null ? Boolean(formData.is_active) : true,
+          // Empêcher un admin de désactiver son propre compte
+          is_active: (editingItem && currentUser && editingItem.id === currentUser.id) 
+            ? true // Forcer à true si c'est son propre compte
+            : (formData.is_active !== undefined && formData.is_active !== null ? Boolean(formData.is_active) : true),
           phone: formData.phone && formData.phone.trim().length > 0 ? formData.phone.trim() : null
         } : {
           first_name: formData.first_name.trim(),
@@ -615,12 +646,16 @@ export default function UserPatientModal({
                       <input
                         type={showPassword ? 'text' : 'password'}
                         name="password"
-                        value={formData.password || ''}
+                        value={formData.password ?? ''}
                         onChange={handleInputChange}
                         placeholder={editingItem ? 'Optionnel, 6+ caractères' : '6+ caractères'}
                         className={`input pr-10 ${formErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
                         required={!editingItem}
                         minLength={6}
+                        autoComplete={editingItem ? 'new-password' : 'new-password'}
+                        data-form-type="other"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
                       />
                       <button
                         type="button"
@@ -665,6 +700,10 @@ export default function UserPatientModal({
                         className={`input pr-10 ${formErrors.passwordConfirm ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
                         required={!editingItem || (editingItem && formData.password && formData.password.length > 0)}
                         minLength={6}
+                        autoComplete="new-password"
+                        data-form-type="other"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
                       />
                       <button
                         type="button"
@@ -688,10 +727,19 @@ export default function UserPatientModal({
                       name="is_active"
                       checked={formData.is_active !== undefined ? formData.is_active : true}
                       onChange={handleInputChange}
-                      className="form-checkbox h-4 w-4 text-primary-600 dark:text-primary-400"
+                      disabled={editingItem && currentUser && editingItem.id === currentUser.id}
+                      className="form-checkbox h-4 w-4 text-primary-600 dark:text-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
-                    Compte actif
+                    <span className={editingItem && currentUser && editingItem.id === currentUser.id ? 'opacity-50' : ''}>
+                      Compte actif
+                      {editingItem && currentUser && editingItem.id === currentUser.id && (
+                        <span className="text-xs text-gray-500 ml-2">(Vous ne pouvez pas désactiver votre propre compte)</span>
+                      )}
+                    </span>
                   </label>
+                  {formErrors.is_active && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1 ml-4">{formErrors.is_active}</p>
+                  )}
                 </div>
               </div>
             </>

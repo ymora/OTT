@@ -1,6 +1,6 @@
 # 🏥 OTT - Dispositif Médical IoT
 
-**Version 3.2 Enterprise** - Solution Cloud Complète
+**Version 3.3 Enterprise** - Solution Cloud Complète
 
 **HAPPLYZ MEDICAL SAS**
 
@@ -282,7 +282,7 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 
 ---
 
-## 🆕 Améliorations Récentes (v3.2)
+## 🆕 Améliorations Récentes (v3.3)
 
 ### Interface Utilisateur
 - **Menu réorganisé** : passage de 14 onglets à 5 sections principales avec sous-menus déroulants
@@ -345,10 +345,21 @@ Commandes durant la session :
 
 📁 Sources : `hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino`
 
-💻 Côté dashboard (`/dashboard/devices`), une carte « Streaming USB temps réel » permet de :
-- détecter le port USB via Web Serial (Chrome/Edge) ;
-- lancer l’écoute (`▶ Écouter`) et visualiser en direct débit/batterie (chart + tableau) ;
-- consulter les logs série récents sans quitter le navigateur.
+💻 Côté dashboard (`/dashboard/devices`), l’onglet « ⚡ Streaming USB » du modal dispositif permet désormais :
+- de déclencher `🔍 Détecter USB` (Web Serial) et de lire ICCID/Serial pour réconcilier automatiquement avec la base ;
+- d’afficher les logs bruts en plein écran (console verte) avec boutons `▶️ Redémarrer` / `⏹️ Arrêter` ;
+- de voir immédiatement si l’on utilise un dispositif réel ou un « virtuel » (identifiant incomplet) avec bouton « Relancer la détection » ;
+- pour les admins, d’assigner le boîtier détecté au patient de leur choix directement depuis ce même onglet.
+
+#### Chaîne de détection USB côté dashboard
+
+1. **Détection / Autorisation** : bouton `🔍 Détecter USB` → l’utilisateur autorise le port dans Chrome/Edge.
+2. **Lecture d’identité** : le dashboard envoie `AT+CCID`, `AT+CGSN`, `AT+FWVER?` et écoute 5 s le flux JSON (`usb_stream`).
+3. **Réconciliation** :
+   - si un ICCID/Serial correspond à un device existant → connexion immédiate, pas de doublon en base ;
+   - sinon, création automatique (`USB-XXXX`). En cas d’erreur API « déjà utilisé », une nouvelle recherche est faite pour récupérer le vrai device.
+4. **Fallback virtuel** : si l’ICCID/Serial est incomplet (ou si l’API refuse la création), un device « virtuel » est instancié localement pour afficher les logs quand même (mais non assignable). Un bandeau explique comment relancer la détection.
+5. **Streaming** : la session de logs est permanente, quel que soit l’onglet actif du dashboard ; les logs restent visibles tant que le port est branché.
 
 ### 🔌 API Backend
 - ✅ REST API avec JWT (désactivable via `AUTH_DISABLED=true`)
@@ -442,26 +453,29 @@ Commandes durant la session :
 
 ---
 
-**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.2 - React + Next.js + Render Cloud
+**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.3 - React + Next.js + Render Cloud
 
 ---
 
-## 🆕 Nouveautés v3.2
+## 🆕 Nouveautés v3.3
 
 ### Architecture USB Améliorée
 - **UsbContext global** : Contexte React pour gérer l'état USB en permanence sur toutes les pages
 - **Détection automatique permanente** : Vérification toutes les 5 secondes des ports USB connectés
 - **Streaming USB dans le modal** : Déplacé de la page principale vers l'onglet "Streaming USB" du modal de détails
 - **Reconnaissance intelligente** : Le streaming USB n'est visible que pour le dispositif réellement connecté
-- **Démarrage automatique** : Le streaming démarre automatiquement quand un dispositif USB est détecté
+- **Console plein écran** : affichage 100 % logs, badge de statut, boutons `▶️/⏹️`, message d’attente clair
+- **CTA Assignation** : un boîtier detecté mais non assigné peut être rattaché à un patient sans quitter l’onglet
 
-### Gestion des Dispositifs
-- **Évite les doublons** : Meilleure gestion des dispositifs USB (virtuel vs réel)
-- **Recherche améliorée** : Détection par ICCID, Serial, ou nom avec correspondance partielle
-- **Gestion d'erreurs** : Gestion automatique des erreurs "ICCID déjà utilisé" avec recherche du dispositif existant
+### Chaîne de détection & gestion des dispositifs
+- **Réconciliation automatique** : lecture ICCID/Serial + recherche exacte/partielle → réutilisation du device existant
+- **Création assistée** : si rien n’est trouvé, création `USB-xxxx` avec feedback visuel (alertes succès/erreur)
+- **Fallback virtuel** : si l’ICCID/Serial est absent ou si l’API refuse la création, un device virtuel local est créé (logs disponibles mais bannière informative)
+- **Relance guidée** : bandeau « Relancer la détection » + bouton dans le modal pour demander une nouvelle autorisation Web Serial
 
 ### Optimisations Code
 - **Réduction duplication** : Migration vers `useUsb()` pour éliminer ~500 lignes de code dupliqué
 - **Code mort supprimé** : Nettoyage des fonctions non utilisées
 - **Imports optimisés** : Suppression des imports inutilisés
+- **Notifications UX** : ajouts des bannières `alert-success/info/warning` pour toutes les étapes USB (détection, création, fallback)
 

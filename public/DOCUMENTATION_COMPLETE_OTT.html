@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documentation OTT V3.2 - HAPPLYZ MEDICAL</title>
+<title>Documentation OTT V3.3 - HAPPLYZ MEDICAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -230,7 +230,7 @@
 <div class="header">
     <h1>🏥 OTT - Dispositif Médical IoT</h1>
     <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
-    <div class="version-badge">Version 3.2 - React + Next.js + Render Cloud</div>
+    <div class="version-badge">Version 3.3 - React + Next.js + Render Cloud</div>
     <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
 </div>
 
@@ -923,18 +923,27 @@ ICCID: 89330123456789012345
         <strong>Astuce :</strong> le dashboard intègre aussi un assistant USB (Web Serial) pour détecter ICCID/serial, mais le mode streaming reste accessible depuis n'importe quel terminal série.
     </div>
     
-    <p><strong>💻 Côté dashboard (v3.2) :</strong></p>
+    <p><strong>💻 Côté dashboard (v3.3) :</strong></p>
     <ul>
-        <li><strong>Onglet "Streaming USB"</strong> dans le modal de détails du dispositif (visible uniquement pour le dispositif réellement connecté en USB)</li>
-        <li><strong>Détection automatique permanente</strong> : le système détecte automatiquement les dispositifs USB connectés (vérification toutes les 5 secondes)</li>
-        <li><strong>Démarrage automatique</strong> : le streaming démarre automatiquement quand un dispositif USB est détecté</li>
-        <li><strong>Contexte global UsbContext</strong> : gestion de l'état USB en permanence sur toutes les pages du dashboard</li>
-        <li>Visualisation en direct : débit/batterie (graphiques + tableau), logs série en temps réel</li>
-        <li>Autorisation du port via Web Serial (Chrome/Edge uniquement)</li>
+        <li><strong>Onglet "Streaming USB"</strong> visible uniquement pour le dispositif réellement connecté en USB (détection Web Serial).</li>
+        <li><strong>Réconciliation automatique</strong> : lecture ICCID/Serial → recherche en base → création auto si besoin. Aucun doublon possible.</li>
+        <li><strong>Mode virtuel</strong> : si l'ICCID/Serial est incomplet ou si l'API refuse la création, un dispositif virtuel est créé localement (logs visibles mais non assignable) avec bouton « Relancer la détection ».</li>
+        <li><strong>Console plein écran</strong> : affichage 100 % logs série en temps réel, avec badges d'état (`▶️/⏹️`) et message clair lorsqu'aucune trame n'arrive.</li>
+        <li><strong>CTA d'assignation</strong> : si le boîtier détecté n'est pas rattaché à un patient, l'admin peut l'assigner depuis le même onglet.</li>
+        <li><strong>Contexte global UsbContext</strong> : écoute/détection permanentes quelle que soit la page du dashboard.</li>
     </ul>
+
+    <h4>Chaîne de détection USB côté dashboard</h4>
+    <ol>
+        <li><em>Autorisation du port</em> : bouton « 🔍 Détecter USB » → popup Chrome/Edge (Web Serial).</li>
+        <li><em>Lecture d'identité</em> : envoi des commandes AT (`AT+CCID`, `AT+CGSN`, `AT+FWVER?`) + écoute 5 s du flux `usb_stream`.</li>
+        <li><em>Réconciliation</em> : recherche ICCID/Serial en base (exact, partiel, suffixe). Si trouvé, connexion directe. Sinon, création `USB-xxxx`.</li>
+        <li><em>Fallback virtuel</em> : si l'API retourne une erreur ou si les identifiants sont incomplets, création d'un device virtuel local pour lire les logs malgré tout.</li>
+        <li><em>Streaming</em> : console temps réel, boutons `▶️/⏹️`, statut visible même si l'utilisateur change d'onglet dans le dashboard.</li>
+    </ol>
     
     <div class="alert alert-info">
-        <strong>🆕 Nouveauté v3.2 :</strong> Le streaming USB a été déplacé de la page principale vers le modal de détails du dispositif pour une meilleure organisation. Le système reconnaît automatiquement le dispositif connecté et n'affiche l'onglet que pour celui-ci.
+        <strong>🆕 Nouveauté v3.3 :</strong> la console USB occupe désormais toute la surface, affiche le statut (réel/virtuel) et propose des actions immédiates (Relancer la détection, Assigner à un patient).
     </div>
     
     <h3>⚠️ Watchdog Anti-Freeze</h3>
@@ -1194,7 +1203,7 @@ TWILIO_PHONE_NUMBER=+33123456789
         <li><strong>Web Serial API</strong> - Communication USB directe avec les dispositifs</li>
     </ul>
     
-    <h3>🔌 UsbContext (v3.2 - Nouveau)</h3>
+    <h3>🔌 UsbContext (v3.3 - Nouveau)</h3>
     
     <p>Le <code>UsbContext</code> est un contexte React global qui gère l'état USB en permanence sur toutes les pages du dashboard :</p>
     
@@ -1226,7 +1235,7 @@ function MyComponent() {
     </pre>
     
     <div class="alert alert-info">
-        <strong>🆕 Nouveauté v3.2 :</strong> Le streaming USB a été déplacé de la page principale vers l'onglet "Streaming USB" du modal de détails du dispositif. Le système reconnaît automatiquement le dispositif connecté et n'affiche l'onglet que pour celui-ci.
+        <strong>🆕 Nouveauté v3.3 :</strong> UsbContext assure désormais la détection permanente, la distinction réel/virtuel et l’affichage global du statut USB (même si l’utilisateur change de page).
     </div>
     
     <h3>📱 12 Pages Complètes</h3>
@@ -1583,6 +1592,127 @@ POST /api.php/devices/{iccid}/commands
         <li>✅ CSS minifié</li>
         <li>✅ Gzip/Brotli sur GitHub Pages</li>
     </ul>
+</section>
+
+<!-- ============================================== -->
+<!-- 6.5. CAPTURES D'ÉCRAN DE L'INTERFACE -->
+<!-- ============================================== -->
+
+<section id="screenshots" class="section">
+    <h2>📸 Captures d'Écran de l'Interface</h2>
+    
+    <p>Cette section présente les différentes vues de l'interface utilisateur et les modals disponibles dans le dashboard OTT.</p>
+    
+    <h3>🔐 Page de Connexion</h3>
+    <p>La page d'authentification avec formulaire de connexion sécurisé :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/login.png" alt="Page de connexion" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Page de connexion avec authentification JWT</p>
+    </div>
+    
+    <h3>🏠 Vue d'Ensemble (Dashboard)</h3>
+    <p>La page principale avec les indicateurs clés et les graphiques :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/dashboard-overview.png" alt="Vue d'ensemble" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Vue d'ensemble avec KPI, graphiques et actions requises</p>
+    </div>
+    
+    <h3>🔌 Page Dispositifs</h3>
+    <p>La liste des dispositifs avec leurs statuts et informations :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/devices-list.png" alt="Liste des dispositifs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Liste des dispositifs avec recherche et filtres</p>
+    </div>
+    
+    <h3>🏥 Page Patients</h3>
+    <p>La gestion des patients avec leurs dispositifs associés :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/patients-list.png" alt="Liste des patients" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Liste des patients avec assignation de dispositifs</p>
+    </div>
+    
+    <h3>📍 Carte Interactive</h3>
+    <p>La visualisation géographique des dispositifs :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/map.png" alt="Carte interactive" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Carte Leaflet avec marqueurs des dispositifs</p>
+    </div>
+    
+    <h3>⚠️ Page Alertes</h3>
+    <p>La liste des alertes avec leurs statuts :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/alerts.png" alt="Page alertes" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des alertes avec filtres et actions</p>
+    </div>
+    
+    <h3>👥 Page Utilisateurs</h3>
+    <p>La gestion des utilisateurs et des permissions :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/users.png" alt="Page utilisateurs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des utilisateurs avec rôles et permissions</p>
+    </div>
+    
+    <h3>🔄 Page OTA</h3>
+    <p>La gestion des mises à jour OTA :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/ota.png" alt="Page OTA" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des mises à jour OTA des dispositifs</p>
+    </div>
+    
+    <h3>📝 Modals</h3>
+    
+    <h4>Modal Création/Édition Patient</h4>
+    <p>Le modal pour créer ou modifier un patient :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-patient.png" alt="Modal patient" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de création/édition de patient avec formulaire complet</p>
+    </div>
+    
+    <h4>Modal Détails Dispositif</h4>
+    <p>Le modal avec les détails complets d'un dispositif :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-device-details.png" alt="Modal détails dispositif" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal avec onglets : Détails, Alertes, Logs, Commandes, Streaming USB</p>
+    </div>
+    
+    <h4>Modal Assignation Dispositif</h4>
+    <p>Le modal pour assigner un dispositif à un patient :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-assign-device.png" alt="Modal assignation" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal d'assignation d'un dispositif libre à un patient</p>
+    </div>
+    
+    <h4>Modal Création/Édition Utilisateur</h4>
+    <p>Le modal pour créer ou modifier un utilisateur :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-user.png" alt="Modal utilisateur" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de création/édition d'utilisateur avec gestion des rôles</p>
+    </div>
+    
+    <h4>Modal Désassignation Dispositif</h4>
+    <p>Le modal pour désassigner un dispositif d'un patient :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-unassign-device.png" alt="Modal désassignation" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de confirmation pour désassigner un dispositif d'un patient</p>
+    </div>
+    
+    <h4>Modal Commande Dispositif</h4>
+    <p>Le modal pour envoyer une commande à un dispositif :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-command.png" alt="Modal commande" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal d'envoi de commandes (SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, etc.)</p>
+    </div>
+    
+    <h4>Modal Streaming USB</h4>
+    <p>Le modal pour le streaming USB en temps réel :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-usb-streaming.png" alt="Modal streaming USB" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de streaming USB avec graphiques en temps réel et logs série</p>
+    </div>
+    
+    <div class="alert alert-info">
+        <strong>💡 Note :</strong> Toutes les captures d'écran sont stockées dans le dossier <code>public/screenshots/</code> et sont automatiquement incluses dans le build de production.
+    </div>
 </section>
 
 <!-- ============================================== -->
@@ -2872,7 +3002,7 @@ SELECT id, email, first_name, last_name FROM users;
         <li>✨ Rapports programmés (hebdo, mensuel)</li>
     </ul>
     
-    <h3>📅 Version 3.2 (Q2 2026)</h3>
+    <h3>📅 Version 3.3 (Q2 2026)</h3>
     
     <h4>🧪 Tests & Qualité</h4>
     <ul>
@@ -2935,7 +3065,7 @@ SELECT id, email, first_name, last_name FROM users;
 
 <div class="footer">
     <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
-    <p>OTT - Version 3.2 Enterprise | Documentation Complète</p>
+    <p>OTT - Version 3.3 Enterprise | Documentation Complète</p>
     <p style="margin-top: 1rem; font-size: 0.9rem;">
         📖 <a href="https://github.com/ymora/OTT" style="color: white; text-decoration: underline;">GitHub Repository</a> | 
         🌐 <a href="https://ymora.github.io/OTT/" style="color: white; text-decoration: underline;">Dashboard Live</a> | 

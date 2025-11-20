@@ -156,15 +156,13 @@ export default function UsersPage() {
                   <th className="text-left py-3 px-4">Téléphone</th>
                   <th className="text-left py-3 px-4">Statut</th>
                   <th className="text-left py-3 px-4">Dernière connexion</th>
-                  <th className="text-left py-3 px-4">Notifications</th>
-                  <th className="text-left py-3 px-4">Types d&apos;alertes</th>
                   <th className="text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="py-8 text-center text-muted">
+                    <td colSpan="7" className="py-8 text-center text-muted">
                       Aucun utilisateur trouvé
                     </td>
                   </tr>
@@ -172,8 +170,9 @@ export default function UsersPage() {
                   filteredUsers.map((user, i) => (
                     <tr 
                       key={user.id} 
-                      className="table-row animate-slide-up"
+                      className="table-row animate-slide-up cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                       style={{animationDelay: `${i * 0.05}s`}}
+                      onClick={() => openEditModal(user)}
                     >
                       <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
                       <td className="py-3 px-4">
@@ -201,62 +200,32 @@ export default function UsersPage() {
                         }) : 'Jamais'}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          {isTrue(user.email_enabled) ? (
-                            <span className="text-lg font-bold text-gray-900" title="Email activé">✉️</span>
-                          ) : (
-                            <span className="text-lg opacity-30 grayscale" title="Email désactivé">✉️</span>
-                          )}
-                          {isTrue(user.sms_enabled) ? (
-                            <span className="text-lg" title="SMS activé">📱</span>
-                          ) : (
-                            <span className="text-lg opacity-40 grayscale" title="SMS désactivé">📱</span>
-                          )}
-                          {isTrue(user.push_enabled) ? (
-                            <span className="text-lg" title="Push activé">🔔</span>
-                          ) : (
-                            <span className="text-lg opacity-40 grayscale" title="Push désactivé">🔔</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {isTrue(user.notify_battery_low) && (
-                            <span className="text-xs" title="Batterie faible">🔋</span>
-                          )}
-                          {isTrue(user.notify_device_offline) && (
-                            <span className="text-xs" title="Dispositif hors ligne">📴</span>
-                          )}
-                          {isTrue(user.notify_abnormal_flow) && (
-                            <span className="text-xs" title="Débit anormal">⚠️</span>
-                          )}
-                          {isTrue(user.notify_new_patient) && (
-                            <span className="text-xs" title="Nouveau patient">👤</span>
-                          )}
-                          {!isTrue(user.notify_battery_low) && 
-                           !isTrue(user.notify_device_offline) && 
-                           !isTrue(user.notify_abnormal_flow) && 
-                           !isTrue(user.notify_new_patient) && (
-                            <span className="text-xs text-gray-400">-</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                           <button
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            onClick={() => openEditModal(user)}
-                            title="Modifier l'utilisateur"
-                          >
-                            <span className="text-lg">✏️</span>
-                          </button>
-                          <button
-                            className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                            className={`p-2 rounded-lg transition-colors ${
+                              user.id === currentUser?.id 
+                                ? 'opacity-50 cursor-not-allowed' 
+                                : 'hover:bg-red-100'
+                            }`}
                             onClick={() => handleDelete(user)}
                             disabled={deleteLoading || currentUser?.role_name !== 'admin' || user.id === currentUser?.id}
                             title={currentUser?.role_name === 'admin' && user.id !== currentUser?.id ? "Supprimer l'utilisateur" : user.id === currentUser?.id ? "Vous ne pouvez pas supprimer votre propre compte" : "Réservé aux administrateurs"}
                           >
-                            <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
+                            {user.id === currentUser?.id ? (
+                              <span className="text-lg relative inline-block">
+                                <span className="text-red-500">🗑️</span>
+                                <span 
+                                  className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center text-red-600 text-lg font-bold leading-none"
+                                  style={{
+                                    textShadow: '0 0 2px white, 0 0 2px white'
+                                  }}
+                                >
+                                  ✖
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
+                            )}
                           </button>
                         </div>
                       </td>
@@ -278,6 +247,7 @@ export default function UsersPage() {
         fetchWithAuth={fetchWithAuth}
         API_URL={API_URL}
         roles={roles}
+        currentUser={currentUser}
       />
 
     </div>

@@ -223,6 +223,7 @@ export function UsbProvider({ children }) {
     autoDetecting,
     setAutoDetecting,
     checkingUSB,
+    setCheckingUSB,
     isConnected,
     isSupported,
     port,
@@ -243,6 +244,7 @@ export function UsbProvider({ children }) {
     requestPort,
     connect,
     disconnect,
+    startReading,
     write,
   }
 

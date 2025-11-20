@@ -317,21 +317,24 @@ export default function PatientsPage() {
                   <th className="text-left py-3 px-4">Ville</th>
                   <th className="text-left py-3 px-4">Code Postal</th>
                   <th className="text-left py-3 px-4">Dispositif</th>
-                  <th className="text-left py-3 px-4">Notifications</th>
-                  <th className="text-left py-3 px-4">Types d&apos;alertes</th>
                   <th className="text-right py-3 px-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredPatients.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="py-8 text-center text-muted">
+                    <td colSpan="8" className="py-8 text-center text-muted">
                       {searchTerm ? 'Aucun patient ne correspond à la recherche' : 'Aucun patient'}
                     </td>
                   </tr>
                 ) : (
                   filteredPatients.map((p, i) => (
-                    <tr key={p.id} className="table-row animate-slide-up" style={{animationDelay: `${i * 0.05}s`}}>
+                    <tr 
+                      key={p.id} 
+                      className="table-row animate-slide-up cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" 
+                      style={{animationDelay: `${i * 0.05}s`}}
+                      onClick={() => openEditModal(p)}
+                    >
                       <td className="py-3 px-4 font-medium text-primary">{p.first_name} {p.last_name}</td>
                       <td className="table-cell">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
                       <td className="table-cell">{p.email || '-'}</td>
@@ -380,55 +383,7 @@ export default function PatientsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          {isTrue(p.email_enabled) ? (
-                            <span className="text-lg font-bold text-gray-900" title="Email activé">✉️</span>
-                          ) : (
-                            <span className="text-lg opacity-30 grayscale" title="Email désactivé">✉️</span>
-                          )}
-                          {isTrue(p.sms_enabled) ? (
-                            <span className="text-lg" title="SMS activé">📱</span>
-                          ) : (
-                            <span className="text-lg opacity-40 grayscale" title="SMS désactivé">📱</span>
-                          )}
-                          {isTrue(p.push_enabled) ? (
-                            <span className="text-lg" title="Push activé">🔔</span>
-                          ) : (
-                            <span className="text-lg opacity-40 grayscale" title="Push désactivé">🔔</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {isTrue(p.notify_battery_low) && (
-                            <span className="text-xs" title="Batterie faible">🔋</span>
-                          )}
-                          {isTrue(p.notify_device_offline) && (
-                            <span className="text-xs" title="Dispositif hors ligne">📴</span>
-                          )}
-                          {isTrue(p.notify_abnormal_flow) && (
-                            <span className="text-xs" title="Débit anormal">⚠️</span>
-                          )}
-                          {isTrue(p.notify_alert_critical) && (
-                            <span className="text-xs" title="Alerte critique">🚨</span>
-                          )}
-                          {!isTrue(p.notify_battery_low) && 
-                           !isTrue(p.notify_device_offline) && 
-                           !isTrue(p.notify_abnormal_flow) && 
-                           !isTrue(p.notify_alert_critical) && (
-                            <span className="text-xs text-gray-400">-</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                            onClick={() => openEditModal(p)}
-                            title="Modifier le patient"
-                          >
-                            <span className="text-lg">✏️</span>
-                          </button>
+                        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                           <button
                             className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                             onClick={() => handleDelete(p)}
