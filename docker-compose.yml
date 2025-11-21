@@ -48,7 +48,7 @@ services:
       - ./index.php:/var/www/html/index.php
       - ./bootstrap:/var/www/html/bootstrap
       - ./sql:/var/www/html/sql
-      - ./firmwares:/var/www/html/firmwares
+      - ./hardware:/var/www/html/hardware
     networks:
       - ott-network
 

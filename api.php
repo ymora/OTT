@@ -492,15 +492,16 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleDeleteDevice($m[1]);
 
 // Firmwares
-} elseif((strpos($path, '/firmwares/upload-ino') !== false || $path === '/firmwares/upload-ino' || preg_match('#/firmwares/upload-ino#', $path)) && $method === 'POST') {
+// IMPORTANT: Vérifier les routes spécifiques AVANT les routes génériques
+} elseif($method === 'POST' && (strpos($path, '/firmwares/upload-ino') !== false || $path === '/firmwares/upload-ino' || preg_match('#/firmwares/upload-ino#', $path))) {
     handleUploadFirmwareIno();
-} elseif(preg_match('#/firmwares/compile/(\d+)$#', $path, $matches) && $method === 'GET') {
+} elseif($method === 'GET' && preg_match('#/firmwares/compile/(\d+)$#', $path, $matches)) {
     handleCompileFirmware($matches[1]);
-} elseif(preg_match('#/firmwares/(\d+)/download$#', $path, $matches) && $method === 'GET') {
+} elseif($method === 'GET' && preg_match('#/firmwares/(\d+)/download$#', $path, $matches)) {
     handleDownloadFirmware($matches[1]);
-} elseif(preg_match('#/firmwares$#', $path) && $method === 'GET') {
+} elseif($method === 'GET' && preg_match('#/firmwares$#', $path)) {
     handleGetFirmwares();
-} elseif(preg_match('#/firmwares$#', $path) && $method === 'POST') {
+} elseif($method === 'POST' && preg_match('#/firmwares$#', $path)) {
     handleUploadFirmware();
 
 // Notifications
@@ -559,11 +560,10 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
         'path' => $path,
         'method' => $method,
         'uri' => $_SERVER['REQUEST_URI'] ?? 'N/A',
-        'script_name' => $_SERVER['SCRIPT_NAME'] ?? 'N/A'
+        'script_name' => $_SERVER['SCRIPT_NAME'] ?? 'N/A',
+        'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'N/A'
     ];
-    if (getenv('DEBUG_ERRORS') === 'true') {
-        error_log("[API Router] Path not matched: " . json_encode($debugInfo));
-    }
+    error_log("[API Router] Path not matched: " . json_encode($debugInfo));
     http_response_code(404);
     echo json_encode([
         'success' => false, 
