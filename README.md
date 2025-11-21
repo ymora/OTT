@@ -6,17 +6,16 @@
 
 ---
 
-## 📖 Documentation Complète
+## 📖 Documentation
 
-👉 **Ouvrir dans votre navigateur:** [`DOCUMENTATION_COMPLETE_OTT.html`](./public/DOCUMENTATION_COMPLETE_OTT.html)
+La documentation est divisée en 3 parties accessibles depuis le dashboard :
 
-**Tout ce dont vous avez besoin :**
-- ⚡ Démarrage rapide (30 minutes)
-- 🔧 Guide firmware ESP32
-- 🔌 Guide API PHP/PostgreSQL
-- ⚛️ Guide dashboard React/Next.js
-- ☁️ Déploiement GitHub + Render
-- 🐛 Troubleshooting complet
+👉 **Accès depuis le dashboard** : Menu latéral → Documentation (menu déroulant)
+
+**Documentations disponibles :**
+- 📸 **Présentation** : Vue d'ensemble, fonctionnalités, captures d'écran
+- 💻 **Développeurs** : Architecture, API, firmware, déploiement, troubleshooting
+- 💼 **Commerciale** : Analyse marché, business plan, ROI, avantages concurrentiels
 
 ---
 
@@ -90,8 +89,8 @@ git push origin main
   - Dashboard Next.js appelle l’API (`NEXT_PUBLIC_API_URL`) pour charger stats, cartes Leaflet, notifications, OTA…
   - Les techniciens déclenchent OTA/config via `/api.php/devices/:id/ota` ou `/config`.
   - Les dispositifs OTT se réveillent, mesurent, publient, puis récupèrent les commandes via `/devices/commands/pending`. Les ACK sont renvoyés sur `/devices/commands/ack` pour alimenter la console “Commandes”. Un verbe `UPDATE_CONFIG` permet de pousser APN/JWT/ICCID/Serial à distance (stockés en NVS après réception).
-- **Auth** : Next → `/api.php/auth/login` (JWT). Token stocké dans LocalStorage, injecté par `fetchWithAuth`. L’API vérifie JWT + permissions (rôles admin/tech/etc.).
-- **Docs / Firmware** : `public/DOCUMENTATION_COMPLETE_OTT.html` décrit la procédure complète, `hardware/firmware/...` contient les sources mais n’est pas versionné.
+- **Auth** : Next → `/api.php/auth/login` (JWT). Token stocké dans LocalStorage, injecté par `fetchWithAuth`. L'API vérifie JWT + permissions (rôles admin/tech/etc.).
+- **Docs / Firmware** : La documentation complète est accessible depuis le dashboard (3 documents : Présentation, Développeurs, Commerciale). `hardware/firmware/...` contient les sources mais n'est pas versionné.
 
 ### 📟 Dépannage – “mon dispositif n’apparaît pas”
 1. **Vérifier l’ICCID côté firmware**
@@ -198,7 +197,7 @@ Le jeu de données installe automatiquement :
 
 ### 🔐 Rôles et Permissions
 
-**Voir la documentation complète :** [`docs/ROLES_PERMISSIONS.md`](./docs/ROLES_PERMISSIONS.md)
+**Voir la documentation complète :** Accessible depuis le dashboard → Documentation → Développeurs (section "Sécurité - Rôles et Permissions")
 
 **Rôles disponibles :**
 - **Admin** : Accès complet (2 max : Maxime, Yann)

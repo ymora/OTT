@@ -52,8 +52,19 @@ export default function FirmwareUploadPage() {
 
   // Upload du fichier .ino
   const handleUpload = useCallback(async () => {
-    if (!selectedFile || !canUpload) return
+    if (!selectedFile) {
+      setError('Veuillez sélectionner un fichier .ino')
+      logger.warn('Upload annulé: aucun fichier sélectionné')
+      return
+    }
 
+    if (!canUpload) {
+      setError('Accès refusé. Admin ou technicien requis.')
+      logger.warn('Upload annulé: permissions insuffisantes')
+      return
+    }
+
+    logger.log('📤 Démarrage upload firmware:', selectedFile.name, `(${(selectedFile.size / 1024).toFixed(2)} KB)`)
     setUploading(true)
     setError(null)
     setSuccess(null)
@@ -65,8 +76,11 @@ export default function FirmwareUploadPage() {
       formData.append('type', 'ino')
 
       const token = localStorage.getItem('token')
-      if (!token) throw new Error('Token manquant')
+      if (!token) {
+        throw new Error('Token manquant. Veuillez vous reconnecter.')
+      }
 
+      logger.log('🔗 Connexion à l\'API:', `${API_URL}/api.php/firmwares/upload-ino`)
       const xhr = new XMLHttpRequest()
 
       // Suivre la progression de l'upload
@@ -74,53 +88,83 @@ export default function FirmwareUploadPage() {
         if (e.lengthComputable) {
           const percent = Math.round((e.loaded / e.total) * 100)
           setUploadProgress(percent)
+          logger.debug('📊 Progression upload:', percent + '%')
         }
       })
 
       // Gérer la réponse
       xhr.addEventListener('load', () => {
+        logger.log('📥 Réponse reçue:', xhr.status, xhr.statusText)
         if (xhr.status === 200) {
           try {
             const response = JSON.parse(xhr.responseText)
+            logger.log('✅ Réponse API:', response)
             if (response.success) {
               setSuccess('✅ Fichier .ino uploadé avec succès')
               setUploadedFirmware(response)
               setUploadProgress(100)
+              logger.log('🚀 Démarrage compilation automatique dans 500ms...')
               // Démarrer automatiquement la compilation
               setTimeout(() => {
-                handleCompile(response.upload_id || response.firmware_id)
+                const firmwareId = response.upload_id || response.firmware_id
+                logger.log('🔨 Démarrage compilation pour firmware ID:', firmwareId)
+                handleCompile(firmwareId)
               }, 500)
             } else {
-              setError(response.error || 'Erreur lors de l\'upload')
+              const errorMsg = response.error || 'Erreur lors de l\'upload'
+              setError(errorMsg)
+              logger.error('❌ Erreur upload:', errorMsg)
             }
           } catch (err) {
-            setError('Erreur lors du parsing de la réponse')
+            const errorMsg = 'Erreur lors du parsing de la réponse: ' + err.message
+            setError(errorMsg)
+            logger.error('❌ Erreur parsing réponse:', err)
           }
         } else {
           try {
             const error = JSON.parse(xhr.responseText)
-            setError(error.error || `Erreur HTTP ${xhr.status}`)
+            const errorMsg = error.error || `Erreur HTTP ${xhr.status}`
+            setError(errorMsg)
+            logger.error('❌ Erreur HTTP:', xhr.status, errorMsg)
           } catch {
-            setError(`Erreur HTTP ${xhr.status}`)
+            const errorMsg = `Erreur HTTP ${xhr.status}: ${xhr.statusText}`
+            setError(errorMsg)
+            logger.error('❌ Erreur HTTP:', xhr.status, xhr.statusText)
           }
         }
         setUploading(false)
       })
 
-      xhr.addEventListener('error', () => {
-        setError('Erreur réseau lors de l\'upload')
+      xhr.addEventListener('error', (e) => {
+        logger.error('❌ Erreur réseau XHR:', e)
+        setError('Erreur réseau lors de l\'upload. Vérifiez votre connexion.')
         setUploading(false)
+        setUploadProgress(0)
       })
 
-      xhr.open('POST', `${API_URL}/api.php/firmwares/upload-ino`)
+      xhr.addEventListener('abort', () => {
+        logger.warn('⚠️ Upload annulé par l\'utilisateur')
+        setError('Upload annulé')
+        setUploading(false)
+        setUploadProgress(0)
+      })
+
+      const uploadUrl = `${API_URL}/api.php/firmwares/upload-ino`
+      logger.log('📤 Envoi requête POST vers:', uploadUrl)
+      xhr.open('POST', uploadUrl)
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      
+      // Ne pas définir Content-Type pour FormData (le navigateur le fait automatiquement)
       xhr.send(formData)
+      logger.log('📤 Requête envoyée, attente réponse...')
 
     } catch (err) {
+      logger.error('❌ Exception lors de l\'upload:', err)
       setError(err.message || 'Erreur lors de l\'upload')
       setUploading(false)
+      setUploadProgress(0)
     }
-  }, [selectedFile, canUpload, API_URL])
+  }, [selectedFile, canUpload, API_URL, handleCompile])
 
   // Compiler le firmware avec logs en direct
   const handleCompile = useCallback(async (uploadId) => {
@@ -247,20 +291,23 @@ export default function FirmwareUploadPage() {
             )}
           </div>
 
-          {uploading && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">Transfert en cours...</span>
-                <span className="font-semibold">{uploadProgress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  className="bg-primary-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
+          {/* Barre de progression - toujours visible */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600 dark:text-gray-400">
+                {uploading ? '⏳ Transfert en cours...' : uploadProgress > 0 ? '✅ Transfert terminé' : 'En attente...'}
+              </span>
+              <span className="font-semibold">{uploadProgress}%</span>
             </div>
-          )}
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+              <div
+                className={`h-3 rounded-full transition-all duration-300 ${
+                  uploading ? 'bg-primary-500' : uploadProgress === 100 ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+                style={{ width: `${Math.max(0, Math.min(100, uploadProgress))}%` }}
+              />
+            </div>
+          </div>
 
           <button
             onClick={handleUpload}

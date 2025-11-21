@@ -277,12 +277,19 @@
 <nav class="nav-menu">
     <ul>
         <li><a href="#intro">📖 Introduction</a></li>
+        <li><a href="#structure">📁 Structure</a></li>
         <li><a href="#architecture">🏗️ Architecture</a></li>
+        <li><a href="#database">🗄️ Base de Données</a></li>
         <li><a href="#firmware">🔧 Firmware ESP32</a></li>
+        <li><a href="#firmware-workflow">⚙️ Compilation & Flash</a></li>
         <li><a href="#api">🔌 API Backend</a></li>
         <li><a href="#dashboard">⚛️ Dashboard React</a></li>
+        <li><a href="#compatibility">🔗 Compatibilité</a></li>
+        <li><a href="#roles-permissions">🔐 Rôles & Permissions</a></li>
+        <li><a href="#measurements-queue">📊 Queue Mesures</a></li>
         <li><a href="#deployment">☁️ Déploiement</a></li>
         <li><a href="#troubleshooting">🐛 Dépannage</a></li>
+        <li><a href="#roadmap">🚀 Roadmap</a></li>
     </ul>
 </nav>
 
@@ -492,35 +499,169 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
 <section id="deployment" class="section">
     <h2>☁️ Déploiement</h2>
     
-    
-    <h3>📦 Étapes de Déploiement</h3>
+    <h3>📦 Déploiement API sur Render</h3>
+    <h4>1. Créer la base PostgreSQL</h4>
     <ol>
-        <li>Créer la base PostgreSQL sur Render (Free)</li>
-        <li>Déployer l'API PHP sur Render (Starter 7€/mois)</li>
-        <li>Déployer le Dashboard Next.js sur GitHub Pages (Free)</li>
-        <li>Compiler et uploader le firmware ESP32</li>
+        <li>Aller sur https://dashboard.render.com</li>
+        <li>Créer un nouveau service PostgreSQL (Free tier)</li>
+        <li>Noter les variables de connexion (DB_HOST, DB_NAME, DB_USER, DB_PASS)</li>
+        <li>Appliquer la migration : <code>DATABASE_URL="postgresql://..." ./scripts/db_migrate.sh --seed</code></li>
+    </ol>
+    
+    <h4>2. Déployer l'API PHP</h4>
+    <ol>
+        <li>Créer un nouveau service Web sur Render</li>
+        <li>Connecter le repository GitHub</li>
+        <li>Configurer avec Dockerfile (déjà présent)</li>
+        <li>Définir les variables d'environnement :
+            <ul>
+                <li><code>DB_HOST</code>, <code>DB_NAME</code>, <code>DB_USER</code>, <code>DB_PASS</code></li>
+                <li><code>JWT_SECRET</code> (générer via <code>openssl rand -hex 32</code>)</li>
+                <li><code>AUTH_DISABLED=false</code> (production)</li>
+                <li><code>ENABLE_DEMO_RESET=false</code> (production)</li>
+            </ul>
+        </li>
+        <li>Le service sera disponible à <code>https://ott-jbln.onrender.com</code></li>
+    </ol>
+    
+    <h3>📱 Déploiement Dashboard</h3>
+    <h4>Option 1 : GitHub Pages (Gratuit)</h4>
+    <ol>
+        <li>Configurer <code>.env.local</code> avec <code>NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com</code></li>
+        <li>Build : <code>npm run build && npm run export</code></li>
+        <li>Push vers GitHub (le dossier <code>out/</code> sera déployé automatiquement)</li>
+        <li>Activer GitHub Pages dans les paramètres du repository</li>
+    </ol>
+    
+    <h4>Option 2 : Render (Recommandé pour production)</h4>
+    <ol>
+        <li>Créer un nouveau service Web sur Render</li>
+        <li>Utiliser <code>Dockerfile.dashboard</code> (si disponible) ou build Next.js standard</li>
+        <li>Variables d'environnement :
+            <ul>
+                <li><code>NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com</code></li>
+                <li><code>NEXT_PUBLIC_ENABLE_DEMO_RESET=false</code></li>
+                <li><code>NODE_ENV=production</code></li>
+            </ul>
+        </li>
+        <li>Auto-deploy activé sur push vers <code>main</code></li>
     </ol>
     
     <h3>💰 Coûts Mensuels</h3>
-    <ul>
-        <li>PostgreSQL (Render) : <strong>0€</strong></li>
-        <li>API Backend (Render) : <strong>7€/mois</strong></li>
-        <li>Dashboard (GitHub Pages) : <strong>0€</strong></li>
-        <li>Carte SIM 4G : <strong>2€/dispositif/mois</strong></li>
-    </ul>
+    <table>
+        <tr>
+            <th>Service</th>
+            <th>Plan</th>
+            <th>Prix</th>
+        </tr>
+        <tr>
+            <td>PostgreSQL (Render)</td>
+            <td>Free</td>
+            <td><strong>0€</strong></td>
+        </tr>
+        <tr>
+            <td>API Backend (Render)</td>
+            <td>Starter</td>
+            <td><strong>7€/mois</strong></td>
+        </tr>
+        <tr>
+            <td>Dashboard (GitHub Pages)</td>
+            <td>Free</td>
+            <td><strong>0€</strong></td>
+        </tr>
+        <tr>
+            <td>Dashboard (Render - Optionnel)</td>
+            <td>Starter</td>
+            <td><strong>7€/mois</strong></td>
+        </tr>
+        <tr>
+            <td>Carte SIM 4G</td>
+            <td>-</td>
+            <td><strong>2€/dispositif/mois</strong></td>
+        </tr>
+        <tr>
+            <td colspan="2"><strong>TOTAL (GitHub Pages)</strong></td>
+            <td><strong>7€/mois</strong></td>
+        </tr>
+        <tr>
+            <td colspan="2"><strong>TOTAL (Render complet)</strong></td>
+            <td><strong>14€/mois</strong></td>
+        </tr>
+    </table>
+    
+    <div class="alert alert-success">
+        <strong>🎉 Économie</strong><br>
+        vs 10 000€/mois avec solutions cloud classiques !
+    </div>
+    
+    <h3>✅ Vérification Post-Déploiement</h3>
+    <ol>
+        <li>Vérifier que l'API répond : <code>curl https://ott-jbln.onrender.com/api.php/health</code></li>
+        <li>Vérifier que le dashboard se charge : <code>https://ymora.github.io/OTT/</code></li>
+        <li>Tester la connexion : Le dashboard doit pouvoir se connecter à l'API</li>
+        <li>Vérifier les CORS : L'API doit autoriser l'origine du dashboard</li>
+    </ol>
 </section>
 
 <section id="troubleshooting" class="section">
     <h2>🐛 Dépannage</h2>
     
-    
     <h3>🔧 Problèmes Courants</h3>
+    
+    <h4>📱 Firmware / Dispositif</h4>
     <ul>
         <li><strong>Modem not responding</strong> : Vérifier l'antenne 4G et la carte SIM</li>
+        <li><strong>Dispositif n'apparaît pas</strong> :
+            <ol>
+                <li>Vérifier l'ICCID côté firmware (après <code>SIM READY</code>, journaliser <code>modem.getSimCCID()</code>)</li>
+                <li>S'assurer que le POST mesure cible bien l'API (<code>https://ott-jbln.onrender.com/api.php/devices/measurements</code>)</li>
+                <li>Observer la réponse API (en succès : <code>{ success: true, device_id: &lt;id&gt; }</code>)</li>
+                <li>Confirmer côté dashboard : rechercher l'ICCID sur la page "Dispositifs"</li>
+                <li>Si toujours absent : relancer <code>scripts/db_migrate.sh --seed</code></li>
+            </ol>
+        </li>
+        <li><strong>OTA échoue</strong> : Vérifier la connexion réseau, le MD5 du firmware, et les logs série</li>
+        <li><strong>USB non détecté</strong> : Vérifier que le navigateur supporte Web Serial API (Chrome/Edge), autoriser l'accès au port</li>
+    </ul>
+    
+    <h4>🌐 API / Backend</h4>
+    <ul>
         <li><strong>JWT verification failed</strong> : Token expiré, se reconnecter</li>
         <li><strong>Failed to fetch</strong> : Vérifier que l'API est en ligne et les headers CORS</li>
-        <li><strong>Build Next.js échoue</strong> : Supprimer le cache et réinstaller les dépendances</li>
+        <li><strong>Database connection failed</strong> : Vérifier les variables d'environnement (DB_HOST, DB_NAME, DB_USER, DB_PASS)</li>
+        <li><strong>500 Internal Server Error</strong> : Vérifier les logs Render, souvent lié à une erreur SQL ou une variable manquante</li>
     </ul>
+    
+    <h4>⚛️ Dashboard / Frontend</h4>
+    <ul>
+        <li><strong>Build Next.js échoue</strong> : Supprimer le cache (<code>rm -rf .next node_modules</code>) et réinstaller les dépendances</li>
+        <li><strong>Page blanche</strong> : Vérifier la console du navigateur, souvent lié à une erreur JavaScript ou une variable d'environnement manquante</li>
+        <li><strong>Données ne se chargent pas</strong> : Vérifier <code>NEXT_PUBLIC_API_URL</code> dans <code>.env.local</code></li>
+        <li><strong>Authentification échoue</strong> : Vérifier que l'API est accessible et que <code>JWT_SECRET</code> est correct</li>
+    </ul>
+    
+    <h4>🗄️ Base de Données</h4>
+    <ul>
+        <li><strong>Migration échoue</strong> : Vérifier <code>DATABASE_URL</code>, s'assurer que la base existe</li>
+        <li><strong>Tables manquantes</strong> : Relancer <code>scripts/db_migrate.sh</code></li>
+        <li><strong>Données corrompues</strong> : Utiliser le bouton "Réinitialiser la base de démo" (si activé) ou relancer les seeds</li>
+    </ul>
+    
+    <h3>🔍 Outils de Diagnostic</h3>
+    <ul>
+        <li><strong>Page /diagnostics</strong> : Affiche l'état de l'API, la base de données, et les variables d'environnement</li>
+        <li><strong>Console navigateur</strong> : Vérifier les erreurs JavaScript et les appels API</li>
+        <li><strong>Logs Render</strong> : Vérifier les logs du service API pour les erreurs backend</li>
+        <li><strong>Network tab</strong> : Vérifier les requêtes HTTP et leurs réponses</li>
+    </ul>
+    
+    <h3>📋 Checklist de Vérification</h3>
+    <ol>
+        <li><strong>Backend Render</strong> : DB_HOST/PORT/NAME/USER/PASS renseignés, JWT_SECRET défini, AUTH_DISABLED=false</li>
+        <li><strong>Base de données</strong> : <code>psql $DATABASE_URL -c "SELECT COUNT(*) FROM measurements;"</code> retourne > 0</li>
+        <li><strong>Frontend local</strong> : <code>.env.local</code> pointe vers l'API, <code>npm run lint && npm run build</code> passent</li>
+        <li><strong>Frontend GitHub Pages</strong> : <code>npm run export</code> avant push, vérifier que le dashboard se charge</li>
+    </ol>
 </section>
 
 <section id="screenshots" class="section">
@@ -798,6 +939,539 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
             <li><strong>Technicien</strong> : Accès technique complet (OTA, commandes, configuration, firmware) mais ne peut pas gérer les utilisateurs ni supprimer des patients/dispositifs.</li>
         </ul>
     </div>
+</section>
+
+<section id="structure" class="section">
+    <h2>📁 Structure du Projet</h2>
+    
+    <h3>🎯 Organisation Principale</h3>
+    <pre><code>maxime/
+├── 📱 app/                          # Application Next.js (Frontend)
+│   ├── dashboard/                   # Pages du dashboard
+│   │   ├── firmware-upload/         # Upload & compilation firmware
+│   │   ├── devices/                 # Gestion dispositifs
+│   │   ├── patients/                # Gestion patients
+│   │   └── ...
+│   └── layout.js                    # Layout principal
+│
+├── 🔧 api.php                       # API Backend PHP (monolithique)
+│
+├── 📦 components/                   # Composants React réutilisables
+│   ├── FlashUSBModal.js             # Modal flash USB
+│   ├── Sidebar.js                   # Menu navigation
+│   └── ...
+│
+├── 🎨 contexts/                     # Contextes React (état global)
+│   ├── AuthContext.js               # Authentification
+│   └── UsbContext.js                # Gestion USB
+│
+├── 📚 lib/                          # Bibliothèques utilitaires
+│   ├── api.js                       # Helpers API
+│   ├── config.js                    # Configuration
+│   ├── usbDevices.js                # Mapping USB devices
+│   ├── measurementSender.js         # Envoi mesures robuste
+│   └── measurementQueue.js         # Queue mesures (IndexedDB)
+│
+├── 🔌 hardware/                     # Matériel & Firmware
+│   ├── firmware/                    # FIRMWARE PRINCIPAL
+│   │   ├── fw_ott_optimized/        # Firmware actuel
+│   │   │   ├── fw_ott_optimized.ino # Source principale
+│   │   │   └── README.md
+│   │   └── external/                # Dépendances externes (TinyGSM)
+│   ├── cad/                         # Plans CAO (STL, PDF)
+│   ├── docs/                        # Documentation matériel
+│   └── scripts/                     # Scripts build firmware
+│
+├── 📦 firmwares/                    # Firmwares compilés (.bin)
+│   ├── ino/                         # Fichiers .ino uploadés
+│   └── *.bin                        # Firmwares compilés prêts à flasher
+│
+├── 🗄️ sql/                          # Schémas & migrations base de données
+│   ├── schema.sql                   # Schéma principal
+│   └── ...
+│
+├── 🛠️ scripts/                     # Scripts utilitaires
+│   ├── build_firmware_bin.ps1       # Compile .ino → .bin
+│   ├── flash_firmware.ps1           # Flash direct
+│   └── ...
+│
+├── 📄 public/                       # Fichiers statiques
+│   ├── DOCUMENTATION_*.html         # Documentation (3 fichiers)
+│   └── screenshots/                 # Captures d'écran
+│
+├── 🐳 Dockerfile                    # Image Docker API
+├── 📋 README.md                     # Documentation principale
+└── ⚙️ package.json                  # Dépendances Node.js</code></pre>
+    
+    <h3>📍 Chemins Importants</h3>
+    <ul>
+        <li><strong>Firmware Source</strong> : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code></li>
+        <li><strong>Firmwares Compilés</strong> : <code>firmwares/*.bin</code></li>
+        <li><strong>Scripts Build</strong> : <code>scripts/build_firmware_bin.ps1</code> et <code>scripts/flash_firmware.ps1</code></li>
+    </ul>
+    
+    <h3>🔄 Workflow Recommandé</h3>
+    <h4>Pour un développeur :</h4>
+    <ol>
+        <li>Modifier le firmware : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code></li>
+        <li>Compiler localement : <code>.\scripts\build_firmware_bin.ps1</code></li>
+        <li>Tester : <code>.\scripts\flash_firmware.ps1 -Port COM6</code></li>
+    </ol>
+    
+    <h4>Pour un admin/technicien :</h4>
+    <ol>
+        <li>Upload .ino : Menu "Firmware" → Upload fichier</li>
+        <li>Compilation automatique : Logs en direct</li>
+        <li>Flash : Page "Dispositifs" → Sélectionner firmware → OTA ou USB</li>
+    </ol>
+</section>
+
+<section id="database" class="section">
+    <h2>🗄️ Base de Données PostgreSQL</h2>
+    
+    <h3>📐 Schéma Relationnel</h3>
+    <p>Base PostgreSQL pour le système OTT - Gestion de dispositifs médicaux IoT avec notifications, OTA, et audit.</p>
+    
+    <h4>🔐 Authentification & Permissions</h4>
+    <ul>
+        <li><strong>roles</strong> : Rôles utilisateurs (admin, medecin, technicien)</li>
+        <li><strong>permissions</strong> : Permissions système (devices.view, patients.edit, etc.)</li>
+        <li><strong>role_permissions</strong> : Table de liaison roles ↔ permissions</li>
+        <li><strong>users</strong> : Utilisateurs du système</li>
+    </ul>
+    
+    <h4>👥 Patients</h4>
+    <ul>
+        <li><strong>patients</strong> : Patients suivis</li>
+        <li><strong>patient_notifications_preferences</strong> : Préférences de notifications des patients</li>
+    </ul>
+    
+    <h4>📱 Dispositifs</h4>
+    <ul>
+        <li><strong>devices</strong> : Dispositifs IoT OTT (PK: id, UNIQUE: sim_iccid, device_serial)</li>
+        <li><strong>device_configurations</strong> : Configuration des dispositifs (firmware, OTA, calibration)</li>
+        <li><strong>measurements</strong> : Mesures de débit et batterie</li>
+        <li><strong>alerts</strong> : Alertes système (batterie faible, offline, etc.)</li>
+        <li><strong>device_logs</strong> : Logs événements dispositifs</li>
+        <li><strong>device_commands</strong> : Commandes envoyées aux dispositifs</li>
+    </ul>
+    
+    <h4>🔄 Firmwares</h4>
+    <ul>
+        <li><strong>firmware_versions</strong> : Versions de firmware disponibles (PK: id, UNIQUE: version)</li>
+    </ul>
+    
+    <h4>📧 Notifications</h4>
+    <ul>
+        <li><strong>user_notifications_preferences</strong> : Préférences de notifications des utilisateurs</li>
+        <li><strong>notifications_queue</strong> : File d'attente des notifications à envoyer</li>
+    </ul>
+    
+    <h4>📝 Audit</h4>
+    <ul>
+        <li><strong>audit_logs</strong> : Logs d'audit de toutes les actions</li>
+    </ul>
+    
+    <h3>🔍 Vues (Views)</h3>
+    <ul>
+        <li><strong>device_stats</strong> : Statistiques agrégées des dispositifs</li>
+        <li><strong>users_with_roles</strong> : Utilisateurs enrichis avec rôles et permissions</li>
+    </ul>
+    
+    <h3>🔗 Règles de Cascade</h3>
+    <p>Les suppressions en cascade sont configurées pour garantir l'intégrité des données :</p>
+    <ul>
+        <li>Suppression d'un device → suppression automatique des measurements, alerts, logs, commands associés</li>
+        <li>Suppression d'un patient → les devices associés ont leur patient_id mis à NULL (ON DELETE SET NULL)</li>
+        <li>Suppression d'un utilisateur → les audit_logs conservent l'user_id (ON DELETE SET NULL)</li>
+    </ul>
+    
+    <div class="alert alert-info">
+        <strong>📊 Statistiques</strong><br>
+        - Total tables : 16<br>
+        - Total vues : 2<br>
+        - Total relations : 20+<br>
+        - Index : 6<br>
+        - Triggers : 7 (mise à jour automatique de updated_at)
+    </div>
+</section>
+
+<section id="firmware-workflow" class="section">
+    <h2>🔧 Compilation et Flash du Firmware</h2>
+    
+    <h3>📤 Workflow Complet</h3>
+    <p>Le système permet un workflow complet de gestion du firmware depuis le dashboard :</p>
+    
+    <h4>1. Upload du fichier .ino</h4>
+    <ol>
+        <li>Un admin/technicien se connecte au dashboard</li>
+        <li>Accède au menu "Firmware" (visible uniquement pour admin/technicien)</li>
+        <li>Clique sur "Upload Firmware" et sélectionne un fichier <code>.ino</code></li>
+        <li>Le fichier est uploadé vers <code>firmwares/ino/</code> avec extraction automatique de la version</li>
+        <li>Un enregistrement est créé dans la table <code>firmware_versions</code> avec le statut <code>pending_compilation</code></li>
+    </ol>
+    
+    <h4>2. Compilation en Direct (SSE)</h4>
+    <ol>
+        <li>Après l'upload, la compilation démarre automatiquement</li>
+        <li>Les logs de compilation sont streamés en temps réel via <strong>Server-Sent Events (SSE)</strong></li>
+        <li>L'utilisateur voit la progression en direct dans une fenêtre dédiée</li>
+        <li>Le système utilise <code>arduino-cli</code> pour compiler le <code>.ino</code> en <code>.bin</code></li>
+        <li>Le fichier <code>.bin</code> est généré dans <code>firmwares/</code></li>
+        <li>Le statut est mis à jour à <code>compiled</code> dans la base de données</li>
+    </ol>
+    
+    <h4>3. Flash du Firmware</h4>
+    <p>Une fois compilé, le firmware peut être flashé de deux manières :</p>
+    
+    <h5>Via OTA (Over-The-Air)</h5>
+    <ol>
+        <li>Aller dans la page "Dispositifs"</li>
+        <li>Ouvrir les détails d'un dispositif en ligne</li>
+        <li>Dans l'onglet "Détails", section "Flash Firmware"</li>
+        <li>Sélectionner le firmware compilé</li>
+        <li>Cliquer sur "Flash OTA"</li>
+        <li>Le firmware est téléchargé et flashé via le réseau 4G</li>
+    </ol>
+    
+    <h5>Via USB</h5>
+    <ol>
+        <li>Connecter le dispositif en USB</li>
+        <li>Aller dans la page "Dispositifs"</li>
+        <li>Ouvrir les détails du dispositif connecté</li>
+        <li>Dans l'onglet "Détails", section "Flash Firmware"</li>
+        <li>Sélectionner le firmware compilé</li>
+        <li>Cliquer sur "Flash USB"</li>
+        <li>Le firmware est flashé directement via le port série USB</li>
+    </ol>
+    
+    <h3>🔌 Communication USB et device_info</h3>
+    <p>Lors de la connexion USB, le firmware envoie automatiquement ses informations au format JSON :</p>
+    <pre><code>{
+  "type": "device_info",
+  "iccid": "89330123456789012345",
+  "serial": "OTT-1234",
+  "firmware_version": "3.0-rebuild",
+  "device_name": "OTT-1234"
+}</code></pre>
+    
+    <p>Ces informations sont automatiquement :</p>
+    <ul>
+        <li>Parsées par le dashboard</li>
+        <li>Utilisées pour identifier le dispositif dans la base de données</li>
+        <li>Mises à jour dans la base si le dispositif existe déjà</li>
+    </ul>
+    
+    <h3>🔄 Mise à Jour Automatique du Firmware Version</h3>
+    <p>Lorsqu'un dispositif envoie un message <code>device_info</code> avec une version de firmware :</p>
+    <ol>
+        <li>Le dashboard reçoit le message via USB</li>
+        <li>La version est extraite du JSON</li>
+        <li>Un callback est déclenché pour mettre à jour la base de données</li>
+        <li>Le champ <code>firmware_version</code> du dispositif est mis à jour automatiquement</li>
+        <li>La configuration du dispositif (<code>device_configurations</code>) est également mise à jour</li>
+    </ol>
+    
+    <div class="alert alert-success">
+        <strong>✅ Avantages</strong><br>
+        - Pas besoin de mise à jour manuelle de la version<br>
+        - Synchronisation automatique entre firmware et base de données<br>
+        - Traçabilité complète des versions installées
+    </div>
+</section>
+
+<section id="compatibility" class="section">
+    <h2>🔗 Compatibilité Firmware ↔ API ↔ Dashboard</h2>
+    
+    <h3>✅ Compatibilité Firmware ↔ API</h3>
+    <h4>Format ICCID</h4>
+    <ul>
+        <li><strong>Firmware</strong> : Envoie <code>device_sim_iccid</code> dans le payload JSON et <code>X-Device-ICCID</code> dans les headers HTTP</li>
+        <li><strong>API</strong> : Accepte <code>device_sim_iccid</code> OU <code>sim_iccid</code> dans le payload</li>
+        <li><strong>Validation</strong> : Max 20 caractères (VARCHAR(20) en base)</li>
+    </ul>
+    
+    <h4>Payload Mesures</h4>
+    <p>Le firmware envoie :</p>
+    <pre><code>{
+  "sim_iccid": "89330123456789012345",
+  "flowrate": 2.34,
+  "battery": 85.5,
+  "rssi": -75,
+  "firmware_version": "v2.0",
+  "timestamp": "2025-01-15T10:30:00Z",
+  "status": "TIMER"
+}</code></pre>
+    
+    <p>L'API accepte :</p>
+    <ul>
+        <li><code>sim_iccid</code> OU <code>device_sim_iccid</code> ✅</li>
+        <li><code>flowrate</code> OU <code>flow</code> OU <code>payload.flowrate</code> ✅</li>
+        <li><code>battery</code> OU <code>payload.battery</code> ✅</li>
+        <li><code>signal_strength</code> OU <code>rssi</code> ✅</li>
+        <li><code>firmware_version</code> (optionnel) ✅</li>
+    </ul>
+    
+    <h3>✅ Compatibilité Firmware ↔ Dashboard</h3>
+    <h4>Endpoints API</h4>
+    <table>
+        <tr>
+            <th>Endpoint Firmware</th>
+            <th>Endpoint API</th>
+            <th>Méthode</th>
+            <th>Statut</th>
+        </tr>
+        <tr>
+            <td><code>/api.php/devices/measurements</code></td>
+            <td><code>/api.php/devices/measurements</code></td>
+            <td>POST</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td><code>/api.php/devices/{ICCID}/commands/pending</code></td>
+            <td><code>/api.php/devices/{iccid}/commands/pending</code></td>
+            <td>GET</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td><code>/api.php/devices/commands/ack</code></td>
+            <td><code>/api.php/devices/commands/ack</code></td>
+            <td>POST</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td><code>/api.php/devices/logs</code></td>
+            <td><code>/api.php/devices/logs</code></td>
+            <td>POST</td>
+            <td>✅</td>
+        </tr>
+    </table>
+    
+    <h4>Commandes Supportées</h4>
+    <table>
+        <tr>
+            <th>Commande</th>
+            <th>Firmware</th>
+            <th>Dashboard</th>
+            <th>Statut</th>
+        </tr>
+        <tr>
+            <td><code>SET_SLEEP_SECONDS</code></td>
+            <td>✅</td>
+            <td>✅</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td><code>PING</code></td>
+            <td>✅</td>
+            <td>✅</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td><code>UPDATE_CONFIG</code></td>
+            <td>✅</td>
+            <td>✅</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td><code>UPDATE_CALIBRATION</code></td>
+            <td>✅</td>
+            <td>✅</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td><code>OTA_REQUEST</code></td>
+            <td>✅</td>
+            <td>✅</td>
+            <td>✅</td>
+        </tr>
+    </table>
+    
+    <h4>Enregistrement Automatique des Dispositifs</h4>
+    <p>Lorsqu'un dispositif envoie sa première mesure ou log :</p>
+    <ul>
+        <li>✅ Le dispositif est automatiquement détecté et enregistré dans la base de données</li>
+        <li>✅ Aucune configuration manuelle requise</li>
+        <li>✅ Les informations (ICCID, firmware_version, battery, etc.) sont capturées automatiquement</li>
+        <li>✅ Le statut est défini à <code>active</code> par défaut</li>
+    </ul>
+</section>
+
+<section id="roles-permissions" class="section">
+    <h2>🔐 Rôles et Permissions</h2>
+    
+    <h3>👑 Administrateur (admin)</h3>
+    <p><strong>Accès complet à toutes les fonctionnalités</strong></p>
+    <ul>
+        <li>✅ Gestion complète des utilisateurs (création, modification, suppression)</li>
+        <li>✅ Gestion complète des dispositifs (création, modification, suppression, OTA)</li>
+        <li>✅ Gestion complète des patients (création, modification, suppression)</li>
+        <li>✅ Configuration système et paramètres</li>
+        <li>✅ Accès au journal d'audit complet</li>
+        <li>✅ Gestion des firmwares et déploiements OTA</li>
+        <li>✅ Résolution de toutes les alertes</li>
+        <li>✅ Export de toutes les données</li>
+    </ul>
+    <p><strong>Utilisateurs :</strong> Maxime, Yann (2 admins maximum)</p>
+    
+    <h3>🔧 Technicien (technicien)</h3>
+    <p><strong>Maintenance et configuration des dispositifs</strong></p>
+    <h4>✅ Permissions</h4>
+    <ul>
+        <li><strong>Dispositifs</strong> : Voir, modifier, configurer, envoyer commandes, OTA</li>
+        <li><strong>Alertes</strong> : Voir toutes les alertes, résoudre les alertes techniques</li>
+        <li><strong>Rapports</strong> : Voir les rapports techniques</li>
+    </ul>
+    <h4>❌ Restrictions</h4>
+    <ul>
+        <li>Ne peut pas gérer les patients</li>
+        <li>Ne peut pas gérer les utilisateurs</li>
+        <li>Ne peut pas accéder au journal d'audit complet</li>
+        <li>Ne peut pas modifier les paramètres système</li>
+    </ul>
+    <p><strong>Utilisateurs :</strong> 3 techniciens maximum</p>
+    
+    <h3>👨‍⚕️ Médecin (medecin)</h3>
+    <p><strong>Consultation des patients et suivi médical</strong></p>
+    <h4>✅ Permissions</h4>
+    <ul>
+        <li><strong>Patients</strong> : Voir tous les patients, modifier les données, exporter</li>
+        <li><strong>Dispositifs</strong> : Voir la liste et les détails (lecture seule)</li>
+        <li><strong>Rapports</strong> : Voir les rapports médicaux, exporter</li>
+        <li><strong>Alertes</strong> : Voir les alertes (lecture seule)</li>
+    </ul>
+    <h4>❌ Restrictions</h4>
+    <ul>
+        <li>Ne peut pas modifier les dispositifs</li>
+        <li>Ne peut pas effectuer d'OTA ou envoyer des commandes</li>
+        <li>Ne peut pas gérer les utilisateurs</li>
+        <li>Ne peut pas accéder au journal d'audit complet</li>
+        <li>Ne peut pas résoudre les alertes techniques</li>
+    </ul>
+    <p><strong>Utilisateurs :</strong> 2 médecins maximum</p>
+    
+    <h3>📊 Tableau des Permissions</h3>
+    <table>
+        <tr>
+            <th>Permission</th>
+            <th>Code</th>
+            <th>Admin</th>
+            <th>Technicien</th>
+            <th>Médecin</th>
+        </tr>
+        <tr>
+            <td colspan="5"><strong>Dispositifs</strong></td>
+        </tr>
+        <tr>
+            <td>Voir dispositifs</td>
+            <td><code>devices.view</code></td>
+            <td>✅</td>
+            <td>✅</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td>Modifier dispositifs</td>
+            <td><code>devices.edit</code></td>
+            <td>✅</td>
+            <td>✅</td>
+            <td>❌</td>
+        </tr>
+        <tr>
+            <td>Mises à jour OTA</td>
+            <td><code>devices.ota</code></td>
+            <td>✅</td>
+            <td>✅</td>
+            <td>❌</td>
+        </tr>
+        <tr>
+            <td colspan="5"><strong>Patients</strong></td>
+        </tr>
+        <tr>
+            <td>Voir patients</td>
+            <td><code>patients.view</code></td>
+            <td>✅</td>
+            <td>❌</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td>Modifier patients</td>
+            <td><code>patients.edit</code></td>
+            <td>✅</td>
+            <td>❌</td>
+            <td>✅</td>
+        </tr>
+        <tr>
+            <td colspan="5"><strong>Utilisateurs</strong></td>
+        </tr>
+        <tr>
+            <td>Gérer utilisateurs</td>
+            <td><code>users.manage</code></td>
+            <td>✅</td>
+            <td>❌</td>
+            <td>❌</td>
+        </tr>
+        <tr>
+            <td colspan="5"><strong>Audit</strong></td>
+        </tr>
+        <tr>
+            <td>Voir audit</td>
+            <td><code>audit.view</code></td>
+            <td>✅</td>
+            <td>❌</td>
+            <td>❌</td>
+        </tr>
+    </table>
+</section>
+
+<section id="measurements-queue" class="section">
+    <h2>📊 Système de Queue de Mesures (IndexedDB)</h2>
+    
+    <h3>🔄 Mécanisme de Retry Robuste</h3>
+    <p>Le système implémente un mécanisme robuste pour garantir l'envoi des mesures même en cas de problème réseau :</p>
+    
+    <h4>1. Queue Locale (IndexedDB)</h4>
+    <ul>
+        <li>Les mesures sont stockées localement dans IndexedDB si le réseau est indisponible</li>
+        <li>La queue est persistante (survit aux redémarrages du navigateur)</li>
+        <li>Les mesures sont automatiquement réessayées lorsque le réseau revient</li>
+    </ul>
+    
+    <h4>2. Retry avec Exponential Backoff</h4>
+    <ul>
+        <li>En cas d'échec, le système attend avant de réessayer</li>
+        <li>Le délai d'attente augmente exponentiellement : 1s, 2s, 4s, 8s, 16s, 32s (max)</li>
+        <li>Maximum 5 tentatives avant de considérer l'échec comme définitif</li>
+    </ul>
+    
+    <h4>3. Validation des Données</h4>
+    <ul>
+        <li>Les données sont validées avant l'envoi (ICCID requis, valeurs numériques valides)</li>
+        <li>Les mesures invalides sont rejetées et ne sont pas ajoutées à la queue</li>
+    </ul>
+    
+    <h3>📈 Améliorations des Statistiques</h3>
+    <p>Les graphiques ont été améliorés pour afficher plus d'informations :</p>
+    
+    <h4>Statistiques Affichées</h4>
+    <ul>
+        <li><strong>Min</strong> : Valeur minimale sur la période</li>
+        <li><strong>Max</strong> : Valeur maximale sur la période</li>
+        <li><strong>Moy</strong> : Valeur moyenne sur la période</li>
+        <li><strong>Dernier</strong> : Dernière valeur enregistrée</li>
+    </ul>
+    
+    <h4>Prévention du Débordement</h4>
+    <ul>
+        <li>Les graphiques ont des limites définies pour éviter le débordement</li>
+        <li>L'axe Y est limité à 0-100% pour la batterie</li>
+        <li>Le nombre de ticks sur l'axe X est limité à 10 pour éviter l'encombrement</li>
+    </ul>
+    
+    <h4>Tooltips Améliorés</h4>
+    <ul>
+        <li>Les tooltips affichent les unités (L/min ou %)</li>
+        <li>Formatage des nombres avec séparateurs de milliers</li>
+    </ul>
 </section>
 
 <section id="roadmap" class="section">
