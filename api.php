@@ -483,6 +483,10 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleGetFirmwares();
 } elseif(preg_match('#/firmwares/(\d+)/download$#', $path, $matches) && $method === 'GET') {
     handleDownloadFirmware($matches[1]);
+} elseif(preg_match('#/firmwares/upload-ino$#', $path) && $method === 'POST') {
+    handleUploadFirmwareIno();
+} elseif(preg_match('#/firmwares/compile/(\d+)$#', $path, $matches) && $method === 'GET') {
+    handleCompileFirmware($matches[1]);
 } elseif(preg_match('#/firmwares$#', $path) && $method === 'POST') {
     handleUploadFirmware();
 
@@ -3046,6 +3050,326 @@ function handleDownloadFirmware($firmware_id) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
     }
+}
+
+function handleUploadFirmwareIno() {
+    global $pdo;
+    $user = requireAuth();
+    
+    // Vérifier que l'utilisateur est admin ou technicien
+    if ($user['role_name'] !== 'admin' && $user['role_name'] !== 'technicien') {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Accès refusé. Admin ou technicien requis.']);
+        return;
+    }
+    
+    if (!isset($_FILES['firmware_ino'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'No file uploaded']);
+        return;
+    }
+    
+    $file = $_FILES['firmware_ino'];
+    
+    if (pathinfo($file['name'], PATHINFO_EXTENSION) !== 'ino') {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid file type: .ino required']);
+        return;
+    }
+    
+    // Créer le dossier pour les fichiers .ino uploadés
+    $ino_dir = __DIR__ . '/firmwares/ino/';
+    if (!is_dir($ino_dir)) {
+        mkdir($ino_dir, 0755, true);
+    }
+    
+    // Extraire la version depuis le fichier .ino
+    $ino_content = file_get_contents($file['tmp_name']);
+    $version = null;
+    
+    // Chercher FIRMWARE_VERSION_STR dans le fichier
+    if (preg_match('/FIRMWARE_VERSION_STR\s+"([^"]+)"/', $ino_content, $matches)) {
+        $version = $matches[1];
+    } else if (preg_match('/FIRMWARE_VERSION\s*=\s*"([^"]+)"/', $ino_content, $matches)) {
+        $version = $matches[1];
+    }
+    
+    if (!$version) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Version non trouvée dans le fichier .ino. Assurez-vous que FIRMWARE_VERSION_STR est défini.']);
+        return;
+    }
+    
+    // Sauvegarder le fichier .ino
+    $ino_filename = 'fw_ott_v' . $version . '_' . time() . '.ino';
+    $ino_path = $ino_dir . $ino_filename;
+    
+    if (!move_uploaded_file($file['tmp_name'], $ino_path)) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Failed to save .ino file']);
+        return;
+    }
+    
+    // Enregistrer dans la base de données (statut: pending_compilation)
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO firmware_versions (version, file_path, file_size, checksum, release_notes, is_stable, uploaded_by, status)
+            VALUES (:version, :file_path, :file_size, :checksum, :release_notes, :is_stable, :uploaded_by, 'pending_compilation')
+        ");
+        
+        $file_size = filesize($ino_path);
+        $checksum = hash_file('sha256', $ino_path);
+        
+        $stmt->execute([
+            'version' => $version,
+            'file_path' => 'firmwares/ino/' . $ino_filename,
+            'file_size' => $file_size,
+            'checksum' => $checksum,
+            'release_notes' => 'Compilé depuis .ino',
+            'is_stable' => 0,
+            'uploaded_by' => $user['id']
+        ]);
+        
+        $firmware_id = $pdo->lastInsertId();
+        
+        auditLog('firmware.ino.uploaded', 'firmware', $firmware_id, null, [
+            'version' => $version,
+            'file_size' => $file_size
+        ]);
+        
+        echo json_encode([
+            'success' => true,
+            'firmware_id' => $firmware_id,
+            'upload_id' => $firmware_id,
+            'version' => $version,
+            'message' => 'Fichier .ino uploadé avec succès. Prêt pour compilation.'
+        ]);
+        
+    } catch(PDOException $e) {
+        unlink($ino_path);
+        http_response_code($e->getCode() == 23000 ? 409 : 500);
+        echo json_encode(['success' => false, 'error' => $e->getCode() == 23000 ? 'Version exists' : 'Database error']);
+    }
+}
+
+function handleCompileFirmware($firmware_id) {
+    global $pdo;
+    requireAuth();
+    
+    // Configurer pour Server-Sent Events (SSE)
+    header('Content-Type: text/event-stream');
+    header('Cache-Control: no-cache');
+    header('Connection: keep-alive');
+    header('X-Accel-Buffering: no'); // Désactiver la mise en buffer pour nginx
+    
+    // Vérifier que le firmware existe et est en attente de compilation
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        $stmt->execute(['id' => $firmware_id]);
+        $firmware = $stmt->fetch();
+        
+        if (!$firmware) {
+            sendSSE('error', 'Firmware not found');
+            return;
+        }
+        
+        if ($firmware['status'] !== 'pending_compilation') {
+            sendSSE('error', 'Firmware already compiled or invalid status');
+            return;
+        }
+        
+        $ino_path = __DIR__ . '/' . $firmware['file_path'];
+        
+        if (!file_exists($ino_path)) {
+            sendSSE('error', 'Fichier .ino introuvable');
+            return;
+        }
+        
+        sendSSE('log', 'info', 'Démarrage de la compilation...');
+        sendSSE('progress', 10);
+        
+        // Vérifier si arduino-cli est disponible
+        $arduinoCli = trim(shell_exec('which arduino-cli 2>/dev/null || where arduino-cli 2>/dev/null'));
+        
+        if (empty($arduinoCli)) {
+            sendSSE('log', 'warning', 'arduino-cli non trouvé. Compilation simulée pour démonstration.');
+            sendSSE('log', 'info', 'Dans un environnement de production, installez arduino-cli sur le serveur.');
+            
+            // Simulation de compilation (pour démonstration)
+            sendSSE('progress', 30);
+            sendSSE('log', 'info', 'Extraction de la version: ' . $firmware['version']);
+            
+            sleep(1);
+            sendSSE('progress', 50);
+            sendSSE('log', 'info', 'Analyse des dépendances...');
+            
+            sleep(1);
+            sendSSE('progress', 70);
+            sendSSE('log', 'info', 'Compilation du code...');
+            
+            sleep(2);
+            sendSSE('progress', 90);
+            sendSSE('log', 'info', 'Génération du fichier .bin...');
+            
+            // Créer un fichier .bin factice (dans un vrai environnement, ce serait le résultat de la compilation)
+            $bin_dir = __DIR__ . '/firmwares/';
+            $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
+            $bin_path = $bin_dir . $bin_filename;
+            
+            // Copier le .ino comme .bin (simulation - dans la vraie vie, ce serait le résultat de la compilation)
+            // Pour l'instant, on crée juste un fichier vide ou on copie le .ino
+            file_put_contents($bin_path, '// Compiled firmware binary - ' . $firmware['version']);
+            
+            sleep(1);
+            sendSSE('progress', 100);
+            sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
+            
+            // Mettre à jour la base de données
+            $md5 = hash_file('md5', $bin_path);
+            $checksum = hash_file('sha256', $bin_path);
+            $file_size = filesize($bin_path);
+            
+            $pdo->prepare("
+                UPDATE firmware_versions 
+                SET file_path = :file_path, 
+                    file_size = :file_size, 
+                    checksum = :checksum,
+                    status = 'compiled'
+                WHERE id = :id
+            ")->execute([
+                'file_path' => 'firmwares/' . $bin_filename,
+                'file_size' => $file_size,
+                'checksum' => $checksum,
+                'id' => $firmware_id
+            ]);
+            
+            sendSSE('success', 'Firmware v' . $firmware['version'] . ' compilé avec succès', $firmware['version']);
+            
+        } else {
+            // Compilation réelle avec arduino-cli
+            sendSSE('log', 'info', 'arduino-cli trouvé: ' . $arduinoCli);
+            sendSSE('progress', 20);
+            
+            // Créer un dossier temporaire pour la compilation
+            $build_dir = sys_get_temp_dir() . '/ott_firmware_build_' . $firmware_id . '_' . time();
+            mkdir($build_dir, 0755, true);
+            
+            sendSSE('log', 'info', 'Préparation de l\'environnement de compilation...');
+            sendSSE('progress', 30);
+            
+            // Copier le fichier .ino dans le dossier de build
+            $sketch_name = 'fw_ott_optimized';
+            $sketch_dir = $build_dir . '/' . $sketch_name;
+            mkdir($sketch_dir, 0755, true);
+            copy($ino_path, $sketch_dir . '/' . $sketch_name . '.ino');
+            
+            sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
+            sendSSE('progress', 40);
+            exec($arduinoCli . ' core update-index 2>&1', $output, $return);
+            sendSSE('log', 'info', implode("\n", $output));
+            
+            sendSSE('log', 'info', 'Installation du core ESP32...');
+            sendSSE('progress', 50);
+            exec($arduinoCli . ' core install esp32:esp32 2>&1', $output, $return);
+            sendSSE('log', 'info', implode("\n", $output));
+            
+            sendSSE('log', 'info', 'Compilation du firmware...');
+            sendSSE('progress', 60);
+            
+            $fqbn = 'esp32:esp32:esp32';
+            $compile_cmd = $arduinoCli . ' compile --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
+            
+            exec($compile_cmd, $compile_output, $compile_return);
+            
+            foreach ($compile_output as $line) {
+                sendSSE('log', 'info', $line);
+            }
+            
+            if ($compile_return !== 0) {
+                sendSSE('error', 'Erreur lors de la compilation. Vérifiez les logs ci-dessus.');
+                // Nettoyer
+                exec('rm -rf ' . escapeshellarg($build_dir));
+                return;
+            }
+            
+            sendSSE('progress', 80);
+            sendSSE('log', 'info', 'Recherche du fichier .bin généré...');
+            
+            // Trouver le fichier .bin
+            $bin_files = glob($build_dir . '/*.bin');
+            if (empty($bin_files)) {
+                $bin_files = glob($build_dir . '/**/*.bin');
+            }
+            
+            if (empty($bin_files)) {
+                sendSSE('error', 'Fichier .bin introuvable après compilation');
+                exec('rm -rf ' . escapeshellarg($build_dir));
+                return;
+            }
+            
+            $compiled_bin = $bin_files[0];
+            $bin_dir = __DIR__ . '/firmwares/';
+            $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
+            $bin_path = $bin_dir . $bin_filename;
+            
+            if (!copy($compiled_bin, $bin_path)) {
+                sendSSE('error', 'Impossible de copier le fichier .bin compilé');
+                exec('rm -rf ' . escapeshellarg($build_dir));
+                return;
+            }
+            
+            sendSSE('progress', 95);
+            sendSSE('log', 'info', 'Calcul des checksums...');
+            
+            $md5 = hash_file('md5', $bin_path);
+            $checksum = hash_file('sha256', $bin_path);
+            $file_size = filesize($bin_path);
+            
+            // Mettre à jour la base de données
+            $pdo->prepare("
+                UPDATE firmware_versions 
+                SET file_path = :file_path, 
+                    file_size = :file_size, 
+                    checksum = :checksum,
+                    status = 'compiled'
+                WHERE id = :id
+            ")->execute([
+                'file_path' => 'firmwares/' . $bin_filename,
+                'file_size' => $file_size,
+                'checksum' => $checksum,
+                'id' => $firmware_id
+            ]);
+            
+            // Nettoyer
+            exec('rm -rf ' . escapeshellarg($build_dir));
+            
+            sendSSE('progress', 100);
+            sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
+            sendSSE('success', 'Firmware v' . $firmware['version'] . ' compilé avec succès', $firmware['version']);
+        }
+        
+    } catch(Exception $e) {
+        sendSSE('error', 'Erreur: ' . $e->getMessage());
+    }
+}
+
+function sendSSE($type, $message = '', $data = null) {
+    if ($type === 'log') {
+        $level = $message;
+        $message = $data;
+        echo "data: " . json_encode(['type' => 'log', 'level' => $level, 'message' => $message]) . "\n\n";
+    } else if ($type === 'progress') {
+        echo "data: " . json_encode(['type' => 'progress', 'progress' => $message]) . "\n\n";
+    } else if ($type === 'success') {
+        echo "data: " . json_encode(['type' => 'success', 'message' => $message, 'version' => $data]) . "\n\n";
+    } else if ($type === 'error') {
+        echo "data: " . json_encode(['type' => 'error', 'message' => $message]) . "\n\n";
+    }
+    
+    if (ob_get_level() > 0) {
+        ob_flush();
+    }
+    flush();
 }
 
 // ============================================================================

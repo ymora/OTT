@@ -12,7 +12,7 @@ import { ESPLoader } from 'esptool-js'
  * Modal simplifié pour le flash USB
  * Réutilise les composants de device-flash mais dans un modal
  */
-export default function FlashUSBModal({ isOpen, onClose, device }) {
+export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirmwareVersion = null }) {
   const { fetchWithAuth, API_URL } = useAuth()
   const [firmwares, setFirmwares] = useState([])
   const [selectedFirmware, setSelectedFirmware] = useState(null)
@@ -54,12 +54,22 @@ export default function FlashUSBModal({ isOpen, onClose, device }) {
     }
   }, [API_URL, fetchWithAuth])
 
-  // Charger au montage
+  // Charger au montage et pré-sélectionner le firmware si fourni
   useEffect(() => {
     if (isOpen) {
       loadFirmwares()
     }
   }, [isOpen, loadFirmwares])
+
+  // Pré-sélectionner le firmware si fourni
+  useEffect(() => {
+    if (preselectedFirmwareVersion && firmwares.length > 0) {
+      const firmware = firmwares.find(fw => fw.version === preselectedFirmwareVersion)
+      if (firmware) {
+        setSelectedFirmware(firmware)
+      }
+    }
+  }, [preselectedFirmwareVersion, firmwares])
 
   // Gérer la connexion
   const handleConnect = useCallback(async () => {

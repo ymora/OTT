@@ -35,6 +35,13 @@ const menuStructure = [
     permission: 'users.view',
     description: 'Gestion des utilisateurs (audit, notifications, paramètres)'
   },
+  {
+    name: 'Firmware',
+    icon: '📦',
+    path: '/dashboard/firmware-upload',
+    permission: null, // Vérifié dans la page (admin/technicien)
+    description: 'Upload et compilation de firmware'
+  },
 ]
 
 export default function Sidebar() {

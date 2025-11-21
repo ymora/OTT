@@ -1177,9 +1177,27 @@ export default function DevicesPage() {
 
   // Fonction pour déclencher OTA sur un dispositif
   const handleOTA = async (device, e) => {
-    e.stopPropagation() // Empêcher l'ouverture du modal
-    if (!selectedFirmwareVersion) {
+    if (e) e.stopPropagation() // Empêcher l'ouverture du modal si événement fourni
+    await handleOtaDeploy(device.id, selectedFirmwareVersion)
+  }
+
+  // Fonction pour déployer OTA (utilisée depuis le modal et la liste)
+  const handleOtaDeploy = async (deviceId, version) => {
+    if (!version) {
       setOtaError('Veuillez sélectionner un firmware')
+      return
+    }
+
+    // Trouver le firmware correspondant
+    const firmware = firmwares.find(fw => fw.version === version && fw.status === 'compiled')
+    if (!firmware) {
+      setOtaError('Firmware introuvable ou non compilé')
+      return
+    }
+
+    const device = devices.find(d => d.id === deviceId)
+    if (!device) {
+      setOtaError('Dispositif introuvable')
       return
     }
 
@@ -1193,20 +1211,20 @@ export default function DevicesPage() {
     try {
       setOtaError(null)
       setOtaMessage(null)
-      setOtaDeploying(prev => ({ ...prev, [device.id]: true }))
+      setOtaDeploying(prev => ({ ...prev, [deviceId]: true }))
       
       await fetchJson(
         fetchWithAuth,
         API_URL,
-        `/api.php/devices/${device.id}/ota`,
+        `/api.php/devices/${deviceId}/ota`,
         {
           method: 'POST',
-          body: JSON.stringify({ firmware_version: selectedFirmwareVersion })
+          body: JSON.stringify({ firmware_version: version })
         },
         { requiresAuth: true }
       )
       
-      setOtaMessage(`✅ OTA v${selectedFirmwareVersion} programmé pour ${device.device_name || device.sim_iccid}`)
+      setOtaMessage(`✅ OTA v${version} programmé pour ${device.device_name || device.sim_iccid}`)
       
       // Recharger les dispositifs
       await refetch()
@@ -1218,7 +1236,7 @@ export default function DevicesPage() {
     } finally {
       setOtaDeploying(prev => {
         const next = { ...prev }
-        delete next[device.id]
+        delete next[deviceId]
         return next
       })
     }
@@ -2376,6 +2394,85 @@ export default function DevicesPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Section Flash Firmware */}
+                      {(isAdmin || user?.role_name === 'technicien') && firmwares.length > 0 && (
+                        <div className="card">
+                          <h3 className="text-lg font-semibold mb-4">📦 Flash Firmware</h3>
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Sélectionner un firmware
+                              </label>
+                              <select
+                                className="input w-full"
+                                value={selectedFirmwareVersion}
+                                onChange={(e) => setSelectedFirmwareVersion(e.target.value)}
+                              >
+                                <option value="">-- Choisir un firmware --</option>
+                                {firmwares
+                                  .filter(fw => fw.status === 'compiled')
+                                  .map((fw) => (
+                                    <option key={fw.id} value={fw.version}>
+                                      v{fw.version} {fw.is_stable ? '✅ Stable' : '⚠️ Beta'} - {(fw.file_size / 1024).toFixed(2)} KB
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+
+                            {selectedFirmwareVersion && (
+                              <div className="flex flex-wrap gap-3">
+                                {/* Flash via OTA si dispositif en ligne */}
+                                {selectedDevice.status === 'active' && selectedDevice.last_seen && 
+                                 new Date(selectedDevice.last_seen) > new Date(Date.now() - 10 * 60 * 1000) && (
+                                  <button
+                                    onClick={() => handleOtaDeploy(selectedDevice.id, selectedFirmwareVersion)}
+                                    disabled={otaDeploying[selectedDevice.id]}
+                                    className="btn-primary flex-1 min-w-[150px]"
+                                  >
+                                    {otaDeploying[selectedDevice.id] ? (
+                                      <>⏳ OTA en cours...</>
+                                    ) : (
+                                      <>📡 Flasher via OTA</>
+                                    )}
+                                  </button>
+                                )}
+
+                                {/* Flash via USB si dispositif connecté */}
+                                {isSelectedDeviceUsbConnected() && (
+                                  <button
+                                    onClick={() => {
+                                      setDeviceForFlash(selectedDevice)
+                                      setShowFlashUSBModal(true)
+                                    }}
+                                    className="btn-primary flex-1 min-w-[150px]"
+                                  >
+                                    🔌 Flasher via USB
+                                  </button>
+                                )}
+
+                                {!isSelectedDeviceUsbConnected() && 
+                                 (!selectedDevice.last_seen || new Date(selectedDevice.last_seen) <= new Date(Date.now() - 10 * 60 * 1000)) && (
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    ⚠️ Le dispositif doit être en ligne (OTA) ou connecté en USB pour flasher
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {otaMessage && (
+                              <div className="alert alert-success">
+                                {otaMessage}
+                              </div>
+                            )}
+                            {otaError && (
+                              <div className="alert alert-warning">
+                                {otaError}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -2892,6 +2989,7 @@ export default function DevicesPage() {
           setDeviceForFlash(null)
         }}
         device={deviceForFlash || usbVirtualDevice || usbConnectedDevice}
+        preselectedFirmwareVersion={selectedFirmwareVersion}
       />
 
       {/* Modal Upload Firmware */}
