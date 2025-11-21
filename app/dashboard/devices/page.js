@@ -189,35 +189,39 @@ export default function DevicesPage() {
     { requiresAuth: true }
   )
 
-  // Configurer le callback pour envoyer les mesures USB à l'API
+  // Configurer le callback pour envoyer les mesures USB à l'API avec queue et retry
   useEffect(() => {
     const sendMeasurementToApi = async (measurementData) => {
-      try {
-        const response = await fetchWithAuth(`${API_URL}/api.php/devices/measurements`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(measurementData)
-        }, { requiresAuth: true })
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
-        }
-        
-        const data = await response.json()
-        if (data.success) {
-          // Rafraîchir les données pour mettre à jour les informations du dispositif
-          refetch()
-        }
-      } catch (err) {
-        logger.error('Erreur envoi mesure USB à l\'API:', err)
+      const response = await fetchWithAuth(`${API_URL}/api.php/devices/measurements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(measurementData)
+      }, { requiresAuth: true })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
       }
+      
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.error || 'Erreur API')
+      }
+      
+      // Rafraîchir les données pour mettre à jour les informations du dispositif
+      refetch()
     }
     
     setSendMeasurementCallback(sendMeasurementToApi)
     
+    // Démarrer le traitement de la queue des mesures en attente
+    const { startQueueProcessor, stopQueueProcessor } = await import('@/lib/measurementSender')
+    const stopProcessor = startQueueProcessor(sendMeasurementToApi, { interval: 30000 })
+    
     return () => {
       setSendMeasurementCallback(null)
+      stopProcessor()
+      stopQueueProcessor()
     }
   }, [fetchWithAuth, API_URL, refetch, setSendMeasurementCallback])
 
@@ -456,6 +460,26 @@ export default function DevicesPage() {
         })
         if (foundDevice) {
           logger.log('✅ Dispositif trouvé par Serial:', foundDevice.device_name || foundDevice.device_serial)
+        }
+      }
+      
+      // Chercher par device_name (USB-xxx:yyy) si pas trouvé par ICCID/Serial
+      if (!foundDevice && portInfo.usbVendorId && portInfo.usbProductId) {
+        const usbId = `${portInfo.usbVendorId.toString(16)}:${portInfo.usbProductId.toString(16)}`
+        foundDevice = currentDevices.find(d => {
+          if (!d.device_name) return false
+          // Chercher par USB-xxx:yyy dans le nom
+          const nameMatch = d.device_name.match(/USB-([a-f0-9:]+)/i)
+          if (nameMatch && nameMatch[1]) {
+            return nameMatch[1].toLowerCase() === usbId.toLowerCase() || 
+                   nameMatch[1].toLowerCase().includes(usbId.toLowerCase()) ||
+                   usbId.toLowerCase().includes(nameMatch[1].toLowerCase())
+          }
+          // Correspondance directe
+          return d.device_name.toLowerCase().includes(usbId.toLowerCase())
+        })
+        if (foundDevice) {
+          logger.log('✅ Dispositif trouvé par device_name (USB ID):', foundDevice.device_name)
         }
       }
 

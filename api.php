@@ -1316,9 +1316,27 @@ function handlePostMeasurement() {
         $pdo->beginTransaction();
         
         try {
+            // Chercher d'abord par sim_iccid
             $stmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE sim_iccid = :iccid FOR UPDATE");
             $stmt->execute(['iccid' => $iccid]);
             $device = $stmt->fetch();
+            
+            // Si pas trouvé, chercher par device_name (pour les dispositifs USB-xxx:yyy)
+            if (!$device) {
+                $stmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE device_name = :iccid OR device_name LIKE :iccid_pattern FOR UPDATE");
+                $stmt->execute([
+                    'iccid' => $iccid,
+                    'iccid_pattern' => '%' . $iccid . '%'
+                ]);
+                $device = $stmt->fetch();
+            }
+            
+            // Si toujours pas trouvé, chercher par device_serial
+            if (!$device) {
+                $stmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE device_serial = :iccid FOR UPDATE");
+                $stmt->execute(['iccid' => $iccid]);
+                $device = $stmt->fetch();
+            }
             
             if (!$device) {
                 // Enregistrement automatique du nouveau dispositif avec paramètres par défaut
@@ -1400,14 +1418,30 @@ function handlePostMeasurement() {
             // Gérer les contraintes uniques (race condition)
             if ($e->getCode() == 23000) {
                 // Contrainte unique violée (dispositif créé entre-temps par une autre requête)
-                // Réessayer une fois
-                try {
-                    $pdo->beginTransaction();
-                    $retryStmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE sim_iccid = :iccid");
-                    $retryStmt->execute(['iccid' => $iccid]);
-                    $device = $retryStmt->fetch();
-                    
-                    if ($device) {
+                    // Réessayer une fois
+                    try {
+                        $pdo->beginTransaction();
+                        // Chercher par sim_iccid, puis device_name, puis device_serial
+                        $retryStmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE sim_iccid = :iccid");
+                        $retryStmt->execute(['iccid' => $iccid]);
+                        $device = $retryStmt->fetch();
+                        
+                        if (!$device) {
+                            $retryStmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE device_name = :iccid OR device_name LIKE :iccid_pattern");
+                            $retryStmt->execute([
+                                'iccid' => $iccid,
+                                'iccid_pattern' => '%' . $iccid . '%'
+                            ]);
+                            $device = $retryStmt->fetch();
+                        }
+                        
+                        if (!$device) {
+                            $retryStmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE device_serial = :iccid");
+                            $retryStmt->execute(['iccid' => $iccid]);
+                            $device = $retryStmt->fetch();
+                        }
+                        
+                        if ($device) {
                         $device_id = $device['id'];
                         // Continuer avec la mise à jour et l'insertion de la mesure
                         $updateParams = ['battery' => $battery, 'id' => $device_id, 'timestamp' => $timestampValue];

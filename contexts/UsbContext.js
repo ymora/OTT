@@ -63,19 +63,46 @@ export function UsbProvider({ children }) {
     return selectedPort
   }, [connect, isConnected, isSupported, port, requestPort])
 
-  // Fonction pour envoyer une mesure à l'API
+  // Fonction pour envoyer une mesure à l'API avec retry et validation
   const sendMeasurementToApi = useCallback(async (measurement, device) => {
-    if (!device || !sendMeasurementToApiRef.current) return
+    if (!device || !sendMeasurementToApiRef.current) {
+      logger.debug('⚠️ Pas de dispositif ou callback pour envoyer la mesure USB')
+      return
+    }
     
     try {
-      const simIccid = device.sim_iccid || device.device_serial || device.device_name
-      if (!simIccid) {
-        logger.warn('Impossible d\'envoyer la mesure USB: pas d\'ICCID disponible')
+      // Priorité : sim_iccid > device_serial > device_name (pour USB-xxx)
+      let simIccid = device.sim_iccid
+      
+      // Si pas d'ICCID, utiliser device_serial
+      if (!simIccid || simIccid === 'N/A' || simIccid.length < 10) {
+        simIccid = device.device_serial
+        logger.debug('📝 Utilisation device_serial comme ICCID:', simIccid)
+      }
+      
+      // Si toujours pas d'identifiant valide, utiliser device_name (pour USB-xxx:yyy)
+      if (!simIccid || simIccid === 'N/A') {
+        // Extraire l'identifiant du nom USB-xxx:yyy
+        const nameMatch = device.device_name?.match(/USB-([a-f0-9:]+)/i)
+        if (nameMatch && nameMatch[1]) {
+          simIccid = nameMatch[1]
+          logger.debug('📝 Utilisation device_name comme ICCID:', simIccid)
+        } else {
+          simIccid = device.device_name
+        }
+      }
+      
+      if (!simIccid || simIccid === 'N/A') {
+        logger.warn('❌ Impossible d\'envoyer la mesure USB: pas d\'identifiant disponible', {
+          device_name: device.device_name,
+          sim_iccid: device.sim_iccid,
+          device_serial: device.device_serial
+        })
         return
       }
 
       const measurementData = {
-        sim_iccid: simIccid,
+        sim_iccid: String(simIccid).trim(),
         flowrate: measurement.flowrate ?? 0,
         battery: measurement.battery ?? null,
         rssi: measurement.rssi ?? null,
@@ -84,10 +111,21 @@ export function UsbProvider({ children }) {
         status: 'USB'
       }
 
-      await sendMeasurementToApiRef.current(measurementData)
-      logger.debug('✅ Mesure USB envoyée à l\'API:', measurementData)
+      logger.debug('📤 Envoi mesure USB à l\'API:', measurementData)
+      
+      // Utiliser le système robuste d'envoi avec retry
+      const { sendMeasurementWithRetry } = await import('@/lib/measurementSender')
+      const result = await sendMeasurementWithRetry(measurementData, sendMeasurementToApiRef.current)
+      
+      if (result.success) {
+        logger.debug('✅ Mesure USB envoyée avec succès')
+      } else if (result.queued) {
+        logger.info('📦 Mesure USB mise en queue pour retry ultérieur')
+      } else {
+        logger.warn('⚠️ Échec envoi mesure USB:', result.error)
+      }
     } catch (err) {
-      logger.error('Erreur envoi mesure USB à l\'API:', err)
+      logger.error('❌ Erreur envoi mesure USB à l\'API:', err, { device })
     }
   }, [])
 

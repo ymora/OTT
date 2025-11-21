@@ -22,7 +22,9 @@ COPY api.php /var/www/html/
 COPY index.php /var/www/html/
 COPY bootstrap /var/www/html/bootstrap
 COPY sql /var/www/html/sql
-COPY public/DOCUMENTATION_COMPLETE_OTT.html /var/www/html/public/DOCUMENTATION_COMPLETE_OTT.html
+COPY public/DOCUMENTATION_PRESENTATION.html /var/www/html/public/DOCUMENTATION_PRESENTATION.html
+COPY public/DOCUMENTATION_DEVELOPPEURS.html /var/www/html/public/DOCUMENTATION_DEVELOPPEURS.html
+COPY public/DOCUMENTATION_COMMERCIALE.html /var/www/html/public/DOCUMENTATION_COMMERCIALE.html
 
 # Vérifier que les fichiers critiques sont bien copiés
 RUN ls -la /var/www/html/ && head -5 /var/www/html/index.php
