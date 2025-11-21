@@ -75,7 +75,8 @@ export default function DevicesPage() {
     usbStreamLastMeasurement,
     startUsbStreaming,
     stopUsbStreaming,
-    ensurePortReady
+    ensurePortReady,
+    setSendMeasurementCallback
   } = useUsb()
   
   const [searchTerm, setSearchTerm] = useState('')
@@ -187,6 +188,38 @@ export default function DevicesPage() {
     ['/api.php/devices', '/api.php/patients', '/api.php/firmwares'],
     { requiresAuth: true }
   )
+
+  // Configurer le callback pour envoyer les mesures USB à l'API
+  useEffect(() => {
+    const sendMeasurementToApi = async (measurementData) => {
+      try {
+        const response = await fetchWithAuth(`${API_URL}/api.php/devices/measurements`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(measurementData)
+        }, { requiresAuth: true })
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
+        }
+        
+        const data = await response.json()
+        if (data.success) {
+          // Rafraîchir les données pour mettre à jour les informations du dispositif
+          refetch()
+        }
+      } catch (err) {
+        logger.error('Erreur envoi mesure USB à l\'API:', err)
+      }
+    }
+    
+    setSendMeasurementCallback(sendMeasurementToApi)
+    
+    return () => {
+      setSendMeasurementCallback(null)
+    }
+  }, [fetchWithAuth, API_URL, refetch, setSendMeasurementCallback])
 
   // Rafraîchissement automatique toutes les 30 secondes
   useEffect(() => {
@@ -902,11 +935,33 @@ export default function DevicesPage() {
     }
   }, [isSupported, detectDeviceOnPort, setAutoDetecting])
 
+  // Vérifier si un dispositif est connecté en USB
+  const isDeviceUsbConnected = useCallback((device) => {
+    if (!device) return false
+    if (usbConnectedDevice && device.id && usbConnectedDevice.id === device.id) return true
+    if (usbVirtualDevice && device.isVirtual && device.id === usbVirtualDevice.id) return true
+    if (usbConnectedDevice && device.sim_iccid && usbConnectedDevice.sim_iccid === device.sim_iccid) return true
+    if (usbVirtualDevice && device.sim_iccid && usbVirtualDevice.sim_iccid === device.sim_iccid) return true
+    return false
+  }, [usbConnectedDevice, usbVirtualDevice])
+
+  // Vérifier si un dispositif est en ligne
+  const isDeviceOnline = useCallback((device) => {
+    if (!device || !device.last_seen) return false
+    const hoursSince = (Date.now() - new Date(device.last_seen).getTime()) / (1000 * 60 * 60)
+    return hoursSince < 2 // En ligne si vu il y a moins de 2 heures
+  }, [])
+
   // Vérifier si un dispositif peut recevoir une mise à jour OTA
   const canReceiveOTA = useCallback((device) => {
     // Dispositif virtuel USB ne peut pas recevoir OTA (seulement USB)
     if (device.isVirtual) {
       return { can: false, reason: 'Dispositif USB virtuel - utilisez le flash USB' }
+    }
+    
+    // Vérifier si le dispositif est en ligne
+    if (!isDeviceOnline(device)) {
+      return { can: false, reason: 'Dispositif hors ligne - le dispositif doit être en ligne pour recevoir une mise à jour OTA' }
     }
     
     // Vérifier si OTA déjà en cours
@@ -1938,7 +1993,8 @@ export default function DevicesPage() {
                       </td>
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
-                            {selectedFirmwareVersion && (needsUpdate || device.firmware_version === 'N/A' || device.firmware_version === 'n/a') ? (() => {
+                            {/* Afficher l'icône OTA uniquement si le dispositif est en ligne */}
+                            {isDeviceOnline(device) && selectedFirmwareVersion && (needsUpdate || device.firmware_version === 'N/A' || device.firmware_version === 'n/a') ? (() => {
                               const otaCheck = canReceiveOTA(device)
                               const isDisabled = isDeploying || !otaCheck.can
                               return (
@@ -1959,26 +2015,24 @@ export default function DevicesPage() {
                                   {isDeploying ? '⏳' : '📡 OTA'}
                                 </button>
                               )
-                            })() : selectedFirmwareVersion && !needsUpdate && device.firmware_version !== 'N/A' && device.firmware_version !== 'n/a' ? (
+                            })() : isDeviceOnline(device) && selectedFirmwareVersion && !needsUpdate && device.firmware_version !== 'N/A' && device.firmware_version !== 'n/a' ? (
                               <span className="text-xs text-gray-400">✓ À jour</span>
                             ) : null}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                // Pour les dispositifs virtuels, ne pas passer device (sera pris automatiquement)
-                                setDeviceForFlash(device.isVirtual ? null : device)
-                                setShowFlashUSBModal(true)
-                              }}
-                              className={`text-xs px-3 py-1 ${
-                                (device.isVirtual && !isConnected)
-                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                                  : 'btn-primary'
-                              }`}
-                              title="Flash USB local : mise à jour via câble USB (nécessite connexion physique)"
-                              disabled={device.isVirtual && !isConnected}
-                            >
-                              📡 USB
-                            </button>
+                            {/* Afficher l'icône USB uniquement si le dispositif est connecté en USB */}
+                            {isDeviceUsbConnected(device) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  // Pour les dispositifs virtuels, ne pas passer device (sera pris automatiquement)
+                                  setDeviceForFlash(device.isVirtual ? null : device)
+                                  setShowFlashUSBModal(true)
+                                }}
+                                className="text-xs px-3 py-1 btn-primary"
+                                title="Flash USB local : mise à jour via câble USB (nécessite connexion physique)"
+                              >
+                                📡 USB
+                              </button>
+                            )}
                           </div>
                         </td>
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>

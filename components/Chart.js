@@ -56,9 +56,30 @@ export default function Chart({ data = [], type }) {
     }]
   }
 
+  // Calculer les statistiques
+  const values = limitedData.map(d => type === 'flowrate'
+    ? Number(d.flowrate ?? d.value ?? 0)
+    : Number(d.battery ?? d.last_battery ?? 0)
+  ).filter(v => !isNaN(v) && v !== null && v !== undefined)
+  
+  const stats = values.length > 0 ? {
+    min: Math.min(...values),
+    max: Math.max(...values),
+    avg: values.reduce((a, b) => a + b, 0) / values.length,
+    last: values[values.length - 1]
+  } : null
+
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: {
+        top: 10,
+        bottom: 10,
+        left: 10,
+        right: 10
+      }
+    },
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -66,11 +87,33 @@ export default function Chart({ data = [], type }) {
         padding: 12,
         titleFont: { size: 14 },
         bodyFont: { size: 13 },
+        callbacks: {
+          label: (context) => {
+            const value = context.parsed.y
+            const unit = type === 'flowrate' ? ' L/min' : '%'
+            return `${value.toFixed(2)}${unit}`
+          }
+        }
       }
     },
     scales: {
-      y: { beginAtZero: true, grid: { color: 'rgba(0, 0, 0, 0.05)' } },
-      x: { grid: { display: false } }
+      y: { 
+        beginAtZero: type === 'battery',
+        min: type === 'flowrate' && stats ? Math.max(0, stats.min - (stats.max - stats.min) * 0.1) : undefined,
+        max: type === 'flowrate' && stats ? stats.max + (stats.max - stats.min) * 0.1 : undefined,
+        grid: { color: 'rgba(0, 0, 0, 0.05)' },
+        ticks: {
+          maxTicksLimit: 6
+        }
+      },
+      x: { 
+        grid: { display: false },
+        ticks: {
+          maxTicksLimit: 8,
+          maxRotation: 45,
+          minRotation: 0
+        }
+      }
     },
     animation: {
       duration: 1000,
@@ -79,8 +122,20 @@ export default function Chart({ data = [], type }) {
   }
 
   return (
-    <div className="h-64">
-      <Line data={chartData} options={options} />
+    <div className="space-y-2">
+      {stats && (
+        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 px-2">
+          <div className="flex gap-4">
+            <span>Min: <strong>{stats.min.toFixed(2)}{type === 'flowrate' ? ' L/min' : '%'}</strong></span>
+            <span>Max: <strong>{stats.max.toFixed(2)}{type === 'flowrate' ? ' L/min' : '%'}</strong></span>
+            <span>Moy: <strong>{stats.avg.toFixed(2)}{type === 'flowrate' ? ' L/min' : '%'}</strong></span>
+            <span>Dernier: <strong>{stats.last.toFixed(2)}{type === 'flowrate' ? ' L/min' : '%'}</strong></span>
+          </div>
+        </div>
+      )}
+      <div className="h-48">
+        <Line data={chartData} options={options} />
+      </div>
     </div>
   )
 }

@@ -26,6 +26,7 @@ export function UsbProvider({ children }) {
   
   const usbStreamStopRef = useRef(null)
   const usbStreamBufferRef = useRef('')
+  const sendMeasurementToApiRef = useRef(null) // Callback pour envoyer les mesures à l'API
 
   // Fonction pour ajouter un log USB
   const appendUsbStreamLog = useCallback((line) => {
@@ -62,6 +63,34 @@ export function UsbProvider({ children }) {
     return selectedPort
   }, [connect, isConnected, isSupported, port, requestPort])
 
+  // Fonction pour envoyer une mesure à l'API
+  const sendMeasurementToApi = useCallback(async (measurement, device) => {
+    if (!device || !sendMeasurementToApiRef.current) return
+    
+    try {
+      const simIccid = device.sim_iccid || device.device_serial || device.device_name
+      if (!simIccid) {
+        logger.warn('Impossible d\'envoyer la mesure USB: pas d\'ICCID disponible')
+        return
+      }
+
+      const measurementData = {
+        sim_iccid: simIccid,
+        flowrate: measurement.flowrate ?? 0,
+        battery: measurement.battery ?? null,
+        rssi: measurement.rssi ?? null,
+        firmware_version: device.firmware_version || measurement.raw?.firmware_version || null,
+        timestamp: new Date(measurement.timestamp).toISOString(),
+        status: 'USB'
+      }
+
+      await sendMeasurementToApiRef.current(measurementData)
+      logger.debug('✅ Mesure USB envoyée à l\'API:', measurementData)
+    } catch (err) {
+      logger.error('Erreur envoi mesure USB à l\'API:', err)
+    }
+  }, [])
+
   // Traitement des lignes de streaming USB
   const processUsbStreamLine = useCallback((line) => {
     if (!line) return
@@ -94,6 +123,13 @@ export function UsbProvider({ children }) {
           setUsbStreamLastUpdate(Date.now())
           setUsbStreamError(null)
           setUsbStreamStatus('running')
+          
+          // Envoyer la mesure à l'API si un dispositif USB est connecté
+          const currentDevice = usbConnectedDevice || usbVirtualDevice
+          if (currentDevice) {
+            sendMeasurementToApi(measurement, currentDevice)
+          }
+          
           return
         }
       } catch (err) {
@@ -101,7 +137,7 @@ export function UsbProvider({ children }) {
         return
       }
     }
-  }, [appendUsbStreamLog])
+  }, [appendUsbStreamLog, sendMeasurementToApi, usbConnectedDevice, usbVirtualDevice])
 
   // Gestion des chunks de streaming
   const handleUsbStreamChunk = useCallback((chunk) => {
@@ -212,6 +248,11 @@ export function UsbProvider({ children }) {
     }
   }, [stopUsbStreaming])
 
+  // Fonction pour configurer le callback d'envoi des mesures à l'API
+  const setSendMeasurementCallback = useCallback((callback) => {
+    sendMeasurementToApiRef.current = callback
+  }, [])
+
   const value = {
     // État USB
     usbConnectedDevice,
@@ -246,6 +287,7 @@ export function UsbProvider({ children }) {
     disconnect,
     startReading,
     write,
+    setSendMeasurementCallback,
   }
 
   return (

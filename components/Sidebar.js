@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { withBasePath } from '@/lib/utils'
 
@@ -39,6 +39,7 @@ const menuStructure = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { user } = useAuth()
   const [isDocsOpen, setIsDocsOpen] = useState(false)
   
@@ -55,9 +56,9 @@ export default function Sidebar() {
   }, [pathname])
   
   const documentationLinks = [
-    { name: 'Présentation', icon: '📸', href: '/DOCUMENTATION_PRESENTATION.html' },
-    { name: 'Développeurs', icon: '💻', href: '/DOCUMENTATION_DEVELOPPEURS.html' },
-    { name: 'Commerciale', icon: '💼', href: '/DOCUMENTATION_COMMERCIALE.html' },
+    { name: 'Présentation', icon: '📸', doc: 'presentation' },
+    { name: 'Développeurs', icon: '💻', doc: 'developpeurs' },
+    { name: 'Commerciale', icon: '💼', doc: 'commerciale' },
   ]
 
   return (
@@ -98,9 +99,19 @@ export default function Sidebar() {
       {/* Footer Sidebar - Menu déroulant Documentation */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white/90 via-primary-50/30 to-transparent dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-transparent backdrop-blur-sm">
         <div className="relative">
-          <button
-            onClick={() => setIsDocsOpen(!isDocsOpen)}
-            className="w-full flex items-center justify-between gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30 text-sm font-medium"
+          <div
+            className={`w-full flex items-center justify-between gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm text-sm font-medium cursor-pointer ${
+              normalizedPathname === '/dashboard/documentation'
+                ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white'
+                : 'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30'
+            }`}
+            onClick={() => {
+              if (normalizedPathname !== '/dashboard/documentation') {
+                router.push('/dashboard/documentation?doc=presentation')
+              } else {
+                setIsDocsOpen(!isDocsOpen)
+              }
+            }}
           >
             <div className="flex items-center gap-2">
               <span>📚</span>
@@ -109,23 +120,35 @@ export default function Sidebar() {
             <span className={`transition-transform duration-300 ${isDocsOpen ? 'rotate-180' : ''}`}>
               ▼
             </span>
-          </button>
+          </div>
           
           {isDocsOpen && (
             <div className="mt-2 space-y-1 animate-fade-in">
-              {documentationLinks.map((doc) => (
-                <a
-                  key={doc.href}
-                  href={withBasePath(doc.href)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30 text-sm"
-                  onClick={() => setIsDocsOpen(false)}
-                >
-                  <span>{doc.icon}</span>
-                  <span className="font-medium">{doc.name}</span>
-                </a>
-              ))}
+              {documentationLinks.map((doc) => {
+                const currentDoc = typeof window !== 'undefined' 
+                  ? new URLSearchParams(window.location.search).get('doc') || 'presentation'
+                  : 'presentation'
+                const isActive = normalizedPathname === '/dashboard/documentation' && currentDoc === doc.doc
+                
+                return (
+                  <Link
+                    key={doc.doc}
+                    href={`/dashboard/documentation?doc=${doc.doc}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm text-sm ${
+                      isActive
+                        ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white'
+                        : 'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30'
+                    }`}
+                    onClick={() => setIsDocsOpen(false)}
+                  >
+                    <span>{doc.icon}</span>
+                    <span className="font-medium">{doc.name}</span>
+                    {isActive && (
+                      <div className="ml-auto w-2 h-2 bg-white/90 dark:bg-slate-800 rounded-full animate-pulse"></div>
+                    )}
+                  </Link>
+                )
+              })}
             </div>
           )}
         </div>
