@@ -980,7 +980,6 @@ export default function DevicesPage() {
       // Recharger les dispositifs
       await refetch()
       notifyDevicesUpdated()
-      notifyDevicesUpdated()
     } catch (err) {
       // Extraire le message d'erreur de la réponse API si disponible
       const errorMessage = err.message || 'Erreur lors du déploiement OTA'

@@ -31,7 +31,8 @@ export default function DashboardPage() {
     return (data?.alerts?.alerts || []).filter(a => a.status === 'unresolved')
   }, [data])
 
-  const stats = {
+  // Mémoriser les calculs coûteux pour éviter les recalculs inutiles
+  const stats = useMemo(() => ({
     totalDevices: devices.length,
     activeDevices: devices.filter(d => {
       // Gérer les valeurs null, undefined ou invalides
@@ -47,9 +48,20 @@ export default function DashboardPage() {
       const battery = d.last_battery
       return battery !== null && battery !== undefined && battery < 30
     }).length
-  }
+  }), [devices, alerts])
 
-  const unassignedDevices = devices.filter(d => !d.first_name && !d.last_name)
+  const unassignedDevices = useMemo(() => 
+    devices.filter(d => !d.first_name && !d.last_name),
+    [devices]
+  )
+  
+  const lowBatteryList = useMemo(() => 
+    devices.filter(d => {
+      const battery = d.last_battery
+      return battery !== null && battery !== undefined && battery < 30
+    }),
+    [devices]
+  )
 
   if (loading) {
     return (
@@ -63,11 +75,16 @@ export default function DashboardPage() {
     )
   }
 
-  const criticalItems = alerts.filter(a => a.severity === 'critical' || a.severity === 'high')
-  const lowBatteryList = devices.filter(d => {
-    const battery = d.last_battery
-    return battery !== null && battery !== undefined && battery < 30
-  }).slice(0, 5)
+  const criticalItems = useMemo(() => 
+    alerts.filter(a => a.severity === 'critical' || a.severity === 'high'),
+    [alerts]
+  )
+  
+  // Limiter à 5 pour l'affichage
+  const lowBatteryListDisplay = useMemo(() => 
+    lowBatteryList.slice(0, 5),
+    [lowBatteryList]
+  )
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -142,7 +159,7 @@ export default function DashboardPage() {
                   <div className="border-l-4 border-orange-500 pl-4">
                     <h3 className="font-semibold text-orange-600 dark:text-orange-400 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
                     <div className="space-y-2">
-                      {lowBatteryList.map(device => {
+                      {lowBatteryListDisplay.map(device => {
                         const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
                         return (
                           <div key={device.id} className="text-sm">

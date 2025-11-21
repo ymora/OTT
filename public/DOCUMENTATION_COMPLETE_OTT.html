@@ -242,9 +242,11 @@
         <li><a href="#firmware">🔧 Firmware ESP32</a></li>
         <li><a href="#api">🔌 API Backend</a></li>
         <li><a href="#dashboard-react">⚛️ Dashboard React</a></li>
+        <li><a href="#screenshots">📸 Captures d'Écran</a></li>
         <li><a href="#deployment">☁️ Déploiement</a></li>
         <li><a href="#security">🔒 Sécurité</a></li>
         <li><a href="#troubleshooting">🐛 Dépannage</a></li>
+        <li><a href="#roadmap">🚀 Roadmap</a></li>
     </ul>
 </nav>
 
@@ -272,21 +274,22 @@
         <li>✅ <strong>Mise à jour OTA</strong> (Over-The-Air) du firmware</li>
     </ul>
     
-    <h3>🆕 Améliorations V3.1</h3>
+    <h3>🆕 Améliorations V3.3</h3>
     <div class="alert alert-info">
-        <strong>Nouvelles fonctionnalités</strong>
+        <strong>Nouvelles fonctionnalités de la version 3.3</strong>
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
-            <li><strong>Menu optimisé</strong> : regroupement logique en sections déroulantes (Dispositifs, Patients & Alertes, Administration)</li>
+            <li><strong>Streaming USB en temps réel</strong> : console USB intégrée avec détection automatique (Web Serial API)</li>
+            <li><strong>UsbContext global</strong> : détection permanente des dispositifs USB, même lors de la navigation entre pages</li>
+            <li><strong>Menu simplifié</strong> : 4 pages principales avec fonctionnalités regroupées (Vue d'Ensemble, Dispositifs, Patients, Utilisateurs)</li>
             <li><strong>Vue d'ensemble réorganisée</strong> : section "Actions Requises" pour alertes critiques, batteries faibles, boîtiers non assignés</li>
-            <li><strong>Gestion utilisateurs complète</strong> : création, édition, suppression avec permissions</li>
-            <li><strong>Gestion dispositifs</strong> : assignation aux patients, filtres (assignés/non assignés)</li>
-            <li><strong>Détails patients</strong> : modale complète avec dispositif associé, statistiques, alertes, graphiques</li>
+            <li><strong>Gestion utilisateurs complète</strong> : création, édition, suppression avec permissions granulaires</li>
+            <li><strong>Gestion dispositifs</strong> : assignation aux patients, filtres (assignés/non assignés), détails complets avec onglets</li>
             <li><strong>Carte interactive</strong> : visualisation des dispositifs avec statut (batterie, en ligne/hors ligne)</li>
-            <li><strong>Indicateurs intelligents</strong> : "Batterie Faible" (compteur <30%) au lieu de moyenne</li>
+            <li><strong>PWA installable</strong> : application progressive web avec manifest.json et service worker</li>
         </ul>
     </div>
     
-    <h3>🏆 Fonctionnalités Clés V3.1</h3>
+    <h3>🏆 Fonctionnalités Clés V3.3</h3>
     
     <table>
         <thead>
@@ -372,13 +375,14 @@
         <li>📡 Firmware `fw_ott_optimized.ino`: réception de commandes (SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST), ACK automatique, intervalle de sommeil dynamique stocké en RTC.</li>
         <li>🗃️ Table `device_commands` + nouveaux endpoints (`POST /devices/{iccid}/commands`, `GET /devices/commands`, `POST /devices/commands/ack`).</li>
         <li>🖥️ Page React "Commandes" (dashboard) pour planifier/visualiser les ordres, restreinte aux admins.</li>
-        <li>🎨 <strong>Menu optimisé V3.1</strong> : regroupement en sections déroulantes (Dispositifs, Patients & Alertes, Administration).</li>
+        <li>🎨 <strong>Menu simplifié V3.3</strong> : 4 pages principales avec fonctionnalités regroupées (Vue d'Ensemble, Dispositifs, Patients, Utilisateurs).</li>
         <li>📊 <strong>Vue d'ensemble réorganisée</strong> : section "Actions Requises", indicateurs intelligents (batterie faible au lieu de moyenne).</li>
         <li>👤 <strong>Gestion utilisateurs complète</strong> : CRUD avec création, édition, suppression depuis le dashboard.</li>
-        <li>🔌 <strong>Gestion dispositifs améliorée</strong> : assignation patients, filtres, badges visuels.</li>
-        <li>👥 <strong>Détails patients</strong> : modale complète avec dispositif, statistiques, alertes, graphiques.</li>
+        <li>🔌 <strong>Gestion dispositifs améliorée</strong> : assignation patients, filtres, badges visuels, détails complets avec onglets.</li>
+        <li>🔌 <strong>Streaming USB V3.3</strong> : console USB en temps réel avec détection automatique (Web Serial API), UsbContext global.</li>
         <li>🗺️ <strong>Carte interactive</strong> : statut dynamique, informations détaillées, sélection dispositifs.</li>
-        <li>🧾 Documentation/README à jour (section bidirectionnelle, restrictions d'accès, endpoints exposés, améliorations V3.1).</li>
+        <li>📱 <strong>PWA installable V3.3</strong> : application progressive web avec manifest.json et service worker.</li>
+        <li>🧾 Documentation/README à jour (section bidirectionnelle, restrictions d'accès, endpoints exposés, améliorations V3.3).</li>
     </ul>
 
     <h3>🧱 À finaliser / prochaines actions</h3>
@@ -1710,6 +1714,27 @@ POST /api.php/devices/{iccid}/commands
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de streaming USB avec graphiques en temps réel et logs série</p>
     </div>
     
+    <h4>Modal Upload Firmware</h4>
+    <p>Le modal pour téléverser un nouveau firmware :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-upload-firmware.png" alt="Modal upload firmware" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de téléversement de firmware avec version, notes et option stable/beta</p>
+    </div>
+    
+    <h4>Modal Détails Dispositif - Onglet Alertes</h4>
+    <p>L'onglet Alertes du modal de détails dispositif :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-device-alerts.png" alt="Modal alertes dispositif" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Onglet Alertes du modal de détails avec liste des alertes du dispositif</p>
+    </div>
+    
+    <h4>Modal Détails Dispositif - Onglet Journal</h4>
+    <p>L'onglet Journal du modal de détails dispositif :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-device-logs.png" alt="Modal logs dispositif" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Onglet Journal du modal de détails avec historique des logs du dispositif</p>
+    </div>
+    
     <div class="alert alert-info">
         <strong>💡 Note :</strong> Toutes les captures d'écran sont stockées dans le dossier <code>public/screenshots/</code> et sont automatiquement incluses dans le build de production.
     </div>
@@ -2209,7 +2234,7 @@ navigator.serviceWorker.getRegistrations().then(regs => {
 <!-- ============================================== -->
 
 <section id="quality" class="section">
-    <h2>✨ Qualité du Code V3.1</h2>
+    <h2>✨ Qualité du Code V3.3</h2>
     
     <h3>🎯 Améliorations Architecturales</h3>
     
@@ -2827,7 +2852,7 @@ SELECT id, email, first_name, last_name FROM users;
             </tr>
             <tr>
                 <td>Authentification 2FA</td>
-                <td>⏳ Roadmap V3.1</td>
+                <td>⏳ Roadmap V3.4</td>
             </tr>
         </tbody>
     </table>
@@ -2976,7 +3001,23 @@ SELECT id, email, first_name, last_name FROM users;
 <section id="roadmap" class="section">
     <h2>🚀 Roadmap & Améliorations Futures</h2>
     
-    <h3>📅 Version 3.1 (Q1 2026)</h3>
+    <div class="alert alert-success">
+        <strong>✅ Version 3.3 (Actuelle - 2025)</strong><br>
+        Version actuellement déployée avec les fonctionnalités suivantes :
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li>✅ PWA installable (manifest.json, service worker)</li>
+            <li>✅ Streaming USB en temps réel avec UsbContext</li>
+            <li>✅ Détection automatique des dispositifs USB (Web Serial API)</li>
+            <li>✅ Dashboard React/Next.js complet avec authentification JWT</li>
+            <li>✅ Gestion multi-utilisateurs avec permissions granulaires</li>
+            <li>✅ API REST complète avec PostgreSQL</li>
+            <li>✅ Mise à jour OTA (Over-The-Air) du firmware</li>
+            <li>✅ Carte interactive Leaflet avec géolocalisation</li>
+            <li>✅ Système d'alertes et notifications</li>
+        </ul>
+    </div>
+    
+    <h3>📅 Version 3.4 (Q2-Q3 2025)</h3>
     
     <h4>🔐 Sécurité Avancée</h4>
     <ul>
@@ -3002,7 +3043,7 @@ SELECT id, email, first_name, last_name FROM users;
         <li>✨ Rapports programmés (hebdo, mensuel)</li>
     </ul>
     
-    <h3>📅 Version 3.3 (Q2 2026)</h3>
+    <h3>📅 Version 3.5 (Q4 2025)</h3>
     
     <h4>🧪 Tests & Qualité</h4>
     <ul>

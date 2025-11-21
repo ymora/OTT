@@ -1,6 +1,8 @@
 'use client'
 
-export default function AlertCard({ alert, delay = 0 }) {
+import { memo } from 'react'
+
+function AlertCard({ alert, delay = 0 }) {
   const severityConfig = {
     critical: { color: 'border-red-500 bg-red-50', icon: '🚨', textColor: 'text-red-700' },
     high: { color: 'border-orange-500 bg-orange-50', icon: '⚠️', textColor: 'text-orange-700' },
@@ -36,4 +38,6 @@ export default function AlertCard({ alert, delay = 0 }) {
     </div>
   )
 }
+
+export default memo(AlertCard)
 
