@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
@@ -40,6 +40,8 @@ const menuStructure = [
 export default function Sidebar() {
   const pathname = usePathname()
   const { user } = useAuth()
+  const [isDocsOpen, setIsDocsOpen] = useState(false)
+  
   const hasPermission = (permission) => {
     if (!permission) return true
     if (user?.role_name === 'admin') return true
@@ -51,6 +53,12 @@ export default function Sidebar() {
     if (!pathname) return ''
     return pathname
   }, [pathname])
+  
+  const documentationLinks = [
+    { name: 'Présentation', icon: '📸', href: '/DOCUMENTATION_PRESENTATION.html' },
+    { name: 'Développeurs', icon: '💻', href: '/DOCUMENTATION_DEVELOPPEURS.html' },
+    { name: 'Commerciale', icon: '💼', href: '/DOCUMENTATION_COMMERCIALE.html' },
+  ]
 
   return (
     <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-gradient-to-b from-white via-white to-primary-50/20 dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-[rgb(var(--night-blue-start))] border-r border-gray-200/80 dark:border-[rgb(var(--night-border))] overflow-y-auto backdrop-blur-sm">
@@ -87,19 +95,40 @@ export default function Sidebar() {
         })}
       </nav>
       
-      {/* Footer Sidebar */}
+      {/* Footer Sidebar - Menu déroulant Documentation */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white/90 via-primary-50/30 to-transparent dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-transparent backdrop-blur-sm">
-        <Link
-          href="/dashboard/documentation"
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm ${
-            normalizedPathname === '/dashboard/documentation'
-              ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white'
-              : 'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30'
-          }`}
-        >
-          <span>📖</span>
-          <span className="text-sm font-medium">Documentation</span>
-        </Link>
+        <div className="relative">
+          <button
+            onClick={() => setIsDocsOpen(!isDocsOpen)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30 text-sm font-medium"
+          >
+            <div className="flex items-center gap-2">
+              <span>📚</span>
+              <span>Documentation</span>
+            </div>
+            <span className={`transition-transform duration-300 ${isDocsOpen ? 'rotate-180' : ''}`}>
+              ▼
+            </span>
+          </button>
+          
+          {isDocsOpen && (
+            <div className="mt-2 space-y-1 animate-fade-in">
+              {documentationLinks.map((doc) => (
+                <a
+                  key={doc.href}
+                  href={withBasePath(doc.href)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30 text-sm"
+                  onClick={() => setIsDocsOpen(false)}
+                >
+                  <span>{doc.icon}</span>
+                  <span className="font-medium">{doc.name}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   )
