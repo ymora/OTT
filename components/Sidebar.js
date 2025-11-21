@@ -74,6 +74,13 @@ export default function Sidebar() {
         {menuStructure.map((item) => {
           if (!hasPermission(item.permission)) return null
           
+          // Vérification spéciale pour le menu Firmware (admin ou technicien uniquement)
+          if (item.path === '/dashboard/firmware-upload') {
+            if (user?.role_name !== 'admin' && user?.role_name !== 'technicien') {
+              return null
+            }
+          }
+          
           // Logique d'activation : pour /dashboard, seulement si exactement /dashboard
           // Pour les autres, si le pathname correspond exactement ou commence par le path + '/'
           const isActive = item.path === '/dashboard'
