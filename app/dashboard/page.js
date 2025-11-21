@@ -63,6 +63,18 @@ export default function DashboardPage() {
     [devices]
   )
 
+  // Tous les hooks doivent être appelés avant tout return conditionnel
+  const criticalItems = useMemo(() => 
+    alerts.filter(a => a.severity === 'critical' || a.severity === 'high'),
+    [alerts]
+  )
+  
+  // Limiter à 5 pour l'affichage
+  const lowBatteryListDisplay = useMemo(() => 
+    lowBatteryList.slice(0, 5),
+    [lowBatteryList]
+  )
+
   if (loading) {
     return (
       <div className="space-y-6 animate-fade-in">
@@ -74,17 +86,6 @@ export default function DashboardPage() {
       </div>
     )
   }
-
-  const criticalItems = useMemo(() => 
-    alerts.filter(a => a.severity === 'critical' || a.severity === 'high'),
-    [alerts]
-  )
-  
-  // Limiter à 5 pour l'affichage
-  const lowBatteryListDisplay = useMemo(() => 
-    lowBatteryList.slice(0, 5),
-    [lowBatteryList]
-  )
 
   return (
     <div className="space-y-6 animate-fade-in">

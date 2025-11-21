@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation Développeurs OTT V3.3 - HAPPLYZ MEDICAL</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+        
+        .nav-menu a, a {
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+        }
+        
+        body::before {
+            content: 'CONFIDENTIEL - HAPPLYZ MEDICAL SAS';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 3rem;
+            color: rgba(0, 0, 0, 0.03);
+            z-index: -1;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        
+        @media print {
+            body { display: none !important; }
+        }
+        
+        .confidential-banner {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 1500;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 3rem 2rem;
+            box-shadow: 0 3px 15px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 3.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header .subtitle {
+            font-size: 1.4rem;
+            opacity: 0.95;
+            margin-top: 0.5rem;
+        }
+        
+        .header .version-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem 1.5rem;
+            border-radius: 25px;
+            margin-top: 1rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+        
+        .nav-menu {
+            position: sticky;
+            top: 0;
+            background: #2c3e50;
+            padding: 1rem 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .nav-menu ul {
+            list-style: none;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        .nav-menu a {
+            color: white;
+            text-decoration: none;
+            padding: 0.6rem 1.2rem;
+            margin: 0.3rem;
+            border-radius: 5px;
+            transition: background 0.3s, transform 0.2s;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+        
+        .nav-menu a:hover {
+            background: #34495e;
+            transform: translateY(-2px);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .section {
+            background: white;
+            margin-bottom: 2rem;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .section h2 {
+            color: #667eea;
+            font-size: 2.2rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 0.8rem;
+        }
+        
+        .section h3 {
+            color: #764ba2;
+            font-size: 1.7rem;
+            margin: 2rem 0 1rem 0;
+        }
+        
+        .section h4 {
+            color: #667eea;
+            font-size: 1.3rem;
+            margin: 1.5rem 0 0.8rem 0;
+        }
+        
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1rem 0;
+            border-left: 4px solid #667eea;
+            font-size: 0.9rem;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e83e8c;
+        }
+        
+        .alert {
+            padding: 1.2rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            border-left: 5px solid;
+        }
+        
+        .alert-success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .alert-warning { background: #fff3cd; border-color: #ffc107; color: #856404; }
+        .alert-danger { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .alert-info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 0.9rem;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        ul, ol { margin-left: 2rem; }
+        li { margin: 0.5rem 0; }
+        
+        .footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 2rem;
+            margin-top: 3rem;
+        }
+        
+    </style>
+</head>
+<body>
+    <script>
+        // Protection contre la copie et les fuites
+        (function() {
+            // Désactiver le clic droit
+            document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+            });
+            
+            // Désactiver les raccourcis clavier de copie
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey && (e.key === 'c' || e.key === 'C' || e.key === 'a' || e.key === 'A' || e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P' || e.key === 'u' || e.key === 'U')) || 
+                    e.key === 'F12' || 
+                    (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'))) {
+                    e.preventDefault();
+                    alert('⚠️ Cette documentation est confidentielle et protégée. La copie est interdite.');
+                    return false;
+                }
+            });
+            
+            // Désactiver le glisser-déposer
+            document.addEventListener('dragstart', function(e) {
+                e.preventDefault();
+                return false;
+            });
+            
+            // Avertissement au chargement
+            window.addEventListener('load', function() {
+                console.log('%c⚠️ ATTENTION', 'color: red; font-size: 50px; font-weight: bold;');
+                console.log('%cCette documentation est confidentielle et propriété de HAPPLYZ MEDICAL SAS. Toute reproduction, copie ou diffusion non autorisée est strictement interdite et peut entraîner des poursuites judiciaires.', 'color: red; font-size: 16px;');
+            });
+        })();
+    </script>
+
+<div class="confidential-banner">
+    ⚠️ DOCUMENTATION CONFIDENTIELLE - PROPRIÉTÉ DE HAPPLYZ MEDICAL SAS - TOUTE REPRODUCTION INTERDITE - BREVET EN COURS
+</div>
+
+<div class="header">
+    <h1>🏥 OTT - Dispositif Médical IoT</h1>
+    <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
+    <div class="version-badge">Version 3.3 - Documentation Développeurs</div>
+    <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
+</div>
+
+<nav class="nav-menu">
+    <ul>
+        <li><a href="#intro">📖 Introduction</a></li>
+        <li><a href="#architecture">🏗️ Architecture</a></li>
+        <li><a href="#firmware">🔧 Firmware ESP32</a></li>
+        <li><a href="#api">🔌 API Backend</a></li>
+        <li><a href="#dashboard">⚛️ Dashboard React</a></li>
+        <li><a href="#deployment">☁️ Déploiement</a></li>
+        <li><a href="#troubleshooting">🐛 Dépannage</a></li>
+    </ul>
+</nav>
+
+<div class="container">
+
+<section id="intro" class="section">
+    <h2>📖 Introduction</h2>
+    
+    <p style="font-size: 1.15rem; margin-bottom: 1.5rem;">
+        <strong>OTT (Oxygen Therapy Tracker)</strong> est un dispositif médical IoT complet pour le monitoring 
+        en temps réel de l'oxygénothérapie à domicile. Solution 100% cloud, sécurisée et conforme aux normes médicales.
+    </p>
+    
+    <div class="alert alert-info">
+        <strong>ℹ️ Documentation Technique</strong><br>
+        Cette documentation est réservée aux développeurs autorisés. Elle contient les détails techniques, 
+        l'architecture, les APIs, le firmware et les procédures de déploiement.
+    </div>
+    
+    <h3>🎯 Stack Technique</h3>
+    <ul>
+        <li><strong>Firmware</strong> : C++ / Arduino IDE / ESP32</li>
+        <li><strong>Backend</strong> : PHP 8.2 / PostgreSQL 14</li>
+        <li><strong>Frontend</strong> : Next.js 14 / React / Tailwind CSS</li>
+        <li><strong>Infrastructure</strong> : Render.com (API) + GitHub Pages (Dashboard)</li>
+        <li><strong>Communication</strong> : 4G/LTE (SIM7600) + HTTPS</li>
+    </ul>
+</section>
+
+<section id="architecture" class="section">
+    <h2>🏗️ Architecture Technique</h2>
+    
+    
+    <h3>📐 Vue d'Ensemble</h3>
+    
+    <pre>
+┌─────────────────┐
+│  ESP32 + SIM    │  ← Firmware C++
+│   (Dispositif)  │     • Mesure capteur MPXV7007DP
+│                 │     • Sleep profond (111j autonomie)
+└────────┬────────┘     • POST HTTPS via 4G
+         │
+         │ 4G/LTE
+         ↓
+┌─────────────────┐
+│   API PHP       │  ← Backend Render.com
+│   PostgreSQL    │     • JWT Authentication
+│   (Render.com)  │     • Multi-users + Permissions
+└────────┬────────┘     • OTA Management
+         │
+         │ REST API
+         ↓
+┌─────────────────┐
+│  Dashboard      │  ← Frontend Next.js
+│  React/Next.js  │     • 12 pages complètes
+│  (GitHub Pages) │     • PWA installable
+└─────────────────┘     • Animations modernes
+    </pre>
+    
+    <h3>🔁 Flux de données</h3>
+    <ul>
+        <li><strong>Montant (device → cloud)</strong> : le firmware mesure (débit, batterie) toutes les 5 min, propage via HTTPS/JSON vers <code>/api.php/devices/measurements</code> et <code>/logs</code>.</li>
+        <li><strong>Persisté</strong> : l'API Docker (Render) écrit en PostgreSQL (tables <code>devices</code>, <code>measurements</code>, <code>alerts</code>, <code>audit_logs</code>…), via PDO.</li>
+        <li><strong>Descendant</strong> : le Dashboard Next.js (GitHub Pages) appelle l'API (<code>NEXT_PUBLIC_API_URL</code>) pour stats, cartes, notifications, OTA.</li>
+        <li><strong>Auth</strong> : Next.js poste sur <code>/api.php/auth/login</code>, stocke le JWT (LocalStorage) et <code>fetchWithAuth</code> ajoute <code>Authorization: Bearer ...</code> à chaque requête.</li>
+    </ul>
+    
+    <h3>📁 Structure du Projet</h3>
+    
+    <div class="file-tree">
+maxime/
+├── 📱 FRONTEND (Next.js)
+│   ├── app/                      # Pages Next.js (App Router)
+│   ├── components/               # Composants réutilisables
+│   ├── contexts/                 # Contextes React (Auth, USB)
+│   └── public/                   # Assets statiques
+│
+├── 🔌 BACKEND (PHP)
+│   ├── api.php                   # API REST complète
+│   ├── sql/schema.sql            # Base PostgreSQL (14 tables)
+│   └── Dockerfile                # Container pour Render
+│
+├── 🔧 FIRMWARE (ESP32)
+│   └── fw_ott_optimized/         # Firmware ESP32
+│
+└── 📚 DOCUMENTATION
+    ├── DOCUMENTATION_PRESENTATION.html
+    ├── DOCUMENTATION_DEVELOPPEURS.html
+    └── DOCUMENTATION_COMMERCIALE.html
+    </div>
+    
+</section>
+
+<section id="firmware" class="section">
+    <h2>🔧 Firmware ESP32</h2>
+    
+    
+    <h3>📦 Matériel Requis</h3>
+    <ul>
+        <li>Carte ESP32 + Modem 4G : LILYGO TTGO T-A7670G (~40€)</li>
+        <li>Capteur de pression : MPXV7007DP (~15€)</li>
+        <li>Batterie Li-Ion : 18650 2000mAh (~5€)</li>
+        <li>Carte SIM 4G : Free Mobile (2€/mois)</li>
+    </ul>
+    
+    <h3>🔋 Optimisation Autonomie</h3>
+    <p>Le firmware est optimisé pour une <strong>autonomie de 111 jours</strong> sur batterie 2000mAh grâce au deep sleep ESP32.</p>
+</section>
+
+<section id="api" class="section">
+    <h2>🔌 API Backend (PHP + PostgreSQL)</h2>
+    
+    
+    <h3>📊 Base de Données PostgreSQL</h3>
+    <p>Le schéma comprend <strong>14 tables</strong> : devices, patients, measurements, alerts, device_logs, users, roles, permissions, etc.</p>
+    
+    <h3>🔐 Authentification JWT</h3>
+    <p>L'API utilise <strong>JWT (JSON Web Tokens)</strong> pour l'authentification avec expiration 24h.</p>
+    
+    <h3>🌐 Endpoints API Principaux</h3>
+    <ul>
+        <li><code>GET/POST/PUT/DELETE /api.php/devices</code> - Gestion des dispositifs</li>
+        <li><code>GET/POST/PUT/DELETE /api.php/patients</code> - Gestion des patients</li>
+        <li><code>POST /api.php/measurements</code> - Enregistrement des mesures</li>
+        <li><code>GET/POST /api.php/alerts</code> - Gestion des alertes</li>
+        <li><code>GET/POST/PUT/DELETE /api.php/users</code> - Gestion des utilisateurs (admin only)</li>
+    </ul>
+</section>
+
+<section id="dashboard" class="section">
+    <h2>⚛️ Dashboard React (Next.js 14)</h2>
+    
+    
+    <h3>🎨 Technologies Utilisées</h3>
+    <ul>
+        <li><strong>Next.js 14</strong> - Framework React avec App Router et export statique</li>
+        <li><strong>Tailwind CSS</strong> - Design system utility-first</li>
+        <li><strong>Chart.js</strong> - Graphiques interactifs</li>
+        <li><strong>React Context</strong> - Gestion d'état (AuthContext, UsbContext)</li>
+        <li><strong>Service Worker</strong> - PWA avec cache offline</li>
+        <li><strong>Web Serial API</strong> - Communication USB directe avec les dispositifs</li>
+    </ul>
+    
+    <h3>📱 12 Pages Complètes</h3>
+    <p>Le dashboard comprend 12 pages : Login, Vue d'Ensemble, Dispositifs, Patients, Alertes, Carte, Historique, Rapports, Utilisateurs, OTA, Audit, Documentation.</p>
+</section>
+
+<section id="deployment" class="section">
+    <h2>☁️ Déploiement</h2>
+    
+    
+    <h3>📦 Étapes de Déploiement</h3>
+    <ol>
+        <li>Créer la base PostgreSQL sur Render (Free)</li>
+        <li>Déployer l'API PHP sur Render (Starter 7€/mois)</li>
+        <li>Déployer le Dashboard Next.js sur GitHub Pages (Free)</li>
+        <li>Compiler et uploader le firmware ESP32</li>
+    </ol>
+    
+    <h3>💰 Coûts Mensuels</h3>
+    <ul>
+        <li>PostgreSQL (Render) : <strong>0€</strong></li>
+        <li>API Backend (Render) : <strong>7€/mois</strong></li>
+        <li>Dashboard (GitHub Pages) : <strong>0€</strong></li>
+        <li>Carte SIM 4G : <strong>2€/dispositif/mois</strong></li>
+    </ul>
+</section>
+
+<section id="troubleshooting" class="section">
+    <h2>🐛 Dépannage</h2>
+    
+    
+    <h3>🔧 Problèmes Courants</h3>
+    <ul>
+        <li><strong>Modem not responding</strong> : Vérifier l'antenne 4G et la carte SIM</li>
+        <li><strong>JWT verification failed</strong> : Token expiré, se reconnecter</li>
+        <li><strong>Failed to fetch</strong> : Vérifier que l'API est en ligne et les headers CORS</li>
+        <li><strong>Build Next.js échoue</strong> : Supprimer le cache et réinstaller les dépendances</li>
+    </ul>
+</section>
+
+<section id="screenshots" class="section">
+    <h2>📸 Captures d'Écran de l'Interface</h2>
+    
+    <p>Cette section présente les différentes vues de l'interface utilisateur et les modals disponibles dans le dashboard OTT.</p>
+    
+    <h3>🔐 Page de Connexion</h3>
+    <p>La page d'authentification avec formulaire de connexion sécurisé :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/login.png" alt="Page de connexion" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Page de connexion avec authentification JWT</p>
+    </div>
+    
+    <h3>🏠 Vue d'Ensemble (Dashboard)</h3>
+    <p>La page principale avec les indicateurs clés et les graphiques :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/dashboard-overview.png" alt="Vue d'ensemble" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Vue d'ensemble avec KPI, graphiques et actions requises</p>
+    </div>
+    
+    <h3>🔌 Page Dispositifs</h3>
+    <p>La liste des dispositifs avec leurs statuts et informations :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/devices-list.png" alt="Liste des dispositifs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Liste des dispositifs avec recherche et filtres</p>
+    </div>
+    
+    <h3>🏥 Page Patients</h3>
+    <p>La gestion des patients avec leurs dispositifs associés :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/patients-list.png" alt="Liste des patients" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Liste des patients avec recherche, création, modification, assignation/désassignation de dispositifs. Interface simplifiée sans alertes (accessibles via le modal de détails du dispositif).</p>
+    </div>
+    
+    <h3>📍 Carte Interactive</h3>
+    <p>La visualisation géographique des dispositifs :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/map.png" alt="Carte interactive" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Carte Leaflet avec marqueurs des dispositifs</p>
+    </div>
+    
+    <h3>⚠️ Page Alertes</h3>
+    <p>La liste des alertes avec leurs statuts :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/alerts.png" alt="Page alertes" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des alertes avec filtres et actions</p>
+    </div>
+    
+    <h3>👥 Page Utilisateurs</h3>
+    <p>La gestion des utilisateurs et des permissions :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/users.png" alt="Page utilisateurs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des utilisateurs avec rôles, permissions, statut actif/inactif et dernière connexion. Interface simplifiée sans alertes (accessibles via le modal de détails dispositif).</p>
+    </div>
+    
+    <h3>🔄 Page OTA</h3>
+    <p>La gestion des mises à jour OTA :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/ota.png" alt="Page OTA" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des mises à jour OTA des dispositifs</p>
+    </div>
+    
+    <h3>📝 Modals</h3>
+    
+    <h4>Modal Création/Édition Patient</h4>
+    <p>Le modal pour créer ou modifier un patient :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-patient.png" alt="Modal patient" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de création/édition de patient avec formulaire complet</p>
+    </div>
+    
+    <h4>Modal Détails Dispositif</h4>
+    <p>Le modal avec les détails complets d'un dispositif :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-device-details.png" alt="Modal détails dispositif" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal avec onglets : Détails, Alertes, Logs, Commandes, Streaming USB</p>
+    </div>
+    
+    <h4>Modal Assignation Dispositif</h4>
+    <p>Le modal pour assigner un dispositif à un patient :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-assign-device.png" alt="Modal assignation" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal d'assignation d'un dispositif libre à un patient</p>
+    </div>
+    
+    <h4>Modal Création/Édition Utilisateur</h4>
+    <p>Le modal pour créer ou modifier un utilisateur :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-user.png" alt="Modal utilisateur" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de création/édition d'utilisateur avec gestion des rôles</p>
+    </div>
+    
+    <h4>Modal Désassignation Dispositif</h4>
+    <p>Le modal pour désassigner un dispositif d'un patient :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-unassign-device.png" alt="Modal désassignation" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de confirmation pour désassigner un dispositif d'un patient</p>
+    </div>
+    
+    <h4>Modal Commande Dispositif</h4>
+    <p>Le modal pour envoyer une commande à un dispositif :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-command.png" alt="Modal commande" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal d'envoi de commandes (SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, etc.)</p>
+    </div>
+    
+    <h4>Modal Flash USB</h4>
+    <p>Le modal pour le flash USB et le streaming série en temps réel :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-usb-streaming.png" alt="Modal flash USB" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de flash USB avec sélection de port série, choix de firmware, et terminal série avec filtres de logs et export</p>
+    </div>
+    
+    <h4>Modal Upload Firmware</h4>
+    <p>Le modal pour téléverser un nouveau firmware :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-upload-firmware.png" alt="Modal upload firmware" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de téléversement de firmware avec version, notes et option stable/beta</p>
+    </div>
+    
+    <h4>Modal Détails Dispositif - Onglet Alertes</h4>
+    <p>L'onglet Alertes du modal de détails dispositif :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-device-alerts.png" alt="Modal alertes dispositif" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Onglet Alertes du modal de détails avec liste des alertes du dispositif</p>
+    </div>
+    
+    <h4>Modal Détails Dispositif - Onglet Journal</h4>
+    <p>L'onglet Journal du modal de détails dispositif :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/modal-device-logs.png" alt="Modal logs dispositif" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Onglet Journal du modal de détails avec historique des logs du dispositif</p>
+    </div>
+</section>
+
+<section id="security" class="section">
+    <h2>🔒 Sécurité & Permissions</h2>
+    
+    <h3>🛡️ Sécurité Complète de l'Application</h3>
+    
+    <p>L'application OTT implémente une sécurité multi-niveaux pour protéger les données médicales sensibles et garantir l'intégrité du système.</p>
+    
+    <h4>1. 🔐 Authentification et Autorisation</h4>
+    
+    <ul>
+        <li><strong>JWT (JSON Web Tokens)</strong> : Tokens signés avec HMAC-SHA256, expiration 24h, vérification côté serveur</li>
+        <li><strong>Passwords hashés</strong> : Bcrypt avec cost 10, jamais stockés en clair</li>
+        <li><strong>Système de permissions</strong> : Rôles (admin, médecin, technicien) avec permissions granulaires</li>
+        <li><strong>Vérification d'activité</strong> : Seuls les utilisateurs actifs peuvent se connecter</li>
+        <li><strong>Audit des connexions</strong> : Toutes les tentatives de connexion sont enregistrées</li>
+    </ul>
+    
+    <h4>2. 🛡️ Protection des Données</h4>
+    
+    <ul>
+        <li><strong>SQL Injection Protection</strong> : 100% des requêtes utilisent PDO::prepare() avec paramètres liés</li>
+        <li><strong>Chiffrement HTTPS</strong> : Toutes les communications sont chiffrées</li>
+        <li><strong>Soft Delete</strong> : Suppression logique pour récupération des données</li>
+        <li><strong>Validation des données</strong> : Validation stricte côté serveur et client</li>
+    </ul>
+    
+    <h3>📊 Tableau Récapitulatif des Droits par Rôle</h3>
+    
+    <p>Le système OTT utilise un système de permissions granulaires avec 3 rôles principaux. Voici un récapitulatif complet des droits d'accès pour chaque type d'utilisateur :</p>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 2rem 0; font-size: 0.95rem;">
+        <thead>
+            <tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <th style="padding: 1rem; text-align: left; border: 1px solid #ddd;">Fonctionnalité / Action</th>
+                <th style="padding: 1rem; text-align: center; border: 1px solid #ddd;">👑 Admin</th>
+                <th style="padding: 1rem; text-align: center; border: 1px solid #ddd;">👨‍⚕️ Médecin</th>
+                <th style="padding: 1rem; text-align: center; border: 1px solid #ddd;">🔧 Technicien</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="background: #f8f9fa;">
+                <td colspan="4" style="padding: 0.75rem; font-weight: bold; background: #e9ecef;">📊 VUE D'ENSEMBLE</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Consulter le tableau de bord (KPI, graphiques)</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr style="background: #f8f9fa;">
+                <td colspan="4" style="padding: 0.75rem; font-weight: bold; background: #e9ecef;">🔌 DISPOSITIFS</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Voir la liste des dispositifs</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Voir les détails d'un dispositif (statut, batterie, historique)</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Modifier les informations d'un dispositif (nom, patient assigné)</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Déclencher une mise à jour OTA (Over-The-Air)</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Envoyer des commandes aux dispositifs (SET_SLEEP_SECONDS, PING, etc.)</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr style="background: #f8f9fa;">
+                <td colspan="4" style="padding: 0.75rem; font-weight: bold; background: #e9ecef;">🏥 PATIENTS</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Voir la liste des patients</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Créer un nouveau patient</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Modifier les informations d'un patient</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Assigner un dispositif à un patient</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+            </tr>
+            <tr style="background: #f8f9fa;">
+                <td colspan="4" style="padding: 0.75rem; font-weight: bold; background: #e9ecef;">👥 UTILISATEURS</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Voir la liste des utilisateurs</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Créer un nouvel utilisateur</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Gérer les rôles et permissions des utilisateurs</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+                <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">❌</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div class="alert alert-info" style="margin-top: 2rem;">
+        <strong>💡 Note importante :</strong>
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li><strong>Admin</strong> : Accès complet à toutes les fonctionnalités. Seul rôle pouvant gérer les utilisateurs et consulter l'audit.</li>
+            <li><strong>Médecin</strong> : Accès en lecture/écriture aux patients et dispositifs, mais pas aux fonctions techniques (OTA, commandes, firmware). Peut résoudre les alertes.</li>
+            <li><strong>Technicien</strong> : Accès technique complet (OTA, commandes, configuration, firmware) mais ne peut pas gérer les utilisateurs ni supprimer des patients/dispositifs.</li>
+        </ul>
+    </div>
+</section>
+
+<section id="roadmap" class="section">
+    <h2>🚀 Roadmap & Améliorations Futures</h2>
+    
+    <div class="alert alert-success">
+        <strong>✅ Version 3.3 (Actuelle - 2025)</strong><br>
+        Version actuellement déployée avec les fonctionnalités suivantes :
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li>✅ PWA installable (manifest.json, service worker)</li>
+            <li>✅ Streaming USB en temps réel avec UsbContext</li>
+            <li>✅ Détection automatique des dispositifs USB (Web Serial API)</li>
+            <li>✅ Dashboard React/Next.js complet avec authentification JWT</li>
+            <li>✅ Gestion multi-utilisateurs avec permissions granulaires</li>
+            <li>✅ API REST complète avec PostgreSQL</li>
+            <li>✅ Mise à jour OTA (Over-The-Air) du firmware</li>
+            <li>✅ Carte interactive Leaflet avec géolocalisation</li>
+            <li>✅ Système d'alertes et notifications</li>
+        </ul>
+    </div>
+    
+    <h3>📅 Version 3.4 (Q2-Q3 2025)</h3>
+    
+    <h4>🔐 Sécurité Avancée</h4>
+    <ul>
+        <li>✨ Authentification 2FA (Google Authenticator, SMS)</li>
+        <li>✨ Rotation automatique JWT secrets (90 jours)</li>
+        <li>✨ Logs d'audit avancés avec alertes automatiques</li>
+        <li>✨ Détection d'activités suspectes</li>
+    </ul>
+    
+    <h4>📱 PWA Améliorée</h4>
+    <ul>
+        <li>✨ Notifications Push natives</li>
+        <li>✨ Mode offline complet (sync automatique)</li>
+        <li>✨ Icônes PWA personnalisées</li>
+        <li>✨ Installable sur iOS sans restrictions</li>
+    </ul>
+    
+    <h4>📊 Analytics & BI</h4>
+    <ul>
+        <li>✨ Dashboard analytics avancé</li>
+        <li>✨ Prédictions ML (pannes, batteries)</li>
+        <li>✨ Export automatique vers Excel/PDF</li>
+        <li>✨ Rapports programmés (hebdo, mensuel)</li>
+    </ul>
+    
+    <h3>📅 Version 3.5 (Q4 2025)</h3>
+    
+    <h4>🌍 Internationalisation</h4>
+    <ul>
+        <li>✨ Support multi-langues (EN, ES, DE)</li>
+        <li>✨ Timezone awareness complet</li>
+        <li>✨ Formats de date localisés</li>
+    </ul>
+    
+    <h4>⚡ Performance</h4>
+    <ul>
+        <li>✨ Migration vers TypeScript</li>
+        <li>✨ Server-Side Rendering (SSR)</li>
+        <li>✨ Optimisation base de données (indices)</li>
+        <li>✨ CDN pour assets statiques</li>
+    </ul>
+    
+    <h3>📅 Version 4.0 (Q4 2026)</h3>
+    
+    <h4>🤖 Intelligence Artificielle</h4>
+    <ul>
+        <li>✨ Détection anomalies automatique (ML)</li>
+        <li>✨ Maintenance prédictive</li>
+        <li>✨ Chatbot support intégré</li>
+        <li>✨ Recommandations personnalisées</li>
+    </ul>
+    
+    <h4>🏥 Conformité Médicale</h4>
+    <ul>
+        <li>✨ Certification CE Médical Classe IIa</li>
+        <li>✨ Conformité RGPD complète (audit externe)</li>
+        <li>✨ HDS (Hébergement Données de Santé)</li>
+        <li>✨ ISO 13485 (Qualité dispositifs médicaux)</li>
+    </ul>
+</section>
+
+</div>
+
+<div class="footer">
+    <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
+    <p>OTT - Version 3.3 Enterprise | Documentation Développeurs</p>
+    <p style="margin-top: 1rem; font-size: 1rem; font-weight: bold;">
+        📚 Documentation :
+        <a href="DOCUMENTATION_PRESENTATION.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">📸 Présentation</a> | 
+        <a href="DOCUMENTATION_DEVELOPPEURS.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">💻 Développeurs</a> | 
+        <a href="DOCUMENTATION_COMMERCIALE.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">💼 Commerciale</a>
+    </p>
+    <p style="margin-top: 0.5rem; font-size: 0.9rem;">
+        🌐 <a href="https://ymora.github.io/OTT/" style="color: white; text-decoration: underline;">Dashboard Live</a>
+    </p>
+</div>
+
+</body>
+</html>
+

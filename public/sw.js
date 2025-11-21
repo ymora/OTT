@@ -12,7 +12,10 @@ const ASSETS = [
   withBase('/'),
   withBase('/manifest.json'),
   withBase('/icon-192.png'),
-  withBase('/icon-512.png')
+  withBase('/icon-512.png'),
+  withBase('/DOCUMENTATION_PRESENTATION.html'),
+  withBase('/DOCUMENTATION_DEVELOPPEURS.html'),
+  withBase('/DOCUMENTATION_COMMERCIALE.html')
 ]
 
 self.addEventListener('install', (event) => {
