@@ -11,7 +11,7 @@
   Identifiant FQBN (défaut: esp32:esp32:esp32)
 
 .PARAMETER OutputDir
-  Dossier de sortie (défaut: firmwares/)
+  Dossier de sortie (défaut: hardware/firmware/v3.0/)
 
 .EXAMPLE
   .\scripts\build_firmware_bin.ps1
@@ -24,7 +24,7 @@
 
 param(
   [string]$Board = "esp32:esp32:esp32",
-  [string]$OutputDir = "firmwares"
+  [string]$OutputDir = "hardware/firmware/v3.0"
 )
 
 Set-StrictMode -Version Latest
@@ -40,6 +40,7 @@ if (-not (Get-Command arduino-cli -ErrorAction SilentlyContinue)) {
 $root = Resolve-Path "$PSScriptRoot/.."
 Set-Location $root
 
+# Chemin du code source du firmware
 $sketchPath = "hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino"
 if (-not (Test-Path $sketchPath)) {
   Write-Error "Fichier firmware introuvable: $sketchPath"

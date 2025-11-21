@@ -372,8 +372,12 @@ maxime/
 │   ├── sql/schema.sql            # Base PostgreSQL (14 tables)
 │   └── Dockerfile                # Container pour Render
 │
-├── 🔧 FIRMWARE (ESP32)
-│   └── fw_ott_optimized/         # Firmware ESP32
+├── 🔧 hardware/                  # Matériel & Firmware
+│   ├── firmware/                 # Firmwares compilés et uploadés (par version)
+│   │   └── v3.0/                 # Version 3.0 (actuelle)
+│   │       ├── *.bin             # Firmwares compilés
+│   │       └── *.ino             # Firmwares uploadés
+│   └── lib/                      # Bibliothèques externes (TinyGSM)
 │
 └── 📚 DOCUMENTATION
     ├── DOCUMENTATION_PRESENTATION.html
@@ -406,7 +410,7 @@ maxime/
     <pre><code># Windows PowerShell
 .\scripts\build_firmware_bin.ps1
 
-# Le fichier .bin sera généré dans firmwares/
+# Le fichier .bin sera généré dans hardware/firmware/v3.0/
 # Exemple : ott_firmware_v3.0-rebuild_20250121.bin</code></pre>
     <p>Le fichier .bin peut ensuite être :</p>
     <ul>
@@ -973,18 +977,15 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
 │   └── measurementQueue.js         # Queue mesures (IndexedDB)
 │
 ├── 🔌 hardware/                     # Matériel & Firmware
-│   ├── firmware/                    # FIRMWARE PRINCIPAL
-│   │   ├── fw_ott_optimized/        # Firmware actuel
-│   │   │   ├── fw_ott_optimized.ino # Source principale
-│   │   │   └── README.md
-│   │   └── external/                # Dépendances externes (TinyGSM)
+│   ├── firmware/                    # Firmware source et compilés
+│   │   ├── fw_ott_optimized/        # Code source du firmware (versionné)
+│   │   │   └── fw_ott_optimized.ino # Source principale v3.0-rebuild
+│   │   └── v3.0/                    # Firmwares compilés et uploadés (non versionné)
+│   │       ├── *.bin                 # Firmwares compilés
+│   │       └── *.ino                 # Firmwares uploadés via dashboard
+│   ├── lib/                         # Bibliothèques externes (TinyGSM)
 │   ├── cad/                         # Plans CAO (STL, PDF)
-│   ├── docs/                        # Documentation matériel
-│   └── scripts/                     # Scripts build firmware
-│
-├── 📦 firmwares/                    # Firmwares compilés (.bin)
-│   ├── ino/                         # Fichiers .ino uploadés
-│   └── *.bin                        # Firmwares compilés prêts à flasher
+│   └── docs/                        # Documentation matériel
 │
 ├── 🗄️ sql/                          # Schémas & migrations base de données
 │   ├── schema.sql                   # Schéma principal
@@ -1005,17 +1006,20 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     
     <h3>📍 Chemins Importants</h3>
     <ul>
-        <li><strong>Firmware Source</strong> : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code></li>
-        <li><strong>Firmwares Compilés</strong> : <code>firmwares/*.bin</code></li>
+        <li><strong>Firmware Source</strong> : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code> (v3.0-rebuild)</li>
+        <li><strong>Firmwares Compilés</strong> : <code>hardware/firmware/vX.X/*.bin</code> (organisés par version)</li>
+        <li><strong>Firmwares Uploadés</strong> : <code>hardware/firmware/vX.X/*.ino</code> (organisés par version)</li>
+        <li><strong>Bibliothèques</strong> : <code>hardware/lib/TinyGSM/</code></li>
         <li><strong>Scripts Build</strong> : <code>scripts/build_firmware_bin.ps1</code> et <code>scripts/flash_firmware.ps1</code></li>
     </ul>
     
     <h3>🔄 Workflow Recommandé</h3>
     <h4>Pour un développeur :</h4>
     <ol>
-        <li>Modifier le firmware : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code></li>
-        <li>Compiler localement : <code>.\scripts\build_firmware_bin.ps1</code></li>
+        <li>Modifier le firmware source : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code></li>
+        <li>Compiler localement : <code>.\scripts\build_firmware_bin.ps1</code> (génère un .bin dans <code>hardware/firmware/v3.0/</code>)</li>
         <li>Tester : <code>.\scripts\flash_firmware.ps1 -Port COM6</code></li>
+        <li>Ou uploader via dashboard : Menu "Firmware" → Upload .ino → Compilation automatique</li>
     </ol>
     
     <h4>Pour un admin/technicien :</h4>
@@ -1107,7 +1111,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li>Un admin/technicien se connecte au dashboard</li>
         <li>Accède au menu "Firmware" (visible uniquement pour admin/technicien)</li>
         <li>Clique sur "Upload Firmware" et sélectionne un fichier <code>.ino</code></li>
-        <li>Le fichier est uploadé vers <code>firmwares/ino/</code> avec extraction automatique de la version</li>
+        <li>Le fichier est uploadé vers <code>hardware/firmware/vX.X/</code> avec extraction automatique de la version</li>
         <li>Un enregistrement est créé dans la table <code>firmware_versions</code> avec le statut <code>pending_compilation</code></li>
     </ol>
     
@@ -1117,7 +1121,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li>Les logs de compilation sont streamés en temps réel via <strong>Server-Sent Events (SSE)</strong></li>
         <li>L'utilisateur voit la progression en direct dans une fenêtre dédiée</li>
         <li>Le système utilise <code>arduino-cli</code> pour compiler le <code>.ino</code> en <code>.bin</code></li>
-        <li>Le fichier <code>.bin</code> est généré dans <code>firmwares/</code></li>
+        <li>Le fichier <code>.bin</code> est généré dans <code>hardware/firmware/vX.X/</code> (même dossier que le .ino)</li>
         <li>Le statut est mis à jour à <code>compiled</code> dans la base de données</li>
     </ol>
     

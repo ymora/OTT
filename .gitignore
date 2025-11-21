@@ -37,9 +37,10 @@ desktop.ini
 temp/
 tmp/
 
-# Firmwares
+# Firmwares compilés et uploadés (non versionnés)
 *.bin
-firmwares/*.bin
+hardware/firmware/**/*.bin
+hardware/firmware/**/*.ino
 
 # Artefacts volumineux conservés hors du dépôt principal
 docs/

@@ -10,7 +10,7 @@ import SuccessMessage from '@/components/SuccessMessage'
 import logger from '@/lib/logger'
 
 export default function FirmwareUploadPage() {
-  const { fetchWithAuth, API_URL, user } = useAuth()
+  const { fetchWithAuth, API_URL, user, token } = useAuth()
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -35,24 +35,83 @@ export default function FirmwareUploadPage() {
   // Vérifier les permissions (admin ou technicien)
   const canUpload = user?.role_name === 'admin' || user?.role_name === 'technicien'
 
-  // Gérer la sélection de fichier
-  const handleFileSelect = useCallback((e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  // Compiler le firmware avec logs en direct (déclaré EN PREMIER car utilisé par handleUpload)
+  const handleCompile = useCallback(async (uploadId) => {
+    if (!uploadId) return
 
-    if (file.name.endsWith('.ino')) {
-      setSelectedFile(file)
-      setError(null)
-      setSuccess(null)
-    } else {
-      setError('Seuls les fichiers .ino sont acceptés')
-      setSelectedFile(null)
+    setCompiling(true)
+    setCompileLogs([])
+    setCompileProgress(0)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      // Démarrer la compilation et recevoir les logs en streaming
+      if (!token) {
+        throw new Error('Token manquant. Veuillez vous reconnecter.')
+      }
+
+      // Utiliser EventSource pour recevoir les logs en temps réel
+      const eventSource = new EventSource(
+        `${API_URL}/api.php/firmwares/compile/${uploadId}?token=${encodeURIComponent(token)}`
+      )
+
+      eventSourceRef.current = eventSource
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          
+          if (data.type === 'log') {
+            setCompileLogs(prev => [...prev, { 
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: data.message,
+              level: data.level || 'info'
+            }])
+            // Auto-scroll vers le bas
+            setTimeout(() => {
+              if (compileLogsRef.current) {
+                compileLogsRef.current.scrollTop = compileLogsRef.current.scrollHeight
+              }
+            }, 100)
+          } else if (data.type === 'progress') {
+            setCompileProgress(data.progress || 0)
+          } else if (data.type === 'success') {
+            setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
+            setCompiling(false)
+            setCompileProgress(0) // Réinitialiser la barre de progression
+            eventSource.close()
+            refetch() // Recharger la liste des firmwares
+          } else if (data.type === 'error') {
+            setError(data.message || 'Erreur lors de la compilation')
+            setCompiling(false)
+            setCompileProgress(0) // Réinitialiser la barre de progression
+            eventSource.close()
+          }
+        } catch (err) {
+          logger.error('Erreur parsing EventSource:', err)
+        }
+      }
+
+      eventSource.onerror = (err) => {
+        logger.error('EventSource error:', err)
+        setError('Erreur de connexion lors de la compilation')
+        setCompiling(false)
+        setCompileProgress(0) // Réinitialiser la barre de progression
+        eventSource.close()
+      }
+
+    } catch (err) {
+      setError(err.message || 'Erreur lors du démarrage de la compilation')
+      setCompiling(false)
+      setCompileProgress(0) // Réinitialiser la barre de progression
     }
-  }, [])
+  }, [API_URL, refetch, token])
 
-  // Upload du fichier .ino
-  const handleUpload = useCallback(async () => {
-    if (!selectedFile) {
+  // Upload du fichier .ino (déclaré APRÈS handleCompile car l'utilise)
+  const handleUpload = useCallback(async (file = null) => {
+    const fileToUpload = file || selectedFile
+    if (!fileToUpload) {
       setError('Veuillez sélectionner un fichier .ino')
       logger.warn('Upload annulé: aucun fichier sélectionné')
       return
@@ -64,7 +123,7 @@ export default function FirmwareUploadPage() {
       return
     }
 
-    logger.log('📤 Démarrage upload firmware:', selectedFile.name, `(${(selectedFile.size / 1024).toFixed(2)} KB)`)
+    logger.log('📤 Démarrage upload firmware:', fileToUpload.name, `(${(fileToUpload.size / 1024).toFixed(2)} KB)`)
     setUploading(true)
     setError(null)
     setSuccess(null)
@@ -72,10 +131,9 @@ export default function FirmwareUploadPage() {
 
     try {
       const formData = new FormData()
-      formData.append('firmware_ino', selectedFile)
+      formData.append('firmware_ino', fileToUpload)
       formData.append('type', 'ino')
 
-      const token = localStorage.getItem('token')
       if (!token) {
         throw new Error('Token manquant. Veuillez vous reconnecter.')
       }
@@ -102,7 +160,10 @@ export default function FirmwareUploadPage() {
             if (response.success) {
               setSuccess('✅ Fichier .ino uploadé avec succès')
               setUploadedFirmware(response)
-              setUploadProgress(100)
+              // Réinitialiser la barre de progression après un court délai
+              setTimeout(() => {
+                setUploadProgress(0)
+              }, 1000)
               logger.log('🚀 Démarrage compilation automatique dans 500ms...')
               // Démarrer automatiquement la compilation
               setTimeout(() => {
@@ -133,20 +194,30 @@ export default function FirmwareUploadPage() {
           }
         }
         setUploading(false)
+        // Réinitialiser la barre de progression après un court délai en cas d'erreur
+        if (xhr.status !== 200) {
+          setTimeout(() => {
+            setUploadProgress(0)
+          }, 1000)
+        }
       })
 
       xhr.addEventListener('error', (e) => {
         logger.error('❌ Erreur réseau XHR:', e)
         setError('Erreur réseau lors de l\'upload. Vérifiez votre connexion.')
         setUploading(false)
-        setUploadProgress(0)
+        setTimeout(() => {
+          setUploadProgress(0)
+        }, 1000)
       })
 
       xhr.addEventListener('abort', () => {
         logger.warn('⚠️ Upload annulé par l\'utilisateur')
         setError('Upload annulé')
         setUploading(false)
-        setUploadProgress(0)
+        setTimeout(() => {
+          setUploadProgress(0)
+        }, 1000)
       })
 
       const uploadUrl = `${API_URL}/api.php/firmwares/upload-ino`
@@ -162,77 +233,32 @@ export default function FirmwareUploadPage() {
       logger.error('❌ Exception lors de l\'upload:', err)
       setError(err.message || 'Erreur lors de l\'upload')
       setUploading(false)
-      setUploadProgress(0)
+      setTimeout(() => {
+        setUploadProgress(0)
+      }, 1000)
     }
   }, [selectedFile, canUpload, API_URL, handleCompile])
 
-  // Compiler le firmware avec logs en direct
-  const handleCompile = useCallback(async (uploadId) => {
-    if (!uploadId) return
+  // Gérer la sélection de fichier et démarrer automatiquement l'upload
+  const handleFileSelect = useCallback((e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-    setCompiling(true)
-    setCompileLogs([])
-    setCompileProgress(0)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      // Démarrer la compilation et recevoir les logs en streaming
-      const token = localStorage.getItem('token')
-      if (!token) throw new Error('Token manquant')
-
-      // Utiliser EventSource pour recevoir les logs en temps réel
-      const eventSource = new EventSource(
-        `${API_URL}/api.php/firmwares/compile/${uploadId}?token=${encodeURIComponent(token)}`
-      )
-
-      eventSourceRef.current = eventSource
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          
-          if (data.type === 'log') {
-            setCompileLogs(prev => [...prev, { 
-              timestamp: new Date().toLocaleTimeString('fr-FR'),
-              message: data.message,
-              level: data.level || 'info'
-            }])
-            // Auto-scroll vers le bas
-            setTimeout(() => {
-              if (compileLogsRef.current) {
-                compileLogsRef.current.scrollTop = compileLogsRef.current.scrollHeight
-              }
-            }, 100)
-          } else if (data.type === 'progress') {
-            setCompileProgress(data.progress || 0)
-          } else if (data.type === 'success') {
-            setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
-            setCompiling(false)
-            eventSource.close()
-            refetch() // Recharger la liste des firmwares
-          } else if (data.type === 'error') {
-            setError(data.message || 'Erreur lors de la compilation')
-            setCompiling(false)
-            eventSource.close()
-          }
-        } catch (err) {
-          logger.error('Erreur parsing EventSource:', err)
-        }
-      }
-
-      eventSource.onerror = (err) => {
-        logger.error('EventSource error:', err)
-        setError('Erreur de connexion lors de la compilation')
-        setCompiling(false)
-        eventSource.close()
-      }
-
-    } catch (err) {
-      setError(err.message || 'Erreur lors du démarrage de la compilation')
-      setCompiling(false)
+    if (file.name.endsWith('.ino')) {
+      setSelectedFile(file)
+      setError(null)
+      setSuccess(null)
+      // Démarrer automatiquement l'upload après sélection
+      setTimeout(() => {
+        handleUpload(file)
+      }, 100)
+    } else {
+      setError('Seuls les fichiers .ino sont acceptés')
+      setSelectedFile(null)
     }
-  }, [API_URL, refetch])
+  }, [handleUpload])
+
+
 
   // Nettoyer EventSource au démontage
   const cleanup = useCallback(() => {
@@ -291,13 +317,13 @@ export default function FirmwareUploadPage() {
             )}
           </div>
 
-          {/* Barre de progression - toujours visible */}
+          {/* Barre de progression Upload - toujours visible */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600 dark:text-gray-400">
                 {uploading ? '⏳ Transfert en cours...' : uploadProgress > 0 ? '✅ Transfert terminé' : 'En attente...'}
               </span>
-              <span className="font-semibold">{uploadProgress}%</span>
+              <span className="font-semibold">{uploadProgress > 0 ? `${uploadProgress}%` : '0%'}</span>
             </div>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
               <div
@@ -309,13 +335,23 @@ export default function FirmwareUploadPage() {
             </div>
           </div>
 
-          <button
-            onClick={handleUpload}
-            disabled={!selectedFile || uploading || compiling}
-            className="btn-primary w-full"
-          >
-            {uploading ? '⏳ Upload en cours...' : '📤 Uploader le fichier .ino'}
-          </button>
+          {/* Barre de progression Compilation - toujours visible en dessous */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600 dark:text-gray-400">
+                {compiling ? '🔨 Compilation en cours...' : compileProgress > 0 ? '✅ Compilation terminée' : 'En attente...'}
+              </span>
+              <span className="font-semibold">{compileProgress > 0 ? `${compileProgress}%` : '0%'}</span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+              <div
+                className={`h-3 rounded-full transition-all duration-300 ${
+                  compiling ? 'bg-blue-500' : compileProgress === 100 ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+                style={{ width: `${Math.max(0, Math.min(100, compileProgress))}%` }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -324,21 +360,6 @@ export default function FirmwareUploadPage() {
         <div className="card">
           <h2 className="text-xl font-semibold mb-4">🔨 Compilation en cours...</h2>
           
-          {compileProgress > 0 && (
-            <div className="mb-4 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">Progression</span>
-                <span className="font-semibold">{compileProgress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${compileProgress}%` }}
-                />
-              </div>
-            </div>
-          )}
-
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Logs de compilation en direct :</h3>
             <div

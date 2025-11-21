@@ -90,7 +90,7 @@ git push origin main
   - Les techniciens déclenchent OTA/config via `/api.php/devices/:id/ota` ou `/config`.
   - Les dispositifs OTT se réveillent, mesurent, publient, puis récupèrent les commandes via `/devices/commands/pending`. Les ACK sont renvoyés sur `/devices/commands/ack` pour alimenter la console “Commandes”. Un verbe `UPDATE_CONFIG` permet de pousser APN/JWT/ICCID/Serial à distance (stockés en NVS après réception).
 - **Auth** : Next → `/api.php/auth/login` (JWT). Token stocké dans LocalStorage, injecté par `fetchWithAuth`. L'API vérifie JWT + permissions (rôles admin/tech/etc.).
-- **Docs / Firmware** : La documentation complète est accessible depuis le dashboard (3 documents : Présentation, Développeurs, Commerciale). `hardware/firmware/...` contient les sources mais n'est pas versionné.
+- **Docs / Firmware** : La documentation complète est accessible depuis le dashboard (3 documents : Présentation, Développeurs, Commerciale). `hardware/firmware/vX.X/` contient les firmwares compilés et uploadés (non versionnés).
 
 ### 📟 Dépannage – “mon dispositif n’apparaît pas”
 1. **Vérifier l’ICCID côté firmware**
@@ -244,8 +244,9 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 - `sql/UPDATE_PASSWORDS_RENDER.sql` - Rotation de mots de passe Render
 - `public/manifest.json` / `public/sw.js` - PWA installable
 - `hardware/` - CAD + doc modem + firmware ESP32/SIM7600 (`cad/`, `docs/`, `firmware/`, `scripts/`)
-  - `hardware/firmware/fw_ott_optimized` contient le firmware complet (OTA, commandes, streaming USB)
-  - `hardware/firmware/external/TinyGSM*` embarque la lib TinyGSM patchée utilisée par l'ESP32
+  - `hardware/firmware/fw_ott_optimized/` contient le code source du firmware (v3.0-rebuild)
+  - `hardware/firmware/vX.X/` contient les firmwares compilés (.bin) et uploadés (.ino) organisés par version
+  - `hardware/lib/TinyGSM/` contient la bibliothèque TinyGSM utilisée par l'ESP32
 
 ---
 
@@ -342,7 +343,7 @@ Commandes durant la session :
 - `help` → affiche l’aide
 - `exit` / `usb_stream_off` → quitte le streaming et redémarre pour reprendre le cycle 4G/deep sleep
 
-📁 Sources : `hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino`
+📁 Firmwares : `hardware/firmware/vX.X/` (organisés par version, .bin et .ino ensemble)
 
 💻 Côté dashboard (`/dashboard/devices`), l’onglet « ⚡ Streaming USB » du modal dispositif permet désormais :
 - de déclencher `🔍 Détecter USB` (Web Serial) et de lire ICCID/Serial pour réconcilier automatiquement avec la base ;

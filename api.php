@@ -245,6 +245,19 @@ function requireAdmin() {
 }
 
 // ============================================================================
+// HELPERS - Firmware
+// ============================================================================
+
+/**
+ * Obtient le répertoire de version pour un firmware (ex: "3.0-rebuild" -> "v3.0")
+ */
+function getVersionDir($version) {
+    // Extraire la version majeure (ex: "3.0-rebuild" -> "v3.0")
+    preg_match('/^(\d+\.\d+)/', $version, $matches);
+    return 'v' . ($matches[1] ?? 'unknown');
+}
+
+// ============================================================================
 // HELPERS - Database
 // ============================================================================
 
@@ -479,14 +492,14 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleDeleteDevice($m[1]);
 
 // Firmwares
-} elseif(preg_match('#/firmwares$#', $path) && $method === 'GET') {
-    handleGetFirmwares();
-} elseif(preg_match('#/firmwares/(\d+)/download$#', $path, $matches) && $method === 'GET') {
-    handleDownloadFirmware($matches[1]);
 } elseif(preg_match('#/firmwares/upload-ino$#', $path) && $method === 'POST') {
     handleUploadFirmwareIno();
 } elseif(preg_match('#/firmwares/compile/(\d+)$#', $path, $matches) && $method === 'GET') {
     handleCompileFirmware($matches[1]);
+} elseif(preg_match('#/firmwares/(\d+)/download$#', $path, $matches) && $method === 'GET') {
+    handleDownloadFirmware($matches[1]);
+} elseif(preg_match('#/firmwares$#', $path) && $method === 'GET') {
+    handleGetFirmwares();
 } elseif(preg_match('#/firmwares$#', $path) && $method === 'POST') {
     handleUploadFirmware();
 
@@ -541,8 +554,16 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleRunMigration();
 
 } else {
+    // Debug: logger le chemin et la méthode pour comprendre pourquoi l'endpoint n'est pas trouvé
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log("[API Router] Path not matched: {$path} | Method: {$method}");
+    }
     http_response_code(404);
-    echo json_encode(['success' => false, 'error' => 'Endpoint not found']);
+    echo json_encode([
+        'success' => false, 
+        'error' => 'Endpoint not found',
+        'debug' => getenv('DEBUG_ERRORS') === 'true' ? ['path' => $path, 'method' => $method] : null
+    ]);
 }
 
 // ============================================================================
@@ -2959,10 +2980,11 @@ function handleUploadFirmware() {
         }
     }
     
-    $upload_dir = __DIR__ . '/firmwares/';
+    $version_dir = getVersionDir($version);
+    $upload_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
     if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
     
-    $file_path = 'firmwares/fw_ott_v' . $version . '.bin';
+    $file_path = 'hardware/firmware/' . $version_dir . '/fw_ott_v' . $version . '.bin';
     $full_path = __DIR__ . '/' . $file_path;
     
     if (!move_uploaded_file($tmp_path, $full_path)) {
@@ -3077,13 +3099,7 @@ function handleUploadFirmwareIno() {
         return;
     }
     
-    // Créer le dossier pour les fichiers .ino uploadés
-    $ino_dir = __DIR__ . '/firmwares/ino/';
-    if (!is_dir($ino_dir)) {
-        mkdir($ino_dir, 0755, true);
-    }
-    
-    // Extraire la version depuis le fichier .ino
+    // Extraire la version depuis le fichier .ino (AVANT de créer le dossier)
     $ino_content = file_get_contents($file['tmp_name']);
     $version = null;
     
@@ -3098,6 +3114,13 @@ function handleUploadFirmwareIno() {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Version non trouvée dans le fichier .ino. Assurez-vous que FIRMWARE_VERSION_STR est défini.']);
         return;
+    }
+    
+    // Créer le dossier pour les fichiers .ino uploadés (par version) - APRÈS extraction de la version
+    $version_dir = getVersionDir($version);
+    $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+    if (!is_dir($ino_dir)) {
+        mkdir($ino_dir, 0755, true);
     }
     
     // Sauvegarder le fichier .ino
@@ -3122,7 +3145,7 @@ function handleUploadFirmwareIno() {
         
         $stmt->execute([
             'version' => $version,
-            'file_path' => 'firmwares/ino/' . $ino_filename,
+            'file_path' => 'hardware/firmware/' . $version_dir . '/' . $ino_filename,
             'file_size' => $file_size,
             'checksum' => $checksum,
             'release_notes' => 'Compilé depuis .ino',
@@ -3212,7 +3235,9 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('log', 'info', 'Génération du fichier .bin...');
             
             // Créer un fichier .bin factice (dans un vrai environnement, ce serait le résultat de la compilation)
-            $bin_dir = __DIR__ . '/firmwares/';
+            $version_dir = getVersionDir($firmware['version']);
+            $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            if (!is_dir($bin_dir)) mkdir($bin_dir, 0755, true);
             $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
             $bin_path = $bin_dir . $bin_filename;
             
@@ -3229,6 +3254,7 @@ function handleCompileFirmware($firmware_id) {
             $checksum = hash_file('sha256', $bin_path);
             $file_size = filesize($bin_path);
             
+            $version_dir = getVersionDir($firmware['version']);
             $pdo->prepare("
                 UPDATE firmware_versions 
                 SET file_path = :file_path, 
@@ -3237,7 +3263,7 @@ function handleCompileFirmware($firmware_id) {
                     status = 'compiled'
                 WHERE id = :id
             ")->execute([
-                'file_path' => 'firmwares/' . $bin_filename,
+                'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
                 'file_size' => $file_size,
                 'checksum' => $checksum,
                 'id' => $firmware_id
@@ -3308,7 +3334,9 @@ function handleCompileFirmware($firmware_id) {
             }
             
             $compiled_bin = $bin_files[0];
-            $bin_dir = __DIR__ . '/firmwares/';
+            $version_dir = getVersionDir($firmware['version']);
+            $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            if (!is_dir($bin_dir)) mkdir($bin_dir, 0755, true);
             $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
             $bin_path = $bin_dir . $bin_filename;
             
@@ -3326,6 +3354,7 @@ function handleCompileFirmware($firmware_id) {
             $file_size = filesize($bin_path);
             
             // Mettre à jour la base de données
+            $version_dir = getVersionDir($firmware['version']);
             $pdo->prepare("
                 UPDATE firmware_versions 
                 SET file_path = :file_path, 
@@ -3334,7 +3363,7 @@ function handleCompileFirmware($firmware_id) {
                     status = 'compiled'
                 WHERE id = :id
             ")->execute([
-                'file_path' => 'firmwares/' . $bin_filename,
+                'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
                 'file_size' => $file_size,
                 'checksum' => $checksum,
                 'id' => $firmware_id

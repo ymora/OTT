@@ -34,9 +34,9 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html \
     && chmod 644 /var/www/html/*.php
 
-# Créer dossier firmwares
-RUN mkdir -p /var/www/html/firmwares \
-    && chown www-data:www-data /var/www/html/firmwares
+# Créer dossier hardware/firmware pour les firmwares compilés
+RUN mkdir -p /var/www/html/hardware/firmware/v3.0 \
+    && chown -R www-data:www-data /var/www/html/hardware
 
 # Activer affichage erreurs PHP (pour debug)
 RUN echo "display_errors = On" >> /usr/local/etc/php/php.ini \
