@@ -12,6 +12,8 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import { useUsb } from '@/contexts/UsbContext'
+import { decorateUsbInfo } from '@/lib/usbDevices'
+import { startQueueProcessor, stopQueueProcessor } from '@/lib/measurementSender'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 
@@ -76,7 +78,8 @@ export default function DevicesPage() {
     startUsbStreaming,
     stopUsbStreaming,
     ensurePortReady,
-    setSendMeasurementCallback
+    setSendMeasurementCallback,
+    setUpdateDeviceFirmwareCallback
   } = useUsb()
   
   const [searchTerm, setSearchTerm] = useState('')
@@ -191,6 +194,8 @@ export default function DevicesPage() {
 
   // Configurer le callback pour envoyer les mesures USB à l'API avec queue et retry
   useEffect(() => {
+    let stopProcessor = null
+
     const sendMeasurementToApi = async (measurementData) => {
       const response = await fetchWithAuth(`${API_URL}/api.php/devices/measurements`, {
         method: 'POST',
@@ -214,16 +219,77 @@ export default function DevicesPage() {
     
     setSendMeasurementCallback(sendMeasurementToApi)
     
+    // Fonction pour mettre à jour automatiquement le firmware_version dans la base
+    const updateDeviceFirmwareVersion = async (identifier, firmwareVersion) => {
+      if (!identifier || !firmwareVersion) {
+        logger.debug('⚠️ Identifiant ou version firmware manquant pour mise à jour')
+        return
+      }
+      
+      try {
+        // Chercher le dispositif par ICCID ou Serial
+        const devicesResponse = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          '/api.php/devices',
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        const allDevices = devicesResponse.devices || []
+        
+        // Trouver le dispositif correspondant
+        const device = allDevices.find(d => {
+          if (d.sim_iccid && d.sim_iccid === identifier) return true
+          if (d.device_serial && d.device_serial === identifier) return true
+          if (d.device_name && d.device_name.includes(identifier)) return true
+          return false
+        })
+        
+        if (!device) {
+          logger.debug('⚠️ Dispositif non trouvé pour mise à jour firmware_version:', identifier)
+          return
+        }
+        
+        // Vérifier si la version a changé
+        if (device.firmware_version === firmwareVersion) {
+          logger.debug('✅ Firmware_version déjà à jour:', firmwareVersion)
+          return
+        }
+        
+        // Mettre à jour le firmware_version
+        logger.log('🔄 Mise à jour firmware_version:', { device: device.device_name, old: device.firmware_version, new: firmwareVersion })
+        await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/devices/${device.id}`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({ firmware_version: firmwareVersion })
+          },
+          { requiresAuth: true }
+        )
+        
+        logger.log('✅ Firmware_version mis à jour avec succès')
+        refetch() // Rafraîchir les données
+      } catch (err) {
+        logger.warn('⚠️ Erreur mise à jour firmware_version:', err)
+      }
+    }
+    
+    setUpdateDeviceFirmwareCallback(updateDeviceFirmwareVersion)
+    
     // Démarrer le traitement de la queue des mesures en attente
-    const { startQueueProcessor, stopQueueProcessor } = await import('@/lib/measurementSender')
-    const stopProcessor = startQueueProcessor(sendMeasurementToApi, { interval: 30000 })
+    stopProcessor = startQueueProcessor(sendMeasurementToApi, { interval: 30000 })
     
     return () => {
       setSendMeasurementCallback(null)
-      stopProcessor()
+      setUpdateDeviceFirmwareCallback(null)
+      if (stopProcessor) {
+        stopProcessor()
+      }
       stopQueueProcessor()
     }
-  }, [fetchWithAuth, API_URL, refetch, setSendMeasurementCallback])
+  }, [fetchWithAuth, API_URL, refetch, setSendMeasurementCallback, setUpdateDeviceFirmwareCallback])
 
   // Rafraîchissement automatique toutes les 30 secondes
   useEffect(() => {
@@ -250,7 +316,7 @@ export default function DevicesPage() {
       setUsbDetectionError(null)
       setUsbDetectionNotice(null)
 
-      const portInfo = targetPort.getInfo()
+      const portInfo = decorateUsbInfo(targetPort.getInfo())
       setUsbPortInfo(portInfo)
       logger.log('🔌 Connexion au port:', portInfo)
       
@@ -281,7 +347,39 @@ export default function DevicesPage() {
           logger.debug('📥 Total données reçues:', receivedData.length, 'caractères')
         }
         
-        // ICCID - plusieurs formats possibles
+        // Parser les messages JSON du firmware (device_info envoyé automatiquement)
+        const lines = data.split(/\r?\n/).filter(l => l.trim())
+        for (const line of lines) {
+          if (line.trim().startsWith('{')) {
+            try {
+              const jsonData = JSON.parse(line.trim())
+              if (jsonData.type === 'device_info') {
+                // Le firmware a envoyé automatiquement les infos du dispositif
+                if (jsonData.iccid && jsonData.iccid.length >= 10) {
+                  iccid = jsonData.iccid
+                  logger.log('✅ ICCID reçu depuis device_info:', iccid)
+                }
+                if (jsonData.serial && jsonData.serial.length > 0) {
+                  deviceSerial = jsonData.serial
+                  logger.log('✅ Serial reçu depuis device_info:', deviceSerial)
+                }
+                if (jsonData.firmware_version && jsonData.firmware_version.length > 0) {
+                  firmwareVersion = jsonData.firmware_version
+                  logger.log('✅ Firmware reçu depuis device_info:', firmwareVersion)
+                }
+                // Si on a toutes les infos, on peut arrêter d'attendre
+                if (iccid || deviceSerial) {
+                  logger.log('✅ Infos complètes reçues depuis device_info, arrêt de l\'écoute')
+                  if (stopReading) stopReading()
+                }
+              }
+            } catch (err) {
+              // Pas un JSON valide, continuer avec les autres formats
+            }
+          }
+        }
+        
+        // ICCID - plusieurs formats possibles (fallback si device_info n'a pas fonctionné)
         // Format AT+CCID: 89330123456789012345
         const iccidMatch1 = receivedData.match(/\+CCID[:\s]+(\d{19,20})/i)
         // Format CCID: 89330123456789012345
@@ -294,7 +392,7 @@ export default function DevicesPage() {
         const iccidMatch5 = receivedData.match(/["']sim_iccid["'][:\s]+["']?(\d{19,20})["']?/i)
         
         const iccidMatch = iccidMatch1 || iccidMatch2 || iccidMatch4 || iccidMatch5 || iccidMatch3
-        if (iccidMatch && iccidMatch[1]) {
+        if (iccidMatch && iccidMatch[1] && !iccid) {
           const newIccid = iccidMatch[1].trim()
           // Vérifier que c'est un ICCID valide (19-20 chiffres)
           if (newIccid.length >= 19 && newIccid.length <= 20 && /^\d+$/.test(newIccid)) {
@@ -303,59 +401,67 @@ export default function DevicesPage() {
           }
         }
         
-        // Serial - plusieurs formats
-        const serialMatch = receivedData.match(/SERIAL[:\s=]+([A-Z0-9\-]+)/i) || 
-                           receivedData.match(/IMEI[:\s=]+([A-Z0-9]+)/i) ||
-                           receivedData.match(/["']serial["'][:\s]+["']?([A-Z0-9\-]+)["']?/i)
-        if (serialMatch && serialMatch[1]) {
-          deviceSerial = serialMatch[1].trim()
-          logger.log('✅ Serial détecté:', deviceSerial)
+        // Serial - plusieurs formats (fallback)
+        if (!deviceSerial) {
+          const serialMatch = receivedData.match(/SERIAL[:\s=]+([A-Z0-9\-]+)/i) || 
+                             receivedData.match(/IMEI[:\s=]+([A-Z0-9]+)/i) ||
+                             receivedData.match(/["']serial["'][:\s]+["']?([A-Z0-9\-]+)["']?/i)
+          if (serialMatch && serialMatch[1]) {
+            deviceSerial = serialMatch[1].trim()
+            logger.log('✅ Serial détecté:', deviceSerial)
+          }
         }
         
-        // Firmware version - plusieurs formats
-        const fwMatch = receivedData.match(/FIRMWARE[:\s=]+([\d.]+)/i) || 
-                       receivedData.match(/VERSION[:\s=]+([\d.]+)/i) ||
-                       receivedData.match(/FWVER[:\s=]+([\d.]+)/i) ||
-                       receivedData.match(/\+CGMR[:\s]+([^\r\n]+)/i) ||
-                       receivedData.match(/\+GMR[:\s]+([^\r\n]+)/i) ||
-                       receivedData.match(/["']firmware_version["'][:\s]+["']?([\d.]+)["']?/i) ||
-                       receivedData.match(/v?(\d+\.\d+\.\d+)/i) ||
-                       receivedData.match(/(\d+\.\d+\.\d+)/)
-        if (fwMatch && fwMatch[1]) {
-          firmwareVersion = fwMatch[1].trim().replace(/[^\d.]/g, '').substring(0, 20)
-          logger.log('✅ Firmware détecté:', firmwareVersion)
+        // Firmware version - plusieurs formats (fallback)
+        if (!firmwareVersion) {
+          const fwMatch = receivedData.match(/FIRMWARE[:\s=]+([\d.]+)/i) || 
+                         receivedData.match(/VERSION[:\s=]+([\d.]+)/i) ||
+                         receivedData.match(/FWVER[:\s=]+([\d.]+)/i) ||
+                         receivedData.match(/\+CGMR[:\s]+([^\r\n]+)/i) ||
+                         receivedData.match(/\+GMR[:\s]+([^\r\n]+)/i) ||
+                         receivedData.match(/["']firmware_version["'][:\s]+["']?([\d.]+)["']?/i) ||
+                         receivedData.match(/v?(\d+\.\d+\.\d+)/i) ||
+                         receivedData.match(/(\d+\.\d+\.\d+)/)
+          if (fwMatch && fwMatch[1]) {
+            firmwareVersion = fwMatch[1].trim().replace(/[^\d.]/g, '').substring(0, 20)
+            logger.log('✅ Firmware détecté:', firmwareVersion)
+          }
         }
       })
 
-      // Attendre un peu que la connexion soit stable
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Envoyer les commandes AT pour obtenir les infos
-      logger.log('📤 Envoi des commandes AT...')
-      await write('AT\r\n') // Test de connexion
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      await write('AT+CCID\r\n')
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await write('AT+GSN\r\n')
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await write('AT+CGMR\r\n') // Version firmware modem
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await write('AT+GMR\r\n') // Version firmware alternative
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await write('ATI\r\n') // Informations générales
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      // Commandes custom OTT si disponibles
-      await write('AT+FIRMWARE?\r\n')
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await write('AT+VERSION?\r\n')
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      await write('AT+FWVER?\r\n')
+      // Attendre un peu que la connexion soit stable et que le firmware envoie device_info
+      logger.log('👂 Attente des infos automatiques du firmware (device_info)...')
       await new Promise(resolve => setTimeout(resolve, 2000))
       
-      // Continuer à écouter pendant 5 secondes supplémentaires pour capturer les données en continu
-      // (le firmware peut envoyer des mesures en continu)
-      logger.log('👂 Écoute continue des données série (5 secondes)...')
-      await new Promise(resolve => setTimeout(resolve, 5000))
+      // Si on n'a pas encore reçu les infos via device_info, envoyer les commandes AT en fallback
+      if (!iccid && !deviceSerial) {
+        logger.log('📤 Infos non reçues automatiquement, envoi des commandes AT (fallback)...')
+        await write('AT\r\n') // Test de connexion
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        await write('AT+CCID\r\n')
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await write('AT+GSN\r\n')
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await write('AT+CGMR\r\n') // Version firmware modem
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await write('AT+GMR\r\n') // Version firmware alternative
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await write('ATI\r\n') // Informations générales
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        // Commandes custom OTT si disponibles
+        await write('AT+FIRMWARE?\r\n')
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await write('AT+VERSION?\r\n')
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        await write('AT+FWVER?\r\n')
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        
+        // Continuer à écouter pendant 3 secondes supplémentaires
+        logger.log('👂 Écoute continue des données série (3 secondes)...')
+        await new Promise(resolve => setTimeout(resolve, 3000))
+      } else {
+        logger.log('✅ Infos reçues automatiquement, pas besoin de commandes AT')
+      }
       
       // Vérifier si de nouvelles données arrivent encore
       const checkInterval = setInterval(() => {
@@ -366,8 +472,8 @@ export default function DevicesPage() {
         }
       }, 500)
       
-      // Attendre encore 2 secondes pour être sûr d'avoir toutes les données
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Attendre encore 1 seconde pour être sûr d'avoir toutes les données
+      await new Promise(resolve => setTimeout(resolve, 1000))
       clearInterval(checkInterval)
 
       if (stopReading) stopReading()
@@ -496,6 +602,18 @@ export default function DevicesPage() {
         })
         return foundDevice
       } else {
+        // Si aucun identifiant n'a été trouvé mais un dispositif est sélectionné, permettre l'association manuelle
+        if (!foundDevice && selectedDevice) {
+          logger.log('🔗 Association manuelle au dispositif sélectionné:', selectedDevice.device_name || selectedDevice.sim_iccid)
+          setUsbConnectedDevice(selectedDevice)
+          setUsbVirtualDevice(null)
+          setUsbDetectionNotice({
+            type: 'success',
+            message: `${describeDevice(selectedDevice)} associé manuellement. Les mesures USB seront rattachées à ce dispositif.`
+          })
+          return selectedDevice
+        }
+
         // Dispositif non trouvé, essayer de le créer seulement si on a un ICCID ou Serial valide
         const deviceIdentifier = iccid && iccid !== 'N/A' && iccid.length >= 10 ? iccid.slice(-4) : 
                                 deviceSerial && deviceSerial !== 'N/A' ? deviceSerial.slice(-4) : 
@@ -657,7 +775,7 @@ export default function DevicesPage() {
       setUsbDetectionError(err.message || 'Erreur pendant la détection USB.')
       return null
     }
-  }, [connect, startReading, write, devices, fetchWithAuth, API_URL, refetch, notifyDevicesUpdated, setUsbConnectedDevice, setUsbPortInfo, setUsbVirtualDevice, setUsbDetectionError, setUsbDetectionNotice])
+  }, [connect, startReading, write, devices, fetchWithAuth, API_URL, refetch, notifyDevicesUpdated, setUsbConnectedDevice, setUsbPortInfo, setUsbVirtualDevice, setUsbDetectionError, setUsbDetectionNotice, selectedDevice])
 
   // Détecter le dispositif connecté en USB (pour autoriser un nouveau port)
   const detectUSBDevice = useCallback(async () => {
@@ -739,7 +857,25 @@ export default function DevicesPage() {
   // Vérifier si le dispositif sélectionné correspond au dispositif USB connecté
   const isSelectedDeviceUsbConnected = useCallback(() => {
     if (!selectedDevice) return false
-    if (!usbConnectedDevice && !usbVirtualDevice) return false
+    if (!usbConnectedDevice && !usbVirtualDevice && !usbPortInfo) return false
+
+    const deviceNamesMatch = (device) => {
+      if (!device?.device_name || !selectedDevice.device_name) return false
+      const connectedName = device.device_name.toLowerCase()
+      const selectedName = selectedDevice.device_name.toLowerCase()
+      if (connectedName === selectedName) return true
+
+      const connectedUsbId = connectedName.match(/([0-9a-f]{4}:[0-9a-f]{4})/)
+      const selectedUsbId = selectedName.match(/([0-9a-f]{4}:[0-9a-f]{4})/)
+      if (connectedUsbId && selectedUsbId && connectedUsbId[1] === selectedUsbId[1]) {
+        return true
+      }
+      return false
+    }
+
+    if (deviceNamesMatch(usbConnectedDevice) || deviceNamesMatch(usbVirtualDevice)) {
+      return true
+    }
     
     // Comparer par ID si disponible
     if (usbConnectedDevice && selectedDevice.id && usbConnectedDevice.id === selectedDevice.id) {
@@ -772,13 +908,30 @@ export default function DevicesPage() {
     
     // Pour les dispositifs virtuels, comparer aussi par device_name si c'est un dispositif USB virtuel
     if (usbVirtualDevice && usbVirtualDevice.isVirtual && selectedDevice.device_name) {
-      if (usbVirtualDevice.device_name && usbVirtualDevice.device_name.includes(selectedDevice.device_name.slice(-4))) {
+      const sliced = selectedDevice.device_name.slice(-4)
+      if (sliced && usbVirtualDevice.device_name && usbVirtualDevice.device_name.includes(sliced)) {
         return true
+      }
+    }
+
+    // Comparer par identifiants USB (vendor/product) via device_name
+    if (usbPortInfo && selectedDevice.device_name) {
+      const usbMatch = selectedDevice.device_name.match(/([0-9a-f]{4}):([0-9a-f]{4})/i)
+      if (usbMatch) {
+        const vendorId = parseInt(usbMatch[1], 16)
+        const productId = parseInt(usbMatch[2], 16)
+        if (
+          !Number.isNaN(vendorId) &&
+          vendorId === usbPortInfo.usbVendorId &&
+          (!usbPortInfo.usbProductId || productId === usbPortInfo.usbProductId)
+        ) {
+          return true
+        }
       }
     }
     
     return false
-  }, [selectedDevice, usbConnectedDevice, usbVirtualDevice])
+  }, [selectedDevice, usbConnectedDevice, usbVirtualDevice, usbPortInfo])
 
   // Détection automatique au chargement et périodiquement (ports déjà autorisés)
   useEffect(() => {
@@ -901,29 +1054,28 @@ export default function DevicesPage() {
   }, [modalActiveTab, isSelectedDeviceUsbConnected])
 
   // Démarrer automatiquement le streaming USB quand un dispositif est détecté
-  // Mais seulement si le dispositif sélectionné correspond au dispositif USB connecté
   useEffect(() => {
     if (!isSupported) return
     if (usbStreamStatus !== 'idle') return // Ne pas redémarrer si déjà en cours
     
     // Démarrer automatiquement le streaming si un dispositif USB est connecté
-    // ET si le dispositif sélectionné correspond au dispositif USB connecté
     if ((usbConnectedDevice || usbVirtualDevice) && isConnected && usbStreamStatus === 'idle') {
-      // Vérifier que le dispositif sélectionné correspond au dispositif USB connecté
-      const isUsbDevice = isSelectedDeviceUsbConnected()
+      // Si un dispositif est sélectionné, vérifier qu'il correspond au dispositif USB
+      // Sinon, démarrer le streaming quand même (le dispositif sera automatiquement sélectionné)
+      const shouldStart = !selectedDevice || isSelectedDeviceUsbConnected()
       
-      if (isUsbDevice) {
+      if (shouldStart) {
         logger.log('🚀 Démarrage automatique du streaming USB pour le dispositif connecté...')
-        // Petit délai pour laisser le port se stabiliser
+        // Petit délai pour laisser le port se stabiliser et recevoir device_info
         const timer = setTimeout(() => {
           startUsbStreaming().catch(err => {
             logger.warn('Erreur démarrage automatique streaming:', err)
           })
-        }, 1000)
+        }, 2000) // Augmenté à 2s pour laisser le temps au firmware d'envoyer device_info
         return () => clearTimeout(timer)
       }
     }
-  }, [usbConnectedDevice, usbVirtualDevice, isConnected, isSupported, usbStreamStatus, startUsbStreaming, isSelectedDeviceUsbConnected])
+  }, [usbConnectedDevice, usbVirtualDevice, isConnected, isSupported, usbStreamStatus, startUsbStreaming, isSelectedDeviceUsbConnected, selectedDevice])
 
   // Écouter les nouveaux ports connectés (événement navigateur)
   useEffect(() => {
@@ -2625,6 +2777,17 @@ export default function DevicesPage() {
                       </div>
                     )}
 
+                    {usbPortInfo && (
+                      <div className="mb-3 rounded-xl border border-gray-200/80 dark:border-slate-700/60 bg-white/60 dark:bg-slate-900/40 px-4 py-3 text-sm text-gray-700 dark:text-slate-200">
+                        <p className="font-semibold text-primary-600 dark:text-primary-300">
+                          Port USB détecté&nbsp;: {usbPortInfo.friendlyName || `USB ${usbPortInfo.vendorHex}:${usbPortInfo.productHex}`}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-slate-400">
+                          VID {usbPortInfo.vendorHex} · PID {usbPortInfo.productHex}
+                        </p>
+                      </div>
+                    )}
+
                     {isSupported && !usbConnectedDevice && !usbVirtualDevice && (
                       <div className="alert alert-info text-sm">
                         Connectez un dispositif USB et autorisez-le dans la popup du navigateur. Le streaming démarrera automatiquement.
@@ -2637,7 +2800,7 @@ export default function DevicesPage() {
                           <span className="text-4xl">📡</span>
                           <p className="font-medium">En attente de logs USB...</p>
                           <p className="text-xs text-gray-400">
-                            Activez le mode streaming du firmware ou cliquez sur &laquo;&nbsp;Redémarrer&nbsp;&raquo; pour relancer l&apos;écoute.
+                            Dès que le firmware envoie le flux USB, les journaux apparaissent ici automatiquement.
                           </p>
                         </div>
                       ) : (

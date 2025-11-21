@@ -417,8 +417,49 @@ Measurement captureSensorSnapshot()
   return m;
 }
 
+// Envoyer les informations du dispositif dès la connexion USB
+void emitUsbDeviceInfo()
+{
+  // Essayer de lire l'ICCID depuis la SIM si le modem est disponible
+  // (sans démarrer complètement le modem, juste une lecture rapide)
+  String iccidToSend = DEVICE_ICCID;
+  String serialToSend = DEVICE_SERIAL;
+  
+  // Si l'ICCID est la valeur par défaut, essayer de le lire depuis la SIM
+  if (iccidToSend == OTT_DEFAULT_ICCID || iccidToSend.isEmpty()) {
+    // Initialiser le modem juste pour lire l'ICCID
+    initModem();
+    delay(1000);
+    if (modem.testAT(2000)) {
+      String realIccid = modem.getSimCCID();
+      if (realIccid.length() > 0 && realIccid.length() <= 20) {
+        iccidToSend = realIccid;
+        DEVICE_ICCID = realIccid;
+        saveConfig();
+      }
+    }
+  }
+  
+  // Envoyer les infos du dispositif en JSON
+  StaticJsonDocument<512> infoDoc;
+  infoDoc["type"] = "device_info";
+  infoDoc["iccid"] = iccidToSend;
+  infoDoc["serial"] = serialToSend;
+  infoDoc["firmware_version"] = FIRMWARE_VERSION;
+  infoDoc["device_name"] = String("OTT-") + (iccidToSend.length() >= 4 ? iccidToSend.substring(iccidToSend.length() - 4) : serialToSend.length() >= 4 ? serialToSend.substring(serialToSend.length() - 4) : "XXXX");
+  
+  serializeJson(infoDoc, Serial);
+  Serial.println();
+  
+  Serial.printf("[USB] Device info envoyé: ICCID=%s, Serial=%s, FW=%s\n", 
+                iccidToSend.c_str(), serialToSend.c_str(), FIRMWARE_VERSION);
+}
+
 bool detectUsbStreamingMode()
 {
+  // Envoyer immédiatement les infos du dispositif dès la connexion USB
+  emitUsbDeviceInfo();
+  
   Serial.println(F("[USB] Branché au PC ? Tapez 'usb' + Entrée sous 3s pour streaming continu."));
   unsigned long start = millis();
   String buffer;

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { getUsbDeviceLabel, getUsbRequestFilters } from '@/lib/usbDevices'
 
 /**
  * Gestionnaire de port série utilisant Web Serial API
@@ -26,8 +27,15 @@ export function useSerialPort() {
 
     try {
       setError(null)
-      const selectedPort = await navigator.serial.requestPort()
+      const filters = getUsbRequestFilters()
+      const requestOptions = filters.length > 0 ? { filters } : undefined
+      const selectedPort = await navigator.serial.requestPort(requestOptions)
       setPort(selectedPort)
+      const info = selectedPort?.getInfo?.()
+      const label = getUsbDeviceLabel(info)
+      if (label) {
+        console.info(`[USB] Port sélectionné: ${label}`)
+      }
       return selectedPort
     } catch (err) {
       if (err.name !== 'NotFoundError') {

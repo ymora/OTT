@@ -1181,7 +1181,7 @@ function handleUpdateDevice($device_id) {
             return;
         }
 
-        $fields = ['device_name', 'status', 'installation_date', 'first_use_date', 'latitude', 'longitude'];
+        $fields = ['device_name', 'status', 'installation_date', 'first_use_date', 'latitude', 'longitude', 'firmware_version'];
         $updates = [];
         $params = ['id' => $device_id];
 

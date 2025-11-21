@@ -27,6 +27,7 @@ export function UsbProvider({ children }) {
   const usbStreamStopRef = useRef(null)
   const usbStreamBufferRef = useRef('')
   const sendMeasurementToApiRef = useRef(null) // Callback pour envoyer les mesures à l'API
+  const updateDeviceFirmwareRef = useRef(null) // Callback pour mettre à jour le firmware_version dans la base
 
   // Fonction pour ajouter un log USB
   const appendUsbStreamLog = useCallback((line) => {
@@ -138,9 +139,47 @@ export function UsbProvider({ children }) {
     // Toujours ajouter les logs
     appendUsbStreamLog(trimmed)
 
-    if (trimmed.startsWith('{') && trimmed.includes('"mode"')) {
+    // Parser les messages JSON du firmware
+    if (trimmed.startsWith('{')) {
       try {
         const payload = JSON.parse(trimmed)
+        
+        // Message device_info : infos du dispositif envoyées dès la connexion USB
+        if (payload.type === 'device_info') {
+          logger.log('📱 Infos dispositif reçues:', payload)
+          
+          // Créer ou mettre à jour un dispositif virtuel avec ces infos
+          const deviceInfo = {
+            id: `usb_info_${Date.now()}`,
+            device_name: payload.device_name || `USB-${payload.iccid?.slice(-4) || payload.serial?.slice(-4) || 'XXXX'}`,
+            sim_iccid: payload.iccid || null,
+            device_serial: payload.serial || null,
+            firmware_version: payload.firmware_version || null,
+            status: 'usb_connected',
+            last_seen: new Date().toISOString(),
+            isVirtual: true,
+            fromUsbInfo: true // Flag pour indiquer que c'est depuis device_info
+          }
+          
+          // Si on n'a pas encore de dispositif USB connecté, utiliser ces infos
+          if (!usbConnectedDevice && !usbVirtualDevice) {
+            setUsbVirtualDevice(deviceInfo)
+            logger.log('✅ Dispositif USB créé depuis device_info:', deviceInfo.device_name)
+          } else if (usbVirtualDevice && !usbVirtualDevice.fromUsbInfo) {
+            // Mettre à jour le dispositif virtuel existant avec les vraies infos
+            setUsbVirtualDevice({ ...usbVirtualDevice, ...deviceInfo })
+            logger.log('✅ Dispositif USB mis à jour avec device_info')
+          }
+          
+          // Mettre à jour automatiquement le firmware_version dans la base de données
+          if (payload.firmware_version && updateDeviceFirmwareRef.current) {
+            updateDeviceFirmwareRef.current(payload.iccid || payload.serial, payload.firmware_version)
+          }
+          
+          return
+        }
+        
+        // Message usb_stream : mesure de streaming
         if (payload.mode === 'usb_stream') {
           const measurement = {
             id: `usb-${payload.seq ?? Date.now()}`,
@@ -171,7 +210,7 @@ export function UsbProvider({ children }) {
           return
         }
       } catch (err) {
-        logger.debug('JSON invalide:', trimmed)
+        logger.debug('JSON invalide:', trimmed, err)
         return
       }
     }
@@ -291,6 +330,11 @@ export function UsbProvider({ children }) {
     sendMeasurementToApiRef.current = callback
   }, [])
 
+  // Fonction pour définir le callback de mise à jour du firmware_version
+  const setUpdateDeviceFirmwareCallback = useCallback((callback) => {
+    updateDeviceFirmwareRef.current = callback
+  }, [])
+
   const value = {
     // État USB
     usbConnectedDevice,
@@ -326,6 +370,7 @@ export function UsbProvider({ children }) {
     startReading,
     write,
     setSendMeasurementCallback,
+    setUpdateDeviceFirmwareCallback,
   }
 
   return (

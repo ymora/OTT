@@ -390,6 +390,65 @@ maxime/
     
     <h3>🔋 Optimisation Autonomie</h3>
     <p>Le firmware est optimisé pour une <strong>autonomie de 111 jours</strong> sur batterie 2000mAh grâce au deep sleep ESP32.</p>
+    
+    <h3>📦 Compilation et Flash du Firmware</h3>
+    <p>Le firmware est écrit en C++ (Arduino) et peut être compilé de deux façons :</p>
+    
+    <h4>Option 1 : Compilation en .bin (Recommandé)</h4>
+    <p>Pour un flash direct via le dashboard ou esptool, compilez le firmware en fichier .bin :</p>
+    <pre><code># Windows PowerShell
+.\scripts\build_firmware_bin.ps1
+
+# Le fichier .bin sera généré dans firmwares/
+# Exemple : ott_firmware_v3.0-rebuild_20250121.bin</code></pre>
+    <p>Le fichier .bin peut ensuite être :</p>
+    <ul>
+        <li>Uploadé via le modal "Flash USB" dans le dashboard</li>
+        <li>Flashé directement avec esptool : <code>esptool.py --port COM6 write_flash 0x1000 firmware.bin</code></li>
+    </ul>
+    
+    <h4>Option 2 : Compilation et Upload Direct</h4>
+    <p>Pour compiler et flasher directement via arduino-cli :</p>
+    <pre><code># Windows PowerShell
+.\scripts\flash_firmware.ps1 -Port COM6
+
+# Ou manuellement
+arduino-cli compile --fqbn esp32:esp32:esp32 hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino
+arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code></pre>
+    
+    <h3>🔌 Communication USB et device_info</h3>
+    <p>Dès la connexion USB, le firmware envoie automatiquement un message <code>device_info</code> contenant :</p>
+    <ul>
+        <li><strong>ICCID</strong> : Identifiant de la carte SIM (lu depuis la SIM si disponible)</li>
+        <li><strong>Serial</strong> : Numéro de série du dispositif</li>
+        <li><strong>firmware_version</strong> : Version du firmware (ex: "3.0-rebuild")</li>
+        <li><strong>device_name</strong> : Nom du dispositif (généré automatiquement)</li>
+    </ul>
+    <p>Format JSON envoyé :</p>
+    <pre><code>{
+  "type": "device_info",
+  "iccid": "89330123456789012345",
+  "serial": "OTT-PIERRE-001",
+  "firmware_version": "3.0-rebuild",
+  "device_name": "OTT-2345"
+}</code></pre>
+    <p>Le dashboard reçoit automatiquement ces informations et :</p>
+    <ul>
+        <li>Identifie le dispositif dans la base de données (par ICCID, Serial ou device_name)</li>
+        <li>Met à jour automatiquement le <code>firmware_version</code> dans la base si la version a changé</li>
+        <li>Démarre automatiquement le streaming USB si un dispositif est détecté</li>
+    </ul>
+    
+    <h3>🔄 Mise à Jour Automatique du Firmware Version</h3>
+    <p>Lorsqu'un dispositif USB est connecté et envoie son <code>device_info</code>, le système :</p>
+    <ol>
+        <li>Reçoit le message <code>device_info</code> via le port série USB</li>
+        <li>Parse le JSON et extrait l'ICCID/Serial et la version firmware</li>
+        <li>Recherche le dispositif correspondant dans la base de données</li>
+        <li>Compare la version reçue avec celle enregistrée</li>
+        <li>Met à jour automatiquement <code>devices.firmware_version</code> via l'API si différent</li>
+    </ol>
+    <p>Cette mise à jour est transparente et ne nécessite aucune action manuelle.</p>
 </section>
 
 <section id="api" class="section">
