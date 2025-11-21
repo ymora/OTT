@@ -492,7 +492,7 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleDeleteDevice($m[1]);
 
 // Firmwares
-} elseif(preg_match('#/firmwares/upload-ino$#', $path) && $method === 'POST') {
+} elseif((strpos($path, '/firmwares/upload-ino') !== false || $path === '/firmwares/upload-ino' || preg_match('#/firmwares/upload-ino#', $path)) && $method === 'POST') {
     handleUploadFirmwareIno();
 } elseif(preg_match('#/firmwares/compile/(\d+)$#', $path, $matches) && $method === 'GET') {
     handleCompileFirmware($matches[1]);
@@ -555,14 +555,20 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 
 } else {
     // Debug: logger le chemin et la méthode pour comprendre pourquoi l'endpoint n'est pas trouvé
+    $debugInfo = [
+        'path' => $path,
+        'method' => $method,
+        'uri' => $_SERVER['REQUEST_URI'] ?? 'N/A',
+        'script_name' => $_SERVER['SCRIPT_NAME'] ?? 'N/A'
+    ];
     if (getenv('DEBUG_ERRORS') === 'true') {
-        error_log("[API Router] Path not matched: {$path} | Method: {$method}");
+        error_log("[API Router] Path not matched: " . json_encode($debugInfo));
     }
     http_response_code(404);
     echo json_encode([
         'success' => false, 
         'error' => 'Endpoint not found',
-        'debug' => getenv('DEBUG_ERRORS') === 'true' ? ['path' => $path, 'method' => $method] : null
+        'debug' => $debugInfo
     ]);
 }
 
