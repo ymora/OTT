@@ -3868,7 +3868,19 @@ function handleCompileFirmware($firmware_id) {
             }
         }
         
-        // 2. Si pas trouvé localement, chercher dans le PATH système
+        // 2. Chercher dans ~/.local/bin/ (emplacement standard pour Render)
+        if (empty($arduinoCli) && !$isWindows) {
+            $homeDir = getenv('HOME');
+            if (!empty($homeDir)) {
+                $renderArduinoCli = $homeDir . '/.local/bin/arduino-cli';
+                if (file_exists($renderArduinoCli) && is_readable($renderArduinoCli)) {
+                    $arduinoCli = $renderArduinoCli;
+                    sendSSE('log', 'info', '✅ arduino-cli trouvé dans ~/.local/bin/');
+                }
+            }
+        }
+        
+        // 3. Si pas trouvé localement, chercher dans le PATH système
         if (empty($arduinoCli)) {
             if ($isWindows) {
                 $pathCli = trim(shell_exec('where arduino-cli 2>nul || echo ""'));
