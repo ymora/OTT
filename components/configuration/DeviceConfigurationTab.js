@@ -231,7 +231,7 @@ export default function DeviceConfigurationTab() {
                     placeholder="1"
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Nombre de réveils avant d'envoyer les données (1 = à chaque réveil, 2 = tous les 2 réveils, etc.)
+                    Nombre de réveils avant d&apos;envoyer les données (1 = à chaque réveil, 2 = tous les 2 réveils, etc.)
                   </p>
                 </div>
 

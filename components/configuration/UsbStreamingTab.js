@@ -67,7 +67,7 @@ export default function UsbStreamingTab() {
 
         {!isSupported && (
           <div className="alert alert-warning mb-4">
-            Le navigateur utilisé ne supporte pas l'API Web Serial. Utilisez Chrome ou Edge (desktop) pour accéder au streaming USB.
+            Le navigateur utilisé ne supporte pas l&apos;API Web Serial. Utilisez Chrome ou Edge (desktop) pour accéder au streaming USB.
           </div>
         )}
 
