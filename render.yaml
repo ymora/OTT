@@ -12,7 +12,10 @@ services:
     buildCommand: |
       # ⚠️ CRITIQUE: arduino-cli est OBLIGATOIRE - la compilation ne doit JAMAIS être simulée
       echo "🔧 Installation d'arduino-cli (OBLIGATOIRE)..."
+      export PATH="${HOME}/.local/bin:${PATH}"
       bash scripts/install_arduino_cli.sh
+      # S'assurer que le PATH inclut ~/.local/bin pour cette session
+      export PATH="${HOME}/.local/bin:${PATH}"
       # Vérifier que arduino-cli est disponible et fonctionnel
       if ! command -v arduino-cli &> /dev/null; then
         echo "❌ ERREUR CRITIQUE: arduino-cli n'est pas disponible après installation"
@@ -26,7 +29,9 @@ services:
       fi
       echo "✅ arduino-cli disponible et fonctionnel: $(arduino-cli version)"
       echo "✅ La compilation sera RÉELLE, jamais simulée"
-    startCommand: php -S 0.0.0.0:$PORT -t .
+    startCommand: |
+      export PATH="${HOME}/.local/bin:${PATH}"
+      php -S 0.0.0.0:$PORT -t .
     envVars:
       - key: DATABASE_URL
         sync: false
