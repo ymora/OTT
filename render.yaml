@@ -28,6 +28,8 @@ services:
         exit 1
       fi
       echo "✅ arduino-cli disponible et fonctionnel: $(arduino-cli version)"
+      echo "ℹ️  Le core ESP32 sera téléchargé automatiquement lors de la première compilation"
+      echo "   (une seule fois, ~430MB, stocké dans arduino-data/ persistant)"
       echo "✅ La compilation sera RÉELLE, jamais simulée"
     startCommand: |
       export PATH="${HOME}/.local/bin:${PATH}"

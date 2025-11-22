@@ -56,5 +56,5 @@ backup_*.sql
 # Binaires locaux (optionnel - peut être versionné)
 # bin/arduino-cli*
 
-# Données arduino-cli (cores, bibliothèques) - volumineux mais persistant
+# Données arduino-cli (cores, bibliothèques) - volumineux et chemins trop longs pour Windows
 arduino-data/

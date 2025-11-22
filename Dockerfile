@@ -34,8 +34,9 @@ COPY index.php /var/www/html/
 COPY .htaccess /var/www/html/.htaccess
 COPY bootstrap /var/www/html/bootstrap
 COPY sql /var/www/html/sql
+# Note: arduino-data/ n'est pas copié car volumineux (~430MB) et chemins trop longs
+# Le core ESP32 sera téléchargé une seule fois lors de la première compilation
 # Note: bin/ n'est pas copié ici car arduino-cli est installé dans le RUN précédent
-# Le RUN à la ligne 21 vérifie déjà si bin/arduino-cli existe localement avant de télécharger
 
 # Créer le dossier public (pour les fichiers statiques si nécessaire)
 RUN mkdir -p /var/www/html/public
