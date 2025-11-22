@@ -102,12 +102,18 @@ export function UsbProvider({ children }) {
         return
       }
 
+      // Priorité pour firmware_version :
+      // 1. Version depuis le message usb_stream (measurement.raw.firmware_version) - la plus récente
+      // 2. Version depuis device_info (device.firmware_version) - peut être obsolète
+      // 3. null si aucune version disponible
+      const firmwareVersion = measurement.raw?.firmware_version || device.firmware_version || null
+      
       const measurementData = {
         sim_iccid: String(simIccid).trim(),
         flowrate: measurement.flowrate ?? 0,
         battery: measurement.battery ?? null,
         rssi: measurement.rssi ?? null,
-        firmware_version: device.firmware_version || measurement.raw?.firmware_version || null,
+        firmware_version: firmwareVersion,
         timestamp: new Date(measurement.timestamp).toISOString(),
         status: 'USB'
       }
@@ -198,7 +204,10 @@ export function UsbProvider({ children }) {
             battery: payload.battery_percent ?? payload.battery ?? null,
             rssi: payload.rssi ?? null,
             interval: payload.interval_ms ?? payload.interval ?? null,
-            raw: payload,
+            raw: {
+              ...payload,
+              firmware_version: payload.firmware_version || null // Extraire la version depuis le payload
+            },
           }
 
           setUsbStreamMeasurements(prev => {

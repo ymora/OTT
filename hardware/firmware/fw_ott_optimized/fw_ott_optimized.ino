@@ -602,6 +602,7 @@ void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t interv
   doc["interval_ms"] = intervalMs;
   doc["sleep_minutes"] = configuredSleepMinutes;
   doc["timestamp_ms"] = millis();
+  doc["firmware_version"] = FIRMWARE_VERSION; // Ajout de la version firmware
   serializeJson(doc, Serial);
   Serial.println();
 
