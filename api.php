@@ -3848,10 +3848,26 @@ function handleCompileFirmware($firmware_id) {
             return;
         }
         
-        $ino_path = __DIR__ . '/' . $firmware['file_path'];
+        // Construire le chemin du fichier .ino
+        // Le file_path dans la DB peut être relatif (hardware/firmware/...) ou absolu
+        $ino_path = $firmware['file_path'];
+        if (!file_exists($ino_path)) {
+            // Essayer avec __DIR__ si c'est un chemin relatif
+            $ino_path = __DIR__ . '/' . $firmware['file_path'];
+        }
+        if (!file_exists($ino_path)) {
+            // Essayer sans le préfixe hardware/firmware/ si présent
+            $relative_path = preg_replace('#^hardware/firmware/#', '', $firmware['file_path']);
+            $ino_path = __DIR__ . '/hardware/firmware/' . $relative_path;
+        }
         
         if (!file_exists($ino_path)) {
-            sendSSE('error', 'Fichier .ino introuvable: ' . $ino_path);
+            sendSSE('error', 'Fichier .ino introuvable: ' . $firmware['file_path']);
+            sendSSE('log', 'error', 'Chemins testés:');
+            sendSSE('log', 'error', '  1. ' . $firmware['file_path']);
+            sendSSE('log', 'error', '  2. ' . (__DIR__ . '/' . $firmware['file_path']));
+            sendSSE('log', 'error', '  3. ' . (__DIR__ . '/hardware/firmware/' . preg_replace('#^hardware/firmware/#', '', $firmware['file_path'])));
+            sendSSE('log', 'error', 'Vérifiez que le fichier existe dans hardware/firmware/');
             flush();
             return;
         }
