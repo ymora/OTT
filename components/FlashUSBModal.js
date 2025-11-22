@@ -204,6 +204,33 @@ export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirm
 
       setTerminalLogs(prev => [...prev, { raw: '[ESPTOOL] ✅ Flash réussi !', timestamp: new Date() }])
       
+      // Mettre à jour la version firmware dans la base de données si un dispositif est associé
+      if (device && device.id && selectedFirmware) {
+        try {
+          setTerminalLogs(prev => [...prev, { raw: `[UPDATE] Mise à jour version firmware dans la base...`, timestamp: new Date() }])
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${device.id}`,
+            {
+              method: 'PUT',
+              body: JSON.stringify({ firmware_version: selectedFirmware.version })
+            },
+            { requiresAuth: true }
+          )
+          setTerminalLogs(prev => [...prev, { raw: `[UPDATE] ✅ Version firmware mise à jour: v${selectedFirmware.version}`, timestamp: new Date() }])
+          logger.log('✅ Version firmware mise à jour après flash:', selectedFirmware.version)
+          // Rafraîchir les données pour que la page dispositifs affiche la nouvelle version
+          await refreshDevices()
+        } catch (updateErr) {
+          logger.warn('⚠️ Erreur mise à jour version firmware:', updateErr)
+          setTerminalLogs(prev => [...prev, { raw: `[UPDATE] ⚠️ Erreur mise à jour: ${updateErr.message}`, timestamp: new Date() }])
+        }
+      } else if (device && !device.id && selectedFirmware) {
+        // Dispositif virtuel (non enregistré) - juste logger
+        setTerminalLogs(prev => [...prev, { raw: `[UPDATE] ℹ️ Dispositif non enregistré - version sera mise à jour lors de la prochaine connexion`, timestamp: new Date() }])
+      }
+      
       // Vérifier si le dispositif est vivant après le flash
       setTerminalLogs(prev => [...prev, { raw: '[TEST] Attente redémarrage (3 secondes)...', timestamp: new Date() }])
       await new Promise(resolve => setTimeout(resolve, 3000)) // Attendre 3s que le dispositif redémarre
