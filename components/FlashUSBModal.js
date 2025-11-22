@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
+import { useUsb } from '@/contexts/UsbContext'
 import { useSerialPort } from '@/components/SerialPortManager'
 import SerialTerminal from '@/components/SerialTerminal'
 import DeviceAutotest from '@/components/DeviceAutotest'
 import { ESPLoader } from 'esptool-js'
+import logger from '@/lib/logger'
 
 /**
  * Modal simplifié pour le flash USB
@@ -25,7 +27,15 @@ export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirm
   const [deviceAlive, setDeviceAlive] = useState(null) // null = pas testé, true = vivant, false = mort
   const stopReadingRef = useRef(null)
 
-  // Gestion du port série
+  // Utiliser le contexte USB partagé pour éviter les conflits de port
+  const {
+    port: usbPort,
+    isConnected: usbIsConnected,
+    isSupported: usbIsSupported,
+    stopUsbStreaming
+  } = useUsb()
+
+  // Gestion du port série (instance séparée pour le flash)
   const {
     port,
     isConnected,
@@ -37,6 +47,14 @@ export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirm
     startReading,
     write
   } = useSerialPort()
+
+  // Déconnecter le streaming USB de la page dispositifs quand on ouvre le modal
+  useEffect(() => {
+    if (isOpen && usbIsConnected && stopUsbStreaming) {
+      logger.log('🔄 Arrêt du streaming USB pour libérer le port pour le flash')
+      stopUsbStreaming()
+    }
+  }, [isOpen, usbIsConnected, stopUsbStreaming])
 
   // Charger les firmwares
   const loadFirmwares = useCallback(async () => {
