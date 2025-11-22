@@ -61,25 +61,6 @@ export default function FirmwareFlashTab() {
     }
   }, [selectedDevices, devices])
 
-  // Flasher un dispositif individuel (via icône flash)
-  const handleFlashSingle = useCallback(async (device, e) => {
-    e.stopPropagation()
-    if (!selectedFirmwareForFlash) return
-    
-    const isUsbConnected = usbConnectedDevice?.id === device.id
-    const isUsbVirtual = usbVirtualDevice && !device.id && usbVirtualDevice.sim_iccid === device.sim_iccid
-    
-    // Priorité USB si connecté
-    if (isUsbConnected || isUsbVirtual) {
-      setDeviceForFlash(device)
-      setFlashMode('usb')
-      setShowFlashModal(true)
-    } else {
-      // Flash OTA direct
-      await flashDevice(device, selectedFirmwareForFlash.version)
-    }
-  }, [selectedFirmwareForFlash, usbConnectedDevice, usbVirtualDevice, flashDevice])
-
   // Flasher un dispositif (OTA ou USB selon disponibilité)
   const flashDevice = useCallback(async (device, firmwareVersion) => {
     const deviceId = device.id
@@ -218,6 +199,25 @@ export default function FirmwareFlashTab() {
       logger.error('Erreur flash dispositif:', err)
     }
   }, [fetchWithAuth, API_URL, usbConnectedDevice, usbVirtualDevice, refetch])
+
+  // Flasher un dispositif individuel (via icône flash)
+  const handleFlashSingle = useCallback(async (device, e) => {
+    e.stopPropagation()
+    if (!selectedFirmwareForFlash) return
+    
+    const isUsbConnected = usbConnectedDevice?.id === device.id
+    const isUsbVirtual = usbVirtualDevice && !device.id && usbVirtualDevice.sim_iccid === device.sim_iccid
+    
+    // Priorité USB si connecté
+    if (isUsbConnected || isUsbVirtual) {
+      setDeviceForFlash(device)
+      setFlashMode('usb')
+      setShowFlashModal(true)
+    } else {
+      // Flash OTA direct
+      await flashDevice(device, selectedFirmwareForFlash.version)
+    }
+  }, [selectedFirmwareForFlash, usbConnectedDevice, usbVirtualDevice, flashDevice])
 
   // Flasher tous les dispositifs sélectionnés
   const handleFlashMultiple = useCallback(async () => {
