@@ -17,16 +17,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Installer arduino-cli (OBLIGATOIRE - compilation jamais simulée)
-# Si le binaire local existe dans bin/, l'utiliser, sinon télécharger
-RUN if [ -f "bin/arduino-cli" ]; then \
-        cp bin/arduino-cli /usr/local/bin/arduino-cli && \
-        chmod +x /usr/local/bin/arduino-cli; \
-    else \
-        curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh && \
-        mv bin/arduino-cli /usr/local/bin/arduino-cli && \
-        chmod +x /usr/local/bin/arduino-cli && \
-        rm -rf bin; \
-    fi && \
+# Note: Le binaire local dans bin/ est pour le développement local, pas pour Docker
+# Dans Docker, on télécharge toujours arduino-cli depuis le script officiel
+RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh && \
+    mv bin/arduino-cli /usr/local/bin/arduino-cli && \
+    chmod +x /usr/local/bin/arduino-cli && \
+    rm -rf bin && \
     arduino-cli version || (echo "ERREUR CRITIQUE: arduino-cli n'a pas pu etre installe" && exit 1)
 
 # Configuration Apache pour PHP
