@@ -49,6 +49,9 @@ external/
 # Backup
 *.backup
 backup_*.sql
+*.rej
+*.orig
+*.bak
 
 # Binaires locaux (optionnel - peut être versionné)
 # bin/arduino-cli*
