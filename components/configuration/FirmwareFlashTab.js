@@ -34,7 +34,7 @@ export default function FirmwareFlashTab() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-semibold">🔌 Flash USB & OTA</h2>
+            <h2 className="text-xl font-semibold">🔌 Flash</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Sélectionnez un firmware pour le flasher sur les dispositifs (USB ou OTA)
             </p>

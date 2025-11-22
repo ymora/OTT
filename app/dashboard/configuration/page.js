@@ -33,7 +33,7 @@ export default function ConfigurationPage() {
 
   const tabs = [
     { id: 'upload', label: 'Upload Firmware', icon: '📤' },
-    { id: 'flash', label: 'Flash USB', icon: '🔌' },
+    { id: 'flash', label: 'Flash', icon: '🔌' },
     { id: 'streaming', label: 'Streaming USB', icon: '📡' }
   ]
 
