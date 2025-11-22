@@ -1,12 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
 import { useUsb } from '@/contexts/UsbContext'
-import logger from '@/lib/logger'
 
 export default function UsbStreamingTab() {
-  const { user } = useAuth()
   const {
     usbConnectedDevice,
     usbVirtualDevice,
@@ -15,13 +11,10 @@ export default function UsbStreamingTab() {
     usbStreamStatus,
     usbStreamLogs,
     usbStreamError,
-    usbStreamMeasurements,
     usbStreamLastMeasurement,
     startUsbStreaming,
     stopUsbStreaming
   } = useUsb()
-
-  const isAdmin = user?.role_name === 'admin'
 
   const getUsbStreamStatusBadge = () => {
     switch (usbStreamStatus) {

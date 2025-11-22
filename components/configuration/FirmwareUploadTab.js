@@ -11,7 +11,7 @@ import Modal from '@/components/Modal'
 import logger from '@/lib/logger'
 
 export default function FirmwareUploadTab() {
-  const { fetchWithAuth, API_URL, user, token } = useAuth()
+  const { fetchWithAuth, API_URL, token } = useAuth()
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
