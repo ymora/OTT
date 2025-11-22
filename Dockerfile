@@ -38,8 +38,8 @@ COPY index.php /var/www/html/
 COPY .htaccess /var/www/html/.htaccess
 COPY bootstrap /var/www/html/bootstrap
 COPY sql /var/www/html/sql
-# Copier bin/ si présent (pour arduino-cli local)
-COPY bin/ /var/www/html/bin/ 2>/dev/null || true
+# Note: bin/ n'est pas copié ici car arduino-cli est installé dans le RUN précédent
+# Le RUN à la ligne 21 vérifie déjà si bin/arduino-cli existe localement avant de télécharger
 
 # Créer le dossier public (pour les fichiers statiques si nécessaire)
 RUN mkdir -p /var/www/html/public
