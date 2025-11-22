@@ -93,19 +93,32 @@ export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirm
 
   // Gérer la connexion
   const handleConnect = useCallback(async () => {
-    const selectedPort = await requestPort()
-    if (selectedPort) {
-      const connected = await connect(selectedPort, 115200)
-      if (connected) {
-        const stopReading = await startReading((data) => {
-          setTerminalLogs(prev => [...prev, { raw: data, timestamp: new Date() }])
-        })
-        if (stopReading) {
-          stopReadingRef.current = stopReading
+    try {
+      // S'assurer que le streaming USB est arrêté
+      if (stopUsbStreaming) {
+        stopUsbStreaming()
+        await new Promise(resolve => setTimeout(resolve, 500)) // Attendre un peu que le port soit libéré
+      }
+
+      const selectedPort = await requestPort()
+      if (selectedPort) {
+        const connected = await connect(selectedPort, 115200)
+        if (connected) {
+          const stopReading = await startReading((data) => {
+            setTerminalLogs(prev => [...prev, { raw: data, timestamp: new Date() }])
+          })
+          if (stopReading) {
+            stopReadingRef.current = stopReading
+          }
+        } else if (serialError) {
+          setError(serialError)
         }
       }
+    } catch (err) {
+      logger.error('Erreur connexion port pour flash:', err)
+      setError(`Erreur de connexion: ${err.message}. Le port est peut-être déjà utilisé. Déconnectez d'abord depuis la page dispositifs.`)
     }
-  }, [requestPort, connect, startReading])
+  }, [requestPort, connect, startReading, stopUsbStreaming, serialError])
 
   const handleDisconnect = useCallback(async () => {
     if (stopReadingRef.current) {
