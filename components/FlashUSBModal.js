@@ -21,6 +21,8 @@ export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirm
   const [flashing, setFlashing] = useState(false)
   const [flashProgress, setFlashProgress] = useState(0)
   const [terminalLogs, setTerminalLogs] = useState([])
+  const [flashComplete, setFlashComplete] = useState(false)
+  const [deviceAlive, setDeviceAlive] = useState(null) // null = pas testé, true = vivant, false = mort
   const stopReadingRef = useRef(null)
 
   // Gestion du port série
@@ -167,8 +169,53 @@ export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirm
         await loader.verify(offset, firmwareData)
       }
       setFlashProgress(100)
+      setFlashComplete(true)
 
       setTerminalLogs(prev => [...prev, { raw: '[ESPTOOL] ✅ Flash réussi !', timestamp: new Date() }])
+      
+      // Vérifier si le dispositif est vivant après le flash
+      setTerminalLogs(prev => [...prev, { raw: '[TEST] Attente redémarrage (3 secondes)...', timestamp: new Date() }])
+      await new Promise(resolve => setTimeout(resolve, 3000)) // Attendre 3s que le dispositif redémarre
+      
+      try {
+        setTerminalLogs(prev => [...prev, { raw: '[TEST] Envoi commande AT pour vérifier...', timestamp: new Date() }])
+        
+        // Envoyer une commande AT pour vérifier que le dispositif répond
+        await write('AT\r\n')
+        
+        // Attendre une réponse (le dispositif devrait envoyer device_info ou répondre à AT)
+        let hasResponse = false
+        const responseCheck = setInterval(() => {
+          setTerminalLogs(prev => {
+            const recentLogs = prev.slice(-10)
+            const foundResponse = recentLogs.some(log => 
+              log.raw && (
+                log.raw.includes('OK') || 
+                log.raw.includes('device_info') || 
+                log.raw.includes('AT') ||
+                log.raw.includes('ready')
+              )
+            )
+            if (foundResponse && !hasResponse) {
+              hasResponse = true
+              setDeviceAlive(true)
+              return [...prev, { raw: '[TEST] ✅ Dispositif répond !', timestamp: new Date() }]
+            }
+            return prev
+          })
+        }, 500)
+        
+        // Timeout après 5 secondes
+        setTimeout(() => {
+          clearInterval(responseCheck)
+          if (!hasResponse) {
+            setDeviceAlive(false)
+            setTerminalLogs(prev => [...prev, { raw: '[TEST] ⚠️ Pas de réponse détectée (peut être normal si le dispositif redémarre encore)', timestamp: new Date() }])
+          }
+        }, 5000)
+      } catch (testErr) {
+        setTerminalLogs(prev => [...prev, { raw: `[TEST] ⚠️ Erreur test: ${testErr.message}`, timestamp: new Date() }])
+      }
     } catch (err) {
       setError(err.message)
       setTerminalLogs(prev => [...prev, { raw: `[ESPTOOL] ❌ Erreur: ${err.message}`, timestamp: new Date() }])
@@ -181,112 +228,140 @@ export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirm
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex-shrink-0 p-6 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+        <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">🔌 Flash USB</h2>
+            <h2 className="text-xl font-bold">🔌 Flash USB</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {device ? `Dispositif: ${device.device_name || device.sim_iccid}` : 'Flasher un dispositif via USB'}
+              {device ? `${device.device_name || device.sim_iccid}` : 'Flasher un dispositif'}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl">
             ✕
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Colonne gauche */}
-            <div className="space-y-4">
-              {/* Port série */}
-              <div className="card">
-                <h3 className="font-semibold mb-3">📡 Port série</h3>
-                {!isConnected ? (
-                  <button
-                    onClick={handleConnect}
-                    disabled={!isSupported || flashing}
-                    className="btn-primary w-full"
-                  >
-                    🔌 Sélectionner un port
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Sélection firmware et port */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Port série */}
+            <div>
+              <label className="block text-sm font-medium mb-2">📡 Port série</label>
+              {!isConnected ? (
+                <button
+                  onClick={handleConnect}
+                  disabled={!isSupported || flashing}
+                  className="btn-primary w-full text-sm"
+                >
+                  🔌 Sélectionner
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-2 text-sm">
+                    <p className="text-green-800 dark:text-green-300 font-semibold">● Connecté</p>
+                  </div>
+                  <button onClick={handleDisconnect} disabled={flashing} className="btn-secondary w-full text-xs">
+                    Déconnecter
                   </button>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-3">
-                      <p className="text-sm font-semibold text-green-800 dark:text-green-300">● Connecté</p>
+                </div>
+              )}
+            </div>
+
+            {/* Firmware */}
+            <div>
+              <label className="block text-sm font-medium mb-2">📦 Firmware</label>
+              {loading ? (
+                <p className="text-sm text-gray-500">Chargement...</p>
+              ) : (
+                <select
+                  value={selectedFirmware?.id || ''}
+                  onChange={(e) => {
+                    const fw = firmwares.find(f => f.id === parseInt(e.target.value))
+                    setSelectedFirmware(fw || null)
+                  }}
+                  disabled={flashing}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                >
+                  <option value="">Sélectionner...</option>
+                  {firmwares.map((fw) => (
+                    <option key={fw.id} value={fw.id}>
+                      v{fw.version} {fw.is_stable ? '✅' : '⚠️'}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Bouton flash */}
+          {isConnected && selectedFirmware && (
+            <div>
+              <button
+                onClick={handleFlash}
+                disabled={flashing}
+                className="btn-primary w-full"
+              >
+                {flashing ? `⏳ Flash en cours... ${flashProgress}%` : `🚀 Flasher v${selectedFirmware.version}`}
+              </button>
+              
+              {/* Barre de progression */}
+              {flashing && (
+                <div className="mt-3 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                  <div
+                    className="bg-primary-500 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${flashProgress}%` }}
+                  />
+                </div>
+              )}
+
+              {/* Statut après flash */}
+              {flashComplete && (
+                <div className="mt-3 p-3 rounded-lg border-2">
+                  {deviceAlive === true && (
+                    <div className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+                      <p className="text-green-800 dark:text-green-300 font-semibold">✅ Dispositif vivant et répond</p>
                     </div>
-                    <button onClick={handleDisconnect} disabled={flashing} className="btn-secondary w-full text-sm">
-                      Déconnecter
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Firmware */}
-              <div className="card">
-                <h3 className="font-semibold mb-3">📦 Firmware</h3>
-                {loading ? (
-                  <p className="text-sm text-gray-500">Chargement...</p>
-                ) : (
-                  <div className="space-y-2">
-                    {firmwares.map((fw) => (
-                      <div
-                        key={fw.id}
-                        onClick={() => setSelectedFirmware(fw)}
-                        className={`p-2 rounded border-2 cursor-pointer ${
-                          selectedFirmware?.id === fw.id
-                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                            : 'border-gray-200 dark:border-gray-700'
-                        }`}
-                      >
-                        <p className="font-mono text-sm">v{fw.version}</p>
-                        <p className="text-xs text-gray-500">{fw.is_stable ? '✅ Stable' : '⚠️ Beta'}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Bouton flash */}
-              {isConnected && selectedFirmware && (
-                <div className="card">
-                  <button
-                    onClick={handleFlash}
-                    disabled={flashing}
-                    className="btn-primary w-full"
-                  >
-                    {flashing ? `⏳ Flash... ${flashProgress}%` : `🚀 Flasher v${selectedFirmware.version}`}
-                  </button>
-                  {flashing && (
-                    <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-primary-500 h-2 rounded-full transition-all"
-                        style={{ width: `${flashProgress}%` }}
-                      />
+                  )}
+                  {deviceAlive === false && (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+                      <p className="text-yellow-800 dark:text-yellow-300 font-semibold">⚠️ Pas de réponse détectée (peut être normal si redémarrage)</p>
+                    </div>
+                  )}
+                  {deviceAlive === null && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                      <p className="text-blue-800 dark:text-blue-300 font-semibold">⏳ Vérification en cours...</p>
                     </div>
                   )}
                 </div>
               )}
             </div>
+          )}
 
-            {/* Colonne droite */}
-            <div className="space-y-4">
-              <SerialTerminal
-                isConnected={isConnected}
-                onRead={(onData) => startReading(onData)}
-                onWrite={write}
-                autoScroll={true}
-              />
-              <DeviceAutotest
-                isConnected={isConnected}
-                logs={terminalLogs}
-              />
+          {/* Console de logs */}
+          <div>
+            <label className="block text-sm font-medium mb-2">📟 Console</label>
+            <div className="bg-black text-green-400 font-mono text-xs p-4 rounded-lg h-64 overflow-y-auto">
+              {terminalLogs.length === 0 ? (
+                <p className="text-gray-500">En attente de logs...</p>
+              ) : (
+                terminalLogs.map((log, idx) => (
+                  <div key={idx} className="mb-1">
+                    <span className="text-gray-500">
+                      {log.timestamp.toLocaleTimeString('fr-FR')}
+                    </span>
+                    {' '}
+                    <span>{log.raw}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
+          {/* Erreurs */}
           {(error || serialError) && (
-            <div className="mt-4 alert alert-warning">
+            <div className="alert alert-warning text-sm">
               {error || serialError}
             </div>
           )}
