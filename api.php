@@ -37,7 +37,7 @@ if ($origin && in_array($origin, $allowedOrigins, true)) {
 
 header('Vary: Origin');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCID, X-Requested-With');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCID, X-Requested-With, Cache-Control, Accept');
 header('Access-Control-Max-Age: 86400');
 // Content-Type sera défini par chaque handler (JSON par défaut, SSE pour compilation)
 
@@ -625,10 +625,16 @@ function parseRequestPath() {
 $path = parseRequestPath();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-// Définir Content-Type JSON par défaut (sera remplacé pour SSE)
+// Définir Content-Type selon le type de route
 // Vérifier si c'est une route SSE avant de définir le header
 $isSSERoute = preg_match('#/firmwares/compile/(\d+)$#', $path) && $method === 'GET';
-if (!$isSSERoute) {
+if ($isSSERoute) {
+    // Pour SSE, définir le Content-Type immédiatement (même pour OPTIONS)
+    header('Content-Type: text/event-stream');
+    header('Cache-Control: no-cache');
+    header('Connection: keep-alive');
+    header('X-Accel-Buffering: no');
+} else {
     header('Content-Type: application/json; charset=utf-8');
 }
 
