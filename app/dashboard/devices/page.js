@@ -348,6 +348,19 @@ export default function DevicesPage() {
               const jsonData = JSON.parse(line.trim())
               if (jsonData.type === 'device_info') {
                 // Le firmware a envoyé automatiquement les infos du dispositif
+                // Validation que c'est un dispositif OTT
+                const isOttDevice = jsonData.firmware_version && (
+                  jsonData.firmware_version.startsWith('3.') || 
+                  jsonData.firmware_version.includes('OTT') ||
+                  jsonData.firmware_version.match(/^\d+\.\d+/)
+                )
+                
+                if (!isOttDevice) {
+                  logger.warn('⚠️ Dispositif non-OTT détecté (firmware_version:', jsonData.firmware_version, ')')
+                } else {
+                  logger.log('✅ Dispositif OTT reconnu via device_info')
+                }
+                
                 if (jsonData.iccid && jsonData.iccid.length >= 10) {
                   iccid = jsonData.iccid
                   logger.log('✅ ICCID reçu depuis device_info:', iccid)
@@ -530,21 +543,34 @@ export default function DevicesPage() {
         // Utiliser les dispositifs en cache si l'API échoue
       }
       
-      // Chercher par ICCID (plusieurs variantes)
+      // Chercher par ICCID (plusieurs variantes, par ordre de priorité)
       if (iccid && iccid !== 'N/A' && iccid.length >= 10) {
+        // 1. Correspondance exacte (priorité maximale)
         foundDevice = currentDevices.find(d => {
           if (!d.sim_iccid) return false
-          // Correspondance exacte
-          if (d.sim_iccid === iccid) return true
-          // Correspondance partielle (l'un contient l'autre)
-          if (d.sim_iccid.includes(iccid) || iccid.includes(d.sim_iccid)) return true
-          // Correspondance par les derniers chiffres (plus robuste)
-          const lastDigits = iccid.slice(-8)
-          if (d.sim_iccid.includes(lastDigits)) return true
-          return false
+          return d.sim_iccid === iccid
         })
         if (foundDevice) {
-          logger.log('✅ Dispositif trouvé par ICCID:', foundDevice.device_name || foundDevice.sim_iccid)
+          logger.log('✅ Dispositif trouvé par ICCID (correspondance exacte):', foundDevice.device_name || foundDevice.sim_iccid)
+        } else {
+          // 2. Correspondance partielle (l'un contient l'autre)
+          foundDevice = currentDevices.find(d => {
+            if (!d.sim_iccid) return false
+            return d.sim_iccid.includes(iccid) || iccid.includes(d.sim_iccid)
+          })
+          if (foundDevice) {
+            logger.log('✅ Dispositif trouvé par ICCID (correspondance partielle):', foundDevice.device_name || foundDevice.sim_iccid)
+          } else {
+            // 3. Correspondance par les 8 derniers chiffres (dernier recours)
+            const lastDigits = iccid.slice(-8)
+            foundDevice = currentDevices.find(d => {
+              if (!d.sim_iccid) return false
+              return d.sim_iccid.includes(lastDigits)
+            })
+            if (foundDevice) {
+              logger.log('✅ Dispositif trouvé par ICCID (8 derniers chiffres):', foundDevice.device_name || foundDevice.sim_iccid)
+            }
+          }
         }
       }
       
