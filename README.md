@@ -83,7 +83,10 @@ git push origin main
 ```
 
 ### Flux global
-- **Montant (devices → cloud)** : le firmware capture débit/batterie toutes les 5 min, ouvre le modem 4G, poste sur `/api.php/devices/measurements` (JSON + Bearer token quand auth active). Les logs et alertes utilisent `/api.php/devices/logs` et `/api.php/alerts`.
+- **Montant (devices → cloud)** : le firmware capture débit/batterie toutes les 5 min, ouvre le modem 4G, obtient la position GPS/réseau cellulaire (si disponible), puis poste sur `/api.php/devices/measurements` (JSON avec `latitude`/`longitude` + Bearer token quand auth active). Les logs et alertes utilisent `/api.php/devices/logs` et `/api.php/alerts`.
+- **Géolocalisation** :
+  - **Dispositifs OTA** : le firmware tente d'obtenir la position via GPS (priorité) ou réseau cellulaire (fallback) et l'inclut dans chaque mesure. L'API met à jour automatiquement `latitude`/`longitude` du dispositif.
+  - **Dispositifs USB** : la position est déterminée via géolocalisation IP du PC client (service ip-api.com). Mise à jour automatique lors de la réception d'une mesure USB.
 - **Persisté** : l’API écrit dans PostgreSQL (tables `devices`, `measurements`, `alerts`, `audit_logs`, etc.). Les requêtes utilisent PDO (pgsql) et auditent chaque action.
 - **Descendant** :
   - Dashboard Next.js appelle l’API (`NEXT_PUBLIC_API_URL`) pour charger stats, cartes Leaflet, notifications, OTA…
@@ -284,6 +287,14 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 
 ## 🆕 Améliorations Récentes (v3.3)
 
+### Géolocalisation (v3.1-gps)
+- **Position automatique pour dispositifs OTA** : le firmware v3.1-gps+ envoie automatiquement la position GPS (ou réseau cellulaire en fallback) dans chaque mesure
+- **Position automatique pour dispositifs USB** : déterminée via géolocalisation IP du PC client
+- **Mise à jour automatique** : l'API met à jour les coordonnées `latitude`/`longitude` dans la base de données à chaque mesure
+- **Affichage sur carte** : les dispositifs avec position apparaissent sur la carte interactive (`/dashboard/map`)
+
+## 🆕 Améliorations Récentes (v3.3)
+
 ### Interface Utilisateur
 - **Menu réorganisé** : passage de 14 onglets à 5 sections principales avec sous-menus déroulants
   - Dispositifs (Liste, Carte, Commandes, Historique, Journal, OTA)
@@ -325,10 +336,11 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 - ✅ Watchdog applicatif + instrumentation série (flux/batterie/RSSI, compte commandes, progression OTA)
 - ✅ Mesure paramétrable (passes, échantillons, délais) + timeouts modem/OTA ajustables à chaud
 - ✅ OTA primaire/fallback avec vérification MD5, rollback possible via `OTA_REQUEST`
-- ✅ Configuration par défaut embarquée (ICCID/APN/SIM PIN=1234 + JWT optionnel via macros `OTT_DEFAULT_*`) pour boîtiers prêts à l’emploi sans commande distante
+- ✅ Configuration par défaut embarquée (ICCID/APN/SIM PIN=1234 + JWT optionnel via macros `OTT_DEFAULT_*`) pour boîtiers prêts à l'emploi sans commande distante
 - ✅ Protocoles API alignés : headers `X-Device-ICCID`, payload `device_sim_iccid` + `payload{flowrate,battery,signal_*}`, prise en charge des réponses `/devices/{iccid}/commands/pending`
 - ✅ Reconfiguration distante des secrets APN/JWT/ICCID/serial/PIN SIM et paramètres runtime (watchdog, OTA, mesures) stockés en NVS
-- ✅ **Mode streaming USB** : brancher l’OTT en USB, ouvrir un moniteur série 115200 puis taper `usb` + Entrée <3s → 1 mesure/s en JSON (`interval=<ms>`, `once`, `exit`)
+- ✅ **Mode streaming USB** : brancher l'OTT en USB, ouvrir un moniteur série 115200 puis taper `usb` + Entrée <3s → 1 mesure/s en JSON (`interval=<ms>`, `once`, `exit`)
+- ✅ **Géolocalisation automatique** : envoi position GPS/réseau cellulaire dans chaque mesure OTA (v3.1-gps+). Pour dispositifs USB, position déterminée via IP du PC client
 
 #### Mode streaming USB – mode opératoire
 

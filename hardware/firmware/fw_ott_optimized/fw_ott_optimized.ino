@@ -91,7 +91,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.0-rebuild"
+#define FIRMWARE_VERSION_STR "3.1-gps"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -170,7 +170,7 @@ bool httpPost(const char* path, const String& body, String* response = nullptr);
 bool httpGet(const char* path, String* response);
 bool sendLog(const char* level, const String& message, const char* type = "firmware");
 
-bool sendMeasurement(const Measurement& m);
+bool sendMeasurement(const Measurement& m, float* latitude = nullptr, float* longitude = nullptr);
 int  fetchCommands(Command* out, size_t maxCount);
 bool acknowledgeCommand(const Command& cmd, bool success, const char* message);
 void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes);
@@ -194,6 +194,7 @@ bool detectUsbStreamingMode();
 void usbStreamingLoop();
 void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs);
 void printUsbStreamHelp(uint32_t intervalMs);
+bool getDeviceLocation(float* latitude, float* longitude);
 
 void setup()
 {
@@ -235,7 +236,16 @@ void setup()
   m.rssi = modem.getSignalQuality();
   Serial.printf("[MEASURE] final flow=%.2f L/min, batt=%.1f%%, rssi=%d dBm\n", m.flow, m.battery, m.rssi);
 
-  if (!sendMeasurement(m)) {
+  // Obtenir la position GPS ou réseau cellulaire (optionnel, ne bloque pas l'envoi)
+  float latitude = 0.0, longitude = 0.0;
+  bool hasLocation = getDeviceLocation(&latitude, &longitude);
+  if (hasLocation) {
+    Serial.printf("[GPS] Position: %.6f, %.6f\n", latitude, longitude);
+  } else {
+    Serial.println(F("[GPS] Position non disponible"));
+  }
+
+  if (!sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr)) {
     Serial.println(F("[API] Echec envoi mesure"));
   } else {
     Serial.println(F("[API] Mesure envoyée avec succès"));
@@ -874,10 +884,11 @@ bool httpGet(const char* path, String* response)
 // API logic                                                                     //
 // ----------------------------------------------------------------------------- //
 
-bool sendMeasurement(const Measurement& m)
+bool sendMeasurement(const Measurement& m, float* latitude, float* longitude)
 {
-  DynamicJsonDocument doc(512);
-  doc["device_sim_iccid"] = DEVICE_ICCID;
+  DynamicJsonDocument doc(768); // Augmenté pour inclure position
+  doc["sim_iccid"] = DEVICE_ICCID; // Format firmware (sim_iccid au lieu de device_sim_iccid)
+  doc["device_sim_iccid"] = DEVICE_ICCID; // Compatibilité ancien format
   doc["device_serial"] = DEVICE_SERIAL;
   doc["firmware_version"] = FIRMWARE_VERSION;
   doc["status"] = "TIMER";
@@ -889,6 +900,15 @@ bool sendMeasurement(const Measurement& m)
   doc["flowrate"] = m.flow;
   doc["battery"] = m.battery;
   doc["signal_dbm"] = m.rssi;
+  
+  // Ajouter la position GPS/réseau cellulaire si disponible
+  if (latitude != nullptr && longitude != nullptr) {
+    doc["latitude"] = *latitude;
+    doc["longitude"] = *longitude;
+    payload["latitude"] = *latitude;
+    payload["longitude"] = *longitude;
+  }
+  
   String body;
   serializeJson(doc, body);
   bool ok = httpPost(PATH_MEASURE, body);
@@ -1530,4 +1550,76 @@ bool performOtaUpdate(const String& url, const String& expectedMd5, const String
   
   // Note: Le firmware sera validé au prochain boot via validateBootAndMarkStable()
   return true;
+}
+
+// ----------------------------------------------------------------------------- //
+// GPS / Localisation                                                            //
+// ----------------------------------------------------------------------------- //
+
+/**
+ * Obtient la position du dispositif via GPS ou réseau cellulaire.
+ * 
+ * Priorité:
+ * 1. GPS si disponible (modem.getGPS())
+ * 2. Réseau cellulaire (modem.getGsmLocation()) si GPS échoue
+ * 
+ * @param latitude Pointeur vers la variable latitude (sortie)
+ * @param longitude Pointeur vers la variable longitude (sortie)
+ * @return true si la position a été obtenue, false sinon
+ */
+bool getDeviceLocation(float* latitude, float* longitude)
+{
+  if (!modemReady || latitude == nullptr || longitude == nullptr) {
+    return false;
+  }
+  
+  // Essayer d'abord le GPS (plus précis mais peut être plus lent)
+  float lat = 0.0, lon = 0.0;
+  float speed = 0.0, alt = 0.0;
+  int vsat = 0, usat = 0;
+  float accuracy = 0.0;
+  
+  // Tentative GPS avec timeout de 10 secondes
+  Serial.println(F("[GPS] Tentative GPS..."));
+  unsigned long gpsStart = millis();
+  bool gpsSuccess = false;
+  
+  // Essayer jusqu'à 3 fois avec timeout de 10s par tentative
+  for (int attempt = 0; attempt < 3 && !gpsSuccess && (millis() - gpsStart) < 10000; attempt++) {
+    if (modem.getGPS(&lat, &lon, &speed, &alt, &vsat, &usat, &accuracy)) {
+      // Valider les coordonnées (latitude: -90 à 90, longitude: -180 à 180)
+      if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0 && 
+          lat != 0.0 && lon != 0.0) { // Exclure 0,0 (souvent une erreur)
+        *latitude = lat;
+        *longitude = lon;
+        Serial.printf("[GPS] Position GPS obtenue: %.6f, %.6f (précision: %.1fm, satellites: %d)\n", 
+                      lat, lon, accuracy, usat);
+        gpsSuccess = true;
+        return true;
+      }
+    }
+    delay(500); // Attendre un peu entre les tentatives
+    feedWatchdog();
+  }
+  
+  // Si GPS échoue, essayer la localisation réseau cellulaire (plus rapide mais moins précis)
+  Serial.println(F("[GPS] GPS indisponible, tentative réseau cellulaire..."));
+  lat = 0.0;
+  lon = 0.0;
+  int gsmAccuracy = 0;
+  
+  if (modem.getGsmLocation(&lat, &lon, &gsmAccuracy)) {
+    // Valider les coordonnées
+    if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0 && 
+        lat != 0.0 && lon != 0.0) {
+      *latitude = lat;
+      *longitude = lon;
+      Serial.printf("[GPS] Position réseau cellulaire obtenue: %.6f, %.6f (précision: %dm)\n", 
+                    lat, lon, gsmAccuracy);
+      return true;
+    }
+  }
+  
+  Serial.println(F("[GPS] Aucune position disponible (GPS et réseau cellulaire échoués)"));
+  return false;
 }
