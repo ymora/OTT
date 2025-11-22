@@ -1432,6 +1432,12 @@ function handleUpdateDevice($device_id) {
         $fields = ['device_name', 'status', 'installation_date', 'first_use_date', 'latitude', 'longitude', 'firmware_version'];
         $updates = [];
         $params = ['id' => $device_id];
+        
+        // Permettre la mise à jour de last_seen via PUT (pour reconnaissance USB)
+        if (array_key_exists('last_seen', $input) && $input['last_seen']) {
+            $updates[] = "last_seen = :last_seen";
+            $params['last_seen'] = $input['last_seen'];
+        }
 
         foreach ($fields as $field) {
             if (array_key_exists($field, $input)) {

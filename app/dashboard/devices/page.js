@@ -612,6 +612,27 @@ export default function DevicesPage() {
         // Dispositif trouvé en base, utiliser celui-ci et NE PAS créer de virtuel
         setUsbConnectedDevice(foundDevice)
         setUsbVirtualDevice(null)
+        
+        // Mettre à jour last_seen dans la base pour indiquer que le dispositif a été vu
+        try {
+          logger.log('🔄 Mise à jour last_seen pour le dispositif USB...')
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${foundDevice.id}`,
+            {
+              method: 'PUT',
+              body: JSON.stringify({ 
+                last_seen: new Date().toISOString()
+              })
+            },
+            { requiresAuth: true }
+          )
+          logger.log('✅ last_seen mis à jour avec succès')
+        } catch (err) {
+          logger.debug('⚠️ Impossible de mettre à jour last_seen (non critique):', err)
+        }
+        
         await refetch() // Recharger pour synchroniser
         notifyDevicesUpdated()
         logger.log('🔌 Dispositif USB connecté (enregistré):', foundDevice.device_name || foundDevice.sim_iccid)
