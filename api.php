@@ -3835,25 +3835,50 @@ function handleCompileFirmware($firmware_id) {
         flush();
         
         // Vérifier si arduino-cli est disponible
-        // 1. Chercher dans bin/ du projet (priorité)
-        $localArduinoCli = __DIR__ . '/bin/arduino-cli' . (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' ? '.exe' : '');
-        if (file_exists($localArduinoCli) && is_executable($localArduinoCli)) {
-            $arduinoCli = $localArduinoCli;
-        } else {
-            // 2. Chercher dans le PATH système
-            $arduinoCli = trim(shell_exec('which arduino-cli 2>/dev/null || where arduino-cli 2>/dev/null'));
+        // ⚠️ CRITIQUE: La compilation ne doit JAMAIS être simulée - soit OK, soit ÉCHEC
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $arduinoCli = null;
+        
+        // 1. Chercher dans bin/ du projet (priorité absolue)
+        $localArduinoCli = __DIR__ . '/bin/arduino-cli' . ($isWindows ? '.exe' : '');
+        $localArduinoCliAlt = __DIR__ . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'arduino-cli' . ($isWindows ? '.exe' : '');
+        
+        // Essayer les deux formats de chemin (normalisé et avec séparateurs)
+        foreach ([$localArduinoCli, $localArduinoCliAlt] as $testPath) {
+            if (file_exists($testPath) && is_readable($testPath)) {
+                $arduinoCli = $testPath;
+                sendSSE('log', 'info', '✅ arduino-cli trouvé dans bin/ du projet');
+                break;
+            }
         }
         
+        // 2. Si pas trouvé localement, chercher dans le PATH système
+        if (empty($arduinoCli)) {
+            if ($isWindows) {
+                $pathCli = trim(shell_exec('where arduino-cli 2>nul || echo ""'));
+            } else {
+                $pathCli = trim(shell_exec('which arduino-cli 2>/dev/null || echo ""'));
+            }
+            
+            if (!empty($pathCli) && file_exists($pathCli)) {
+                $arduinoCli = $pathCli;
+                sendSSE('log', 'info', '✅ arduino-cli trouvé dans le PATH système');
+            }
+        }
+        
+        // 3. Vérification finale - ÉCHEC si arduino-cli n'est pas disponible
         if (empty($arduinoCli) || !file_exists($arduinoCli)) {
-            // Refuser la compilation si arduino-cli n'est pas disponible
-            sendSSE('error', 'arduino-cli n\'est pas installé sur le serveur. La compilation réelle est requise et ne peut pas être simulée.');
-            sendSSE('log', 'error', 'Pour activer la compilation, installez arduino-cli sur le serveur.');
+            sendSSE('error', '❌ ÉCHEC: arduino-cli non trouvé. La compilation réelle est requise.');
+            sendSSE('log', 'error', 'Pour activer la compilation, installez arduino-cli:');
+            sendSSE('log', 'error', '  - Windows: .\\scripts\\download_arduino_cli.ps1');
+            sendSSE('log', 'error', '  - Linux/Mac: ./scripts/download_arduino_cli.sh');
+            sendSSE('log', 'error', '  - Ou placez arduino-cli dans bin/ du projet');
             sendSSE('log', 'error', 'Instructions: https://arduino.github.io/arduino-cli/latest/installation/');
             
             // Marquer le firmware comme erreur dans la base de données
             $pdo->prepare("
                 UPDATE firmware_versions 
-                SET status = 'error'
+                SET status = 'error', error_message = 'arduino-cli non trouvé - compilation échouée'
                 WHERE id = :id
             ")->execute(['id' => $firmware_id]);
             
@@ -3861,7 +3886,7 @@ function handleCompileFirmware($firmware_id) {
             return;
         } else {
             // Compilation réelle avec arduino-cli
-            sendSSE('log', 'info', 'arduino-cli trouvé: ' . $arduinoCli);
+            sendSSE('log', 'info', '✅ arduino-cli disponible - démarrage de la compilation réelle');
             sendSSE('progress', 20);
             
             // Créer un dossier temporaire pour la compilation

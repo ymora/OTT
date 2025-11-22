@@ -315,33 +315,52 @@ export default function FirmwareUploadTab() {
         return
       }
 
+      // Vérifier si la version existe déjà
       let existingFirmware = null
       try {
         existingFirmware = await checkVersionExists(version)
+        
+        if (existingFirmware) {
+          // Version existe déjà - afficher le modal
+          setExistingFirmware(existingFirmware)
+          setPendingFile(file)
+          setShowVersionExistsModal(true)
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+          return
+        }
       } catch (err) {
+        // En cas d'erreur, on vérifie aussi dans la liste locale des firmwares
+        logger.warn('Erreur lors de la vérification version via API:', err)
+        
+        // Fallback: vérifier dans la liste locale
+        const localExisting = firmwares.find(fw => fw.version === version)
+        if (localExisting) {
+          setExistingFirmware(localExisting)
+          setPendingFile(file)
+          setShowVersionExistsModal(true)
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+          return
+        }
+        
+        // Si l'endpoint n'est pas disponible, on continue quand même mais on informe
         if (err.message?.includes('404') || err.message?.includes('Endpoint not found')) {
           logger.warn('Endpoint de vérification non disponible, continuation de l\'upload')
           setError('⚠️ L\'endpoint de vérification n\'est pas disponible. L\'upload continue sans vérification.')
-          existingFirmware = null
         } else {
           setError(`⚠️ Erreur lors de la vérification: ${err.message}. L'upload continue.`)
-          existingFirmware = null
         }
       }
       
-      if (existingFirmware) {
-        setExistingFirmware(existingFirmware)
-        setPendingFile(file)
-        setShowVersionExistsModal(true)
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ''
-        }
-        return
+      // Si pas de version existante, continuer l'upload
+      if (!existingFirmware) {
+        setTimeout(() => {
+          handleUpload(file)
+        }, 100)
       }
-      
-      setTimeout(() => {
-        handleUpload(file)
-      }, 100)
     } catch (err) {
       logger.error('Erreur lors de la lecture du fichier:', err)
       setError('Erreur lors de la lecture du fichier')
