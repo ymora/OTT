@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useSerialPort } from '@/components/SerialPortManager'
 import logger from '@/lib/logger'
+import logger from '@/lib/logger'
 
 const UsbContext = createContext()
 
