@@ -7,6 +7,7 @@ import { useUsbAutoDetection } from '@/hooks'
 import FirmwareUploadTab from '@/components/configuration/FirmwareUploadTab'
 import FirmwareFlashTab from '@/components/configuration/FirmwareFlashTab'
 import UsbStreamingTab from '@/components/configuration/UsbStreamingTab'
+import DeviceConfigurationTab from '@/components/configuration/DeviceConfigurationTab'
 
 export default function ConfigurationPage() {
   const { user } = useAuth()
@@ -34,6 +35,7 @@ export default function ConfigurationPage() {
   const tabs = [
     { id: 'upload', label: 'Upload Firmware', icon: '📤' },
     { id: 'flash', label: 'Flash', icon: '🔌' },
+    { id: 'configuration', label: 'Configuration', icon: '⚙️' },
     { id: 'streaming', label: 'Streaming USB', icon: '📡' }
   ]
 
@@ -76,6 +78,7 @@ export default function ConfigurationPage() {
       <div className="mt-6">
         {activeTab === 'upload' && <FirmwareUploadTab />}
         {activeTab === 'flash' && <FirmwareFlashTab />}
+        {activeTab === 'configuration' && <DeviceConfigurationTab />}
         {activeTab === 'streaming' && <UsbStreamingTab />}
       </div>
     </div>
