@@ -161,6 +161,10 @@ export function UsbProvider({ children }) {
             fromUsbInfo: true // Flag pour indiquer que c'est depuis device_info
           }
           
+          // Essayer d'abord de trouver le dispositif dans la base de données
+          // Cette logique devrait être dans devices/page.js, mais on peut aussi essayer ici
+          // Si on a un callback pour chercher le dispositif, l'utiliser
+          
           // Si on n'a pas encore de dispositif USB connecté, utiliser ces infos
           if (!usbConnectedDevice && !usbVirtualDevice) {
             setUsbVirtualDevice(deviceInfo)
@@ -172,8 +176,13 @@ export function UsbProvider({ children }) {
           }
           
           // Mettre à jour automatiquement le firmware_version dans la base de données
+          // Utiliser ICCID, serial, ou device_name pour trouver le dispositif
           if (payload.firmware_version && updateDeviceFirmwareRef.current) {
-            updateDeviceFirmwareRef.current(payload.iccid || payload.serial, payload.firmware_version)
+            // Essayer ICCID d'abord, puis serial, puis device_name
+            const identifier = payload.iccid || payload.serial || payload.device_name
+            if (identifier) {
+              updateDeviceFirmwareRef.current(identifier, payload.firmware_version)
+            }
           }
           
           return

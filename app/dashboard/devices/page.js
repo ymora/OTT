@@ -231,12 +231,39 @@ export default function DevicesPage() {
         const allDevices = devicesResponse.devices || []
         
         // Trouver le dispositif correspondant
-        const device = allDevices.find(d => {
+        // Essayer correspondance exacte d'abord
+        let device = allDevices.find(d => {
           if (d.sim_iccid && d.sim_iccid === identifier) return true
           if (d.device_serial && d.device_serial === identifier) return true
-          if (d.device_name && d.device_name.includes(identifier)) return true
+          if (d.device_name && d.device_name === identifier) return true
           return false
         })
+        
+        // Si pas trouvé, essayer correspondance partielle
+        if (!device) {
+          device = allDevices.find(d => {
+            if (d.sim_iccid && (d.sim_iccid.includes(identifier) || identifier.includes(d.sim_iccid))) return true
+            if (d.device_serial && (d.device_serial.includes(identifier) || identifier.includes(d.device_serial))) return true
+            if (d.device_name && (d.device_name.includes(identifier) || identifier.includes(d.device_name))) return true
+            return false
+          })
+        }
+        
+        // Si toujours pas trouvé et que l'identifiant ressemble à un USB-xxx:yyy, chercher par USB ID
+        if (!device && identifier.match(/USB-([a-f0-9:]+)/i)) {
+          const usbIdMatch = identifier.match(/USB-([a-f0-9:]+)/i)
+          if (usbIdMatch) {
+            const usbId = usbIdMatch[1].toLowerCase()
+            device = allDevices.find(d => {
+              if (d.device_name) {
+                const nameMatch = d.device_name.match(/USB-([a-f0-9:]+)/i)
+                if (nameMatch && nameMatch[1].toLowerCase() === usbId) return true
+                if (d.device_name.toLowerCase().includes(usbId)) return true
+              }
+              return false
+            })
+          }
+        }
         
         if (!device) {
           logger.debug('⚠️ Dispositif non trouvé pour mise à jour firmware_version:', identifier)

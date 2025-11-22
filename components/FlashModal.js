@@ -319,21 +319,72 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
       addLog('[USB] ✅ Flash réussi !')
 
       // Mettre à jour la version firmware dans la base
-      if (device && device.id && selectedFirmware) {
+      // Chercher le dispositif par ID, ICCID, serial ou device_name
+      if (selectedFirmware) {
         try {
-          addLog('[UPDATE] Mise à jour version firmware dans la base...')
-          await fetchJson(
-            fetchWithAuth,
-            API_URL,
-            `/api.php/devices/${device.id}`,
-            {
-              method: 'PUT',
-              body: JSON.stringify({ firmware_version: selectedFirmware.version })
-            },
-            { requiresAuth: true }
-          )
-          addLog(`[UPDATE] ✅ Version firmware mise à jour: v${selectedFirmware.version}`)
-          await refreshDevices()
+          addLog('[UPDATE] Recherche du dispositif dans la base...')
+          
+          let deviceId = null
+          
+          // Si on a un ID direct, l'utiliser
+          if (device?.id) {
+            deviceId = device.id
+          } else {
+            // Sinon, chercher dans la base par ICCID, serial ou device_name
+            const devicesResponse = await fetchJson(
+              fetchWithAuth,
+              API_URL,
+              '/api.php/devices',
+              { method: 'GET' },
+              { requiresAuth: true }
+            )
+            const allDevices = devicesResponse.devices || []
+            
+            // Chercher par ICCID
+            if (device?.sim_iccid) {
+              const found = allDevices.find(d => d.sim_iccid === device.sim_iccid)
+              if (found) deviceId = found.id
+            }
+            
+            // Chercher par device_serial
+            if (!deviceId && device?.device_serial) {
+              const found = allDevices.find(d => d.device_serial === device.device_serial)
+              if (found) deviceId = found.id
+            }
+            
+            // Chercher par device_name (USB-xxx:yyy)
+            if (!deviceId && device?.device_name) {
+              const usbIdMatch = device.device_name.match(/USB-([a-f0-9:]+)/i)
+              if (usbIdMatch) {
+                const usbId = usbIdMatch[1]
+                const found = allDevices.find(d => {
+                  if (d.device_name && d.device_name.includes(usbId)) return true
+                  if (d.device_serial && d.device_serial.includes(usbId)) return true
+                  return false
+                })
+                if (found) deviceId = found.id
+              }
+            }
+          }
+          
+          if (deviceId) {
+            addLog(`[UPDATE] Dispositif trouvé (ID: ${deviceId}), mise à jour version firmware...`)
+            await fetchJson(
+              fetchWithAuth,
+              API_URL,
+              `/api.php/devices/${deviceId}`,
+              {
+                method: 'PUT',
+                body: JSON.stringify({ firmware_version: selectedFirmware.version })
+              },
+              { requiresAuth: true }
+            )
+            addLog(`[UPDATE] ✅ Version firmware mise à jour: v${selectedFirmware.version}`)
+            await refreshDevices()
+          } else {
+            addLog(`[UPDATE] ⚠️ Dispositif non trouvé en base - la version sera mise à jour lors de la prochaine connexion USB`)
+            logger.warn('Dispositif non trouvé pour mise à jour firmware:', device)
+          }
         } catch (updateErr) {
           logger.warn('⚠️ Erreur mise à jour version firmware:', updateErr)
           addLog(`[UPDATE] ⚠️ Erreur mise à jour: ${updateErr.message}`)
