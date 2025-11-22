@@ -353,11 +353,13 @@ export default function InoEditorTab() {
 
         // Vérifier si la version existe déjà
         let existingFirmware = null
+        let versionExists = false
         try {
           existingFirmware = await checkVersionExists(version)
           
           if (existingFirmware) {
             // Version existe déjà - afficher le modal
+            versionExists = true
             setExistingFirmware(existingFirmware)
             setPendingFile(file)
             setShowVersionExistsModal(true)
@@ -373,6 +375,7 @@ export default function InoEditorTab() {
           // Fallback: vérifier dans la liste locale
           const localExisting = firmwares.find(fw => fw.version === version)
           if (localExisting) {
+            versionExists = true
             setExistingFirmware(localExisting)
             setPendingFile(file)
             setShowVersionExistsModal(true)
@@ -390,6 +393,14 @@ export default function InoEditorTab() {
             setError(`⚠️ Erreur lors de la vérification: ${err.message}. L'upload continue.`)
           }
         }
+        
+        // Si la version n'existe pas, lancer automatiquement l'upload
+        if (!versionExists && !existingFirmware) {
+          // Attendre un court instant pour s'assurer que les états sont bien mis à jour
+          setTimeout(() => {
+            handleUpload(file, content)
+          }, 100)
+        }
       }
       reader.onerror = () => {
         setError('Erreur lors de la lecture du fichier')
@@ -401,7 +412,7 @@ export default function InoEditorTab() {
       setError('Erreur lors de la lecture du fichier')
       setSelectedFile(null)
     }
-  }, [fetchWithAuth, API_URL, firmwares])
+  }, [fetchWithAuth, API_URL, firmwares, checkVersionExists, handleUpload])
 
   // Gérer les modifications du contenu
   const handleContentChange = useCallback((e) => {
