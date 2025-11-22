@@ -52,7 +52,7 @@ export default function FirmwareFlashTab() {
     })
   }, [])
 
-  // Sélectionner/désélectionner tous
+  // Sélectionner/désélectionner tous (via checkbox header)
   const toggleSelectAll = useCallback(() => {
     if (selectedDevices.size === devices.length) {
       setSelectedDevices(new Set())
@@ -60,6 +60,25 @@ export default function FirmwareFlashTab() {
       setSelectedDevices(new Set(devices.map(d => d.id).filter(Boolean)))
     }
   }, [selectedDevices, devices])
+
+  // Flasher un dispositif individuel (via icône flash)
+  const handleFlashSingle = useCallback(async (device, e) => {
+    e.stopPropagation()
+    if (!selectedFirmwareForFlash) return
+    
+    const isUsbConnected = usbConnectedDevice?.id === device.id
+    const isUsbVirtual = usbVirtualDevice && !device.id && usbVirtualDevice.sim_iccid === device.sim_iccid
+    
+    // Priorité USB si connecté
+    if (isUsbConnected || isUsbVirtual) {
+      setDeviceForFlash(device)
+      setFlashMode('usb')
+      setShowFlashModal(true)
+    } else {
+      // Flash OTA direct
+      await flashDevice(device, selectedFirmwareForFlash.version)
+    }
+  }, [selectedFirmwareForFlash, usbConnectedDevice, usbVirtualDevice, flashDevice])
 
   // Flasher un dispositif (OTA ou USB selon disponibilité)
   const flashDevice = useCallback(async (device, firmwareVersion) => {
@@ -262,24 +281,16 @@ export default function FirmwareFlashTab() {
           </select>
         </div>
 
-        {/* Bouton Flash multiple */}
-        {selectedFirmwareForFlash && devices.length > 0 && (
-          <div className="mb-4 flex items-center gap-3">
+        {/* Bouton Flash multiple (apparaît quand des dispositifs sont sélectionnés) */}
+        {selectedDevices.size > 0 && selectedFirmwareForFlash && (
+          <div className="mb-4">
             <button
-              onClick={toggleSelectAll}
-              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
+              onClick={handleFlashMultiple}
+              disabled={flashMultipleMode}
+              className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {selectedDevices.size === devices.length ? '☑️ Tout désélectionner' : '☐ Tout sélectionner'}
+              🚀 Flasher {selectedDevices.size} dispositif{selectedDevices.size > 1 ? 's' : ''} ({flashMultipleMode ? 'En cours...' : 'OTA/USB'})
             </button>
-            {selectedDevices.size > 0 && (
-              <button
-                onClick={handleFlashMultiple}
-                disabled={flashMultipleMode}
-                className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                🚀 Flasher {selectedDevices.size} dispositif{selectedDevices.size > 1 ? 's' : ''} ({flashMultipleMode ? 'En cours...' : 'OTA/USB'})
-              </button>
-            )}
           </div>
         )}
 
@@ -299,12 +310,15 @@ export default function FirmwareFlashTab() {
                   <thead className="bg-gray-50 dark:bg-gray-800">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-12">
-                        <input
-                          type="checkbox"
-                          checked={selectedDevices.size === devices.length && devices.length > 0}
-                          onChange={toggleSelectAll}
-                          className="rounded"
-                        />
+                        {selectedFirmwareForFlash && (
+                          <input
+                            type="checkbox"
+                            checked={selectedDevices.size === devices.length && devices.length > 0}
+                            onChange={toggleSelectAll}
+                            className="rounded"
+                            title="Sélectionner tous"
+                          />
+                        )}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                         Dispositif
@@ -387,9 +401,9 @@ export default function FirmwareFlashTab() {
                           </td>
                           <td className="py-3 px-4">
                             {flashStatus ? (
-                              <div className="space-y-1">
+                              <div className="space-y-1.5 min-w-[200px]">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-gray-600">
+                                  <span className="text-gray-600 dark:text-gray-400">
                                     {flashStatus.status === 'starting' && '⏳ Démarrage...'}
                                     {flashStatus.status === 'triggering' && '📡 Déclenchement...'}
                                     {flashStatus.status === 'pending' && '⏳ En attente...'}
@@ -397,11 +411,11 @@ export default function FirmwareFlashTab() {
                                     {flashStatus.status === 'executed' && '✅ Terminé'}
                                     {flashStatus.status === 'error' && '❌ Erreur'}
                                   </span>
-                                  <span className="font-semibold">{flashStatus.progress}%</span>
+                                  <span className="font-semibold text-primary-600 dark:text-primary-400">{flashStatus.progress}%</span>
                                 </div>
-                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                                   <div
-                                    className={`h-2 rounded-full transition-all duration-300 ${
+                                    className={`h-3 rounded-full transition-all duration-300 ${
                                       flashStatus.status === 'error' ? 'bg-red-500' :
                                       flashStatus.status === 'executed' ? 'bg-green-500' :
                                       'bg-primary-500'
@@ -415,37 +429,22 @@ export default function FirmwareFlashTab() {
                             )}
                           </td>
                           <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex gap-2">
-                              {/* Bouton Flash USB */}
-                              {(isUsbConnected || isUsbVirtual) && (
-                                <button
-                                  onClick={() => {
-                                    setDeviceForFlash(device)
-                                    setFlashMode('usb')
-                                    setShowFlashModal(true)
-                                  }}
-                                  className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors"
-                                  title="Flasher via USB"
-                                >
-                                  🔌 USB
-                                </button>
-                              )}
-                              
-                              {/* Bouton Flash OTA */}
-                              {device.id && (
-                                <button
-                                  onClick={() => {
-                                    setDeviceForFlash(device)
-                                    setFlashMode('ota')
-                                    setShowFlashModal(true)
-                                  }}
-                                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-medium transition-colors"
-                                  title="Flasher via OTA (Over-The-Air)"
-                                >
-                                  📡 OTA
-                                </button>
-                              )}
-                            </div>
+                            {selectedFirmwareForFlash && (
+                              <button
+                                onClick={(e) => handleFlashSingle(device, e)}
+                                disabled={!!flashStatus && flashStatus.status !== 'executed' && flashStatus.status !== 'error'}
+                                className="p-2 text-2xl hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={isUsbConnected || isUsbVirtual ? 'Flasher via USB' : 'Flasher via OTA'}
+                              >
+                                {flashStatus ? (
+                                  flashStatus.status === 'executed' ? '✅' :
+                                  flashStatus.status === 'error' ? '❌' :
+                                  '🔄'
+                                ) : (
+                                  '🚀'
+                                )}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       )
