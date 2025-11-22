@@ -54,25 +54,7 @@ export default function FirmwareUploadPage() {
   } = useUsb()
 
   // Activer la détection automatique USB si aucun dispositif n'est connecté
-  useEffect(() => {
-    if (!isSupported) {
-      setAutoDetecting(false)
-      return
-    }
-
-    // Si un dispositif USB est déjà connecté, pas besoin de détecter
-    if (usbConnectedDevice || usbVirtualDevice) {
-      return
-    }
-
-    // Activer la détection automatique pour que le contexte USB puisse détecter
-    // La détection complète se fait dans devices/page.js, mais on s'assure que
-    // autoDetecting est activé ici aussi pour que le contexte USB fonctionne
-    if (!autoDetecting) {
-      setAutoDetecting(true)
-      logger.log('🔄 Activation de la détection automatique USB (page firmware)')
-    }
-  }, [isSupported, autoDetecting, setAutoDetecting, usbConnectedDevice, usbVirtualDevice])
+  useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting, usbConnectedDevice, usbVirtualDevice)
 
   // Vérifier les permissions (admin ou technicien)
   const canUpload = user?.role_name === 'admin' || user?.role_name === 'technicien'

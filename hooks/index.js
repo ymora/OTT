@@ -8,4 +8,5 @@ export { useForm } from './useForm'
 export { useModal } from './useModal'
 export { useDebounce } from './useDebounce'
 export { useFilter } from './useFilter'
+export { useUsbAutoDetection } from './useUsbAutoDetection'
 
