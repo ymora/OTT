@@ -74,6 +74,23 @@ export default function FlashUSBModal({ isOpen, onClose, device, preselectedFirm
     }
   }, [API_URL, fetchWithAuth])
 
+  // Fonction pour rafraîchir les données après mise à jour (appelée depuis le parent si nécessaire)
+  const refreshDevices = useCallback(async () => {
+    try {
+      // Recharger les dispositifs depuis l'API pour rafraîchir l'affichage
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        '/api.php/devices',
+        { method: 'GET' },
+        { requiresAuth: true }
+      )
+      logger.log('✅ Dispositifs rafraîchis après mise à jour firmware')
+    } catch (err) {
+      logger.warn('⚠️ Erreur rafraîchissement dispositifs:', err)
+    }
+  }, [fetchWithAuth, API_URL])
+
   // Charger au montage et pré-sélectionner le firmware si fourni
   useEffect(() => {
     if (isOpen) {
