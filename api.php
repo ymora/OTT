@@ -3982,15 +3982,15 @@ function handleCompileFirmware($firmware_id) {
                 sendSSE('log', 'info', 'Installation du core ESP32...');
                 sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
                 sendSSE('progress', 45);
-            
-            // Exécuter avec output en temps réel pour voir la progression
-            $descriptorspec = [
-                0 => ["pipe", "r"],  // stdin
-                1 => ["pipe", "w"],  // stdout
-                2 => ["pipe", "w"]   // stderr
-            ];
-            
-            $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
+                
+                // Exécuter avec output en temps réel pour voir la progression
+                $descriptorspec = [
+                    0 => ["pipe", "r"],  // stdin
+                    1 => ["pipe", "w"],  // stdout
+                    2 => ["pipe", "w"]   // stderr
+                ];
+                
+                $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
             
             if (is_resource($process)) {
                 // Lire la sortie ligne par ligne pour afficher la progression
