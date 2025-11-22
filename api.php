@@ -3958,9 +3958,85 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('log', 'info', implode("\n", $output));
             
             sendSSE('log', 'info', 'Installation du core ESP32...');
+            sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~100MB)...');
             sendSSE('progress', 50);
-            exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $output, $return);
-            sendSSE('log', 'info', implode("\n", $output));
+            
+            // Exécuter avec output en temps réel pour voir la progression
+            $descriptorspec = [
+                0 => ["pipe", "r"],  // stdin
+                1 => ["pipe", "w"],  // stdout
+                2 => ["pipe", "w"]   // stderr
+            ];
+            
+            $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
+            
+            if (is_resource($process)) {
+                // Lire la sortie ligne par ligne pour afficher la progression
+                $output = [];
+                $stdout = $pipes[1];
+                $stderr = $pipes[2];
+                
+                // Configurer les streams en non-bloquant
+                stream_set_blocking($stdout, false);
+                stream_set_blocking($stderr, false);
+                
+                $startTime = time();
+                $lastOutputTime = $startTime;
+                
+                while (true) {
+                    $status = proc_get_status($process);
+                    
+                    // Lire stdout
+                    $line = fgets($stdout);
+                    if ($line !== false) {
+                        $line = trim($line);
+                        if (!empty($line)) {
+                            $output[] = $line;
+                            sendSSE('log', 'info', $line);
+                            flush();
+                            $lastOutputTime = time();
+                        }
+                    }
+                    
+                    // Lire stderr
+                    $errLine = fgets($stderr);
+                    if ($errLine !== false) {
+                        $errLine = trim($errLine);
+                        if (!empty($errLine)) {
+                            $output[] = $errLine;
+                            sendSSE('log', 'info', $errLine);
+                            flush();
+                            $lastOutputTime = time();
+                        }
+                    }
+                    
+                    // Vérifier si le processus est terminé
+                    if ($status['running'] === false) {
+                        break;
+                    }
+                    
+                    // Timeout de sécurité : si pas de sortie depuis 5 minutes, considérer comme bloqué
+                    if (time() - $lastOutputTime > 300) {
+                        sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 5 minutes, le processus semble bloqué');
+                        proc_terminate($process);
+                        break;
+                    }
+                    
+                    // Attendre un peu avant de relire
+                    usleep(100000); // 100ms
+                }
+                
+                // Fermer les pipes
+                fclose($pipes[0]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                
+                $return = proc_close($process);
+            } else {
+                // Fallback sur exec si proc_open échoue
+                exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $output, $return);
+                sendSSE('log', 'info', implode("\n", $output));
+            }
             
             sendSSE('log', 'info', 'Compilation du firmware...');
             sendSSE('progress', 60);
