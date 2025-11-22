@@ -49,8 +49,12 @@ if (getenv('DEBUG_ERRORS') === 'true') {
 }
 
 // Répondre immédiatement aux requêtes OPTIONS (preflight)
+// IMPORTANT: Les headers CORS doivent être définis AVANT cette vérification
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    // Pour les routes SSE, ne pas définir Content-Type (OPTIONS n'a pas de body)
+    // Mais s'assurer que les headers CORS sont corrects
     http_response_code(204);
+    // Ne pas définir Content-Type pour OPTIONS (pas de body)
     exit();
 }
 
@@ -628,13 +632,13 @@ $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 // Définir Content-Type selon le type de route
 // Vérifier si c'est une route SSE avant de définir le header
 $isSSERoute = preg_match('#/firmwares/compile/(\d+)$#', $path) && $method === 'GET';
-if ($isSSERoute) {
-    // Pour SSE, définir le Content-Type immédiatement (même pour OPTIONS)
+if ($isSSERoute && $method !== 'OPTIONS') {
+    // Pour SSE, définir le Content-Type immédiatement (sauf pour OPTIONS qui n'a pas de body)
     header('Content-Type: text/event-stream');
     header('Cache-Control: no-cache');
     header('Connection: keep-alive');
     header('X-Accel-Buffering: no');
-} else {
+} elseif (!$isSSERoute && $method !== 'OPTIONS') {
     header('Content-Type: application/json; charset=utf-8');
 }
 
