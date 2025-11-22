@@ -410,24 +410,51 @@ function handleRunMigration() {
 // ROUTER
 // ============================================================================
 
-$uri = $_SERVER['REQUEST_URI'] ?? '/';
-$path = parse_url($uri, PHP_URL_PATH) ?? '/';
-$scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-
-// Support accès via /api.php/route (Render, Apache, etc.)
-if (!empty($scriptName)) {
-    $scriptBase = '/' . ltrim($scriptName, '/');
-    if (strpos($path, $scriptBase) === 0) {
-        $path = substr($path, strlen($scriptBase)) ?: '/';
+/**
+ * Parse et normalise le chemin de la requête
+ * Gère les différents formats : /api.php/route, /route, api.php/route
+ */
+function parseRequestPath() {
+    $uri = $_SERVER['REQUEST_URI'] ?? '/';
+    $path = parse_url($uri, PHP_URL_PATH) ?? '/';
+    
+    // Supprimer les query strings et fragments
+    $path = rtrim($path, '/');
+    if (empty($path)) {
+        $path = '/';
     }
+    
+    // Normaliser : supprimer /api.php du début si présent
+    if (strpos($path, '/api.php') === 0) {
+        $path = substr($path, 7); // 7 = strlen('/api.php')
+        if (empty($path)) {
+            $path = '/';
+        }
+    }
+    
+    // Gérer SCRIPT_NAME si présent (Apache mod_rewrite)
+    $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+    if (!empty($scriptName) && $scriptName !== '/api.php') {
+        $scriptBase = '/' . ltrim(basename($scriptName), '/');
+        if (strpos($path, $scriptBase) === 0) {
+            $path = substr($path, strlen($scriptBase));
+            if (empty($path)) {
+                $path = '/';
+            }
+        }
+    }
+    
+    // Gérer PATH_INFO (Apache mod_rewrite)
+    $pathInfo = $_SERVER['PATH_INFO'] ?? '';
+    if (!empty($pathInfo)) {
+        $path = $pathInfo;
+    }
+    
+    return $path;
 }
 
-// Fallback générique si /api.php est en dur dans l'URL
-if (strpos($path, '/api.php') === 0) {
-    $path = substr($path, strlen('/api.php')) ?: '/';
-}
-
-$method = $_SERVER['REQUEST_METHOD'];
+$path = parseRequestPath();
+$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 // Auth
 if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
