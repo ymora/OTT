@@ -11,6 +11,7 @@ import Modal from '@/components/Modal'
 import FlashUSBModal from '@/components/FlashUSBModal'
 import { useUsb } from '@/contexts/UsbContext'
 import logger from '@/lib/logger'
+import { formatTimeAgo } from '@/lib/utils'
 
 export default function FirmwareUploadPage() {
   const { fetchWithAuth, API_URL, user, token } = useAuth()
@@ -975,11 +976,26 @@ export default function FirmwareUploadPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              {device.last_seen ? (
-                                <span className="text-xs text-gray-600">
-                                  Vu il y a {Math.round((new Date() - new Date(device.last_seen)) / (1000 * 60))} min
-                                </span>
-                              ) : (
+                              {device.last_seen ? (() => {
+                                const minutes = Math.round((new Date() - new Date(device.last_seen)) / (1000 * 60))
+                                const hours = Math.floor(minutes / 60)
+                                const days = Math.floor(hours / 24)
+                                
+                                let timeAgo
+                                if (days > 0) {
+                                  timeAgo = `${days} jour${days > 1 ? 's' : ''}`
+                                } else if (hours > 0) {
+                                  timeAgo = `${hours} heure${hours > 1 ? 's' : ''}`
+                                } else {
+                                  timeAgo = `${minutes} min`
+                                }
+                                
+                                return (
+                                  <span className="text-xs text-gray-600">
+                                    Vu il y a {timeAgo}
+                                  </span>
+                                )
+                              })() : (
                                 <span className="text-xs text-gray-400">Jamais vu</span>
                               )}
                             </td>
