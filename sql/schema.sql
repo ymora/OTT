@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS firmware_versions (
   is_stable BOOLEAN DEFAULT FALSE,
   min_battery_pct INT DEFAULT 30,
   uploaded_by INT REFERENCES users(id) ON DELETE SET NULL,
+  status VARCHAR(50) DEFAULT 'compiled' CHECK (status IN ('pending_compilation', 'compiling', 'compiled', 'error')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -413,11 +414,12 @@ ON CONFLICT (device_id) DO UPDATE SET
   firmware_version = EXCLUDED.firmware_version,
   calibration_coefficients = EXCLUDED.calibration_coefficients;
 
-INSERT INTO firmware_versions (version, file_path, file_size, is_stable, release_notes, uploaded_by)
-VALUES ('3.0.0', 'firmwares/fw_ott_v3.0.0.bin', 925000, TRUE, 'Version 3.0 stable avec OTA + JWT + Notifications', 1)
-ON CONFLICT (version) DO UPDATE SET 
-  file_path = EXCLUDED.file_path,
-  is_stable = EXCLUDED.is_stable;
+-- Firmwares fictifs supprimés - Les firmwares seront uploadés via l'interface
+-- INSERT INTO firmware_versions (version, file_path, file_size, is_stable, release_notes, uploaded_by)
+-- VALUES ('3.0.0', 'firmwares/fw_ott_v3.0.0.bin', 925000, TRUE, 'Version 3.0 stable avec OTA + JWT + Notifications', 1)
+-- ON CONFLICT (version) DO UPDATE SET 
+--   file_path = EXCLUDED.file_path,
+--   is_stable = EXCLUDED.is_stable;
 
 INSERT INTO measurements (device_id, timestamp, flowrate, battery, device_status)
 VALUES

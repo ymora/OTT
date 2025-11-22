@@ -416,6 +416,162 @@ function handleRunMigration() {
     }
 }
 
+function handleMigrateFirmwareStatus() {
+    global $pdo;
+    
+    $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? null;
+    $allowWithoutAuth = in_array($remoteAddr, ['127.0.0.1', '::1', 'localhost'], true) || AUTH_DISABLED || getenv('ALLOW_MIGRATION_ENDPOINT') === 'true';
+    $currentUser = getCurrentUser();
+    $isAdmin = $currentUser && $currentUser['role_name'] === 'admin';
+    
+    if (!$allowWithoutAuth && !$isAdmin) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Forbidden: admin only']);
+        return;
+    }
+    
+    try {
+        // Vérifier si la colonne existe déjà
+        $columnExists = columnExists('firmware_versions', 'status');
+        
+        if ($columnExists) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Column status already exists',
+                'column_exists' => true
+            ]);
+            return;
+        }
+        
+        // Ajouter la colonne status
+        $pdo->exec("
+            ALTER TABLE firmware_versions 
+            ADD COLUMN status VARCHAR(50) DEFAULT 'compiled' 
+            CHECK (status IN ('pending_compilation', 'compiling', 'compiled', 'error'))
+        ");
+        
+        // Mettre à jour les firmwares existants
+        $pdo->exec("UPDATE firmware_versions SET status = 'compiled' WHERE status IS NULL");
+        
+        // Vérifier que la colonne a été créée
+        $columnExistsAfter = columnExists('firmware_versions', 'status');
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Column status added successfully',
+            'column_exists' => $columnExistsAfter
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Migration error';
+        error_log('[handleMigrateFirmwareStatus] Error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    } catch(Exception $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+function handleClearFirmwares() {
+    global $pdo;
+    
+    requirePermission('firmwares.manage');
+    
+    try {
+        // Compter les firmwares avant suppression
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
+        $countBefore = $countStmt->fetchColumn();
+        
+        // Supprimer tous les firmwares
+        $pdo->exec("DELETE FROM firmware_versions");
+        
+        auditLog('firmwares.cleared', 'firmware', null, ['count' => $countBefore], ['count' => 0]);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Tous les firmwares ont été supprimés',
+            'deleted_count' => intval($countBefore)
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleClearFirmwares] Error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
+function handleInitFirmwareDb() {
+    global $pdo;
+    
+    requirePermission('firmwares.manage');
+    
+    $results = [];
+    
+    try {
+        // 1. Vérifier et ajouter la colonne status
+        $checkStmt = $pdo->query("
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name = 'firmware_versions'
+                AND column_name = 'status'
+            )
+        ");
+        $columnExists = $checkStmt->fetchColumn();
+        $columnExists = ($columnExists === true || $columnExists === 't' || $columnExists === 1 || $columnExists === '1');
+        
+        if (!$columnExists) {
+            $pdo->exec("
+                ALTER TABLE firmware_versions 
+                ADD COLUMN status VARCHAR(50) DEFAULT 'compiled' 
+                CHECK (status IN ('pending_compilation', 'compiling', 'compiled', 'error'))
+            ");
+            $results['status_column'] = 'added';
+        } else {
+            $results['status_column'] = 'already_exists';
+        }
+        
+        // 2. Mettre à jour les firmwares existants sans status
+        $updateCount = $pdo->exec("UPDATE firmware_versions SET status = 'compiled' WHERE status IS NULL");
+        $results['updated_count'] = intval($updateCount);
+        
+        // 3. Compter les firmwares
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
+        $countBefore = intval($countStmt->fetchColumn());
+        $results['firmwares_before'] = $countBefore;
+        
+        // 4. Supprimer tous les firmwares fictifs
+        if ($countBefore > 0) {
+            $deleteCount = $pdo->exec("DELETE FROM firmware_versions");
+            $results['deleted_count'] = intval($deleteCount);
+            
+            // Vérification finale
+            $finalCountStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
+            $finalCount = intval($finalCountStmt->fetchColumn());
+            $results['firmwares_after'] = $finalCount;
+        } else {
+            $results['deleted_count'] = 0;
+            $results['firmwares_after'] = 0;
+        }
+        
+        auditLog('firmware_db.initialized', 'firmware', null, null, $results);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Base de données firmware initialisée avec succès',
+            'results' => $results
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleInitFirmwareDb] Error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
 // ============================================================================
 // ROUTER
 // ============================================================================
@@ -604,6 +760,12 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 // Migration (temporaire - à supprimer après exécution)
 } elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {
     handleRunMigration();
+} elseif(preg_match('#/migrate/firmware-status$#', $path) && $method === 'POST') {
+    handleMigrateFirmwareStatus();
+} elseif(preg_match('#/admin/clear-firmwares$#', $path) && $method === 'POST') {
+    handleClearFirmwares();
+} elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
+    handleInitFirmwareDb();
 
 } else {
     // Debug: logger le chemin et la méthode pour comprendre pourquoi l'endpoint n'est pas trouvé
