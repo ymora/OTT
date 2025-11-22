@@ -29,7 +29,7 @@ export default function InoEditorTab() {
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
   const [firmwareToDelete, setFirmwareToDelete] = useState(null)
   const [deletingFirmware, setDeletingFirmware] = useState(null)
-  const [editorMinimized, setEditorMinimized] = useState(false)
+  const [editorMinimized, setEditorMinimized] = useState(true)
   const fileInputRef = useRef(null)
   const uploadLogsRef = useRef(null)
   const textareaRef = useRef(null)
@@ -340,6 +340,7 @@ export default function InoEditorTab() {
         setInoContent(content)
         setOriginalContent(content)
         setIsEdited(false)
+        // Ne pas ouvrir l'éditeur automatiquement, seulement via le crayon
 
         const version = extractVersionFromContent(content)
         if (!version) {
@@ -730,8 +731,7 @@ export default function InoEditorTab() {
                 {inoFirmwares.map((fw) => (
                   <tr 
                     key={fw.id} 
-                    className="table-row cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
-                    onClick={() => handleLoadIno(fw.id)}
+                    className="table-row"
                   >
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
@@ -759,16 +759,27 @@ export default function InoEditorTab() {
                     <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
                       {new Date(fw.created_at).toLocaleDateString('fr-FR')}
                     </td>
-                    <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleLoadIno(fw.id)
+                          onClick={() => {
+                            // Si le fichier est déjà chargé, fermer l'éditeur
+                            if (editingFirmwareId === fw.id && inoContent.trim() !== '') {
+                              setInoContent('')
+                              setOriginalContent('')
+                              setIsEdited(false)
+                              setEditingFirmwareId(null)
+                              setError(null)
+                              setSuccess(null)
+                              setEditorMinimized(true)
+                            } else {
+                              // Sinon, charger le fichier
+                              handleLoadIno(fw.id)
+                            }
                           }}
                           disabled={loadingIno}
                           className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50"
-                          title={editingFirmwareId === fw.id ? "Fichier déjà chargé dans l'éditeur" : "Éditer le fichier .ino"}
+                          title={editingFirmwareId === fw.id && inoContent.trim() !== '' ? "Fermer l'éditeur" : "Éditer le fichier .ino"}
                         >
                           <span className="text-lg">✏️</span>
                         </button>
@@ -793,20 +804,21 @@ export default function InoEditorTab() {
         )}
       </div>
 
-      {/* Éditeur INO toujours visible mais masquable */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">📝 Éditeur INO</h2>
-          <button
-            onClick={() => setEditorMinimized(!editorMinimized)}
-            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-            title={editorMinimized ? 'Afficher l\'éditeur' : 'Masquer l\'éditeur'}
-          >
-            {editorMinimized ? '⬆️' : '⬇️'}
-          </button>
-        </div>
-        
-        {!editorMinimized && (
+      {/* Éditeur INO - affiché seulement après clic sur le crayon */}
+      {editingFirmwareId && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">📝 Éditeur INO</h2>
+            <button
+              onClick={() => setEditorMinimized(!editorMinimized)}
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              title={editorMinimized ? 'Afficher l\'éditeur' : 'Masquer l\'éditeur'}
+            >
+              {editorMinimized ? '⬆️' : '⬇️'}
+            </button>
+          </div>
+          
+          {!editorMinimized && (
           <div className="space-y-4">
             {/* Éditeur de texte */}
             {inoContent ? (
@@ -825,16 +837,16 @@ export default function InoEditorTab() {
                         ↺ Réinitialiser
                       </button>
                     )}
-                    <button
-                      onClick={handleSave}
-                      disabled={uploading}
-                      className={`btn-primary text-sm ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      {editingFirmwareId 
-                        ? (isEdited ? '💾 Sauvegarder et Uploader' : '📤 Uploader')
-                        : (isEdited ? '💾 Sauvegarder et Uploader' : '📤 Uploader')
-                      }
-                    </button>
+                    {/* Afficher le bouton seulement si c'est un nouveau fichier ou si le contenu a été modifié */}
+                    {(!editingFirmwareId || isEdited) && (
+                      <button
+                        onClick={handleSave}
+                        disabled={uploading}
+                        className={`btn-primary text-sm ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {isEdited ? '💾 Enregistrer et Uploader' : '📤 Uploader'}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <textarea
@@ -860,8 +872,9 @@ export default function InoEditorTab() {
               </div>
             )}
           </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Messages d'erreur */}
       {error && <ErrorMessage error={error} />}
