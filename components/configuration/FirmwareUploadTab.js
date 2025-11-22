@@ -27,6 +27,8 @@ export default function FirmwareUploadTab() {
   const [deletingFirmware, setDeletingFirmware] = useState(null)
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
   const [firmwareToDelete, setFirmwareToDelete] = useState(null)
+  const [compileWindowMinimized, setCompileWindowMinimized] = useState(false)
+  const [compileHistory, setCompileHistory] = useState([]) // Historique des compilations
   const fileInputRef = useRef(null)
   const compileLogsRef = useRef(null)
   const eventSourceRef = useRef(null)
@@ -88,6 +90,15 @@ export default function FirmwareUploadTab() {
             setCompileProgress(data.progress || 0)
           } else if (data.type === 'success') {
             setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
+            // Sauvegarder dans l'historique avant de réinitialiser
+            setCompileHistory(prev => [...prev, {
+              id: Date.now(),
+              timestamp: new Date().toISOString(),
+              logs: [...compileLogs],
+              progress: compileProgress,
+              status: 'success',
+              version: data.version
+            }])
             setCompiling(false)
             setCurrentStep(null)
             setCompileProgress(0)
