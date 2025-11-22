@@ -36,11 +36,11 @@ const menuStructure = [
     description: 'Gestion des utilisateurs (audit, notifications, paramètres)'
   },
   {
-    name: 'Firmware',
-    icon: '📦',
-    path: '/dashboard/firmware-upload',
+    name: 'Configuration',
+    icon: '⚙️',
+    path: '/dashboard/configuration',
     permission: null, // Vérifié dans la page (admin/technicien)
-    description: 'Upload et compilation de firmware'
+    description: 'Upload firmware, flash USB et streaming'
   },
 ]
 
