@@ -37,9 +37,9 @@ if ($origin && in_array($origin, $allowedOrigins, true)) {
 
 header('Vary: Origin');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCID');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCID, X-Requested-With');
 header('Access-Control-Max-Age: 86400');
-header('Content-Type: application/json; charset=utf-8');
+// Content-Type sera défini par chaque handler (JSON par défaut, SSE pour compilation)
 
 // Debug mode activable via variable d'environnement
 if (getenv('DEBUG_ERRORS') === 'true') {
@@ -187,13 +187,23 @@ function getCurrentUser() {
         return getDemoUser();
     }
     
+    $jwt = null;
+    
+    // Essayer d'abord depuis les headers (pour les requêtes normales)
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? '';
     
-    if (empty($authHeader)) return null;
-    if (!preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) return null;
+    if (!empty($authHeader) && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+        $jwt = $matches[1];
+    }
     
-    $jwt = $matches[1];
+    // Si pas trouvé dans les headers, essayer depuis les query parameters (pour EventSource)
+    if (empty($jwt) && isset($_GET['token'])) {
+        $jwt = $_GET['token'];
+    }
+    
+    if (empty($jwt)) return null;
+    
     $payload = verifyJWT($jwt);
     if (!$payload) return null;
     
@@ -426,9 +436,12 @@ function parseRequestPath() {
     
     // Normaliser : supprimer /api.php du début si présent
     if (strpos($path, '/api.php') === 0) {
-        $path = substr($path, 7); // 7 = strlen('/api.php')
-        if (empty($path)) {
+        $path = substr($path, strlen('/api.php')); // Enlever '/api.php' (8 caractères)
+        // S'assurer que le path commence par /
+        if (empty($path) || $path === '/') {
             $path = '/';
+        } else {
+            $path = '/' . ltrim($path, '/');
         }
     }
     
@@ -455,6 +468,13 @@ function parseRequestPath() {
 
 $path = parseRequestPath();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
+// Définir Content-Type JSON par défaut (sera remplacé pour SSE)
+// Vérifier si c'est une route SSE avant de définir le header
+$isSSERoute = preg_match('#/firmwares/compile/(\d+)$#', $path) && $method === 'GET';
+if (!$isSSERoute) {
+    header('Content-Type: application/json; charset=utf-8');
+}
 
 // Auth
 if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
@@ -520,7 +540,11 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 
 // Firmwares
 // IMPORTANT: Vérifier les routes spécifiques AVANT les routes génériques
-} elseif($method === 'POST' && (strpos($path, '/firmwares/upload-ino') !== false || $path === '/firmwares/upload-ino' || preg_match('#/firmwares/upload-ino#', $path))) {
+} elseif($method === 'POST' && preg_match('#^/firmwares/upload-ino/?$#', $path)) {
+    // Log de debug pour vérifier que la route est bien matchée
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[ROUTER] Route upload-ino matchée - Path: ' . $path . ' Method: ' . $method);
+    }
     handleUploadFirmwareIno();
 } elseif($method === 'GET' && preg_match('#/firmwares/compile/(\d+)$#', $path, $matches)) {
     handleCompileFirmware($matches[1]);
@@ -3109,6 +3133,19 @@ function handleDownloadFirmware($firmware_id) {
 
 function handleUploadFirmwareIno() {
     global $pdo;
+    
+    // Log de debug
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[handleUploadFirmwareIno] Début - Method: ' . $_SERVER['REQUEST_METHOD']);
+        error_log('[handleUploadFirmwareIno] FILES: ' . json_encode(array_keys($_FILES)));
+    }
+    
+    // Définir Content-Type JSON immédiatement (AVANT requireAuth qui peut exit())
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
+    // Authentification (requireAuth peut exit() directement)
     $user = requireAuth();
     
     // Vérifier que l'utilisateur est admin ou technicien
@@ -3118,22 +3155,100 @@ function handleUploadFirmwareIno() {
         return;
     }
     
+    // Vérifier que le fichier est présent (AVANT tout traitement)
     if (!isset($_FILES['firmware_ino'])) {
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleUploadFirmwareIno] ❌ Fichier non reçu');
+            error_log('[handleUploadFirmwareIno] FILES: ' . json_encode($_FILES));
+            error_log('[handleUploadFirmwareIno] POST: ' . json_encode($_POST));
+            error_log('[handleUploadFirmwareIno] CONTENT_TYPE: ' . ($_SERVER['CONTENT_TYPE'] ?? 'not set'));
+        }
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'No file uploaded']);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode([
+            'success' => false, 
+            'error' => 'No file uploaded',
+            'debug' => [
+                'files_keys' => array_keys($_FILES),
+                'content_type' => $_SERVER['CONTENT_TYPE'] ?? 'not set',
+                'method' => $_SERVER['REQUEST_METHOD'] ?? 'not set'
+            ]
+        ]);
         return;
     }
     
     $file = $_FILES['firmware_ino'];
     
+    // Vérifier les erreurs d'upload PHP
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $errorMessages = [
+            UPLOAD_ERR_INI_SIZE => 'Fichier trop volumineux (php.ini)',
+            UPLOAD_ERR_FORM_SIZE => 'Fichier trop volumineux (formulaire)',
+            UPLOAD_ERR_PARTIAL => 'Upload partiel',
+            UPLOAD_ERR_NO_FILE => 'Aucun fichier',
+            UPLOAD_ERR_NO_TMP_DIR => 'Dossier temporaire manquant',
+            UPLOAD_ERR_CANT_WRITE => 'Erreur d\'écriture',
+            UPLOAD_ERR_EXTENSION => 'Extension bloquée'
+        ];
+        $errorMsg = $errorMessages[$file['error']] ?? 'Erreur inconnue: ' . $file['error'];
+        
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleUploadFirmwareIno] ❌ Erreur upload PHP: ' . $errorMsg);
+        }
+        
+        http_response_code(400);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        return;
+    }
+    
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[handleUploadFirmwareIno] ✅ Fichier reçu: ' . $file['name'] . ' (' . $file['size'] . ' bytes)');
+    }
+    
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[handleUploadFirmwareIno] File received: ' . $file['name'] . ' (' . $file['size'] . ' bytes)');
+    }
+    
     if (pathinfo($file['name'], PATHINFO_EXTENSION) !== 'ino') {
         http_response_code(400);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
         echo json_encode(['success' => false, 'error' => 'Invalid file type: .ino required']);
         return;
     }
     
     // Extraire la version depuis le fichier .ino (AVANT de créer le dossier)
+    if (!file_exists($file['tmp_name'])) {
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleUploadFirmwareIno] Fichier temporaire introuvable: ' . $file['tmp_name']);
+        }
+        http_response_code(500);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode(['success' => false, 'error' => 'Fichier temporaire introuvable']);
+        return;
+    }
+    
     $ino_content = file_get_contents($file['tmp_name']);
+    if ($ino_content === false) {
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleUploadFirmwareIno] Impossible de lire le fichier temporaire');
+        }
+        http_response_code(500);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode(['success' => false, 'error' => 'Impossible de lire le fichier']);
+        return;
+    }
+    
     $version = null;
     
     // Chercher FIRMWARE_VERSION_STR dans le fichier
@@ -3153,7 +3268,11 @@ function handleUploadFirmwareIno() {
     $version_dir = getVersionDir($version);
     $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
     if (!is_dir($ino_dir)) {
-        mkdir($ino_dir, 0755, true);
+        if (!mkdir($ino_dir, 0755, true)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Impossible de créer le dossier de destination']);
+            return;
+        }
     }
     
     // Sauvegarder le fichier .ino
@@ -3168,13 +3287,15 @@ function handleUploadFirmwareIno() {
     
     // Enregistrer dans la base de données (statut: pending_compilation)
     try {
+        $file_size = filesize($ino_path);
+        $checksum = hash_file('sha256', $ino_path);
+        
+        // Utiliser RETURNING pour PostgreSQL (plus fiable que lastInsertId)
         $stmt = $pdo->prepare("
             INSERT INTO firmware_versions (version, file_path, file_size, checksum, release_notes, is_stable, uploaded_by, status)
             VALUES (:version, :file_path, :file_size, :checksum, :release_notes, :is_stable, :uploaded_by, 'pending_compilation')
+            RETURNING id
         ");
-        
-        $file_size = filesize($ino_path);
-        $checksum = hash_file('sha256', $ino_path);
         
         $stmt->execute([
             'version' => $version,
@@ -3186,25 +3307,71 @@ function handleUploadFirmwareIno() {
             'uploaded_by' => $user['id']
         ]);
         
-        $firmware_id = $pdo->lastInsertId();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $firmware_id = $result['id'] ?? $pdo->lastInsertId();
         
         auditLog('firmware.ino.uploaded', 'firmware', $firmware_id, null, [
             'version' => $version,
             'file_size' => $file_size
         ]);
         
-        echo json_encode([
+        // S'assurer que le Content-Type est JSON (si pas déjà défini pour SSE)
+        if (!headers_sent() && !isset($GLOBALS['sse_mode'])) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        $response = [
             'success' => true,
             'firmware_id' => $firmware_id,
             'upload_id' => $firmware_id,
             'version' => $version,
             'message' => 'Fichier .ino uploadé avec succès. Prêt pour compilation.'
-        ]);
+        ];
+        
+        echo json_encode($response);
+        flush(); // Forcer l'envoi immédiat de la réponse
+        
+        // Log pour debug
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleUploadFirmwareIno] ✅ Upload réussi - Réponse: ' . json_encode($response));
+        }
         
     } catch(PDOException $e) {
-        unlink($ino_path);
-        http_response_code($e->getCode() == 23000 ? 409 : 500);
-        echo json_encode(['success' => false, 'error' => $e->getCode() == 23000 ? 'Version exists' : 'Database error']);
+        if (isset($ino_path) && file_exists($ino_path)) {
+            @unlink($ino_path);
+        }
+        
+        $errorMsg = 'Database error';
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            $errorMsg = $e->getMessage();
+            error_log('[handleUploadFirmwareIno] PDOException: ' . $e->getMessage());
+        }
+        
+        if ($e->getCode() == 23000 || strpos($e->getMessage(), '23505') !== false || strpos($e->getMessage(), 'duplicate key') !== false) {
+            http_response_code(409);
+            $errorMsg = 'Cette version existe déjà';
+        } else {
+            http_response_code(500);
+        }
+        
+        if (!headers_sent() && !isset($GLOBALS['sse_mode'])) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    } catch(Exception $e) {
+        if (isset($ino_path) && file_exists($ino_path)) {
+            @unlink($ino_path);
+        }
+        
+        http_response_code(500);
+        if (!headers_sent() && !isset($GLOBALS['sse_mode'])) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur lors de l\'upload';
+        error_log('[handleUploadFirmwareIno] Exception: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -3212,37 +3379,55 @@ function handleCompileFirmware($firmware_id) {
     global $pdo;
     requireAuth();
     
-    // Configurer pour Server-Sent Events (SSE)
-    header('Content-Type: text/event-stream');
-    header('Cache-Control: no-cache');
-    header('Connection: keep-alive');
-    header('X-Accel-Buffering: no'); // Désactiver la mise en buffer pour nginx
+    // Désactiver la mise en buffer pour SSE
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
+    // Vérifier si les headers ont déjà été envoyés
+    if (!headers_sent()) {
+        // Configurer pour Server-Sent Events (SSE) - DOIT être avant tout output
+        header('Content-Type: text/event-stream');
+        header('Cache-Control: no-cache');
+        header('Connection: keep-alive');
+        header('X-Accel-Buffering: no'); // Désactiver la mise en buffer pour nginx
+    }
+    
+    // Envoyer immédiatement pour établir la connexion
+    echo ": keep-alive\n\n";
+    flush();
     
     // Vérifier que le firmware existe et est en attente de compilation
     try {
+        sendSSE('log', 'info', 'Connexion établie, vérification du firmware...');
+        
         $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
         $stmt->execute(['id' => $firmware_id]);
         $firmware = $stmt->fetch();
         
         if (!$firmware) {
             sendSSE('error', 'Firmware not found');
+            flush();
             return;
         }
         
         if ($firmware['status'] !== 'pending_compilation') {
-            sendSSE('error', 'Firmware already compiled or invalid status');
+            sendSSE('error', 'Firmware already compiled or invalid status: ' . ($firmware['status'] ?? 'unknown'));
+            flush();
             return;
         }
         
         $ino_path = __DIR__ . '/' . $firmware['file_path'];
         
         if (!file_exists($ino_path)) {
-            sendSSE('error', 'Fichier .ino introuvable');
+            sendSSE('error', 'Fichier .ino introuvable: ' . $ino_path);
+            flush();
             return;
         }
         
         sendSSE('log', 'info', 'Démarrage de la compilation...');
         sendSSE('progress', 10);
+        flush();
         
         // Vérifier si arduino-cli est disponible
         $arduinoCli = trim(shell_exec('which arduino-cli 2>/dev/null || where arduino-cli 2>/dev/null'));
@@ -3346,6 +3531,7 @@ function handleCompileFirmware($firmware_id) {
             
             if ($compile_return !== 0) {
                 sendSSE('error', 'Erreur lors de la compilation. Vérifiez les logs ci-dessus.');
+                flush();
                 // Nettoyer
                 exec('rm -rf ' . escapeshellarg($build_dir));
                 return;
@@ -3362,6 +3548,7 @@ function handleCompileFirmware($firmware_id) {
             
             if (empty($bin_files)) {
                 sendSSE('error', 'Fichier .bin introuvable après compilation');
+                flush();
                 exec('rm -rf ' . escapeshellarg($build_dir));
                 return;
             }
@@ -3375,6 +3562,7 @@ function handleCompileFirmware($firmware_id) {
             
             if (!copy($compiled_bin, $bin_path)) {
                 sendSSE('error', 'Impossible de copier le fichier .bin compilé');
+                flush();
                 exec('rm -rf ' . escapeshellarg($build_dir));
                 return;
             }
@@ -3408,30 +3596,41 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('progress', 100);
             sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
             sendSSE('success', 'Firmware v' . $firmware['version'] . ' compilé avec succès', $firmware['version']);
+            
+            // Fermer la connexion après un court délai pour permettre au client de recevoir les messages
+            sleep(1);
         }
         
     } catch(Exception $e) {
         sendSSE('error', 'Erreur: ' . $e->getMessage());
+        error_log('[handleCompileFirmware] Exception: ' . $e->getMessage());
+        flush();
+        sleep(1);
     }
+    
+    // S'assurer que la sortie est vidée
+    flush();
 }
 
 function sendSSE($type, $message = '', $data = null) {
+    $payload = null;
+    
     if ($type === 'log') {
         $level = $message;
         $message = $data;
-        echo "data: " . json_encode(['type' => 'log', 'level' => $level, 'message' => $message]) . "\n\n";
+        $payload = ['type' => 'log', 'level' => $level, 'message' => $message];
     } else if ($type === 'progress') {
-        echo "data: " . json_encode(['type' => 'progress', 'progress' => $message]) . "\n\n";
+        $payload = ['type' => 'progress', 'progress' => $message];
     } else if ($type === 'success') {
-        echo "data: " . json_encode(['type' => 'success', 'message' => $message, 'version' => $data]) . "\n\n";
+        $payload = ['type' => 'success', 'message' => $message, 'version' => $data];
     } else if ($type === 'error') {
-        echo "data: " . json_encode(['type' => 'error', 'message' => $message]) . "\n\n";
+        $payload = ['type' => 'error', 'message' => $message];
     }
     
-    if (ob_get_level() > 0) {
-        ob_flush();
+    if ($payload !== null) {
+        echo "data: " . json_encode($payload) . "\n\n";
+        flush();
     }
-    flush();
 }
 
 // ============================================================================

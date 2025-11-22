@@ -18,6 +18,18 @@ const nextConfig = {
     NEXT_PUBLIC_BASE_PATH: basePath || '',
     NEXT_PUBLIC_STATIC_EXPORT: isStaticExport ? 'true' : 'false'
   },
+  // Proxy API en développement local
+  async rewrites() {
+    if (isDev && !isStaticExport) {
+      return [
+        {
+          source: '/api.php/:path*',
+          destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api.php/:path*`
+        }
+      ]
+    }
+    return []
+  },
   // Configuration pour éviter les erreurs de pages
   experimental: {
     missingSuspenseWithCSRBailout: false

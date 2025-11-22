@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Upload Complet</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #0f0; }
+        .log { margin: 5px 0; padding: 5px; border-left: 3px solid #0f0; }
+        .error { color: #f00; border-color: #f00; }
+        .success { color: #0f0; border-color: #0f0; }
+        .warning { color: #ff0; border-color: #ff0; }
+        button { padding: 10px 20px; margin: 10px; background: #0f0; color: #000; border: none; cursor: pointer; }
+        button:hover { background: #0a0; }
+        input[type="file"] { margin: 10px 0; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #0f0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Test Upload Complet</h1>
+    
+    <div class="section">
+        <h2>Configuration</h2>
+        <label>API URL: <input type="text" id="apiUrl" value="http://localhost:8000" style="width: 300px; padding: 5px;"></label><br>
+        <label>Token JWT: <input type="text" id="token" placeholder="Coller votre token" style="width: 500px; padding: 5px;"></label><br>
+        <button onclick="loadTokenFromStorage()">Charger depuis localStorage</button>
+    </div>
+    
+    <div class="section">
+        <h2>Test 1: Vérifier l'API</h2>
+        <button onclick="testApiConnection()">Tester connexion API</button>
+    </div>
+    
+    <div class="section">
+        <h2>Test 2: Upload Fichier</h2>
+        <input type="file" id="fileInput" accept=".ino">
+        <button onclick="testUpload()">Tester Upload</button>
+    </div>
+    
+    <div class="section">
+        <h2>Test 3: Créer fichier test</h2>
+        <button onclick="createTestFile()">Créer fichier .ino de test</button>
+    </div>
+    
+    <div class="section">
+        <h2>Logs</h2>
+        <button onclick="clearLogs()">Effacer</button>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('logs').appendChild(div);
+            console.log(message);
+            // Auto-scroll
+            div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        function loadTokenFromStorage() {
+            const token = localStorage.getItem('ott_token');
+            if (token) {
+                document.getElementById('token').value = token;
+                log('✅ Token chargé depuis localStorage', 'success');
+            } else {
+                log('❌ Aucun token dans localStorage', 'error');
+            }
+        }
+
+        async function testApiConnection() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            log(`🔗 Test connexion à: ${apiUrl}`, 'info');
+            
+            try {
+                const response = await fetch(`${apiUrl}/api.php/firmwares`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${document.getElementById('token').value}`
+                    }
+                });
+                
+                log(`📥 Status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+                const text = await response.text();
+                log(`📥 Réponse: ${text.substring(0, 200)}`, 'info');
+                
+                if (response.ok) {
+                    try {
+                        const data = JSON.parse(text);
+                        log(`✅ API accessible - Firmwares: ${data.firmwares?.length || 0}`, 'success');
+                    } catch (e) {
+                        log(`⚠️ Réponse non-JSON: ${text.substring(0, 100)}`, 'warning');
+                    }
+                } else {
+                    log(`❌ Erreur API: ${text.substring(0, 200)}`, 'error');
+                }
+            } catch (err) {
+                log(`❌ Erreur réseau: ${err.message}`, 'error');
+            }
+        }
+
+        function createTestFile() {
+            const inoContent = `// Test firmware OTT
+#define FIRMWARE_VERSION_STR "3.0.0-test"
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("OTT Firmware Test");
+}
+
+void loop() {
+  delay(1000);
+}`;
+            
+            const blob = new Blob([inoContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'test_firmware.ino';
+            a.click();
+            URL.revokeObjectURL(url);
+            log('✅ Fichier test_firmware.ino créé et téléchargé', 'success');
+        }
+
+        async function testUpload() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                log('❌ Aucun fichier sélectionné', 'error');
+                return;
+            }
+            
+            if (!file.name.endsWith('.ino')) {
+                log('❌ Le fichier doit être un .ino', 'error');
+                return;
+            }
+            
+            const apiUrl = document.getElementById('apiUrl').value;
+            const token = document.getElementById('token').value;
+            
+            if (!token) {
+                log('❌ Token manquant!', 'error');
+                return;
+            }
+            
+            log(`📤 Démarrage upload: ${file.name} (${file.size} bytes)`, 'info');
+            log(`🔗 URL: ${apiUrl}/api.php/firmwares/upload-ino`, 'info');
+            
+            const formData = new FormData();
+            formData.append('firmware_ino', file);
+            formData.append('type', 'ino');
+            
+            const xhr = new XMLHttpRequest();
+            xhr.timeout = 30000;
+            
+            // Événements
+            xhr.addEventListener('loadstart', () => {
+                log('🚀 loadstart - Upload démarré', 'info');
+            });
+            
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    log(`📊 Progression: ${percent}%`, 'info');
+                }
+            });
+            
+            xhr.addEventListener('load', () => {
+                log(`📥 load - Status: ${xhr.status} ${xhr.statusText}`, xhr.status === 200 ? 'success' : 'error');
+                log(`📥 ReadyState: ${xhr.readyState}`, 'info');
+                log(`📥 Response: ${xhr.responseText.substring(0, 500)}`, 'info');
+                
+                if (xhr.status === 200) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        log(`✅ Upload réussi!`, 'success');
+                        log(`📋 Réponse: ${JSON.stringify(response, null, 2)}`, 'success');
+                        
+                        if (response.upload_id || response.firmware_id) {
+                            const id = response.upload_id || response.firmware_id;
+                            log(`🔨 ID firmware: ${id} - Prêt pour compilation`, 'success');
+                        }
+                    } catch (e) {
+                        log(`❌ Erreur parsing JSON: ${e.message}`, 'error');
+                    }
+                } else {
+                    log(`❌ Erreur HTTP ${xhr.status}`, 'error');
+                    try {
+                        const error = JSON.parse(xhr.responseText);
+                        log(`❌ Erreur: ${JSON.stringify(error)}`, 'error');
+                    } catch (e) {
+                        log(`❌ Réponse: ${xhr.responseText}`, 'error');
+                    }
+                }
+            });
+            
+            xhr.addEventListener('error', (e) => {
+                log(`❌ error - Erreur réseau`, 'error');
+                log(`❌ ReadyState: ${xhr.readyState}, Status: ${xhr.status}`, 'error');
+            });
+            
+            xhr.addEventListener('timeout', () => {
+                log(`⏱️ timeout - Timeout après 30s`, 'error');
+            });
+            
+            xhr.addEventListener('abort', () => {
+                log(`⚠️ abort - Upload annulé`, 'warning');
+            });
+            
+            xhr.addEventListener('loadend', () => {
+                log(`🏁 loadend - Upload terminé`, 'info');
+            });
+            
+            try {
+                xhr.open('POST', `${apiUrl}/api.php/firmwares/upload-ino`);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                xhr.send(formData);
+                log('✅ Requête envoyée', 'success');
+            } catch (err) {
+                log(`❌ Exception: ${err.message}`, 'error');
+            }
+        }
+        
+        // Charger le token au chargement
+        window.addEventListener('load', () => {
+            loadTokenFromStorage();
+        });
+    </script>
+</body>
+</html>
+

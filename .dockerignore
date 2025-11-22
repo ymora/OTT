@@ -10,8 +10,8 @@ components
 contexts
 hooks
 lib
-public
-!public/DOCUMENTATION_COMPLETE_OTT.html
+public/*
+!public/*.html
 scripts
 package-lock.json
 package.json

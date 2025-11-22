@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useApiData } from '@/hooks'
@@ -58,6 +58,15 @@ export default function FirmwareUploadPage() {
 
       eventSourceRef.current = eventSource
 
+      eventSource.onopen = () => {
+        logger.log('✅ Connexion SSE établie')
+        setCompileLogs(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: 'Connexion établie, démarrage de la compilation...',
+          level: 'info'
+        }])
+      }
+
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
@@ -80,13 +89,19 @@ export default function FirmwareUploadPage() {
             setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
             setCompiling(false)
             setCompileProgress(0) // Réinitialiser la barre de progression
-            eventSource.close()
+            if (eventSourceRef.current) {
+              eventSourceRef.current.close()
+              eventSourceRef.current = null
+            }
             refetch() // Recharger la liste des firmwares
           } else if (data.type === 'error') {
             setError(data.message || 'Erreur lors de la compilation')
             setCompiling(false)
             setCompileProgress(0) // Réinitialiser la barre de progression
-            eventSource.close()
+            if (eventSourceRef.current) {
+              eventSourceRef.current.close()
+              eventSourceRef.current = null
+            }
           }
         } catch (err) {
           logger.error('Erreur parsing EventSource:', err)
@@ -95,16 +110,24 @@ export default function FirmwareUploadPage() {
 
       eventSource.onerror = (err) => {
         logger.error('EventSource error:', err)
-        setError('Erreur de connexion lors de la compilation')
+        setError('Erreur de connexion lors de la compilation. Vérifiez votre connexion et que le serveur est accessible.')
         setCompiling(false)
         setCompileProgress(0) // Réinitialiser la barre de progression
-        eventSource.close()
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close()
+          eventSourceRef.current = null
+        }
       }
 
     } catch (err) {
+      logger.error('Erreur lors du démarrage de la compilation:', err)
       setError(err.message || 'Erreur lors du démarrage de la compilation')
       setCompiling(false)
       setCompileProgress(0) // Réinitialiser la barre de progression
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
     }
   }, [API_URL, refetch, token])
 
@@ -140,6 +163,9 @@ export default function FirmwareUploadPage() {
 
       logger.log('🔗 Connexion à l\'API:', `${API_URL}/api.php/firmwares/upload-ino`)
       const xhr = new XMLHttpRequest()
+      
+      // Configurer le timeout (30 secondes - suffisant pour un fichier .ino de quelques KB)
+      xhr.timeout = 30 * 1000 // 30 secondes
 
       // Suivre la progression de l'upload
       xhr.upload.addEventListener('progress', (e) => {
@@ -151,35 +177,57 @@ export default function FirmwareUploadPage() {
       })
 
       // Gérer la réponse
+      xhr.addEventListener('loadstart', () => {
+        logger.log('🚀 Upload démarré')
+      })
+      
       xhr.addEventListener('load', () => {
-        logger.log('📥 Réponse reçue:', xhr.status, xhr.statusText)
+        logger.log('📥 Réponse reçue:', xhr.status, xhr.statusText, 'ReadyState:', xhr.readyState)
         if (xhr.status === 200) {
+          const responseText = xhr.responseText
+          logger.log('📥 Réponse brute:', responseText.substring(0, 200))
+          
+          let response
           try {
-            const response = JSON.parse(xhr.responseText)
-            logger.log('✅ Réponse API:', response)
-            if (response.success) {
-              setSuccess('✅ Fichier .ino uploadé avec succès')
-              setUploadedFirmware(response)
-              // Réinitialiser la barre de progression après un court délai
-              setTimeout(() => {
-                setUploadProgress(0)
-              }, 1000)
-              logger.log('🚀 Démarrage compilation automatique dans 500ms...')
-              // Démarrer automatiquement la compilation
-              setTimeout(() => {
-                const firmwareId = response.upload_id || response.firmware_id
-                logger.log('🔨 Démarrage compilation pour firmware ID:', firmwareId)
-                handleCompile(firmwareId)
-              }, 500)
-            } else {
-              const errorMsg = response.error || 'Erreur lors de l\'upload'
-              setError(errorMsg)
-              logger.error('❌ Erreur upload:', errorMsg)
+            response = JSON.parse(responseText)
+          } catch (parseErr) {
+            logger.error('❌ Erreur parsing JSON:', parseErr, 'Réponse:', responseText.substring(0, 200))
+            setError('Réponse invalide du serveur: ' + responseText.substring(0, 100))
+            setUploading(false)
+            return
+          }
+          
+          logger.log('✅ Réponse API parsée:', response)
+          
+          if (response.success) {
+            setSuccess('✅ Fichier .ino uploadé avec succès')
+            setUploadedFirmware(response)
+            
+            // Réinitialiser la barre de progression après un court délai
+            setTimeout(() => {
+              setUploadProgress(0)
+            }, 1000)
+            
+            // Vérifier que l'ID est présent
+            const firmwareId = response.upload_id || response.firmware_id
+            if (!firmwareId) {
+              logger.error('❌ Aucun ID de firmware dans la réponse:', response)
+              setError('Réponse invalide: ID de firmware manquant')
+              setUploading(false)
+              return
             }
-          } catch (err) {
-            const errorMsg = 'Erreur lors du parsing de la réponse: ' + err.message
+            
+            logger.log('🚀 Démarrage compilation automatique dans 500ms pour ID:', firmwareId)
+            
+            // Démarrer automatiquement la compilation
+            setTimeout(() => {
+              logger.log('🔨 Démarrage compilation pour firmware ID:', firmwareId)
+              handleCompile(firmwareId)
+            }, 500)
+          } else {
+            const errorMsg = response.error || 'Erreur lors de l\'upload'
             setError(errorMsg)
-            logger.error('❌ Erreur parsing réponse:', err)
+            logger.error('❌ Erreur upload:', errorMsg)
           }
         } else {
           try {
@@ -204,16 +252,46 @@ export default function FirmwareUploadPage() {
 
       xhr.addEventListener('error', (e) => {
         logger.error('❌ Erreur réseau XHR:', e)
-        setError('Erreur réseau lors de l\'upload. Vérifiez votre connexion.')
+        logger.error('❌ XHR State:', xhr.readyState, 'Status:', xhr.status)
+        logger.error('❌ Response:', xhr.responseText?.substring(0, 200))
+        logger.error('❌ Event details:', {
+          type: e.type,
+          target: e.target,
+          currentTarget: e.currentTarget
+        })
+        setError('Erreur réseau lors de l\'upload. Vérifiez votre connexion et que le serveur est accessible.')
         setUploading(false)
+        setTimeout(() => {
+          setUploadProgress(0)
+        }, 1000)
+      })
+      
+      xhr.addEventListener('loadend', () => {
+        logger.log('🏁 Upload terminé (loadend)')
+      })
+      
+      xhr.addEventListener('abort', () => {
+        logger.warn('⚠️ Upload annulé (abort)')
+        setUploading(false)
+      })
+
+      xhr.addEventListener('timeout', () => {
+        logger.error('⏱️ Timeout: La requête a pris trop de temps (30s)')
+        logger.error('⏱️ XHR State au timeout:', xhr.readyState, 'Status:', xhr.status)
+        logger.error('⏱️ Response partielle:', xhr.responseText?.substring(0, 200))
+        setError('La requête a pris trop de temps (30s). Vérifiez votre connexion ou la taille du fichier.')
+        setUploading(false)
+        xhr.abort()
         setTimeout(() => {
           setUploadProgress(0)
         }, 1000)
       })
 
       xhr.addEventListener('abort', () => {
-        logger.warn('⚠️ Upload annulé par l\'utilisateur')
-        setError('Upload annulé')
+        if (xhr.status === 0 && !xhr.timeout) {
+          logger.warn('⚠️ Upload annulé')
+          setError('Upload annulé')
+        }
         setUploading(false)
         setTimeout(() => {
           setUploadProgress(0)
@@ -222,12 +300,14 @@ export default function FirmwareUploadPage() {
 
       const uploadUrl = `${API_URL}/api.php/firmwares/upload-ino`
       logger.log('📤 Envoi requête POST vers:', uploadUrl)
+      logger.log('📦 Taille du fichier:', fileToUpload.size, 'bytes')
+      
       xhr.open('POST', uploadUrl)
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
       
       // Ne pas définir Content-Type pour FormData (le navigateur le fait automatiquement)
       xhr.send(formData)
-      logger.log('📤 Requête envoyée, attente réponse...')
+      logger.log('📤 Requête envoyée, attente réponse... (timeout: 30s)')
 
     } catch (err) {
       logger.error('❌ Exception lors de l\'upload:', err)
@@ -237,7 +317,7 @@ export default function FirmwareUploadPage() {
         setUploadProgress(0)
       }, 1000)
     }
-  }, [selectedFile, canUpload, API_URL, handleCompile])
+  }, [selectedFile, canUpload, API_URL, handleCompile, token])
 
   // Gérer la sélection de fichier et démarrer automatiquement l'upload
   const handleFileSelect = useCallback((e) => {
@@ -261,10 +341,12 @@ export default function FirmwareUploadPage() {
 
 
   // Nettoyer EventSource au démontage
-  const cleanup = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
     }
   }, [])
 

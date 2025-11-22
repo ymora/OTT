@@ -23,9 +23,12 @@ COPY index.php /var/www/html/
 COPY .htaccess /var/www/html/.htaccess
 COPY bootstrap /var/www/html/bootstrap
 COPY sql /var/www/html/sql
-COPY public/DOCUMENTATION_PRESENTATION.html /var/www/html/public/DOCUMENTATION_PRESENTATION.html
-COPY public/DOCUMENTATION_DEVELOPPEURS.html /var/www/html/public/DOCUMENTATION_DEVELOPPEURS.html
-COPY public/DOCUMENTATION_COMMERCIALE.html /var/www/html/public/DOCUMENTATION_COMMERCIALE.html
+
+# Créer le dossier public (pour les fichiers statiques si nécessaire)
+RUN mkdir -p /var/www/html/public
+
+# Note: Les fichiers de documentation HTML ne sont pas copiés car non critiques pour l'API
+# Ils sont exclus par .dockerignore pour optimiser la taille de l'image
 
 # Vérifier que les fichiers critiques sont bien copiés
 RUN ls -la /var/www/html/ && head -5 /var/www/html/index.php

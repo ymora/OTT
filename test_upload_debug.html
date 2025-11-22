@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Upload Debug</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #0f0; }
+        .log { margin: 5px 0; padding: 5px; border-left: 3px solid #0f0; }
+        .error { color: #f00; border-color: #f00; }
+        .success { color: #0f0; border-color: #0f0; }
+        button { padding: 10px 20px; margin: 10px; background: #0f0; color: #000; border: none; cursor: pointer; }
+        button:hover { background: #0a0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Test Upload Debug</h1>
+    <button onclick="testUpload()">Tester Upload</button>
+    <button onclick="clearLogs()">Effacer Logs</button>
+    <div id="logs"></div>
+
+    <script>
+        const API_URL = 'http://localhost:3000'; // Ajuster selon votre config
+        const TOKEN = localStorage.getItem('token') || prompt('Token JWT:');
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('logs').appendChild(div);
+            console.log(message);
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        async function testUpload() {
+            clearLogs();
+            log('🚀 Démarrage test upload...', 'info');
+            
+            // Créer un fichier .ino de test
+            const inoContent = `// Test firmware
+#define FIRMWARE_VERSION_STR "3.0.0-test"
+
+void setup() {
+  Serial.begin(115200);
+}
+
+void loop() {
+  delay(1000);
+}`;
+            
+            const blob = new Blob([inoContent], { type: 'text/plain' });
+            const file = new File([blob], 'test_firmware.ino', { type: 'text/plain' });
+            
+            log(`📦 Fichier créé: ${file.name} (${file.size} bytes)`, 'info');
+            
+            const formData = new FormData();
+            formData.append('firmware_ino', file);
+            formData.append('type', 'ino');
+            
+            log(`🔗 URL: ${API_URL}/api.php/firmwares/upload-ino`, 'info');
+            log(`🔑 Token: ${TOKEN ? TOKEN.substring(0, 20) + '...' : 'MANQUANT'}`, TOKEN ? 'success' : 'error');
+            
+            if (!TOKEN) {
+                log('❌ Token manquant!', 'error');
+                return;
+            }
+            
+            const xhr = new XMLHttpRequest();
+            xhr.timeout = 30000; // 30 secondes
+            
+            // Événements détaillés
+            xhr.addEventListener('loadstart', () => {
+                log('🚀 loadstart - Upload démarré', 'info');
+            });
+            
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    log(`📊 Progression: ${percent}% (${e.loaded}/${e.total} bytes)`, 'info');
+                }
+            });
+            
+            xhr.addEventListener('load', () => {
+                log(`📥 load - Réponse reçue: Status ${xhr.status} ${xhr.statusText}`, xhr.status === 200 ? 'success' : 'error');
+                log(`📥 ReadyState: ${xhr.readyState}`, 'info');
+                log(`📥 ResponseText (premiers 500 chars): ${xhr.responseText.substring(0, 500)}`, 'info');
+                
+                if (xhr.status === 200) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        log(`✅ Réponse JSON: ${JSON.stringify(response, null, 2)}`, 'success');
+                    } catch (e) {
+                        log(`❌ Erreur parsing JSON: ${e.message}`, 'error');
+                    }
+                } else {
+                    log(`❌ Erreur HTTP ${xhr.status}`, 'error');
+                    try {
+                        const error = JSON.parse(xhr.responseText);
+                        log(`❌ Erreur: ${JSON.stringify(error)}`, 'error');
+                    } catch (e) {
+                        log(`❌ Réponse non-JSON: ${xhr.responseText}`, 'error');
+                    }
+                }
+            });
+            
+            xhr.addEventListener('error', (e) => {
+                log(`❌ error - Erreur réseau XHR`, 'error');
+                log(`❌ ReadyState: ${xhr.readyState}`, 'error');
+                log(`❌ Status: ${xhr.status}`, 'error');
+                log(`❌ Response: ${xhr.responseText?.substring(0, 200)}`, 'error');
+            });
+            
+            xhr.addEventListener('timeout', () => {
+                log(`⏱️ timeout - Timeout après 30 secondes`, 'error');
+                log(`⏱️ ReadyState: ${xhr.readyState}`, 'error');
+            });
+            
+            xhr.addEventListener('abort', () => {
+                log(`⚠️ abort - Upload annulé`, 'error');
+            });
+            
+            xhr.addEventListener('loadend', () => {
+                log(`🏁 loadend - Upload terminé`, 'info');
+            });
+            
+            try {
+                log('📤 Ouverture requête POST...', 'info');
+                xhr.open('POST', `${API_URL}/api.php/firmwares/upload-ino`);
+                
+                log('📤 Définition header Authorization...', 'info');
+                xhr.setRequestHeader('Authorization', `Bearer ${TOKEN}`);
+                
+                log('📤 Envoi FormData...', 'info');
+                xhr.send(formData);
+                
+                log('✅ Requête envoyée, attente réponse...', 'success');
+            } catch (err) {
+                log(`❌ Exception: ${err.message}`, 'error');
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>
+

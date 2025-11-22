@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test SSE Compilation</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .log { background: #1e1e1e; color: #0f0; padding: 10px; margin: 5px 0; border-radius: 4px; }
+        .error { color: #f00; }
+        .success { color: #0f0; }
+        .info { color: #0ff; }
+    </style>
+</head>
+<body>
+    <h1>Test SSE - Compilation Firmware</h1>
+    <button onclick="testSSE()">Tester SSE</button>
+    <button onclick="testUpload()">Tester Upload</button>
+    <div id="logs"></div>
+
+    <script>
+        const API_URL = 'http://localhost:3000'; // Ajuster selon votre configuration
+        const TOKEN = 'test-token'; // Remplacer par un vrai token
+
+        function addLog(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            document.getElementById('logs').appendChild(div);
+        }
+
+        async function testSSE() {
+            addLog('Démarrage test SSE...', 'info');
+            const firmwareId = 1; // Remplacer par un ID réel
+            
+            try {
+                const url = `${API_URL}/api.php/firmwares/compile/${firmwareId}?token=${encodeURIComponent(TOKEN)}`;
+                addLog(`Connexion à: ${url}`, 'info');
+                
+                const eventSource = new EventSource(url);
+                
+                eventSource.onopen = () => {
+                    addLog('✅ Connexion SSE établie', 'success');
+                };
+                
+                eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        addLog(`Message reçu: ${JSON.stringify(data)}`, 'info');
+                        
+                        if (data.type === 'log') {
+                            addLog(`[${data.level}] ${data.message}`, data.level);
+                        } else if (data.type === 'progress') {
+                            addLog(`Progression: ${data.progress}%`, 'info');
+                        } else if (data.type === 'success') {
+                            addLog(`✅ ${data.message}`, 'success');
+                            eventSource.close();
+                        } else if (data.type === 'error') {
+                            addLog(`❌ ${data.message}`, 'error');
+                            eventSource.close();
+                        }
+                    } catch (err) {
+                        addLog(`Erreur parsing: ${err.message}`, 'error');
+                    }
+                };
+                
+                eventSource.onerror = (err) => {
+                    addLog(`❌ Erreur EventSource: ${JSON.stringify(err)}`, 'error');
+                    addLog(`État: ${eventSource.readyState}`, 'error');
+                    // readyState: 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
+                    eventSource.close();
+                };
+                
+                // Timeout après 30 secondes
+                setTimeout(() => {
+                    if (eventSource.readyState !== EventSource.CLOSED) {
+                        addLog('⏱️ Timeout - fermeture de la connexion', 'error');
+                        eventSource.close();
+                    }
+                }, 30000);
+                
+            } catch (err) {
+                addLog(`❌ Erreur: ${err.message}`, 'error');
+            }
+        }
+
+        async function testUpload() {
+            addLog('Démarrage test Upload...', 'info');
+            
+            // Créer un fichier .ino de test
+            const inoContent = `// Test firmware
+#define FIRMWARE_VERSION_STR "3.0.0-test"
+
+void setup() {
+  Serial.begin(115200);
+}
+
+void loop() {
+  delay(1000);
+}`;
+            
+            const blob = new Blob([inoContent], { type: 'text/plain' });
+            const file = new File([blob], 'test_firmware.ino', { type: 'text/plain' });
+            
+            const formData = new FormData();
+            formData.append('firmware_ino', file);
+            formData.append('type', 'ino');
+            
+            try {
+                const response = await fetch(`${API_URL}/api.php/firmwares/upload-ino`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${TOKEN}`
+                    },
+                    body: formData
+                });
+                
+                const text = await response.text();
+                addLog(`Réponse (${response.status}): ${text}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = JSON.parse(text);
+                    if (data.success && data.upload_id) {
+                        addLog(`✅ Upload réussi! ID: ${data.upload_id}`, 'success');
+                        addLog('Démarrage compilation automatique...', 'info');
+                        // Tester la compilation
+                        setTimeout(() => testSSEWithId(data.upload_id), 1000);
+                    }
+                }
+            } catch (err) {
+                addLog(`❌ Erreur upload: ${err.message}`, 'error');
+            }
+        }
+
+        async function testSSEWithId(firmwareId) {
+            addLog(`Test SSE pour firmware ID: ${firmwareId}`, 'info');
+            // Même code que testSSE mais avec l'ID
+            testSSE();
+        }
+    </script>
+</body>
+</html>
+
