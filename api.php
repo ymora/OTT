@@ -1534,6 +1534,61 @@ function handleDeleteDevice($device_id) {
     }
 }
 
+// Fonction helper pour obtenir la position depuis l'IP du client (pour dispositifs USB)
+function getLocationFromIp($ip) {
+    // Ignorer les IPs locales/privées
+    if (empty($ip) || $ip === '127.0.0.1' || $ip === '::1' || 
+        strpos($ip, '192.168.') === 0 || strpos($ip, '10.') === 0 || 
+        strpos($ip, '172.') === 0 || strpos($ip, 'localhost') !== false) {
+        return null;
+    }
+    
+    try {
+        // Utiliser ip-api.com (gratuit, sans clé API, limite 45 req/min)
+        $url = "http://ip-api.com/json/$ip?fields=status,lat,lon";
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 2,
+                'method' => 'GET'
+            ]
+        ]);
+        $response = @file_get_contents($url, false, $context);
+        
+        if ($response) {
+            $data = json_decode($response, true);
+            if ($data && $data['status'] === 'success' && isset($data['lat']) && isset($data['lon'])) {
+                return [
+                    'latitude' => floatval($data['lat']),
+                    'longitude' => floatval($data['lon'])
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        // Ignorer les erreurs de géolocalisation IP (non critique)
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[getLocationFromIp] Erreur: ' . $e->getMessage());
+        }
+    }
+    
+    return null;
+}
+
+// Fonction helper pour obtenir l'IP réelle du client
+function getClientIp() {
+    $ipKeys = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
+    foreach ($ipKeys as $key) {
+        if (!empty($_SERVER[$key])) {
+            $ip = $_SERVER[$key];
+            // Si X-Forwarded-For contient plusieurs IPs, prendre la première
+            if (strpos($ip, ',') !== false) {
+                $ip = trim(explode(',', $ip)[0]);
+            }
+            return $ip;
+        }
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? null;
+}
+
 function handlePostMeasurement() {
     global $pdo;
     
@@ -1561,6 +1616,23 @@ function handlePostMeasurement() {
     $timestamp = isset($input['timestamp']) ? $input['timestamp'] : null;
     // Status optionnel
     $status = $input['status'] ?? 'TIMER';
+    
+    // Position GPS optionnelle (pour dispositifs OTA)
+    $latitude = null;
+    $longitude = null;
+    if (isset($input['latitude']) && is_numeric($input['latitude'])) {
+        $latitude = floatval($input['latitude']);
+    } elseif (isset($input['payload']['latitude']) && is_numeric($input['payload']['latitude'])) {
+        $latitude = floatval($input['payload']['latitude']);
+    }
+    if (isset($input['longitude']) && is_numeric($input['longitude'])) {
+        $longitude = floatval($input['longitude']);
+    } elseif (isset($input['payload']['longitude']) && is_numeric($input['payload']['longitude'])) {
+        $longitude = floatval($input['payload']['longitude']);
+    }
+    
+    // Détecter si c'est une mesure USB (status = 'USB') ou OTA
+    $isUsbMeasurement = ($status === 'USB' || strpos($iccid, 'USB-') === 0 || strpos($iccid, 'TEMP-') === 0);
     
     try {
         // Normaliser le timestamp
@@ -1595,9 +1667,35 @@ function handlePostMeasurement() {
             if (!$device) {
                 // Enregistrement automatique du nouveau dispositif avec paramètres par défaut
                 // Utiliser l'ICCID comme nom par défaut du dispositif (identifiant unique de la SIM)
+                
+                // Déterminer la position initiale
+                $initialLatitude = null;
+                $initialLongitude = null;
+                
+                if ($isUsbMeasurement) {
+                    // Dispositif USB : géolocaliser via IP du client
+                    $clientIp = getClientIp();
+                    if ($clientIp) {
+                        $ipLocation = getLocationFromIp($clientIp);
+                        if ($ipLocation) {
+                            $initialLatitude = $ipLocation['latitude'];
+                            $initialLongitude = $ipLocation['longitude'];
+                        }
+                    }
+                } else {
+                    // Dispositif OTA : utiliser les coordonnées GPS/réseau cellulaire envoyées
+                    if ($latitude !== null && $longitude !== null) {
+                        // Valider les coordonnées
+                        if ($latitude >= -90 && $latitude <= 90 && $longitude >= -180 && $longitude <= 180) {
+                            $initialLatitude = $latitude;
+                            $initialLongitude = $longitude;
+                        }
+                    }
+                }
+                
                 $insertStmt = $pdo->prepare("
-                    INSERT INTO devices (sim_iccid, device_name, device_serial, last_seen, last_battery, firmware_version, status, first_use_date)
-                    VALUES (:iccid, :device_name, :device_serial, :timestamp, :battery, :firmware_version, 'active', :timestamp)
+                    INSERT INTO devices (sim_iccid, device_name, device_serial, last_seen, last_battery, firmware_version, status, first_use_date, latitude, longitude)
+                    VALUES (:iccid, :device_name, :device_serial, :timestamp, :battery, :firmware_version, 'active', :timestamp, :latitude, :longitude)
                 ");
                 $insertStmt->execute([
                     'iccid' => $iccid,
@@ -1605,7 +1703,9 @@ function handlePostMeasurement() {
                     'device_serial' => $iccid, // Utiliser l'ICCID comme numéro de série (c'est l'ID unique de la SIM)
                     'battery' => $battery,
                     'firmware_version' => $firmware_version,
-                    'timestamp' => $timestampValue
+                    'timestamp' => $timestampValue,
+                    'latitude' => $initialLatitude,
+                    'longitude' => $initialLongitude
                 ]);
                 $device_id = $pdo->lastInsertId();
                 
@@ -1623,6 +1723,34 @@ function handlePostMeasurement() {
                 if ($firmware_version && $firmware_version !== $device['firmware_version']) {
                     $updateFields[] = 'firmware_version = :firmware_version';
                     $updateParams['firmware_version'] = $firmware_version;
+                }
+                
+                // Gestion de la position
+                // Pour OTA : utiliser latitude/longitude envoyées par le firmware (GPS ou réseau cellulaire)
+                // Pour USB : utiliser l'IP du client pour géolocaliser
+                if ($isUsbMeasurement) {
+                    // Dispositif USB : géolocaliser via IP du client
+                    $clientIp = getClientIp();
+                    if ($clientIp) {
+                        $ipLocation = getLocationFromIp($clientIp);
+                        if ($ipLocation) {
+                            $updateFields[] = 'latitude = :latitude';
+                            $updateFields[] = 'longitude = :longitude';
+                            $updateParams['latitude'] = $ipLocation['latitude'];
+                            $updateParams['longitude'] = $ipLocation['longitude'];
+                        }
+                    }
+                } else {
+                    // Dispositif OTA : utiliser les coordonnées GPS/réseau cellulaire envoyées
+                    if ($latitude !== null && $longitude !== null) {
+                        // Valider les coordonnées (latitude: -90 à 90, longitude: -180 à 180)
+                        if ($latitude >= -90 && $latitude <= 90 && $longitude >= -180 && $longitude <= 180) {
+                            $updateFields[] = 'latitude = :latitude';
+                            $updateFields[] = 'longitude = :longitude';
+                            $updateParams['latitude'] = $latitude;
+                            $updateParams['longitude'] = $longitude;
+                        }
+                    }
                 }
                 
                 $pdo->prepare("UPDATE devices SET " . implode(', ', $updateFields) . " WHERE id = :id")
