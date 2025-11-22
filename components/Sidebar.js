@@ -15,7 +15,7 @@ const menuStructure = [
     permission: null
   },
   {
-    name: 'Dispositifs',
+    name: 'Dispositifs OTT',
     icon: '🔌',
     path: '/dashboard/devices',
     permission: 'devices.view',
