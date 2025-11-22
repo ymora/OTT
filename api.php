@@ -3942,19 +3942,31 @@ function handleCompileFirmware($firmware_id) {
             
             sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
             sendSSE('progress', 40);
-            exec($arduinoCli . ' core update-index 2>&1', $output, $return);
+            // Définir HOME si non défini (pour éviter les avertissements arduino-cli)
+            $env = [];
+            if (empty(getenv('HOME'))) {
+                $env['HOME'] = sys_get_temp_dir() . '/arduino-cli-home';
+                if (!is_dir($env['HOME'])) {
+                    mkdir($env['HOME'], 0755, true);
+                }
+            }
+            $envStr = '';
+            foreach ($env as $key => $value) {
+                $envStr .= $key . '=' . escapeshellarg($value) . ' ';
+            }
+            exec($envStr . $arduinoCli . ' core update-index 2>&1', $output, $return);
             sendSSE('log', 'info', implode("\n", $output));
             
             sendSSE('log', 'info', 'Installation du core ESP32...');
             sendSSE('progress', 50);
-            exec($arduinoCli . ' core install esp32:esp32 2>&1', $output, $return);
+            exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $output, $return);
             sendSSE('log', 'info', implode("\n", $output));
             
             sendSSE('log', 'info', 'Compilation du firmware...');
             sendSSE('progress', 60);
             
             $fqbn = 'esp32:esp32:esp32';
-            $compile_cmd = $arduinoCli . ' compile --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
+            $compile_cmd = $envStr . $arduinoCli . ' compile --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
             
             exec($compile_cmd, $compile_output, $compile_return);
             
