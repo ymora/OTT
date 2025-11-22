@@ -3457,38 +3457,70 @@ function handleGetFirmwareIno($firmware_id) {
         $stmt->execute(['id' => $firmware_id]);
         $firmware = $stmt->fetch();
         
+        // Stocker firmware_id pour utilisation dans la recherche de fichier
         if (!$firmware) {
             http_response_code(404);
             echo json_encode(['success' => false, 'error' => 'Firmware introuvable']);
             return;
         }
         
-        // Construire le chemin du fichier .ino
-        $ino_path = $firmware['file_path'];
-        if (!file_exists($ino_path)) {
-            $ino_path = __DIR__ . '/' . $firmware['file_path'];
-        }
-        if (!file_exists($ino_path)) {
+        // Construire le chemin du fichier .ino en utilisant l'ID du firmware
+        $ino_path = null;
+        
+        // Essayer d'abord le chemin exact depuis la base de données
+        $test_paths = [
+            $firmware['file_path'],
+            __DIR__ . '/' . $firmware['file_path'],
+        ];
+        
+        // Si le chemin contient hardware/firmware/, essayer aussi sans préfixe
+        if (preg_match('#^hardware/firmware/#', $firmware['file_path'])) {
             $relative_path = preg_replace('#^hardware/firmware/#', '', $firmware['file_path']);
-            $ino_path = __DIR__ . '/hardware/firmware/' . $relative_path;
+            $test_paths[] = __DIR__ . '/hardware/firmware/' . $relative_path;
         }
         
-        // Vérifier si c'est un fichier .ino
-        if (!preg_match('/\.ino$/', $ino_path)) {
-            // Si ce n'est pas un .ino, chercher le fichier .ino correspondant
+        // Tester chaque chemin
+        foreach ($test_paths as $test_path) {
+            if (file_exists($test_path) && preg_match('/\.ino$/', $test_path)) {
+                $ino_path = $test_path;
+                break;
+            }
+        }
+        
+        // Si le fichier n'est pas trouvé avec le chemin exact, chercher par ID
+        if (!$ino_path || !file_exists($ino_path)) {
             $version_dir = getVersionDir($firmware['version']);
             $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            
             if (is_dir($ino_dir)) {
-                $ino_files = glob($ino_dir . 'fw_ott_v' . $firmware['version'] . '_*.ino');
-                if (!empty($ino_files)) {
-                    $ino_path = $ino_files[0]; // Prendre le premier fichier .ino trouvé
+                // Chercher le fichier avec l'ID dans le nom (pattern le plus fiable)
+                $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
+                $ino_path_with_id = $ino_dir . $pattern_with_id;
+                
+                if (file_exists($ino_path_with_id)) {
+                    $ino_path = $ino_path_with_id;
+                } else {
+                    // Fallback : chercher tous les fichiers .ino pour cette version (pour compatibilité avec anciens fichiers)
+                    $pattern = 'fw_ott_v' . $firmware['version'] . '_*.ino';
+                    $ino_files = glob($ino_dir . $pattern);
+                    if (!empty($ino_files)) {
+                        // Trier par date de modification (le plus récent en premier)
+                        usort($ino_files, function($a, $b) {
+                            return filemtime($b) - filemtime($a);
+                        });
+                        $ino_path = $ino_files[0];
+                    }
                 }
             }
         }
         
-        if (!file_exists($ino_path)) {
+        if (!$ino_path || !file_exists($ino_path)) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Fichier .ino introuvable']);
+            $error_msg = 'Fichier .ino introuvable: ' . $firmware['file_path'];
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                $error_msg .= ' (Version: ' . $firmware['version'] . ', ID: ' . $firmware_id . ')';
+            }
+            echo json_encode(['success' => false, 'error' => $error_msg]);
             return;
         }
         
@@ -3620,8 +3652,8 @@ function handleUpdateFirmwareIno($firmware_id) {
             if (!empty($new_ino_files)) {
                 $ino_path = $new_ino_files[0];
             } else {
-                // Créer un nouveau fichier dans le nouveau dossier
-                $ino_filename = 'fw_ott_v' . $target_version . '_' . time() . '.ino';
+                // Créer un nouveau fichier dans le nouveau dossier avec l'ID
+                $ino_filename = 'fw_ott_v' . $target_version . '_id' . $firmware_id . '.ino';
                 $ino_path = $ino_dir . $ino_filename;
             }
         }
@@ -4001,27 +4033,27 @@ function handleUploadFirmwareIno() {
         }
     }
     
-    // Sauvegarder le fichier .ino
-    $ino_filename = 'fw_ott_v' . $version . '_' . time() . '.ino';
-    $ino_path = $ino_dir . $ino_filename;
+    // Sauvegarder temporairement le fichier .ino (avant insertion en DB pour obtenir l'ID)
+    $temp_filename = 'temp_' . uniqid() . '.ino';
+    $temp_path = $ino_dir . $temp_filename;
     
-    if (!move_uploaded_file($file['tmp_name'], $ino_path)) {
+    if (!move_uploaded_file($file['tmp_name'], $temp_path)) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Failed to save .ino file']);
         return;
     }
     
-    // Vérifier que le fichier a bien été créé
-    if (!file_exists($ino_path)) {
+    // Vérifier que le fichier temporaire a bien été créé
+    if (!file_exists($temp_path)) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Fichier .ino non trouvé après upload']);
         return;
     }
     
-    // Enregistrer dans la base de données (statut: pending_compilation)
+    // Enregistrer dans la base de données (statut: pending_compilation) avec un chemin temporaire
     try {
-        $file_size = filesize($ino_path);
-        $checksum = hash_file('sha256', $ino_path);
+        $file_size = filesize($temp_path);
+        $checksum = hash_file('sha256', $temp_path);
         
         // Utiliser RETURNING pour PostgreSQL (plus fiable que lastInsertId)
         $stmt = $pdo->prepare("
@@ -4030,9 +4062,12 @@ function handleUploadFirmwareIno() {
             RETURNING id
         ");
         
+        // Chemin temporaire pour l'insertion initiale
+        $temp_file_path = 'hardware/firmware/' . $version_dir . '/' . $temp_filename;
+        
         $stmt->execute([
             'version' => $version,
-            'file_path' => 'hardware/firmware/' . $version_dir . '/' . $ino_filename,
+            'file_path' => $temp_file_path,
             'file_size' => $file_size,
             'checksum' => $checksum,
             'release_notes' => 'Compilé depuis .ino',
@@ -4042,6 +4077,28 @@ function handleUploadFirmwareIno() {
         
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         $firmware_id = $result['id'] ?? $pdo->lastInsertId();
+        
+        // Renommer le fichier avec l'ID pour garantir l'unicité et la retrouvabilité
+        $ino_filename = 'fw_ott_v' . $version . '_id' . $firmware_id . '.ino';
+        $ino_path = $ino_dir . $ino_filename;
+        $final_file_path = 'hardware/firmware/' . $version_dir . '/' . $ino_filename;
+        
+        if (!rename($temp_path, $ino_path)) {
+            // Si le renommage échoue, nettoyer et retourner une erreur
+            @unlink($temp_path);
+            // Supprimer l'entrée en DB
+            $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Impossible de renommer le fichier .ino']);
+            return;
+        }
+        
+        // Mettre à jour le file_path dans la base de données avec le nom final
+        $updateStmt = $pdo->prepare("UPDATE firmware_versions SET file_path = :file_path WHERE id = :id");
+        $updateStmt->execute([
+            'file_path' => $final_file_path,
+            'id' => $firmware_id
+        ]);
         
         auditLog('firmware.ino.uploaded', 'firmware', $firmware_id, null, [
             'version' => $version,
@@ -4150,25 +4207,61 @@ function handleCompileFirmware($firmware_id) {
             return;
         }
         
-        // Construire le chemin du fichier .ino
-        // Le file_path dans la DB peut être relatif (hardware/firmware/...) ou absolu
-        $ino_path = $firmware['file_path'];
-        if (!file_exists($ino_path)) {
-            // Essayer avec __DIR__ si c'est un chemin relatif
-            $ino_path = __DIR__ . '/' . $firmware['file_path'];
-        }
-        if (!file_exists($ino_path)) {
-            // Essayer sans le préfixe hardware/firmware/ si présent
+        // Construire le chemin du fichier .ino en utilisant l'ID du firmware
+        $ino_path = null;
+        
+        // Essayer d'abord le chemin exact depuis la base de données
+        $test_paths = [
+            $firmware['file_path'],
+            __DIR__ . '/' . $firmware['file_path'],
+        ];
+        
+        // Si le chemin contient hardware/firmware/, essayer aussi sans préfixe
+        if (preg_match('#^hardware/firmware/#', $firmware['file_path'])) {
             $relative_path = preg_replace('#^hardware/firmware/#', '', $firmware['file_path']);
-            $ino_path = __DIR__ . '/hardware/firmware/' . $relative_path;
+            $test_paths[] = __DIR__ . '/hardware/firmware/' . $relative_path;
         }
         
-        if (!file_exists($ino_path)) {
+        // Tester chaque chemin
+        foreach ($test_paths as $test_path) {
+            if (file_exists($test_path) && preg_match('/\.ino$/', $test_path)) {
+                $ino_path = $test_path;
+                break;
+            }
+        }
+        
+        // Si le fichier n'est pas trouvé avec le chemin exact, chercher par ID
+        if (!$ino_path || !file_exists($ino_path)) {
+            $version_dir = getVersionDir($firmware['version']);
+            $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            
+            if (is_dir($ino_dir)) {
+                // Chercher le fichier avec l'ID dans le nom (pattern le plus fiable)
+                $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
+                $ino_path_with_id = $ino_dir . $pattern_with_id;
+                
+                if (file_exists($ino_path_with_id)) {
+                    $ino_path = $ino_path_with_id;
+                } else {
+                    // Fallback : chercher tous les fichiers .ino pour cette version (pour compatibilité avec anciens fichiers)
+                    $pattern = 'fw_ott_v' . $firmware['version'] . '_*.ino';
+                    $ino_files = glob($ino_dir . $pattern);
+                    if (!empty($ino_files)) {
+                        // Trier par date de modification (le plus récent en premier)
+                        usort($ino_files, function($a, $b) {
+                            return filemtime($b) - filemtime($a);
+                        });
+                        $ino_path = $ino_files[0];
+                    }
+                }
+            }
+        }
+        
+        if (!$ino_path || !file_exists($ino_path)) {
             sendSSE('error', 'Fichier .ino introuvable: ' . $firmware['file_path']);
-            sendSSE('log', 'error', 'Chemins testés:');
-            sendSSE('log', 'error', '  1. ' . $firmware['file_path']);
-            sendSSE('log', 'error', '  2. ' . (__DIR__ . '/' . $firmware['file_path']));
-            sendSSE('log', 'error', '  3. ' . (__DIR__ . '/hardware/firmware/' . preg_replace('#^hardware/firmware/#', '', $firmware['file_path'])));
+            sendSSE('log', 'error', 'Version: ' . $firmware['version'] . ', ID: ' . $firmware_id);
+            sendSSE('log', 'error', 'Dossier recherché: hardware/firmware/' . getVersionDir($firmware['version']) . '/');
+            sendSSE('log', 'error', 'Pattern recherché: fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino');
             sendSSE('log', 'error', 'Vérifiez que le fichier existe dans hardware/firmware/');
             flush();
             return;

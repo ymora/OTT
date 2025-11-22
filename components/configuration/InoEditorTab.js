@@ -872,7 +872,7 @@ export default function InoEditorTab() {
               </div>
             )}
           </div>
-          )}
+        )}
         </div>
       )}
 
