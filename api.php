@@ -4015,11 +4015,19 @@ function handleCompileFirmware($firmware_id) {
                         break;
                     }
                     
-                    // Timeout de sécurité : si pas de sortie depuis 5 minutes, considérer comme bloqué
-                    if (time() - $lastOutputTime > 300) {
-                        sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 5 minutes, le processus semble bloqué');
+                    // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
+                    // (L'installation du core ESP32 peut prendre du temps)
+                    if (time() - $lastOutputTime > 600) {
+                        sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
+                        sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
                         proc_terminate($process);
                         break;
+                    }
+                    
+                    // Envoyer un heartbeat toutes les 30 secondes pour maintenir la connexion
+                    if (time() - $startTime > 0 && (time() - $startTime) % 30 === 0) {
+                        sendSSE('log', 'info', '⏳ Installation en cours... (patientez, cela peut prendre plusieurs minutes)');
+                        flush();
                     }
                     
                     // Attendre un peu avant de relire
