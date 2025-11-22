@@ -271,6 +271,38 @@ function getVersionDir($version) {
     return 'v' . ($matches[1] ?? 'unknown');
 }
 
+/**
+ * Copie récursivement un répertoire et son contenu
+ */
+function copyRecursive($src, $dst) {
+    $dir = opendir($src);
+    if (!$dir) {
+        return false;
+    }
+    
+    if (!is_dir($dst)) {
+        mkdir($dst, 0755, true);
+    }
+    
+    while (($file = readdir($dir)) !== false) {
+        if ($file === '.' || $file === '..') {
+            continue;
+        }
+        
+        $srcPath = $src . '/' . $file;
+        $dstPath = $dst . '/' . $file;
+        
+        if (is_dir($srcPath)) {
+            copyRecursive($srcPath, $dstPath);
+        } else {
+            copy($srcPath, $dstPath);
+        }
+    }
+    
+    closedir($dir);
+    return true;
+}
+
 // ============================================================================
 // HELPERS - Database
 // ============================================================================
@@ -4226,6 +4258,47 @@ function handleCompileFirmware($firmware_id) {
             mkdir($sketch_dir, 0755, true);
             copy($ino_path, $sketch_dir . '/' . $sketch_name . '.ino');
             
+            // Copier les librairies externes (TinyGSM) dans le dossier de compilation
+            // Arduino-cli cherche les librairies dans plusieurs emplacements :
+            // 1. Le dossier 'libraries' à côté du sketch (pour cette compilation)
+            // 2. Le dossier 'libraries' dans ARDUINO_DIRECTORIES_USER (persistant)
+            $hardware_lib_dir = __DIR__ . '/hardware/lib';
+            if (is_dir($hardware_lib_dir)) {
+                $lib_dirs = glob($hardware_lib_dir . '/TinyGSM*', GLOB_ONLYDIR);
+                if (!empty($lib_dirs)) {
+                    // 1. Copier dans le dossier libraries à côté du sketch (pour cette compilation)
+                    $libraries_dir = $sketch_dir . '/../libraries';
+                    if (!is_dir($libraries_dir)) {
+                        mkdir($libraries_dir, 0755, true);
+                    }
+                    
+                    // 2. Copier aussi dans arduino-data/libraries (persistant, réutilisable)
+                    $arduinoDataLibrariesDir = __DIR__ . '/arduino-data/libraries';
+                    if (!is_dir($arduinoDataLibrariesDir)) {
+                        mkdir($arduinoDataLibrariesDir, 0755, true);
+                    }
+                    
+                    foreach ($lib_dirs as $lib_dir) {
+                        $lib_name = basename($lib_dir);
+                        
+                        // Copier dans le dossier libraries du build (temporaire)
+                        $target_lib_dir_build = $libraries_dir . '/' . $lib_name;
+                        if (!is_dir($target_lib_dir_build)) {
+                            copyRecursive($lib_dir, $target_lib_dir_build);
+                            sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
+                        }
+                        
+                        // Copier dans arduino-data/libraries (persistant, pour réutilisation)
+                        $target_lib_dir_persistent = $arduinoDataLibrariesDir . '/' . $lib_name;
+                        if (!is_dir($target_lib_dir_persistent)) {
+                            copyRecursive($lib_dir, $target_lib_dir_persistent);
+                            sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' installée dans arduino-data/libraries');
+                        }
+                    }
+                    flush();
+                }
+            }
+            
             // Configurer un répertoire persistant pour arduino-cli (évite de retélécharger à chaque fois)
             $arduinoDataDir = __DIR__ . '/arduino-data';
             if (!is_dir($arduinoDataDir)) {
@@ -4340,12 +4413,13 @@ function handleCompileFirmware($firmware_id) {
                             break;
                         }
                         
-                        // Envoyer un heartbeat toutes les 30 secondes pour maintenir la connexion
+                        // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion
                         $currentTime = time();
-                        if ($currentTime - $lastHeartbeatTime >= 30) {
+                        if ($currentTime - $lastHeartbeatTime >= 10) {
+                            // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
+                            $lastHeartbeatTime = $currentTime;
                             sendSSE('log', 'info', '⏳ Installation en cours... (patientez, cela peut prendre plusieurs minutes)');
                             flush();
-                            $lastHeartbeatTime = $currentTime;
                         }
                         
                         // Attendre un peu avant de relire
@@ -4375,14 +4449,89 @@ function handleCompileFirmware($firmware_id) {
             
             sendSSE('log', 'info', 'Compilation du firmware...');
             sendSSE('progress', 60);
+            flush();
             
             $fqbn = 'esp32:esp32:esp32';
             $compile_cmd = $envStr . $arduinoCli . ' compile --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
             
-            exec($compile_cmd, $compile_output, $compile_return);
+            // Exécuter avec output en temps réel pour voir la progression et maintenir la connexion SSE
+            $descriptorspec = [
+                0 => ["pipe", "r"],  // stdin
+                1 => ["pipe", "w"],  // stdout
+                2 => ["pipe", "w"]   // stderr
+            ];
             
-            foreach ($compile_output as $line) {
-                sendSSE('log', 'info', $line);
+            $compile_process = proc_open($compile_cmd, $descriptorspec, $compile_pipes);
+            
+            if (is_resource($compile_process)) {
+                $compile_stdout = $compile_pipes[1];
+                $compile_stderr = $compile_pipes[2];
+                
+                // Configurer les streams en non-bloquant
+                stream_set_blocking($compile_stdout, false);
+                stream_set_blocking($compile_stderr, false);
+                
+                $compile_start_time = time();
+                $compile_last_heartbeat = $compile_start_time;
+                $compile_output_lines = [];
+                
+                while (true) {
+                    $compile_status = proc_get_status($compile_process);
+                    
+                    // Lire stdout
+                    $line = fgets($compile_stdout);
+                    if ($line !== false) {
+                        $line = trim($line);
+                        if (!empty($line)) {
+                            $compile_output_lines[] = $line;
+                            sendSSE('log', 'info', $line);
+                            flush();
+                        }
+                    }
+                    
+                    // Lire stderr
+                    $errLine = fgets($compile_stderr);
+                    if ($errLine !== false) {
+                        $errLine = trim($errLine);
+                        if (!empty($errLine)) {
+                            $compile_output_lines[] = $errLine;
+                            sendSSE('log', 'info', $errLine);
+                            flush();
+                        }
+                    }
+                    
+                    // Vérifier si le processus est terminé
+                    if ($compile_status['running'] === false) {
+                        break;
+                    }
+                    
+                    // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion SSE
+                    $current_time = time();
+                    if ($current_time - $compile_last_heartbeat >= 10) {
+                        $compile_last_heartbeat = $current_time;
+                        sendSSE('log', 'info', '⏳ Compilation en cours...');
+                        flush();
+                    }
+                    
+                    // Attendre un peu avant de relire
+                    usleep(100000); // 100ms
+                }
+                
+                // Fermer les pipes
+                fclose($compile_pipes[0]);
+                fclose($compile_pipes[1]);
+                fclose($compile_pipes[2]);
+                
+                $compile_return = proc_close($compile_process);
+                $compile_output = $compile_output_lines;
+            } else {
+                // Fallback sur exec si proc_open échoue
+                exec($compile_cmd, $compile_output, $compile_return);
+                
+                foreach ($compile_output as $line) {
+                    sendSSE('log', 'info', $line);
+                }
+                flush();
             }
             
             if ($compile_return !== 0) {
