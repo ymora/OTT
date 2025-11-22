@@ -3940,9 +3940,13 @@ function handleCompileFirmware($firmware_id) {
             mkdir($sketch_dir, 0755, true);
             copy($ino_path, $sketch_dir . '/' . $sketch_name . '.ino');
             
-            sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
-            sendSSE('progress', 40);
-            // Définir HOME si non défini (pour éviter les avertissements arduino-cli)
+            // Configurer un répertoire persistant pour arduino-cli (évite de retélécharger à chaque fois)
+            $arduinoDataDir = __DIR__ . '/arduino-data';
+            if (!is_dir($arduinoDataDir)) {
+                mkdir($arduinoDataDir, 0755, true);
+            }
+            
+            // Définir HOME et ARDUINO_DIRECTORIES_USER pour arduino-cli
             $env = [];
             if (empty(getenv('HOME'))) {
                 $env['HOME'] = sys_get_temp_dir() . '/arduino-cli-home';
@@ -3950,16 +3954,34 @@ function handleCompileFirmware($firmware_id) {
                     mkdir($env['HOME'], 0755, true);
                 }
             }
+            // Utiliser un répertoire persistant pour les données arduino-cli
+            $env['ARDUINO_DIRECTORIES_USER'] = $arduinoDataDir;
+            
             $envStr = '';
             foreach ($env as $key => $value) {
                 $envStr .= $key . '=' . escapeshellarg($value) . ' ';
             }
-            exec($envStr . $arduinoCli . ' core update-index 2>&1', $output, $return);
-            sendSSE('log', 'info', implode("\n", $output));
             
-            sendSSE('log', 'info', 'Installation du core ESP32...');
-            sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~100MB)...');
-            sendSSE('progress', 50);
+            sendSSE('log', 'info', 'Vérification du core ESP32...');
+            sendSSE('progress', 40);
+            
+            // Vérifier si le core ESP32 est déjà installé
+            exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
+            $coreListStr = implode("\n", $coreListOutput);
+            $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false;
+            
+            if ($esp32Installed) {
+                sendSSE('log', 'info', '✅ Core ESP32 déjà installé - pas besoin de retélécharger');
+                sendSSE('progress', 50);
+            } else {
+                sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
+                sendSSE('progress', 42);
+                exec($envStr . $arduinoCli . ' core update-index 2>&1', $output, $return);
+                sendSSE('log', 'info', implode("\n", $output));
+                
+                sendSSE('log', 'info', 'Installation du core ESP32...');
+                sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
+                sendSSE('progress', 45);
             
             // Exécuter avec output en temps réel pour voir la progression
             $descriptorspec = [
