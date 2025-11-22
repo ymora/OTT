@@ -501,7 +501,9 @@ Commandes durant la session :
 
 ### Optimisations Code
 - **Réduction duplication** : Migration vers `useUsb()` pour éliminer ~500 lignes de code dupliqué
-- **Code mort supprimé** : Nettoyage des fonctions non utilisées
+- **Code mort supprimé** : Nettoyage des fonctions non utilisées (`FlashUSBModal.js` supprimé, remplacé par `FlashModal.js` unifié)
 - **Imports optimisés** : Suppression des imports inutilisés
+- **Fonction helper centralisée** : `findDeviceByIdentifier()` dans `api.php` pour éliminer la logique répétée de recherche de dispositifs
 - **Notifications UX** : ajouts des bannières `alert-success/info/warning` pour toutes les étapes USB (détection, création, fallback)
+- **Structure optimisée** : Nettoyage de `.gitignore` (doublons supprimés), vérification de la cohérence des chemins de menu
 

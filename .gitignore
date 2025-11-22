@@ -50,9 +50,5 @@ external/
 *.backup
 backup_*.sql
 
-# Fichiers temporaires
-*.tmp
-temp/
-
 # Binaires locaux (optionnel - peut être versionné)
 # bin/arduino-cli*

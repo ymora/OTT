@@ -1642,27 +1642,8 @@ function handlePostMeasurement() {
         $pdo->beginTransaction();
         
         try {
-            // Chercher d'abord par sim_iccid
-            $stmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE sim_iccid = :iccid FOR UPDATE");
-            $stmt->execute(['iccid' => $iccid]);
-            $device = $stmt->fetch();
-            
-            // Si pas trouvé, chercher par device_name (pour les dispositifs USB-xxx:yyy)
-            if (!$device) {
-                $stmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE device_name = :iccid OR device_name LIKE :iccid_pattern FOR UPDATE");
-                $stmt->execute([
-                    'iccid' => $iccid,
-                    'iccid_pattern' => '%' . $iccid . '%'
-                ]);
-                $device = $stmt->fetch();
-            }
-            
-            // Si toujours pas trouvé, chercher par device_serial
-            if (!$device) {
-                $stmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE device_serial = :iccid FOR UPDATE");
-                $stmt->execute(['iccid' => $iccid]);
-                $device = $stmt->fetch();
-            }
+            // Utiliser la fonction helper pour rechercher le dispositif
+            $device = findDeviceByIdentifier($iccid, true); // true = FOR UPDATE
             
             if (!$device) {
                 // Enregistrement automatique du nouveau dispositif avec paramètres par défaut
@@ -1803,25 +1784,8 @@ function handlePostMeasurement() {
                     // Réessayer une fois
                     try {
                         $pdo->beginTransaction();
-                        // Chercher par sim_iccid, puis device_name, puis device_serial
-                        $retryStmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE sim_iccid = :iccid");
-                        $retryStmt->execute(['iccid' => $iccid]);
-                        $device = $retryStmt->fetch();
-                        
-                        if (!$device) {
-                            $retryStmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE device_name = :iccid OR device_name LIKE :iccid_pattern");
-                            $retryStmt->execute([
-                                'iccid' => $iccid,
-                                'iccid_pattern' => '%' . $iccid . '%'
-                            ]);
-                            $device = $retryStmt->fetch();
-                        }
-                        
-                        if (!$device) {
-                            $retryStmt = $pdo->prepare("SELECT id, firmware_version FROM devices WHERE device_serial = :iccid");
-                            $retryStmt->execute(['iccid' => $iccid]);
-                            $device = $retryStmt->fetch();
-                        }
+                        // Utiliser la fonction helper pour rechercher le dispositif (sans FOR UPDATE pour le retry)
+                        $device = findDeviceByIdentifier($iccid, false);
                         
                         if ($device) {
                         $device_id = $device['id'];
@@ -1876,11 +1840,63 @@ function handlePostMeasurement() {
     }
 }
 
-function getDeviceByIccid($iccid) {
+/**
+ * Recherche un dispositif par ICCID, device_serial ou device_name (avec correspondance partielle)
+ * Priorité : sim_iccid exact > device_name exact > device_name LIKE > device_serial exact
+ * 
+ * @param string $identifier ICCID, serial ou device_name à rechercher
+ * @param bool $forUpdate Si true, ajoute FOR UPDATE à la requête (pour transactions)
+ * @return array|false Dispositif trouvé ou false
+ */
+function findDeviceByIdentifier($identifier, $forUpdate = false) {
     global $pdo;
-    $stmt = $pdo->prepare("SELECT * FROM devices WHERE sim_iccid = :iccid");
-    $stmt->execute(['iccid' => $iccid]);
-    return $stmt->fetch();
+    
+    if (empty($identifier)) {
+        return false;
+    }
+    
+    $forUpdateClause = $forUpdate ? ' FOR UPDATE' : '';
+    
+    // 1. Recherche par sim_iccid exact
+    $stmt = $pdo->prepare("SELECT * FROM devices WHERE sim_iccid = :identifier" . $forUpdateClause);
+    $stmt->execute(['identifier' => $identifier]);
+    $device = $stmt->fetch();
+    if ($device) {
+        return $device;
+    }
+    
+    // 2. Recherche par device_name exact
+    $stmt = $pdo->prepare("SELECT * FROM devices WHERE device_name = :identifier" . $forUpdateClause);
+    $stmt->execute(['identifier' => $identifier]);
+    $device = $stmt->fetch();
+    if ($device) {
+        return $device;
+    }
+    
+    // 3. Recherche par device_name LIKE (pour USB-xxx:yyy)
+    $stmt = $pdo->prepare("SELECT * FROM devices WHERE device_name LIKE :pattern" . $forUpdateClause);
+    $stmt->execute(['pattern' => '%' . $identifier . '%']);
+    $device = $stmt->fetch();
+    if ($device) {
+        return $device;
+    }
+    
+    // 4. Recherche par device_serial exact
+    $stmt = $pdo->prepare("SELECT * FROM devices WHERE device_serial = :identifier" . $forUpdateClause);
+    $stmt->execute(['identifier' => $identifier]);
+    $device = $stmt->fetch();
+    if ($device) {
+        return $device;
+    }
+    
+    return false;
+}
+
+/**
+ * @deprecated Utiliser findDeviceByIdentifier() à la place
+ */
+function getDeviceByIccid($iccid) {
+    return findDeviceByIdentifier($iccid, false);
 }
 
 function normalizePriority($priority) {
@@ -2008,7 +2024,7 @@ function fetchPendingCommandsForDevice($device_id, $limit = 5) {
                 // Insérer la commande OTA_REQUEST
                 $insertStmt = $pdo->prepare("
                     INSERT INTO device_commands (device_id, command, payload, priority, status, execute_after, expires_at)
-                    VALUES (:device_id, 'OTA_REQUEST', :payload, 'high', 'pending', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR))
+                    VALUES (:device_id, 'OTA_REQUEST', :payload, 'high', 'pending', NOW(), NOW() + INTERVAL '24 HOURS')
                 ");
                 $insertStmt->execute([
                     'device_id' => $device_id,

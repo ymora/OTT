@@ -74,8 +74,8 @@ export default function Sidebar() {
         {menuStructure.map((item) => {
           if (!hasPermission(item.permission)) return null
           
-          // Vérification spéciale pour le menu Firmware (admin ou technicien uniquement)
-          if (item.path === '/dashboard/firmware-upload') {
+          // Vérification spéciale pour le menu Outils (admin ou technicien uniquement)
+          if (item.path === '/dashboard/configuration') {
             if (user?.role_name !== 'admin' && user?.role_name !== 'technicien') {
               return null
             }

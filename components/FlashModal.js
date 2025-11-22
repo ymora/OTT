@@ -31,7 +31,6 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
 
   // Utiliser le contexte USB partagé
   const {
-    port: usbPort,
     isConnected: usbIsConnected,
     isSupported: usbIsSupported,
     stopUsbStreaming
