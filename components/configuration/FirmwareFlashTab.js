@@ -66,8 +66,15 @@ export default function FirmwareFlashTab() {
     const deviceId = device.id
     if (!deviceId) return
 
+    // Vérifier si USB est disponible (par ID, ICCID, serial, ou device_name)
     const isUsbConnected = usbConnectedDevice?.id === deviceId
-    const isUsbVirtual = usbVirtualDevice && !device.id && usbVirtualDevice.sim_iccid === device.sim_iccid
+    const isUsbVirtual = usbVirtualDevice && (
+      (device.id && usbVirtualDevice.sim_iccid === device.sim_iccid) ||
+      (!device.id && usbVirtualDevice.sim_iccid === device.sim_iccid) ||
+      (usbVirtualDevice.device_serial && usbVirtualDevice.device_serial === device.device_serial) ||
+      (usbVirtualDevice.device_name && device.device_name && 
+       usbVirtualDevice.device_name.includes(device.device_name.replace(/USB-/, '')))
+    )
     
     // Priorité USB si connecté
     const useUSB = isUsbConnected || isUsbVirtual
@@ -102,16 +109,42 @@ export default function FirmwareFlashTab() {
           }
         }))
 
-        await fetchJson(
-          fetchWithAuth,
-          API_URL,
-          `/api.php/devices/${deviceId}/ota`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ firmware_version: firmwareVersion })
-          },
-          { requiresAuth: true }
-        )
+        try {
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${deviceId}/ota`,
+            {
+              method: 'POST',
+              body: JSON.stringify({ firmware_version: firmwareVersion })
+            },
+            { requiresAuth: true }
+          )
+        } catch (err) {
+          // Gérer l'erreur 409 (OTA déjà en cours)
+          if (err.message && err.message.includes('déjà en cours')) {
+            // Essayer de récupérer la version en attente depuis l'erreur
+            let pendingVersion = 'inconnue'
+            try {
+              const errorResponse = await fetchWithAuth(
+                `${API_URL}/api.php/devices/${deviceId}`,
+                { method: 'GET' },
+                { requiresAuth: true }
+              )
+              if (errorResponse.ok) {
+                const deviceData = await errorResponse.json()
+                if (deviceData.device?.target_firmware_version) {
+                  pendingVersion = deviceData.device.target_firmware_version
+                }
+              }
+            } catch (fetchErr) {
+              logger.debug('Impossible de récupérer la version en attente:', fetchErr)
+            }
+            
+            throw new Error(`Une mise à jour OTA est déjà en cours pour ce dispositif (version en attente: v${pendingVersion}). Veuillez attendre la fin de la mise à jour ou utiliser le flash USB si le dispositif est connecté.`)
+          }
+          throw err
+        }
 
         setFlashingDevices(prev => ({
           ...prev,
@@ -188,12 +221,14 @@ export default function FirmwareFlashTab() {
         }, 5 * 60 * 1000)
       }
     } catch (err) {
+      const errorMessage = err.message || 'Erreur inconnue'
       setFlashingDevices(prev => ({
         ...prev,
         [deviceId]: {
           ...prev[deviceId],
           status: 'error',
-          logs: [...(prev[deviceId]?.logs || []), `[${device.device_name || device.sim_iccid}] ❌ Erreur: ${err.message}`]
+          progress: prev[deviceId]?.progress || 0,
+          logs: [...(prev[deviceId]?.logs || []), `[${device.device_name || device.sim_iccid}] ❌ Erreur: ${errorMessage}`]
         }
       }))
       logger.error('Erreur flash dispositif:', err)
@@ -205,8 +240,15 @@ export default function FirmwareFlashTab() {
     e.stopPropagation()
     if (!selectedFirmwareForFlash) return
     
+    // Vérifier si USB est disponible (par ID, ICCID, serial, ou device_name)
     const isUsbConnected = usbConnectedDevice?.id === device.id
-    const isUsbVirtual = usbVirtualDevice && !device.id && usbVirtualDevice.sim_iccid === device.sim_iccid
+    const isUsbVirtual = usbVirtualDevice && (
+      (device.id && usbVirtualDevice.sim_iccid === device.sim_iccid) ||
+      (!device.id && usbVirtualDevice.sim_iccid === device.sim_iccid) ||
+      (usbVirtualDevice.device_serial && usbVirtualDevice.device_serial === device.device_serial) ||
+      (usbVirtualDevice.device_name && device.device_name && 
+       usbVirtualDevice.device_name.includes(device.device_name.replace(/USB-/, '')))
+    )
     
     // Priorité USB si connecté
     if (isUsbConnected || isUsbVirtual) {
