@@ -3716,6 +3716,13 @@ function handleUploadFirmwareIno() {
         return;
     }
     
+    // Vérifier que le fichier a bien été créé
+    if (!file_exists($ino_path)) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Fichier .ino non trouvé après upload']);
+        return;
+    }
+    
     // Enregistrer dans la base de données (statut: pending_compilation)
     try {
         $file_size = filesize($ino_path);
