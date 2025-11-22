@@ -94,6 +94,7 @@ git push origin main
   - Les dispositifs OTT se réveillent, mesurent, publient, puis récupèrent les commandes via `/devices/commands/pending`. Les ACK sont renvoyés sur `/devices/commands/ack` pour alimenter la console “Commandes”. Un verbe `UPDATE_CONFIG` permet de pousser APN/JWT/ICCID/Serial à distance (stockés en NVS après réception).
 - **Auth** : Next → `/api.php/auth/login` (JWT). Token stocké dans LocalStorage, injecté par `fetchWithAuth`. L'API vérifie JWT + permissions (rôles admin/tech/etc.).
 - **Docs / Firmware** : La documentation complète est accessible depuis le dashboard (3 documents : Présentation, Développeurs, Commerciale). `hardware/firmware/vX.X/` contient les firmwares compilés et uploadés (non versionnés).
+- **Compilation Firmware** : La compilation est toujours réelle via `arduino-cli` (jamais simulée). Le serveur doit avoir `arduino-cli` installé. Si `arduino-cli` n'est pas disponible, la compilation est refusée avec une erreur explicite. Voir section "Installation arduino-cli" ci-dessous.
 
 ### 📟 Dépannage – “mon dispositif n’apparaît pas”
 1. **Vérifier l’ICCID côté firmware**
@@ -276,12 +277,25 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
    - OTA, commandes descendantes, configuration distante : rôle **Admin** uniquement.  
    - Les autres rôles restent lecture/diagnostic ; l’API retourne `403 Forbidden` si la permission manque.
 
-6. **Scripts utiles**  
+6. **Installation arduino-cli (requis pour compilation firmware)**  
+   - **⚠️ IMPORTANT** : La compilation des firmwares est toujours réelle, jamais simulée. Si `arduino-cli` n'est pas disponible, la compilation est refusée avec une erreur explicite.
+   - **Docker** : `arduino-cli` est automatiquement installé dans le `Dockerfile` lors du build.
+   - **Render** : Le script `scripts/install_arduino_cli.sh` est exécuté automatiquement via `render.yaml` lors du déploiement.
+   - **Installation manuelle** (si nécessaire) :
+     ```bash
+     curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+     sudo mv bin/arduino-cli /usr/local/bin/arduino-cli
+     sudo chmod +x /usr/local/bin/arduino-cli
+     ```
+   - **Vérification** : `arduino-cli version` doit afficher la version installée.
+
+7. **Scripts utiles**  
    - `scripts/db_migrate.sh --seed` : applique `sql/schema.sql` + `sql/demo_seed.sql` sur Postgres (`DATABASE_URL=...`).  
    - `psql $DATABASE_URL -f sql/create_demo_user.sql` : crée/active `demo@example.com` (role viewer).  
    - `scripts/deploy_api.sh` / `scripts/deploy_dashboard.sh` : automatisent Render + GitHub Pages.  
    - `scripts/flash_firmware.ps1 -Port COMx` : compil/flash Arduino CLI.
-   - Page `/diagnostics` : teste en un clic l’API (`index.php`), affiche version, statut base Postgres et variables `NEXT_PUBLIC_*`.
+   - `scripts/install_arduino_cli.sh` : installe arduino-cli sur le serveur (exécuté automatiquement sur Render).
+   - Page `/diagnostics` : teste en un clic l'API (`index.php`), affiche version, statut base Postgres et variables `NEXT_PUBLIC_*`.
 
 ---
 

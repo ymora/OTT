@@ -7,12 +7,27 @@
 
 FROM php:8.2-apache
 
-# Installer extensions PHP requises
+# Installer extensions PHP requises et arduino-cli
 RUN apt-get update && apt-get install -y \
     libpq-dev \
+    curl \
+    unzip \
     && docker-php-ext-install pdo pdo_pgsql \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
+
+# Installer arduino-cli (OBLIGATOIRE - compilation jamais simulée)
+# Si le binaire local existe dans bin/, l'utiliser, sinon télécharger
+RUN if [ -f "bin/arduino-cli" ]; then \
+        cp bin/arduino-cli /usr/local/bin/arduino-cli && \
+        chmod +x /usr/local/bin/arduino-cli; \
+    else \
+        curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh && \
+        mv bin/arduino-cli /usr/local/bin/arduino-cli && \
+        chmod +x /usr/local/bin/arduino-cli && \
+        rm -rf bin; \
+    fi && \
+    arduino-cli version || (echo "ERREUR CRITIQUE: arduino-cli n'a pas pu etre installe" && exit 1)
 
 # Configuration Apache pour PHP
 RUN echo "ServerName ott-api" >> /etc/apache2/apache2.conf
@@ -23,6 +38,8 @@ COPY index.php /var/www/html/
 COPY .htaccess /var/www/html/.htaccess
 COPY bootstrap /var/www/html/bootstrap
 COPY sql /var/www/html/sql
+# Copier bin/ si présent (pour arduino-cli local)
+COPY bin/ /var/www/html/bin/ 2>/dev/null || true
 
 # Créer le dossier public (pour les fichiers statiques si nécessaire)
 RUN mkdir -p /var/www/html/public

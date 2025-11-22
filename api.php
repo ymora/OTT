@@ -3835,65 +3835,30 @@ function handleCompileFirmware($firmware_id) {
         flush();
         
         // Vérifier si arduino-cli est disponible
-        $arduinoCli = trim(shell_exec('which arduino-cli 2>/dev/null || where arduino-cli 2>/dev/null'));
+        // 1. Chercher dans bin/ du projet (priorité)
+        $localArduinoCli = __DIR__ . '/bin/arduino-cli' . (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' ? '.exe' : '');
+        if (file_exists($localArduinoCli) && is_executable($localArduinoCli)) {
+            $arduinoCli = $localArduinoCli;
+        } else {
+            // 2. Chercher dans le PATH système
+            $arduinoCli = trim(shell_exec('which arduino-cli 2>/dev/null || where arduino-cli 2>/dev/null'));
+        }
         
-        if (empty($arduinoCli)) {
-            sendSSE('log', 'warning', 'arduino-cli non trouvé. Compilation simulée pour démonstration.');
-            sendSSE('log', 'info', 'Dans un environnement de production, installez arduino-cli sur le serveur.');
+        if (empty($arduinoCli) || !file_exists($arduinoCli)) {
+            // Refuser la compilation si arduino-cli n'est pas disponible
+            sendSSE('error', 'arduino-cli n\'est pas installé sur le serveur. La compilation réelle est requise et ne peut pas être simulée.');
+            sendSSE('log', 'error', 'Pour activer la compilation, installez arduino-cli sur le serveur.');
+            sendSSE('log', 'error', 'Instructions: https://arduino.github.io/arduino-cli/latest/installation/');
             
-            // Simulation de compilation (pour démonstration)
-            sendSSE('progress', 30);
-            sendSSE('log', 'info', 'Extraction de la version: ' . $firmware['version']);
-            
-            sleep(1);
-            sendSSE('progress', 50);
-            sendSSE('log', 'info', 'Analyse des dépendances...');
-            
-            sleep(1);
-            sendSSE('progress', 70);
-            sendSSE('log', 'info', 'Compilation du code...');
-            
-            sleep(2);
-            sendSSE('progress', 90);
-            sendSSE('log', 'info', 'Génération du fichier .bin...');
-            
-            // Créer un fichier .bin factice (dans un vrai environnement, ce serait le résultat de la compilation)
-            $version_dir = getVersionDir($firmware['version']);
-            $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
-            if (!is_dir($bin_dir)) mkdir($bin_dir, 0755, true);
-            $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
-            $bin_path = $bin_dir . $bin_filename;
-            
-            // Copier le .ino comme .bin (simulation - dans la vraie vie, ce serait le résultat de la compilation)
-            // Pour l'instant, on crée juste un fichier vide ou on copie le .ino
-            file_put_contents($bin_path, '// Compiled firmware binary - ' . $firmware['version']);
-            
-            sleep(1);
-            sendSSE('progress', 100);
-            sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
-            
-            // Mettre à jour la base de données
-            $md5 = hash_file('md5', $bin_path);
-            $checksum = hash_file('sha256', $bin_path);
-            $file_size = filesize($bin_path);
-            
-            $version_dir = getVersionDir($firmware['version']);
+            // Marquer le firmware comme erreur dans la base de données
             $pdo->prepare("
                 UPDATE firmware_versions 
-                SET file_path = :file_path, 
-                    file_size = :file_size, 
-                    checksum = :checksum,
-                    status = 'compiled'
+                SET status = 'error'
                 WHERE id = :id
-            ")->execute([
-                'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
-                'file_size' => $file_size,
-                'checksum' => $checksum,
-                'id' => $firmware_id
-            ]);
+            ")->execute(['id' => $firmware_id]);
             
-            sendSSE('success', 'Firmware v' . $firmware['version'] . ' compilé avec succès', $firmware['version']);
-            
+            flush();
+            return;
         } else {
             // Compilation réelle avec arduino-cli
             sendSSE('log', 'info', 'arduino-cli trouvé: ' . $arduinoCli);

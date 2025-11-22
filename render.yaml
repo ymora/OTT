@@ -1,0 +1,45 @@
+# ================================================================================
+# Configuration Render - OTT API Backend
+# ================================================================================
+# HAPPLYZ MEDICAL SAS
+# Configuration pour déploiement sur Render.com
+# ================================================================================
+
+services:
+  - type: web
+    name: ott-api
+    env: php
+    buildCommand: |
+      # ⚠️ CRITIQUE: arduino-cli est OBLIGATOIRE - la compilation ne doit JAMAIS être simulée
+      echo "🔧 Installation d'arduino-cli (OBLIGATOIRE)..."
+      bash scripts/install_arduino_cli.sh
+      # Vérifier que arduino-cli est disponible et fonctionnel
+      if ! command -v arduino-cli &> /dev/null; then
+        echo "❌ ERREUR CRITIQUE: arduino-cli n'est pas disponible après installation"
+        echo "❌ Le build est interrompu - la compilation ne peut pas être simulée"
+        exit 1
+      fi
+      # Vérifier que arduino-cli fonctionne
+      if ! arduino-cli version &> /dev/null; then
+        echo "❌ ERREUR CRITIQUE: arduino-cli est installé mais ne fonctionne pas"
+        exit 1
+      fi
+      echo "✅ arduino-cli disponible et fonctionnel: $(arduino-cli version)"
+      echo "✅ La compilation sera RÉELLE, jamais simulée"
+    startCommand: php -S 0.0.0.0:$PORT -t .
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+
