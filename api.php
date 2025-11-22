@@ -3991,8 +3991,8 @@ function handleCompileFirmware($firmware_id) {
                 ];
                 
                 $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
-            
-            if (is_resource($process)) {
+                
+                if (is_resource($process)) {
                 // Lire la sortie ligne par ligne pour afficher la progression
                 $output = [];
                 $stdout = $pipes[1];
@@ -4061,11 +4061,20 @@ function handleCompileFirmware($firmware_id) {
                 fclose($pipes[1]);
                 fclose($pipes[2]);
                 
-                $return = proc_close($process);
-            } else {
-                // Fallback sur exec si proc_open échoue
-                exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $output, $return);
-                sendSSE('log', 'info', implode("\n", $output));
+                    $return = proc_close($process);
+                } else {
+                    // Fallback sur exec si proc_open échoue
+                    exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $output, $return);
+                    sendSSE('log', 'info', implode("\n", $output));
+                }
+                
+                if ($return !== 0) {
+                    sendSSE('error', 'Erreur lors de l\'installation du core ESP32');
+                    flush();
+                    return;
+                }
+                
+                sendSSE('log', 'info', '✅ Core ESP32 installé avec succès');
             }
             
             sendSSE('log', 'info', 'Compilation du firmware...');
