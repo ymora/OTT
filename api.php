@@ -588,39 +588,46 @@ function parseRequestPath() {
     $uri = $_SERVER['REQUEST_URI'] ?? '/';
     $path = parse_url($uri, PHP_URL_PATH) ?? '/';
     
-    // Supprimer les query strings et fragments
-    $path = rtrim($path, '/');
-    if (empty($path)) {
-        $path = '/';
+    // Gérer PATH_INFO en priorité (Apache mod_rewrite)
+    $pathInfo = $_SERVER['PATH_INFO'] ?? '';
+    if (!empty($pathInfo)) {
+        $path = $pathInfo;
     }
     
     // Normaliser : supprimer /api.php du début si présent
     if (strpos($path, '/api.php') === 0) {
-        $path = substr($path, strlen('/api.php')); // Enlever '/api.php' (8 caractères)
-        // S'assurer que le path commence par /
-        if (empty($path) || $path === '/') {
+        $path = substr($path, strlen('/api.php'));
+        if (empty($path)) {
             $path = '/';
-        } else {
-            $path = '/' . ltrim($path, '/');
+        } else if ($path[0] !== '/') {
+            $path = '/' . $path;
         }
     }
     
     // Gérer SCRIPT_NAME si présent (Apache mod_rewrite)
     $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
-    if (!empty($scriptName) && $scriptName !== '/api.php') {
-        $scriptBase = '/' . ltrim(basename($scriptName), '/');
-        if (strpos($path, $scriptBase) === 0) {
-            $path = substr($path, strlen($scriptBase));
-            if (empty($path)) {
-                $path = '/';
-            }
+    if (!empty($scriptName) && $scriptName !== '/api.php' && strpos($path, $scriptName) === 0) {
+        $path = substr($path, strlen($scriptName));
+        if (empty($path)) {
+            $path = '/';
+        } else if ($path[0] !== '/') {
+            $path = '/' . $path;
         }
     }
     
-    // Gérer PATH_INFO (Apache mod_rewrite)
-    $pathInfo = $_SERVER['PATH_INFO'] ?? '';
-    if (!empty($pathInfo)) {
-        $path = $pathInfo;
+    // Normaliser les slashes multiples
+    $path = preg_replace('#/+#', '/', $path);
+    
+    // S'assurer que le path commence par /
+    if (empty($path) || $path === '') {
+        $path = '/';
+    } else if ($path[0] !== '/') {
+        $path = '/' . $path;
+    }
+    
+    // Log de debug pour les paths firmwares/ino
+    if (preg_match('#/firmwares.*ino#', $path)) {
+        error_log('[parseRequestPath] Firmwares/ino path: ' . $path . ' URI: ' . $uri . ' PATH_INFO: ' . ($pathInfo ?: 'empty'));
     }
     
     return $path;
@@ -718,6 +725,19 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleCompileFirmware($matches[1]);
 } elseif($method === 'GET' && preg_match('#^/firmwares/(\d+)/download$#', $path, $matches)) {
     handleDownloadFirmware($matches[1]);
+} elseif($method === 'GET' && preg_match('#^/firmwares/(\d+)/ino/?$#', $path, $matches)) {
+    // Log de debug
+    error_log('[ROUTER] Route GET /firmwares/{id}/ino matchée - Path: ' . $path . ' ID: ' . ($matches[1] ?? 'N/A'));
+    handleGetFirmwareIno($matches[1]);
+} elseif($method === 'PUT' && preg_match('#^/firmwares/(\d+)/ino/?$#', $path, $matches)) {
+    // Vérifier que c'est bien la bonne route avant d'appeler
+    if (isset($matches[1]) && is_numeric($matches[1])) {
+        handleUpdateFirmwareIno($matches[1]);
+    } else {
+        error_log('[ROUTER] Erreur: ID invalide dans PUT /firmwares/{id}/ino - Path: ' . $path);
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Invalid firmware ID']);
+    }
 } elseif($method === 'GET' && preg_match('#^/firmwares$#', $path)) {
     handleGetFirmwares();
 } elseif($method === 'POST' && preg_match('#^/firmwares$#', $path)) {
@@ -790,6 +810,12 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
         'script_name' => $_SERVER['SCRIPT_NAME'] ?? 'N/A',
         'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'N/A'
     ];
+    
+    // Log spécifique pour les routes firmwares/ino qui ne matchent pas
+    if (preg_match('#/firmwares.*ino#', $path)) {
+        error_log("[API Router] Route firmwares/ino non matchée: " . json_encode($debugInfo));
+    }
+    
     error_log("[API Router] Path not matched: " . json_encode($debugInfo));
     http_response_code(404);
     echo json_encode([
@@ -3384,6 +3410,243 @@ function handleDeleteFirmware($firmware_id) {
     }
 }
 
+function handleGetFirmwareIno($firmware_id) {
+    global $pdo;
+    
+    // Log de debug
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[handleGetFirmwareIno] Appelé avec firmware_id: ' . $firmware_id);
+    }
+    
+    requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        $stmt->execute(['id' => $firmware_id]);
+        $firmware = $stmt->fetch();
+        
+        if (!$firmware) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Firmware introuvable']);
+            return;
+        }
+        
+        // Construire le chemin du fichier .ino
+        $ino_path = $firmware['file_path'];
+        if (!file_exists($ino_path)) {
+            $ino_path = __DIR__ . '/' . $firmware['file_path'];
+        }
+        if (!file_exists($ino_path)) {
+            $relative_path = preg_replace('#^hardware/firmware/#', '', $firmware['file_path']);
+            $ino_path = __DIR__ . '/hardware/firmware/' . $relative_path;
+        }
+        
+        // Vérifier si c'est un fichier .ino
+        if (!preg_match('/\.ino$/', $ino_path)) {
+            // Si ce n'est pas un .ino, chercher le fichier .ino correspondant
+            $version_dir = getVersionDir($firmware['version']);
+            $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            if (is_dir($ino_dir)) {
+                $ino_files = glob($ino_dir . 'fw_ott_v' . $firmware['version'] . '_*.ino');
+                if (!empty($ino_files)) {
+                    $ino_path = $ino_files[0]; // Prendre le premier fichier .ino trouvé
+                }
+            }
+        }
+        
+        if (!file_exists($ino_path)) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Fichier .ino introuvable']);
+            return;
+        }
+        
+        $ino_content = file_get_contents($ino_path);
+        if ($ino_content === false) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Impossible de lire le fichier .ino']);
+            return;
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'content' => $ino_content,
+            'version' => $firmware['version'],
+            'file_path' => $firmware['file_path'],
+            'status' => $firmware['status']
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleGetFirmwareIno] Error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
+function handleUpdateFirmwareIno($firmware_id) {
+    global $pdo;
+    
+    // Vérifier que l'utilisateur est admin ou technicien
+    $user = requireAuth();
+    if ($user['role_name'] !== 'admin' && $user['role_name'] !== 'technicien') {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Accès refusé. Admin ou technicien requis.']);
+        return;
+    }
+    
+    try {
+        // Récupérer le body JSON
+        $body = json_decode(file_get_contents('php://input'), true);
+        
+        if (!isset($body['content']) || empty($body['content'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Contenu du fichier .ino manquant']);
+            return;
+        }
+        
+        $ino_content = $body['content'];
+        
+        // Vérifier la version dans le contenu
+        $version = null;
+        if (preg_match('/FIRMWARE_VERSION_STR\s+"([^"]+)"/', $ino_content, $matches)) {
+            $version = $matches[1];
+        } else if (preg_match('/FIRMWARE_VERSION\s*=\s*"([^"]+)"/', $ino_content, $matches)) {
+            $version = $matches[1];
+        }
+        
+        if (!$version) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Version non trouvée dans le fichier .ino. Assurez-vous que FIRMWARE_VERSION_STR est défini.']);
+            return;
+        }
+        
+        // Récupérer le firmware existant
+        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        $stmt->execute(['id' => $firmware_id]);
+        $firmware = $stmt->fetch();
+        
+        if (!$firmware) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Firmware introuvable']);
+            return;
+        }
+        
+        // Vérifier que la version n'a pas changé (ou la mettre à jour si elle a changé)
+        if ($firmware['version'] !== $version) {
+            // Vérifier si la nouvelle version existe déjà
+            $checkStmt = $pdo->prepare("SELECT id FROM firmware_versions WHERE version = :version AND id != :id");
+            $checkStmt->execute(['version' => $version, 'id' => $firmware_id]);
+            if ($checkStmt->fetch()) {
+                http_response_code(409);
+                echo json_encode(['success' => false, 'error' => 'La version ' . $version . ' existe déjà']);
+                return;
+            }
+        }
+        
+        // Trouver le chemin du fichier .ino
+        // Utiliser la nouvelle version si elle a changé
+        $target_version = $version;
+        
+        // D'abord, chercher le fichier .ino existant (peut être avec l'ancienne version)
+        $ino_path = null;
+        
+        // Vérifier le file_path original s'il existe et est un .ino
+        if (!empty($firmware['file_path']) && preg_match('/\.ino$/', $firmware['file_path'])) {
+            $test_path = $firmware['file_path'];
+            if (!file_exists($test_path)) {
+                $test_path = __DIR__ . '/' . $firmware['file_path'];
+            }
+            if (file_exists($test_path) && preg_match('/\.ino$/', $test_path)) {
+                $ino_path = $test_path;
+            }
+        }
+        
+        // Si pas trouvé, chercher dans le dossier de l'ancienne version
+        if (!$ino_path) {
+            $old_version_dir = getVersionDir($firmware['version']);
+            $old_ino_dir = __DIR__ . '/hardware/firmware/' . $old_version_dir . '/';
+            if (is_dir($old_ino_dir)) {
+                $old_ino_files = glob($old_ino_dir . 'fw_ott_v' . $firmware['version'] . '_*.ino');
+                if (!empty($old_ino_files)) {
+                    $ino_path = $old_ino_files[0];
+                }
+            }
+        }
+        
+        // Si la version a changé ou si pas de fichier trouvé, créer/utiliser le dossier de la nouvelle version
+        $version_dir = getVersionDir($target_version);
+        $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+        
+        if (!is_dir($ino_dir)) {
+            mkdir($ino_dir, 0755, true);
+        }
+        
+        // Si la version a changé ou si pas de fichier trouvé, utiliser le nouveau dossier
+        if ($firmware['version'] !== $target_version || !$ino_path) {
+            // Chercher dans le nouveau dossier
+            $new_ino_files = glob($ino_dir . 'fw_ott_v' . $target_version . '_*.ino');
+            if (!empty($new_ino_files)) {
+                $ino_path = $new_ino_files[0];
+            } else {
+                // Créer un nouveau fichier dans le nouveau dossier
+                $ino_filename = 'fw_ott_v' . $target_version . '_' . time() . '.ino';
+                $ino_path = $ino_dir . $ino_filename;
+            }
+        }
+        
+        // Sauvegarder le contenu
+        if (file_put_contents($ino_path, $ino_content) === false) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Impossible d\'enregistrer le fichier .ino']);
+            return;
+        }
+        
+        // Mettre à jour la base de données
+        $file_size = filesize($ino_path);
+        $checksum = hash_file('sha256', $ino_path);
+        
+        // Calculer le chemin relatif
+        $relative_path = str_replace(__DIR__ . '/', '', $ino_path);
+        // Normaliser les séparateurs pour la base de données
+        $relative_path = str_replace('\\', '/', $relative_path);
+        
+        $updateStmt = $pdo->prepare("
+            UPDATE firmware_versions 
+            SET version = :version,
+                file_path = :file_path,
+                file_size = :file_size,
+                checksum = :checksum,
+                status = 'pending_compilation'
+            WHERE id = :id
+        ");
+        $updateStmt->execute([
+            'version' => $target_version,
+            'file_path' => $relative_path,
+            'file_size' => $file_size,
+            'checksum' => $checksum,
+            'id' => $firmware_id
+        ]);
+        
+        auditLog('firmware.ino.updated', 'firmware', $firmware_id, $firmware, [
+            'version' => $version,
+            'file_size' => $file_size
+        ]);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Fichier .ino mis à jour avec succès',
+            'version' => $target_version,
+            'firmware_id' => $firmware_id
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleUpdateFirmwareIno] Error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
 function extractVersionFromBin($bin_path) {
     // Tente d'extraire la version depuis le fichier .bin
     // Cherche la section .version avec OTT_FW_VERSION=
@@ -3988,22 +4251,29 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('log', 'info', 'Vérification du core ESP32...');
             sendSSE('progress', 40);
             
-            // Vérifier si le core ESP32 est déjà installé
+            // Vérifier si le core ESP32 est déjà installé via arduino-cli core list
+            // C'est la méthode la plus fiable car elle vérifie la base de données d'arduino-cli
+            // La commande 'core list' retourne les cores installés, pas seulement téléchargés
             exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
             $coreListStr = implode("\n", $coreListOutput);
-            $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false;
+            // Vérifier si le core ESP32 apparaît dans la liste (format: esp32:esp32 ou esp-rv32)
+            $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || strpos($coreListStr, 'esp-rv32') !== false;
             
             if ($esp32Installed) {
-                sendSSE('log', 'info', '✅ Core ESP32 déjà installé - pas besoin de retélécharger');
+                sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
                 sendSSE('progress', 50);
             } else {
-                sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
+                sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
+                sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
                 sendSSE('progress', 42);
-                exec($envStr . $arduinoCli . ' core update-index 2>&1', $output, $return);
-                sendSSE('log', 'info', implode("\n", $output));
+                
+                // Mettre à jour l'index puis installer le core
+                exec($envStr . $arduinoCli . ' core update-index 2>&1', $updateIndexOutput, $updateIndexReturn);
+                if ($updateIndexReturn !== 0) {
+                    sendSSE('log', 'warning', 'Avertissement lors de la mise à jour de l\'index');
+                }
                 
                 sendSSE('log', 'info', 'Installation du core ESP32...');
-                sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
                 sendSSE('progress', 45);
                 
                 // Exécuter avec output en temps réel pour voir la progression
@@ -4016,79 +4286,82 @@ function handleCompileFirmware($firmware_id) {
                 $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
                 
                 if (is_resource($process)) {
-                // Lire la sortie ligne par ligne pour afficher la progression
-                $output = [];
-                $stdout = $pipes[1];
-                $stderr = $pipes[2];
-                
-                // Configurer les streams en non-bloquant
-                stream_set_blocking($stdout, false);
-                stream_set_blocking($stderr, false);
-                
-                $startTime = time();
-                $lastOutputTime = $startTime;
-                
-                while (true) {
-                    $status = proc_get_status($process);
+                    // Lire la sortie ligne par ligne pour afficher la progression
+                    $installOutput = [];
+                    $stdout = $pipes[1];
+                    $stderr = $pipes[2];
                     
-                    // Lire stdout
-                    $line = fgets($stdout);
-                    if ($line !== false) {
-                        $line = trim($line);
-                        if (!empty($line)) {
-                            $output[] = $line;
-                            sendSSE('log', 'info', $line);
-                            flush();
-                            $lastOutputTime = time();
+                    // Configurer les streams en non-bloquant
+                    stream_set_blocking($stdout, false);
+                    stream_set_blocking($stderr, false);
+                    
+                    $startTime = time();
+                    $lastOutputTime = $startTime;
+                    $lastHeartbeatTime = $startTime;
+                    
+                    while (true) {
+                        $status = proc_get_status($process);
+                        
+                        // Lire stdout
+                        $line = fgets($stdout);
+                        if ($line !== false) {
+                            $line = trim($line);
+                            if (!empty($line)) {
+                                $installOutput[] = $line;
+                                sendSSE('log', 'info', $line);
+                                flush();
+                                $lastOutputTime = time();
+                            }
                         }
-                    }
-                    
-                    // Lire stderr
-                    $errLine = fgets($stderr);
-                    if ($errLine !== false) {
-                        $errLine = trim($errLine);
-                        if (!empty($errLine)) {
-                            $output[] = $errLine;
-                            sendSSE('log', 'info', $errLine);
-                            flush();
-                            $lastOutputTime = time();
+                        
+                        // Lire stderr
+                        $errLine = fgets($stderr);
+                        if ($errLine !== false) {
+                            $errLine = trim($errLine);
+                            if (!empty($errLine)) {
+                                $installOutput[] = $errLine;
+                                sendSSE('log', 'info', $errLine);
+                                flush();
+                                $lastOutputTime = time();
+                            }
                         }
+                        
+                        // Vérifier si le processus est terminé
+                        if ($status['running'] === false) {
+                            break;
+                        }
+                        
+                        // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
+                        // (L'installation du core ESP32 peut prendre du temps)
+                        if (time() - $lastOutputTime > 600) {
+                            sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
+                            sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
+                            proc_terminate($process);
+                            break;
+                        }
+                        
+                        // Envoyer un heartbeat toutes les 30 secondes pour maintenir la connexion
+                        $currentTime = time();
+                        if ($currentTime - $lastHeartbeatTime >= 30) {
+                            sendSSE('log', 'info', '⏳ Installation en cours... (patientez, cela peut prendre plusieurs minutes)');
+                            flush();
+                            $lastHeartbeatTime = $currentTime;
+                        }
+                        
+                        // Attendre un peu avant de relire
+                        usleep(100000); // 100ms
                     }
                     
-                    // Vérifier si le processus est terminé
-                    if ($status['running'] === false) {
-                        break;
-                    }
+                    // Fermer les pipes
+                    fclose($pipes[0]);
+                    fclose($pipes[1]);
+                    fclose($pipes[2]);
                     
-                    // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
-                    // (L'installation du core ESP32 peut prendre du temps)
-                    if (time() - $lastOutputTime > 600) {
-                        sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
-                        sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
-                        proc_terminate($process);
-                        break;
-                    }
-                    
-                    // Envoyer un heartbeat toutes les 30 secondes pour maintenir la connexion
-                    if (time() - $startTime > 0 && (time() - $startTime) % 30 === 0) {
-                        sendSSE('log', 'info', '⏳ Installation en cours... (patientez, cela peut prendre plusieurs minutes)');
-                        flush();
-                    }
-                    
-                    // Attendre un peu avant de relire
-                    usleep(100000); // 100ms
-                }
-                
-                // Fermer les pipes
-                fclose($pipes[0]);
-                fclose($pipes[1]);
-                fclose($pipes[2]);
-                
                     $return = proc_close($process);
                 } else {
                     // Fallback sur exec si proc_open échoue
-                    exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $output, $return);
-                    sendSSE('log', 'info', implode("\n", $output));
+                    exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $installOutput, $return);
+                    sendSSE('log', 'info', implode("\n", $installOutput));
                 }
                 
                 if ($return !== 0) {

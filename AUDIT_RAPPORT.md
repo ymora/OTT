@@ -26,8 +26,8 @@
 ### 3. Corrections de Logique
 
 #### `components/Sidebar.js`
-- ✅ Correction de la vérification de permission : `/dashboard/firmware-upload` → `/dashboard/configuration`
-  - Le menu "Outils" pointe vers `/dashboard/configuration`, la vérification doit correspondre
+- ✅ Correction de la vérification de permission : `/dashboard/firmware-upload` → `/dashboard/outils`
+  - Le menu "Outils" pointe vers `/dashboard/outils`, la vérification doit correspondre
 
 ### 4. Nettoyage des Fichiers de Configuration
 

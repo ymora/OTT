@@ -35,9 +35,9 @@ New-Item -ItemType Directory -Path $ARDUINO_DATA_DIR -Force | Out-Null
 # Configurer arduino-cli pour utiliser ce répertoire
 $env:ARDUINO_DIRECTORIES_USER = $ARDUINO_DATA_DIR
 
-# Vérifier si le core ESP32 est déjà installé
+# Vérifier si le core ESP32 est déjà installé (format: esp32:esp32 ou esp-rv32)
 $coreList = & $arduinoCliPath core list 2>&1
-if ($coreList -match "esp32:esp32") {
+if ($coreList -match "(esp32:esp32|esp-rv32)") {
     Write-Host "✅ Core ESP32 déjà installé dans $ARDUINO_DATA_DIR" -ForegroundColor Green
     & $arduinoCliPath core list
     exit 0
@@ -54,9 +54,9 @@ Write-Host "📦 Mise à jour de l'index des cores..." -ForegroundColor Cyan
 Write-Host "📥 Installation du core ESP32..." -ForegroundColor Cyan
 & $arduinoCliPath core install esp32:esp32
 
-# Vérifier l'installation
+# Vérifier l'installation (format: esp32:esp32 ou esp-rv32)
 $coreList = & $arduinoCliPath core list 2>&1
-if ($coreList -match "esp32:esp32") {
+if ($coreList -match "(esp32:esp32|esp-rv32)") {
     Write-Host "✅ Core ESP32 installé avec succès dans $ARDUINO_DATA_DIR" -ForegroundColor Green
     Write-Host ""
     Write-Host "📊 Taille du répertoire arduino-data:" -ForegroundColor Cyan

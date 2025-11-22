@@ -1691,7 +1691,7 @@ export default function DevicesPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">🔌 Dispositifs</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">🔌 Dispositifs OTT</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
             {allDevices.length} dispositif(s) total
             {usbVirtualDevice && ' (1 USB non enregistré)'}

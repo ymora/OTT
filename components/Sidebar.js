@@ -38,7 +38,7 @@ const menuStructure = [
   {
     name: 'Outils',
     icon: '⚙️',
-    path: '/dashboard/configuration',
+    path: '/dashboard/outils',
     permission: null, // Vérifié dans la page (admin/technicien)
     description: 'Upload firmware, flash USB et streaming'
   },
@@ -75,7 +75,7 @@ export default function Sidebar() {
           if (!hasPermission(item.permission)) return null
           
           // Vérification spéciale pour le menu Outils (admin ou technicien uniquement)
-          if (item.path === '/dashboard/configuration') {
+          if (item.path === '/dashboard/outils') {
             if (user?.role_name !== 'admin' && user?.role_name !== 'technicien') {
               return null
             }
