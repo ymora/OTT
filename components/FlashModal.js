@@ -352,14 +352,45 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
               if (found) deviceId = found.id
             }
             
-            // Chercher par device_name (USB-xxx:yyy)
+            // Chercher par device_name (USB-xxx:yyy ou correspondance partielle)
             if (!deviceId && device?.device_name) {
               const usbIdMatch = device.device_name.match(/USB-([a-f0-9:]+)/i)
               if (usbIdMatch) {
-                const usbId = usbIdMatch[1]
+                const usbId = usbIdMatch[1].toLowerCase()
+                // Chercher par USB ID dans device_name
                 const found = allDevices.find(d => {
-                  if (d.device_name && d.device_name.includes(usbId)) return true
-                  if (d.device_serial && d.device_serial.includes(usbId)) return true
+                  if (d.device_name) {
+                    const nameMatch = d.device_name.match(/USB-([a-f0-9:]+)/i)
+                    if (nameMatch && nameMatch[1].toLowerCase() === usbId) return true
+                    if (d.device_name.toLowerCase().includes(usbId)) return true
+                  }
+                  if (d.device_serial && d.device_serial.toLowerCase().includes(usbId)) return true
+                  // Chercher aussi dans sim_iccid si c'est un TEMP-xxx avec le même identifiant
+                  if (d.sim_iccid && d.sim_iccid.includes(usbId.replace(':', ''))) return true
+                  return false
+                })
+                if (found) deviceId = found.id
+              } else {
+                // Si pas de format USB-xxx:yyy, chercher correspondance partielle dans device_name
+                const found = allDevices.find(d => {
+                  if (d.device_name && (d.device_name.includes(device.device_name) || device.device_name.includes(d.device_name))) return true
+                  return false
+                })
+                if (found) deviceId = found.id
+              }
+            }
+            
+            // Chercher aussi par correspondance partielle d'ICCID (pour TEMP-xxx)
+            if (!deviceId && device?.sim_iccid) {
+              // Extraire la partie numérique de TEMP-xxx
+              const tempMatch = device.sim_iccid.match(/TEMP-([0-9a-f]+)/i)
+              if (tempMatch) {
+                const tempId = tempMatch[1]
+                const found = allDevices.find(d => {
+                  // Chercher dans sim_iccid, device_serial ou device_name
+                  if (d.sim_iccid && d.sim_iccid.includes(tempId)) return true
+                  if (d.device_serial && d.device_serial.includes(tempId)) return true
+                  if (d.device_name && d.device_name.includes(tempId)) return true
                   return false
                 })
                 if (found) deviceId = found.id
