@@ -115,7 +115,38 @@ export default function FirmwareUploadTab() {
 
       eventSource.onerror = (err) => {
         logger.error('EventSource error:', err)
-        setError('Erreur de connexion lors de la compilation.')
+        
+        // Vérifier l'état de la connexion
+        if (eventSource.readyState === EventSource.CLOSED) {
+          // Connexion fermée - peut être normale si la compilation est terminée
+          // Vérifier si on a reçu un message de succès ou d'erreur avant
+          const lastLog = compileLogs[compileLogs.length - 1]
+          if (!lastLog || (!lastLog.message.includes('✅') && !lastLog.message.includes('❌'))) {
+            setError('Connexion fermée inattendue. La compilation peut avoir échoué ou pris trop de temps.')
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: '⚠️ Connexion fermée - Vérifiez l\'état de la compilation dans la liste des firmwares',
+              level: 'warning'
+            }])
+          }
+        } else if (eventSource.readyState === EventSource.CONNECTING) {
+          // En train de se reconnecter
+          setCompileLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: '🔄 Reconnexion en cours...',
+            level: 'info'
+          }])
+          return // Ne pas fermer, laisser la reconnexion se faire
+        } else {
+          // Erreur de connexion
+          setError('Erreur de connexion lors de la compilation. La compilation peut toujours être en cours sur le serveur.')
+          setCompileLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: '⚠️ Erreur de connexion - Vérifiez l\'état de la compilation dans la liste des firmwares',
+            level: 'error'
+          }])
+        }
+        
         setCompiling(false)
         setCurrentStep(null)
         setCompileProgress(0)
@@ -124,6 +155,11 @@ export default function FirmwareUploadTab() {
           eventSourceRef.current.close()
           eventSourceRef.current = null
         }
+        
+        // Rafraîchir la liste des firmwares pour voir l'état actuel
+        setTimeout(() => {
+          refetch()
+        }, 2000)
       }
 
     } catch (err) {
