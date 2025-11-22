@@ -36,7 +36,7 @@ const menuStructure = [
     description: 'Gestion des utilisateurs (audit, notifications, paramètres)'
   },
   {
-    name: 'Configuration',
+    name: 'Outils',
     icon: '⚙️',
     path: '/dashboard/configuration',
     permission: null, // Vérifié dans la page (admin/technicien)

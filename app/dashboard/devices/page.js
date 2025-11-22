@@ -2039,18 +2039,6 @@ export default function DevicesPage() {
                 >
                   📝 Journal ({deviceLogs.length})
                 </button>
-                {isSelectedDeviceUsbConnected() && (
-                  <button
-                    onClick={() => setModalActiveTab('usb-stream')}
-                    className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
-                      modalActiveTab === 'usb-stream'
-                        ? 'border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
-                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    ⚡ Streaming USB
-                  </button>
-                )}
               </nav>
             </div>
 
@@ -2161,114 +2149,6 @@ export default function DevicesPage() {
                       )}
                     </div>
                   )}
-
-                {modalActiveTab === 'usb-stream' && isSelectedDeviceUsbConnected() && (
-                  <div className="h-full flex flex-col space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">⚡ Streaming USB temps réel</h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Toute la zone ci-dessous est dédiée aux logs USB en direct. Le streaming démarre dès qu&apos;un dispositif est autorisé.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getUsbStreamStatusBadge().color}`}>
-                          {getUsbStreamStatusBadge().label}
-                        </span>
-                        {(usbStreamStatus === 'running' || usbStreamStatus === 'waiting') && (
-                          <button
-                            onClick={stopUsbStreaming}
-                            disabled={!isSupported}
-                            className="btn-secondary text-sm"
-                          >
-                            ⏹️ Arrêter
-                          </button>
-                        )}
-                        {usbStreamStatus === 'idle' && (usbConnectedDevice || usbVirtualDevice) && (
-                          <button
-                            onClick={startUsbStreaming}
-                            disabled={!isSupported || usbStreamStatus === 'connecting'}
-                            className={`btn-primary text-sm ${(!isSupported || usbStreamStatus === 'connecting') ? 'opacity-60 cursor-not-allowed' : ''}`}
-                          >
-                            ▶️ Redémarrer
-                          </button>
-                        )}
-                        {isAdmin && selectedDevice && !selectedDevice.isVirtual && !selectedDevice.patient_id && (
-                          <button
-                            onClick={() => handleAssign(selectedDevice)}
-                            className="btn-secondary text-sm"
-                          >
-                            ➕ Assigner à un patient
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {selectedDevice?.isVirtual && (
-                      <div className="alert alert-warning flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          Ce dispositif est en mode virtuel (non enregistré). Relancez la détection après avoir obtenu l&apos;ICCID/Serial ou flashé le firmware.
-                        </div>
-                        <button
-                          onClick={detectUSBDevice}
-                          className="btn-secondary btn-sm"
-                        >
-                          🔁 Relancer la détection
-                        </button>
-                      </div>
-                    )}
-
-                    {!isSupported && (
-                      <div className="alert alert-warning">
-                        Le navigateur utilisé ne supporte pas l&apos;API Web Serial. Utilisez Chrome ou Edge (desktop) pour accéder au streaming USB.
-                      </div>
-                    )}
-
-                    {usbStreamError && (
-                      <div className="alert alert-warning">
-                        {usbStreamError}
-                      </div>
-                    )}
-
-                    {usbPortInfo && (
-                      <div className="mb-3 rounded-xl border border-gray-200/80 dark:border-slate-700/60 bg-white/60 dark:bg-slate-900/40 px-4 py-3 text-sm text-gray-700 dark:text-slate-200">
-                        <p className="font-semibold text-primary-600 dark:text-primary-300">
-                          Port USB détecté&nbsp;: {usbPortInfo.friendlyName || `USB ${usbPortInfo.vendorHex}:${usbPortInfo.productHex}`}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-slate-400">
-                          VID {usbPortInfo.vendorHex} · PID {usbPortInfo.productHex}
-                        </p>
-                      </div>
-                    )}
-
-                    {isSupported && !usbConnectedDevice && !usbVirtualDevice && (
-                      <div className="alert alert-info text-sm">
-                        Connectez un dispositif USB et autorisez-le dans la popup du navigateur. Le streaming démarrera automatiquement.
-                      </div>
-                    )}
-
-                    <div className="flex-1 rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 text-green-400 p-4 shadow-inner overflow-y-auto">
-                      {usbStreamLogs.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-gray-500">
-                          <span className="text-4xl">📡</span>
-                          <p className="font-medium">En attente de logs USB...</p>
-                          <p className="text-xs text-gray-400">
-                            Dès que le firmware envoie le flux USB, les journaux apparaissent ici automatiquement.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-1 font-mono text-sm tracking-tight">
-                          {usbStreamLogs.map((log) => (
-                            <div key={log.id} className="whitespace-pre-wrap">
-                              <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
-                              <span className="text-green-300">{log.line}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
                 </>
               )}
             </div>
