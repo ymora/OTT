@@ -1,22 +1,24 @@
 /**
  * ================================================================
- *  OTT Firmware v3 - Reconstruction complète
+ *  OTT Firmware v3.1-gps - Reconstruction complète + GPS
  * ================================================================
  * Objectifs :
  *   - Mesurer le débit d'oxygène + la batterie et publier la mesure
  *   - Consommer les commandes descendantes émises depuis le dashboard
  *   - Journaliser localement ou côté API chaque événement important
- *   - Autoriser la reconfiguration complète d’un boîtier sans reflasher
+ *   - Autoriser la reconfiguration complète d'un boîtier sans reflasher
+ *   - Envoyer la position GPS/réseau cellulaire avec chaque mesure
  *
  * Nouveautés majeures :
  *   - TinyGSM SIM7600 : init matériel, gestion SIM/PIN, GPRS, HTTPS
  *   - Commandes : SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, UPDATE_CALIBRATION
  *   - Persistence : APN/JWT/ICCID/PIN/calibration stockés en NVS (Preferences)
  *   - Logs : POST /devices/logs + tampon en NVS quand le réseau est coupé
- *   - Payloads mesures enrichis (firmware_version, RSSI)
+ *   - Payloads mesures enrichis (firmware_version, RSSI, latitude, longitude)
+ *   - Géolocalisation : GPS (priorité) ou réseau cellulaire (fallback) inclus dans chaque mesure
  *
  * Toutes les sections ci-dessous sont abondamment commentées pour guider
- * la maintenance ou l’extension (ex. ajout d’une commande OTA_REQUEST).
+ * la maintenance ou l'extension (ex. ajout d'une commande OTA_REQUEST).
  */
 
 #define TINY_GSM_MODEM_SIM7600   // Indique à TinyGSM le modem utilisé
