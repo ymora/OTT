@@ -8,7 +8,7 @@ import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
-import FlashUSBModal from '@/components/FlashUSBModal'
+import FlashModal from '@/components/FlashModal'
 import { formatTimeAgo } from '@/lib/utils'
 import logger from '@/lib/logger'
 
@@ -25,11 +25,9 @@ export default function FirmwareFlashTab() {
   const devices = data?.devices?.devices || []
 
   const [selectedFirmwareForFlash, setSelectedFirmwareForFlash] = useState(null)
-  const [otaDeploying, setOtaDeploying] = useState({})
-  const [flashMessage, setFlashMessage] = useState(null)
-  const [flashError, setFlashError] = useState(null)
-  const [showFlashUSBModal, setShowFlashUSBModal] = useState(false)
+  const [showFlashModal, setShowFlashModal] = useState(false)
   const [deviceForFlash, setDeviceForFlash] = useState(null)
+  const [flashMode, setFlashMode] = useState('usb') // 'usb' ou 'ota'
 
   return (
     <div className="space-y-6">
@@ -147,7 +145,8 @@ export default function FirmwareFlashTab() {
                                 <button
                                   onClick={() => {
                                     setDeviceForFlash(device)
-                                    setShowFlashUSBModal(true)
+                                    setFlashMode('usb')
+                                    setShowFlashModal(true)
                                   }}
                                   className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors"
                                   title="Flasher via USB"
@@ -159,44 +158,15 @@ export default function FirmwareFlashTab() {
                               {/* Bouton Flash OTA */}
                               {device.id && (
                                 <button
-                                  onClick={async () => {
-                                    if (!confirm(`Déployer le firmware v${selectedFirmwareForFlash.version} sur ${device.device_name || device.sim_iccid} via OTA ?`)) {
-                                      return
-                                    }
-                                    
-                                    try {
-                                      setOtaDeploying(prev => ({ ...prev, [device.id]: true }))
-                                      setFlashError(null)
-                                      
-                                      await fetchJson(
-                                        fetchWithAuth,
-                                        API_URL,
-                                        `/api.php/devices/${device.id}/ota`,
-                                        {
-                                          method: 'POST',
-                                          body: JSON.stringify({ firmware_version: selectedFirmwareForFlash.version })
-                                        },
-                                        { requiresAuth: true }
-                                      )
-                                      
-                                      setFlashMessage(`✅ OTA v${selectedFirmwareForFlash.version} programmé pour ${device.device_name || device.sim_iccid}`)
-                                      await refetch()
-                                    } catch (err) {
-                                      setFlashError(`Erreur OTA pour ${device.device_name || device.sim_iccid}: ${err.message}`)
-                                      logger.error('Erreur OTA:', err)
-                                    } finally {
-                                      setOtaDeploying(prev => {
-                                        const next = { ...prev }
-                                        delete next[device.id]
-                                        return next
-                                      })
-                                    }
+                                  onClick={() => {
+                                    setDeviceForFlash(device)
+                                    setFlashMode('ota')
+                                    setShowFlashModal(true)
                                   }}
-                                  disabled={otaDeploying[device.id]}
-                                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-medium transition-colors"
                                   title="Flasher via OTA (Over-The-Air)"
                                 >
-                                  {otaDeploying[device.id] ? '⏳...' : '📡 OTA'}
+                                  📡 OTA
                                 </button>
                               )}
                             </div>
@@ -209,30 +179,20 @@ export default function FirmwareFlashTab() {
               </div>
             )}
             
-            {flashMessage && (
-              <div className="mt-4">
-                <SuccessMessage message={flashMessage} onClose={() => setFlashMessage(null)} />
-              </div>
-            )}
-            
-            {flashError && (
-              <div className="mt-4">
-                <ErrorMessage error={flashError} />
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      {/* Modal Flash USB */}
-      <FlashUSBModal
-        isOpen={showFlashUSBModal}
+      {/* Modal Flash unifié (USB/OTA) */}
+      <FlashModal
+        isOpen={showFlashModal}
         onClose={() => {
-          setShowFlashUSBModal(false)
+          setShowFlashModal(false)
           setDeviceForFlash(null)
         }}
         device={deviceForFlash || usbVirtualDevice || usbConnectedDevice}
         preselectedFirmwareVersion={selectedFirmwareForFlash?.version}
+        flashMode={flashMode}
       />
     </div>
   )

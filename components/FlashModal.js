@@ -1,0 +1,668 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
+import { fetchJson } from '@/lib/api'
+import { useUsb } from '@/contexts/UsbContext'
+import { useSerialPort } from '@/components/SerialPortManager'
+import { ESPLoader } from 'esptool-js'
+import logger from '@/lib/logger'
+
+/**
+ * Modal unifié pour le flash USB et OTA
+ * Avec barre de progression, logs et stats
+ */
+export default function FlashModal({ isOpen, onClose, device, preselectedFirmwareVersion = null, flashMode = 'usb' }) {
+  const { fetchWithAuth, API_URL } = useAuth()
+  const [firmwares, setFirmwares] = useState([])
+  const [selectedFirmware, setSelectedFirmware] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [flashing, setFlashing] = useState(false)
+  const [flashProgress, setFlashProgress] = useState(0)
+  const [terminalLogs, setTerminalLogs] = useState([])
+  const [flashComplete, setFlashComplete] = useState(false)
+  const [deviceAlive, setDeviceAlive] = useState(null)
+  const [flashModeState, setFlashModeState] = useState(flashMode) // 'usb' ou 'ota'
+  const [otaStatus, setOtaStatus] = useState(null) // { status: 'pending'|'executing'|'executed'|'error', command: {...} }
+  const [otaStats, setOtaStats] = useState({ lastCheck: null, attempts: 0 })
+  const stopReadingRef = useRef(null)
+  const otaCheckIntervalRef = useRef(null)
+
+  // Utiliser le contexte USB partagé
+  const {
+    port: usbPort,
+    isConnected: usbIsConnected,
+    isSupported: usbIsSupported,
+    stopUsbStreaming
+  } = useUsb()
+
+  // Gestion du port série (instance séparée pour le flash USB)
+  const {
+    port,
+    isConnected,
+    isSupported,
+    error: serialError,
+    requestPort,
+    connect,
+    disconnect,
+    startReading,
+    write
+  } = useSerialPort()
+
+  // Déconnecter le streaming USB quand on ouvre le modal
+  useEffect(() => {
+    if (isOpen && usbIsConnected && stopUsbStreaming) {
+      logger.log('🔄 Arrêt du streaming USB pour libérer le port pour le flash')
+      stopUsbStreaming()
+    }
+  }, [isOpen, usbIsConnected, stopUsbStreaming])
+
+  // Charger les firmwares
+  const loadFirmwares = useCallback(async () => {
+    try {
+      const data = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        '/api.php/firmwares',
+        {},
+        { requiresAuth: true }
+      )
+      setFirmwares(data.firmwares || [])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [API_URL, fetchWithAuth])
+
+  // Charger au montage
+  useEffect(() => {
+    if (isOpen) {
+      loadFirmwares()
+      setFlashModeState(flashMode)
+      setFlashProgress(0)
+      setFlashComplete(false)
+      setDeviceAlive(null)
+      setOtaStatus(null)
+      setOtaStats({ lastCheck: null, attempts: 0 })
+      setTerminalLogs([])
+      setError(null)
+    }
+  }, [isOpen, loadFirmwares, flashMode])
+
+  // Pré-sélectionner le firmware
+  useEffect(() => {
+    if (preselectedFirmwareVersion && firmwares.length > 0) {
+      const firmware = firmwares.find(fw => fw.version === preselectedFirmwareVersion)
+      if (firmware) {
+        setSelectedFirmware(firmware)
+      }
+    }
+  }, [preselectedFirmwareVersion, firmwares])
+
+  // Fonction pour rafraîchir les données
+  const refreshDevices = useCallback(async () => {
+    try {
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        '/api.php/devices',
+        { method: 'GET' },
+        { requiresAuth: true }
+      )
+      logger.log('✅ Dispositifs rafraîchis après mise à jour firmware')
+    } catch (err) {
+      logger.warn('⚠️ Erreur rafraîchissement dispositifs:', err)
+    }
+  }, [fetchWithAuth, API_URL])
+
+  // Gérer la connexion USB
+  const handleConnect = useCallback(async () => {
+    try {
+      if (stopUsbStreaming) {
+        stopUsbStreaming()
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+
+      const selectedPort = await requestPort()
+      if (selectedPort) {
+        const connected = await connect(selectedPort, 115200)
+        if (connected) {
+          const stopReading = await startReading((data) => {
+            setTerminalLogs(prev => [...prev, { raw: data, timestamp: new Date() }])
+          })
+          if (stopReading) {
+            stopReadingRef.current = stopReading
+          }
+        } else if (serialError) {
+          setError(serialError)
+        }
+      }
+    } catch (err) {
+      logger.error('Erreur connexion port pour flash:', err)
+      setError(`Erreur de connexion: ${err.message}`)
+    }
+  }, [requestPort, connect, startReading, stopUsbStreaming, serialError])
+
+  const handleDisconnect = useCallback(async () => {
+    if (stopReadingRef.current) {
+      stopReadingRef.current()
+      stopReadingRef.current = null
+    }
+    await disconnect()
+    setTerminalLogs([])
+  }, [disconnect])
+
+  // Télécharger le firmware
+  const downloadFirmware = useCallback(async (firmware) => {
+    const token = localStorage.getItem('token')
+    if (!token) throw new Error('Token manquant')
+
+    const response = await fetch(`${API_URL}/api.php/firmwares/${firmware.id}/download`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+
+    if (!response.ok) throw new Error('Erreur téléchargement')
+    return await response.blob()
+  }, [API_URL])
+
+  // Vérifier le statut OTA
+  const checkOtaStatus = useCallback(async () => {
+    if (!device?.id) return
+
+    try {
+      const commandsData = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${device.id}/commands`,
+        { method: 'GET' },
+        { requiresAuth: true }
+      )
+
+      const commands = commandsData.commands || []
+      // Trouver la commande OTA_REQUEST la plus récente
+      const otaCommand = commands
+        .filter(cmd => cmd.command === 'OTA_REQUEST')
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+
+      if (otaCommand) {
+        setOtaStatus({
+          status: otaCommand.status,
+          command: otaCommand,
+          message: getOtaStatusMessage(otaCommand.status)
+        })
+
+        setOtaStats(prev => ({
+          lastCheck: new Date(),
+          attempts: prev.attempts + 1
+        }))
+
+        // Si la commande est exécutée, le flash est terminé
+        if (otaCommand.status === 'executed') {
+          setFlashComplete(true)
+          setFlashProgress(100)
+          setTerminalLogs(prev => [...prev, { 
+            raw: '[OTA] ✅ Flash OTA terminé avec succès !', 
+            timestamp: new Date() 
+          }])
+          
+          // Mettre à jour la version firmware dans la base
+          if (selectedFirmware) {
+            try {
+              await fetchJson(
+                fetchWithAuth,
+                API_URL,
+                `/api.php/devices/${device.id}`,
+                {
+                  method: 'PUT',
+                  body: JSON.stringify({ firmware_version: selectedFirmware.version })
+                },
+                { requiresAuth: true }
+              )
+              await refreshDevices()
+            } catch (updateErr) {
+              logger.warn('⚠️ Erreur mise à jour version firmware:', updateErr)
+            }
+          }
+
+          // Arrêter la vérification
+          if (otaCheckIntervalRef.current) {
+            clearInterval(otaCheckIntervalRef.current)
+            otaCheckIntervalRef.current = null
+          }
+        } else if (otaCommand.status === 'error') {
+          setFlashComplete(true)
+          setError('Erreur lors du flash OTA')
+          setTerminalLogs(prev => [...prev, { 
+            raw: '[OTA] ❌ Erreur lors du flash OTA', 
+            timestamp: new Date() 
+          }])
+          
+          if (otaCheckIntervalRef.current) {
+            clearInterval(otaCheckIntervalRef.current)
+            otaCheckIntervalRef.current = null
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn('⚠️ Erreur vérification statut OTA:', err)
+    }
+  }, [device, fetchWithAuth, API_URL, selectedFirmware, refreshDevices])
+
+  const getOtaStatusMessage = (status) => {
+    switch (status) {
+      case 'pending': return 'En attente d\'exécution'
+      case 'executing': return 'Flash en cours...'
+      case 'executed': return 'Flash terminé avec succès'
+      case 'error': return 'Erreur lors du flash'
+      case 'expired': return 'Commande expirée'
+      case 'cancelled': return 'Commande annulée'
+      default: return 'Statut inconnu'
+    }
+  }
+
+  // Flasher via USB
+  const handleFlashUSB = useCallback(async () => {
+    if (!selectedFirmware || !isConnected || !port) {
+      setError('Sélectionnez un firmware et connectez un port')
+      return
+    }
+
+    setFlashing(true)
+    setError(null)
+    setFlashProgress(0)
+    setFlashComplete(false)
+
+    try {
+      setFlashProgress(5)
+      addLog('[USB] Téléchargement du firmware...')
+      const firmwareBlob = await downloadFirmware(selectedFirmware)
+      setFlashProgress(10)
+      const firmwareArrayBuffer = await firmwareBlob.arrayBuffer()
+
+      const terminal = {
+        clean: () => {},
+        writeLine: (data) => addLog(`[ESPTOOL] ${data}`),
+        write: (data) => addLog(`[ESPTOOL] ${data}`)
+      }
+
+      setFlashProgress(20)
+      addLog('[USB] Connexion au dispositif...')
+      const loader = new ESPLoader(port, terminal, 115200)
+      setFlashProgress(25)
+      await loader.connect()
+      setFlashProgress(30)
+      addLog('[USB] Connexion établie, début du flash...')
+
+      const offset = 0x1000
+      const firmwareData = new Uint8Array(firmwareArrayBuffer)
+      setFlashProgress(40)
+
+      if (typeof loader.flashData === 'function') {
+        await loader.flashData(firmwareData, offset)
+      } else if (typeof loader.flash_file === 'function') {
+        await loader.flash_file(firmwareData, offset)
+      } else if (typeof loader.write === 'function') {
+        await loader.write(offset, firmwareData)
+      } else {
+        throw new Error('Méthode de flash non trouvée')
+      }
+
+      setFlashProgress(90)
+      if (typeof loader.verify === 'function') {
+        addLog('[USB] Vérification du flash...')
+        await loader.verify(offset, firmwareData)
+      }
+      setFlashProgress(100)
+      setFlashComplete(true)
+      addLog('[USB] ✅ Flash réussi !')
+
+      // Mettre à jour la version firmware dans la base
+      if (device && device.id && selectedFirmware) {
+        try {
+          addLog('[UPDATE] Mise à jour version firmware dans la base...')
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${device.id}`,
+            {
+              method: 'PUT',
+              body: JSON.stringify({ firmware_version: selectedFirmware.version })
+            },
+            { requiresAuth: true }
+          )
+          addLog(`[UPDATE] ✅ Version firmware mise à jour: v${selectedFirmware.version}`)
+          await refreshDevices()
+        } catch (updateErr) {
+          logger.warn('⚠️ Erreur mise à jour version firmware:', updateErr)
+          addLog(`[UPDATE] ⚠️ Erreur mise à jour: ${updateErr.message}`)
+        }
+      }
+
+      // Vérifier si le dispositif est vivant
+      addLog('[TEST] Attente redémarrage (3 secondes)...')
+      await new Promise(resolve => setTimeout(resolve, 3000))
+
+      try {
+        addLog('[TEST] Envoi commande AT pour vérifier...')
+        await write('AT\r\n')
+
+        let hasResponse = false
+        const responseCheck = setInterval(() => {
+          const recentLogs = terminalLogs.slice(-10)
+          const foundResponse = recentLogs.some(log =>
+            log.raw && (
+              log.raw.includes('OK') ||
+              log.raw.includes('device_info') ||
+              log.raw.includes('AT') ||
+              log.raw.includes('ready')
+            )
+          )
+          if (foundResponse && !hasResponse) {
+            hasResponse = true
+            setDeviceAlive(true)
+            addLog('[TEST] ✅ Dispositif répond !')
+          }
+        }, 500)
+
+        setTimeout(() => {
+          clearInterval(responseCheck)
+          if (!hasResponse) {
+            setDeviceAlive(false)
+            addLog('[TEST] ⚠️ Pas de réponse détectée')
+          }
+        }, 5000)
+      } catch (testErr) {
+        addLog(`[TEST] ⚠️ Erreur test: ${testErr.message}`)
+      }
+    } catch (err) {
+      setError(err.message)
+      addLog(`[USB] ❌ Erreur: ${err.message}`)
+    } finally {
+      setFlashing(false)
+    }
+  }, [selectedFirmware, isConnected, port, downloadFirmware, device, fetchWithAuth, API_URL, write, refreshDevices, terminalLogs])
+
+  // Flasher via OTA
+  const handleFlashOTA = useCallback(async () => {
+    if (!selectedFirmware || !device?.id) {
+      setError('Sélectionnez un firmware et un dispositif')
+      return
+    }
+
+    setFlashing(true)
+    setError(null)
+    setFlashProgress(0)
+    setFlashComplete(false)
+    setOtaStatus(null)
+    setOtaStats({ lastCheck: null, attempts: 0 })
+
+    try {
+      addLog('[OTA] Déclenchement du flash OTA...')
+      setFlashProgress(10)
+
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${device.id}/ota`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ firmware_version: selectedFirmware.version })
+        },
+        { requiresAuth: true }
+      )
+
+      setFlashProgress(30)
+      addLog(`[OTA] ✅ Commande OTA programmée pour v${selectedFirmware.version}`)
+      addLog('[OTA] Attente de l\'exécution par le dispositif...')
+      setOtaStatus({ status: 'pending', message: 'En attente d\'exécution' })
+
+      // Démarrer la vérification périodique du statut
+      otaCheckIntervalRef.current = setInterval(() => {
+        checkOtaStatus()
+      }, 2000) // Vérifier toutes les 2 secondes
+
+      // Timeout après 5 minutes
+      setTimeout(() => {
+        if (otaCheckIntervalRef.current) {
+          clearInterval(otaCheckIntervalRef.current)
+          otaCheckIntervalRef.current = null
+        }
+        if (!flashComplete) {
+          setError('Timeout: Le flash OTA n\'a pas été exécuté dans les 5 minutes')
+          addLog('[OTA] ⚠️ Timeout: Flash OTA non exécuté')
+        }
+      }, 5 * 60 * 1000)
+
+    } catch (err) {
+      setError(err.message)
+      addLog(`[OTA] ❌ Erreur: ${err.message}`)
+      setFlashing(false)
+    }
+  }, [selectedFirmware, device, fetchWithAuth, API_URL, checkOtaStatus, flashComplete])
+
+  // Fonction helper pour ajouter des logs
+  const addLog = useCallback((message) => {
+    setTerminalLogs(prev => [...prev, { raw: message, timestamp: new Date() }])
+  }, [])
+
+  // Nettoyer les intervalles au démontage
+  useEffect(() => {
+    return () => {
+      if (otaCheckIntervalRef.current) {
+        clearInterval(otaCheckIntervalRef.current)
+      }
+    }
+  }, [])
+
+  if (!isOpen) return null
+
+  const canFlashUSB = flashModeState === 'usb' && isConnected && selectedFirmware
+  const canFlashOTA = flashModeState === 'ota' && device?.id && selectedFirmware
+
+  return (
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold">
+              {flashModeState === 'usb' ? '🔌 Flash USB' : '📡 Flash OTA'}
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              {device ? `${device.device_name || device.sim_iccid}` : 'Flasher un dispositif'}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl">
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Sélection mode */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFlashModeState('usb')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                flashModeState === 'usb'
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+              }`}
+            >
+              🔌 USB
+            </button>
+            <button
+              onClick={() => setFlashModeState('ota')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                flashModeState === 'ota'
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+              }`}
+            >
+              📡 OTA
+            </button>
+          </div>
+
+          {/* Configuration */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Port série (USB uniquement) */}
+            {flashModeState === 'usb' && (
+              <div>
+                <label className="block text-sm font-medium mb-2">📡 Port série</label>
+                {!isConnected ? (
+                  <button
+                    onClick={handleConnect}
+                    disabled={!isSupported || flashing}
+                    className="btn-primary w-full text-sm"
+                  >
+                    🔌 Sélectionner
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-2 text-sm">
+                      <p className="text-green-800 dark:text-green-300 font-semibold">● Connecté</p>
+                    </div>
+                    <button onClick={handleDisconnect} disabled={flashing} className="btn-secondary w-full text-xs">
+                      Déconnecter
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Firmware */}
+            <div className={flashModeState === 'usb' ? '' : 'col-span-2'}>
+              <label className="block text-sm font-medium mb-2">📦 Firmware</label>
+              {loading ? (
+                <p className="text-sm text-gray-500">Chargement...</p>
+              ) : (
+                <select
+                  value={selectedFirmware?.id || ''}
+                  onChange={(e) => {
+                    const fw = firmwares.find(f => f.id === parseInt(e.target.value))
+                    setSelectedFirmware(fw || null)
+                  }}
+                  disabled={flashing}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                >
+                  <option value="">Sélectionner...</option>
+                  {firmwares
+                    .filter(fw => fw.status === 'compiled')
+                    .map((fw) => (
+                      <option key={fw.id} value={fw.id}>
+                        v{fw.version} {fw.is_stable ? '✅' : '⚠️'}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Bouton flash */}
+          {(canFlashUSB || canFlashOTA) && (
+            <div>
+              <button
+                onClick={flashModeState === 'usb' ? handleFlashUSB : handleFlashOTA}
+                disabled={flashing}
+                className="btn-primary w-full"
+              >
+                {flashing
+                  ? `⏳ Flash en cours... ${flashProgress}%`
+                  : `🚀 Flasher v${selectedFirmware.version} (${flashModeState.toUpperCase()})`}
+              </button>
+
+              {/* Barre de progression */}
+              {flashing && (
+                <div className="mt-3 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                  <div
+                    className="bg-primary-500 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${flashProgress}%` }}
+                  />
+                </div>
+              )}
+
+              {/* Stats OTA */}
+              {flashModeState === 'ota' && otaStatus && (
+                <div className="mt-3 p-3 rounded-lg border-2 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-blue-800 dark:text-blue-300">
+                        Statut: {otaStatus.message}
+                      </p>
+                      {otaStatus.command && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                          Commande créée: {new Date(otaStatus.command.created_at).toLocaleString('fr-FR')}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        Vérifications: {otaStats.attempts}
+                      </p>
+                      {otaStats.lastCheck && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          Dernière: {otaStats.lastCheck.toLocaleTimeString('fr-FR')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Statut après flash */}
+              {flashComplete && (
+                <div className="mt-3 p-3 rounded-lg border-2">
+                  {deviceAlive === true && (
+                    <div className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+                      <p className="text-green-800 dark:text-green-300 font-semibold">✅ Dispositif vivant et répond</p>
+                    </div>
+                  )}
+                  {deviceAlive === false && (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+                      <p className="text-yellow-800 dark:text-yellow-300 font-semibold">⚠️ Pas de réponse détectée</p>
+                    </div>
+                  )}
+                  {flashModeState === 'ota' && otaStatus?.status === 'executed' && (
+                    <div className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+                      <p className="text-green-800 dark:text-green-300 font-semibold">✅ Flash OTA terminé avec succès</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Console de logs */}
+          <div>
+            <label className="block text-sm font-medium mb-2">📟 Console</label>
+            <div className="bg-black text-green-400 font-mono text-xs p-4 rounded-lg h-64 overflow-y-auto">
+              {terminalLogs.length === 0 ? (
+                <p className="text-gray-500">En attente de logs...</p>
+              ) : (
+                terminalLogs.map((log, idx) => (
+                  <div key={idx} className="mb-1">
+                    <span className="text-gray-500">
+                      {log.timestamp.toLocaleTimeString('fr-FR')}
+                    </span>
+                    {' '}
+                    <span>{log.raw}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Erreurs */}
+          {(error || serialError) && (
+            <div className="alert alert-warning text-sm">
+              {error || serialError}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
