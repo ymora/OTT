@@ -845,7 +845,10 @@ export default function DevicesPage() {
     setUsbConnectedDevice(null)
     setUsbVirtualDevice(null)
     setUsbPortInfo(null)
-  }, [disconnect, stopUsbStreaming, setUsbConnectedDevice, setUsbVirtualDevice, setUsbPortInfo])
+    // Réactiver la détection automatique après déconnexion
+    setAutoDetecting(true)
+    logger.log('🔄 Détection automatique USB réactivée après déconnexion')
+  }, [disconnect, stopUsbStreaming, setUsbConnectedDevice, setUsbVirtualDevice, setUsbPortInfo, setAutoDetecting])
 
   // Vérifier si le dispositif sélectionné correspond au dispositif USB connecté
   const isSelectedDeviceUsbConnected = useCallback(() => {
@@ -935,8 +938,15 @@ export default function DevicesPage() {
 
     // Ne pas détecter si déjà un dispositif connecté
     if (usbConnectedDevice || usbVirtualDevice) {
-      setAutoDetecting(false)
+      // Ne pas désactiver autoDetecting ici, juste ne pas lancer la détection
+      // Cela permet de réactiver automatiquement la détection après déconnexion
       return
+    }
+
+    // S'assurer que la détection automatique est activée si aucun dispositif n'est connecté
+    if (!autoDetecting) {
+      setAutoDetecting(true)
+      logger.log('🔄 Réactivation de la détection automatique USB')
     }
 
     const autoDetect = async () => {
@@ -1080,21 +1090,28 @@ export default function DevicesPage() {
         // Le port est dans event.target
         if (event.target) {
           logger.log('📱 Tentative de détection automatique sur le nouveau port...')
+          // S'assurer que la détection automatique est activée
+          setAutoDetecting(true)
           const device = await detectDeviceOnPort(event.target)
           if (device) {
             logger.log('✅ Dispositif détecté sur le nouveau port:', device.device_name || device.sim_iccid)
             setAutoDetecting(false)
+          } else {
+            // Si pas de dispositif détecté, garder la détection active pour réessayer
+            logger.log('⚠️ Aucun dispositif détecté sur le nouveau port, la détection automatique continue')
           }
         }
       } catch (err) {
         logger.error('Erreur lors de la détection du nouveau port:', err)
+        // En cas d'erreur, réactiver la détection automatique
+        setAutoDetecting(true)
       }
     }
 
     // Écouter l'événement 'connect' du navigateur (une seule fois)
     if (navigator.serial && typeof navigator.serial.addEventListener === 'function') {
       navigator.serial.addEventListener('connect', handleConnect)
-      // Ne pas logger à chaque re-render
+      logger.log('👂 Écoute des événements de connexion USB activée')
     }
 
     return () => {
