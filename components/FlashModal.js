@@ -556,8 +556,13 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
               {device ? `${device.device_name || device.sim_iccid}` : 'Flasher un dispositif'}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl">
-            ✕
+          <button 
+            onClick={onClose} 
+            className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+            title="Fermer"
+            aria-label="Fermer"
+          >
+            <span className="text-2xl font-bold leading-none">×</span>
           </button>
         </div>
 
