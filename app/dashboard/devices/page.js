@@ -6,7 +6,6 @@ import { fetchJson } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import AlertCard from '@/components/AlertCard'
-import FlashUSBModal from '@/components/FlashUSBModal'
 import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
@@ -96,10 +95,6 @@ export default function DevicesPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [modalActiveTab, setModalActiveTab] = useState('details') // 'details', 'alerts', 'logs', 'commands'
   
-  // Modal Flash USB
-  const [showFlashUSBModal, setShowFlashUSBModal] = useState(false)
-  const [deviceForFlash, setDeviceForFlash] = useState(null)
-  
   // Modal Upload Firmware
   const [showUploadFirmwareModal, setShowUploadFirmwareModal] = useState(false)
   const [firmwareFile, setFirmwareFile] = useState(null)
@@ -109,6 +104,10 @@ export default function DevicesPage() {
   const [uploadingFirmware, setUploadingFirmware] = useState(false)
   const [firmwareUploadError, setFirmwareUploadError] = useState(null)
   const [firmwareUploadSuccess, setFirmwareUploadSuccess] = useState(null)
+  
+  // État pour les messages OTA
+  const [otaError, setOtaError] = useState(null)
+  const [otaMessage, setOtaMessage] = useState(null)
   
   // État pour le formulaire de commandes dans le modal
   const [commandForm, setCommandForm] = useState({
@@ -156,12 +155,6 @@ export default function DevicesPage() {
   // Notifications détection USB
   const [usbDetectionNotice, setUsbDetectionNotice] = useState(null)
   const [usbDetectionError, setUsbDetectionError] = useState(null)
-  
-  // OTA intégré dans le tableau
-  const [selectedFirmwareVersion, setSelectedFirmwareVersion] = useState('')
-  const [otaDeploying, setOtaDeploying] = useState({})
-  const [otaMessage, setOtaMessage] = useState(null)
-  const [otaError, setOtaError] = useState(null)
   
   // Focus sur la carte
   const [focusDeviceId, setFocusDeviceId] = useState(null)
@@ -1111,224 +1104,7 @@ export default function DevicesPage() {
     }
   }, [isSupported, detectDeviceOnPort, setAutoDetecting])
 
-  // Vérifier si un dispositif est connecté en USB
-  const isDeviceUsbConnected = useCallback((device) => {
-    if (!device) return false
-    if (usbConnectedDevice && device.id && usbConnectedDevice.id === device.id) return true
-    if (usbVirtualDevice && device.isVirtual && device.id === usbVirtualDevice.id) return true
-    if (usbConnectedDevice && device.sim_iccid && usbConnectedDevice.sim_iccid === device.sim_iccid) return true
-    if (usbVirtualDevice && device.sim_iccid && usbVirtualDevice.sim_iccid === device.sim_iccid) return true
-    return false
-  }, [usbConnectedDevice, usbVirtualDevice])
 
-  // Vérifier si un dispositif est en ligne
-  const isDeviceOnline = useCallback((device) => {
-    if (!device || !device.last_seen) return false
-    const hoursSince = (Date.now() - new Date(device.last_seen).getTime()) / (1000 * 60 * 60)
-    return hoursSince < 2 // En ligne si vu il y a moins de 2 heures
-  }, [])
-
-  // Vérifier si un dispositif peut recevoir une mise à jour OTA
-  const canReceiveOTA = useCallback((device) => {
-    // Dispositif virtuel USB ne peut pas recevoir OTA (seulement USB)
-    if (device.isVirtual) {
-      return { can: false, reason: 'Dispositif USB virtuel - utilisez le flash USB' }
-    }
-    
-    // Vérifier si le dispositif est en ligne
-    if (!isDeviceOnline(device)) {
-      return { can: false, reason: 'Dispositif hors ligne - le dispositif doit être en ligne pour recevoir une mise à jour OTA' }
-    }
-    
-    // Vérifier si OTA déjà en cours
-    if (device.ota_pending) {
-      return { 
-        can: false, 
-        reason: `Mise à jour OTA déjà en cours (v${device.target_firmware_version || 'N/A'})` 
-      }
-    }
-    
-    // Vérifier si le dispositif est hors ligne
-    if (!device.last_seen) {
-      return { can: false, reason: 'Dispositif jamais vu en ligne' }
-    }
-    
-    const hoursSinceLastSeen = (Date.now() - new Date(device.last_seen).getTime()) / (1000 * 60 * 60)
-    if (hoursSinceLastSeen > 6) {
-      return { 
-        can: false, 
-        reason: `Dispositif hors ligne depuis ${Math.round(hoursSinceLastSeen * 10) / 10}h (max: 6h)` 
-      }
-    }
-    
-    // Vérifier la batterie
-    if (device.last_battery !== null && device.last_battery !== undefined) {
-      const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery)
-      if (!isNaN(battery) && battery < 20) {
-        return { 
-          can: false, 
-          reason: `Batterie trop faible (${Math.round(battery)}%) - minimum requis: 20%` 
-        }
-      }
-    }
-    
-    return { can: true }
-  }, [])
-
-  // Fonction pour déclencher OTA sur un dispositif
-  const handleOTA = async (device, e) => {
-    if (e) e.stopPropagation() // Empêcher l'ouverture du modal si événement fourni
-    await handleOtaDeploy(device.id, selectedFirmwareVersion)
-  }
-
-  // Fonction pour déployer OTA (utilisée depuis le modal et la liste)
-  const handleOtaDeploy = async (deviceId, version) => {
-    if (!version) {
-      setOtaError('Veuillez sélectionner un firmware')
-      return
-    }
-
-    // Trouver le firmware correspondant
-    const firmware = firmwares.find(fw => fw.version === version && fw.status === 'compiled')
-    if (!firmware) {
-      setOtaError('Firmware introuvable ou non compilé')
-      return
-    }
-
-    const device = devices.find(d => d.id === deviceId)
-    if (!device) {
-      setOtaError('Dispositif introuvable')
-      return
-    }
-
-    // Vérifier les conditions avant d'envoyer la requête
-    const check = canReceiveOTA(device)
-    if (!check.can) {
-      setOtaError(`❌ ${check.reason}`)
-      return
-    }
-
-    try {
-      setOtaError(null)
-      setOtaMessage(null)
-      setOtaDeploying(prev => ({ ...prev, [deviceId]: true }))
-      
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${deviceId}/ota`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ firmware_version: version })
-        },
-        { requiresAuth: true }
-      )
-      
-      setOtaMessage(`✅ OTA v${version} programmé pour ${device.device_name || device.sim_iccid}`)
-      
-      // Recharger les dispositifs
-      await refetch()
-      notifyDevicesUpdated()
-    } catch (err) {
-      // Extraire le message d'erreur de la réponse API si disponible
-      const errorMessage = err.message || 'Erreur lors du déploiement OTA'
-      setOtaError(`❌ ${errorMessage}`)
-    } finally {
-      setOtaDeploying(prev => {
-        const next = { ...prev }
-        delete next[deviceId]
-        return next
-      })
-    }
-  }
-
-  // Fonction pour flasher tous les dispositifs concernés
-  const handleOTAAll = async (e) => {
-    e.stopPropagation()
-    if (!selectedFirmwareVersion || devicesToUpdate.length === 0) return
-
-    // Filtrer les dispositifs qui peuvent recevoir OTA
-    const eligibleDevices = devicesToUpdate.filter(d => canReceiveOTA(d).can)
-    const ineligibleDevices = devicesToUpdate.filter(d => !canReceiveOTA(d).can)
-    
-    if (eligibleDevices.length === 0) {
-      const reasons = [...new Set(ineligibleDevices.map(d => canReceiveOTA(d).reason))]
-      setOtaError(`❌ Aucun dispositif éligible pour OTA. Raisons: ${reasons.join('; ')}`)
-      return
-    }
-
-    let confirmMessage = `⚠️ ATTENTION : Déploiement massif OTA\n\n` +
-      `Firmware: v${selectedFirmwareVersion}\n` +
-      `Dispositifs éligibles: ${eligibleDevices.length} / ${devicesToUpdate.length}\n\n`
-    
-    if (ineligibleDevices.length > 0) {
-      confirmMessage += `⚠️ ${ineligibleDevices.length} dispositif(s) seront ignorés (hors ligne, batterie faible, OTA en cours, etc.)\n\n`
-    }
-    
-    confirmMessage += `Cette opération va déployer le firmware sur ${eligibleDevices.length} dispositif(s) éligible(s).\n` +
-      `Cela peut planter les dispositifs si le firmware est incompatible.\n\n` +
-      `Êtes-vous sûr de vouloir continuer ?`
-
-    if (!confirm(confirmMessage)) return
-
-    setOtaError(null)
-    setOtaMessage(null)
-    const eligibleDeviceIds = eligibleDevices.map(d => d.id)
-    
-    // Marquer tous les éligibles comme en cours de déploiement
-    const deployingState = {}
-    eligibleDeviceIds.forEach(id => { deployingState[id] = true })
-    setOtaDeploying(deployingState)
-
-    let successCount = 0
-    let errorCount = 0
-    let skippedCount = ineligibleDevices.length
-
-    try {
-      // Déployer sur tous les dispositifs éligibles en parallèle
-      const promises = eligibleDeviceIds.map(async (deviceId) => {
-        try {
-          await fetchJson(
-            fetchWithAuth,
-            API_URL,
-            `/api.php/devices/${deviceId}/ota`,
-            {
-              method: 'POST',
-              body: JSON.stringify({ firmware_version: selectedFirmwareVersion })
-            },
-            { requiresAuth: true }
-          )
-          successCount++
-        } catch (err) {
-          errorCount++
-          logger.error(`Erreur OTA pour dispositif ${deviceId}:`, err)
-        }
-      })
-
-      await Promise.all(promises)
-
-      let message = `✅ OTA v${selectedFirmwareVersion} programmé : ${successCount} succès`
-      if (errorCount > 0) {
-        message += `, ${errorCount} erreur(s)`
-      }
-      if (skippedCount > 0) {
-        message += `, ${skippedCount} ignoré(s) (hors ligne/batterie faible/OTA en cours)`
-      }
-      if (errorCount === 0) {
-        setOtaMessage(message)
-      } else {
-        setOtaError(message)
-      }
-
-      // Recharger les dispositifs
-      await refetch()
-    } catch (err) {
-      setOtaError(`Erreur lors du déploiement massif: ${err.message}`)
-    } finally {
-      // Réinitialiser l'état de déploiement
-      setOtaDeploying({})
-    }
-  }
 
   // Fonction pour ouvrir le modal de suppression
   const openDeleteModal = (device) => {
@@ -1484,17 +1260,6 @@ export default function DevicesPage() {
   }, [firmwares])
 
   // Dispositifs qui ont un firmware différent du sélectionné (inclure les virtuels et N/A)
-  const devicesToUpdate = useMemo(() => {
-    if (!selectedFirmwareVersion) return []
-    return filteredDevices.filter(device => {
-      // Les dispositifs virtuels peuvent toujours être mis à jour
-      if (device.isVirtual) return true
-      const deviceFirmware = device.firmware_version || 'N/A'
-      // Si firmware est N/A ou différent, on peut le mettre à jour
-      if (deviceFirmware === 'N/A' || deviceFirmware === 'n/a') return true
-      return deviceFirmware !== selectedFirmwareVersion
-    })
-  }, [filteredDevices, selectedFirmwareVersion])
 
   const handleShowDetails = async (device) => {
     setSelectedDevice(device)
@@ -1841,13 +1606,6 @@ export default function DevicesPage() {
             {usbVirtualDevice && ' (1 USB non enregistré)'}
           </p>
         </div>
-        {isConnected && (
-          <span className="px-3 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg text-sm font-medium">
-            🔌 USB Connecté
-            {usbConnectedDevice && ` - ${usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid}`}
-            {usbVirtualDevice && ` - ${usbVirtualDevice.device_name} (Non enregistré)`}
-          </span>
-        )}
       </div>
 
       {error && (
@@ -1914,78 +1672,7 @@ export default function DevicesPage() {
           />
         </div>
 
-        {/* Bouton de détection USB */}
-        {isSupported && (
-          <button
-            onClick={detectUSBDevice}
-            disabled={checkingUSB}
-            className={`btn-primary whitespace-nowrap ${checkingUSB ? 'opacity-50 cursor-not-allowed' : ''}`}
-            title="Détecter et autoriser un dispositif USB connecté"
-          >
-            {checkingUSB ? (
-              <>
-                <span className="animate-spin inline-block mr-2">⏳</span>
-                Détection...
-              </>
-            ) : (
-              <>
-                🔍 Détecter USB
-              </>
-            )}
-          </button>
-        )}
 
-        {/* Sélecteur de firmware pour OTA */}
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-              Firmware OTA (à distance) 📡:
-            </label>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Mise à jour via réseau 4G/WiFi
-            </span>
-          </div>
-          <select
-            value={selectedFirmwareVersion}
-            onChange={(e) => {
-              setSelectedFirmwareVersion(e.target.value)
-              setOtaMessage(null)
-              setOtaError(null)
-            }}
-            className="input min-w-[150px]"
-            title="Sélectionnez un firmware pour mise à jour OTA (Over-The-Air) à distance"
-          >
-            <option value="">— Sélectionner —</option>
-            {firmwares.map(fw => (
-              <option key={fw.id} value={fw.version}>
-                v{fw.version}
-              </option>
-            ))}
-          </select>
-          {selectedFirmwareVersion && devicesToUpdate.length > 1 && (
-            <button
-              onClick={handleOTAAll}
-              disabled={Object.keys(otaDeploying).length > 0}
-              className="btn-primary text-sm whitespace-nowrap"
-              title={`Déployer OTA (à distance) sur tous les ${devicesToUpdate.length} dispositifs concernés via réseau 4G/WiFi`}
-            >
-              {Object.keys(otaDeploying).length > 0 ? '⏳ Déploiement...' : `📡 OTA tous (${devicesToUpdate.length})`}
-            </button>
-          )}
-          {isAdmin && (
-            <button
-              onClick={() => {
-                setShowUploadFirmwareModal(true)
-                setFirmwareUploadError(null)
-                setFirmwareUploadSuccess(null)
-              }}
-              className="btn-secondary text-sm whitespace-nowrap"
-              title="Uploader un nouveau firmware"
-            >
-              📤 Upload Firmware
-            </button>
-          )}
-        </div>
       </div>
 
     {(usbDetectionNotice || usbDetectionError) && (
@@ -2105,14 +1792,13 @@ export default function DevicesPage() {
                 <th className="text-left py-3 px-4">Batterie</th>
                 <th className="text-left py-3 px-4">Dernier contact</th>
                 <th className="text-left py-3 px-4">Firmware</th>
-                <th className="text-right py-3 px-4">Flash</th>
                 <th className="text-right py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredDevices.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-gray-500">
+                  <td colSpan={7} className="py-8 text-center text-gray-500">
                     Aucun dispositif trouvé
                   </td>
                 </tr>
@@ -2121,14 +1807,6 @@ export default function DevicesPage() {
                   const status = getStatusBadge(device)
                   const battery = getBatteryBadge(device.last_battery)
                   const deviceFirmware = device.firmware_version || 'N/A'
-                  // Un dispositif peut être mis à jour si : firmware N/A, différent, ou virtuel
-                  const needsUpdate = selectedFirmwareVersion && (
-                    device.isVirtual || 
-                    deviceFirmware === 'N/A' || 
-                    deviceFirmware === 'n/a' ||
-                    deviceFirmware !== selectedFirmwareVersion
-                  )
-                  const isDeploying = otaDeploying[device.id]
                   
                   return (
                     <tr 
@@ -2185,50 +1863,6 @@ export default function DevicesPage() {
                       <td className="py-3 px-4">
                         <span className="text-sm font-mono">{device.firmware_version || 'N/A'}</span>
                       </td>
-                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Afficher l'icône OTA uniquement si le dispositif est en ligne */}
-                            {isDeviceOnline(device) && selectedFirmwareVersion && (needsUpdate || device.firmware_version === 'N/A' || device.firmware_version === 'n/a') ? (() => {
-                              const otaCheck = canReceiveOTA(device)
-                              const isDisabled = isDeploying || !otaCheck.can
-                              return (
-                                <button
-                                  onClick={(e) => handleOTA(device, e)}
-                                  disabled={isDisabled}
-                                  className={`text-xs px-3 py-1 ${
-                                    isDisabled 
-                                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                                      : 'btn-primary'
-                                  }`}
-                                  title={
-                                    isDisabled 
-                                      ? `❌ ${otaCheck.reason}` 
-                                      : `Mise à jour OTA (Over-The-Air) à distance via réseau 4G/WiFi vers v${selectedFirmwareVersion}`
-                                  }
-                                >
-                                  {isDeploying ? '⏳' : '📡 OTA'}
-                                </button>
-                              )
-                            })() : isDeviceOnline(device) && selectedFirmwareVersion && !needsUpdate && device.firmware_version !== 'N/A' && device.firmware_version !== 'n/a' ? (
-                              <span className="text-xs text-gray-400">✓ À jour</span>
-                            ) : null}
-                            {/* Afficher l'icône USB uniquement si le dispositif est connecté en USB */}
-                            {isDeviceUsbConnected(device) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  // Pour les dispositifs virtuels, ne pas passer device (sera pris automatiquement)
-                                  setDeviceForFlash(device.isVirtual ? null : device)
-                                  setShowFlashUSBModal(true)
-                                }}
-                                className="text-xs px-3 py-1 btn-primary"
-                                title="Flash USB local : mise à jour via câble USB (nécessite connexion physique)"
-                              >
-                                📡 USB
-                              </button>
-                            )}
-                          </div>
-                        </td>
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           <button
@@ -2326,18 +1960,6 @@ export default function DevicesPage() {
                     ⚡ Streaming USB
                   </button>
                 )}
-                {isAdmin && (
-                  <button
-                    onClick={() => setModalActiveTab('commands')}
-                    className={`px-4 py-3 font-medium text-sm border-b-2 transition-all ${
-                      modalActiveTab === 'commands'
-                        ? 'border-primary-500 dark:border-primary-400 text-primary-600 dark:text-primary-400'
-                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    📡 Commandes ({deviceCommands.length})
-                  </button>
-                )}
               </nav>
             </div>
 
@@ -2395,84 +2017,6 @@ export default function DevicesPage() {
                         </div>
                       )}
 
-                      {/* Section Flash Firmware */}
-                      {(isAdmin || user?.role_name === 'technicien') && firmwares.length > 0 && (
-                        <div className="card">
-                          <h3 className="text-lg font-semibold mb-4">📦 Flash Firmware</h3>
-                          <div className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Sélectionner un firmware
-                              </label>
-                              <select
-                                className="input w-full"
-                                value={selectedFirmwareVersion}
-                                onChange={(e) => setSelectedFirmwareVersion(e.target.value)}
-                              >
-                                <option value="">-- Choisir un firmware --</option>
-                                {firmwares
-                                  .filter(fw => fw.status === 'compiled')
-                                  .map((fw) => (
-                                    <option key={fw.id} value={fw.version}>
-                                      v{fw.version} {fw.is_stable ? '✅ Stable' : '⚠️ Beta'} - {(fw.file_size / 1024).toFixed(2)} KB
-                                    </option>
-                                  ))}
-                              </select>
-                            </div>
-
-                            {selectedFirmwareVersion && (
-                              <div className="flex flex-wrap gap-3">
-                                {/* Flash via OTA si dispositif en ligne */}
-                                {selectedDevice.status === 'active' && selectedDevice.last_seen && 
-                                 new Date(selectedDevice.last_seen) > new Date(Date.now() - 10 * 60 * 1000) && (
-                                  <button
-                                    onClick={() => handleOtaDeploy(selectedDevice.id, selectedFirmwareVersion)}
-                                    disabled={otaDeploying[selectedDevice.id]}
-                                    className="btn-primary flex-1 min-w-[150px]"
-                                  >
-                                    {otaDeploying[selectedDevice.id] ? (
-                                      <>⏳ OTA en cours...</>
-                                    ) : (
-                                      <>📡 Flasher via OTA</>
-                                    )}
-                                  </button>
-                                )}
-
-                                {/* Flash via USB si dispositif connecté */}
-                                {isSelectedDeviceUsbConnected() && (
-                                  <button
-                                    onClick={() => {
-                                      setDeviceForFlash(selectedDevice)
-                                      setShowFlashUSBModal(true)
-                                    }}
-                                    className="btn-primary flex-1 min-w-[150px]"
-                                  >
-                                    🔌 Flasher via USB
-                                  </button>
-                                )}
-
-                                {!isSelectedDeviceUsbConnected() && 
-                                 (!selectedDevice.last_seen || new Date(selectedDevice.last_seen) <= new Date(Date.now() - 10 * 60 * 1000)) && (
-                                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    ⚠️ Le dispositif doit être en ligne (OTA) ou connecté en USB pour flasher
-                                  </p>
-                                )}
-                              </div>
-                            )}
-
-                            {otaMessage && (
-                              <div className="alert alert-success">
-                                {otaMessage}
-                              </div>
-                            )}
-                            {otaError && (
-                              <div className="alert alert-warning">
-                                {otaError}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </>
                   )}
 
@@ -2524,285 +2068,6 @@ export default function DevicesPage() {
                           ))}
                         </div>
                       )}
-                    </div>
-                  )}
-
-                  {modalActiveTab === 'commands' && isAdmin && (
-                    <div className="h-full flex flex-col space-y-6">
-                      <div>
-                        <h3 className="text-lg font-semibold mb-4 text-primary">📡 Commandes</h3>
-                        {(commandError || commandSuccess) && (
-                          <div className={`alert ${commandError ? 'alert-warning' : 'alert-success'} mb-4`}>
-                            {commandError || commandSuccess}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Formulaire de commande */}
-                      <div className="card">
-                        <h4 className="text-md font-semibold mb-4 text-primary">Envoyer une commande</h4>
-                        <form onSubmit={handleCreateCommand} className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-muted mb-2">Type de commande *</label>
-                            <select
-                              className="input"
-                              value={commandForm.command}
-                              onChange={(e) => setCommandForm((prev) => ({ ...prev, command: e.target.value }))}
-                              required
-                            >
-                              {commandOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Paramètres spécifiques selon le type de commande */}
-                          {commandForm.command === 'SET_SLEEP_SECONDS' && (
-                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                              <label className="block text-sm font-medium text-muted mb-2">
-                                Intervalle de sommeil (secondes) *
-                              </label>
-                              <input
-                                type="number"
-                                min={30}
-                                max={7200}
-                                className="input"
-                                value={commandForm.sleepSeconds}
-                                onChange={(e) => setCommandForm((prev) => ({ ...prev, sleepSeconds: e.target.value }))}
-                                required
-                              />
-                              <p className="text-xs text-muted mt-1">Valeur entre 30 et 7200 secondes</p>
-                            </div>
-                          )}
-
-                          {commandForm.command === 'PING' && (
-                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                              <label className="block text-sm font-medium text-muted mb-2">
-                                Message de diagnostic (optionnel)
-                              </label>
-                              <input
-                                type="text"
-                                className="input"
-                                placeholder="Ex: Test de connexion"
-                                value={commandForm.message}
-                                onChange={(e) => setCommandForm((prev) => ({ ...prev, message: e.target.value }))}
-                              />
-                              <p className="text-xs text-muted mt-1">Message qui sera renvoyé par le dispositif</p>
-                            </div>
-                          )}
-
-                          {commandForm.command === 'UPDATE_CONFIG' && (
-                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 space-y-4">
-                              <div className="bg-amber-100 dark:bg-amber-900/30 border-l-4 border-amber-500 dark:border-amber-400 p-3 rounded">
-                                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ Configuration avancée</p>
-                                <p className="text-xs text-amber-700 dark:text-amber-300">
-                                  Remplir uniquement les champs à modifier. Les valeurs vides seront ignorées.
-                                </p>
-                              </div>
-                              
-                              <div>
-                                <p className="text-sm font-semibold text-primary mb-3">🔐 Identité & Réseau</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  <input className="input" placeholder="APN" value={commandForm.configApn} onChange={(e) => setCommandForm((prev) => ({ ...prev, configApn: e.target.value }))} />
-                                  <input className="input" placeholder="JWT Bearer..." value={commandForm.configJwt} onChange={(e) => setCommandForm((prev) => ({ ...prev, configJwt: e.target.value }))} />
-                                  <input className="input" placeholder="ICCID" value={commandForm.configIccid} onChange={(e) => setCommandForm((prev) => ({ ...prev, configIccid: e.target.value }))} />
-                                  <input className="input" placeholder="Numéro de série" value={commandForm.configSerial} onChange={(e) => setCommandForm((prev) => ({ ...prev, configSerial: e.target.value }))} />
-                                  <input className="input" placeholder="PIN SIM" value={commandForm.configSimPin} onChange={(e) => setCommandForm((prev) => ({ ...prev, configSimPin: e.target.value }))} />
-                                </div>
-                              </div>
-
-                              <div>
-                                <p className="text-sm font-semibold text-primary mb-3">📊 Mesures & Sommeil</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  <input type="number" min={1} className="input" placeholder="Sommeil par défaut (minutes)" value={commandForm.configSleepMinutes} onChange={(e) => setCommandForm((prev) => ({ ...prev, configSleepMinutes: e.target.value }))} />
-                                  <input type="number" min={1} className="input" placeholder="Passes capteur" value={commandForm.configAirflowPasses} onChange={(e) => setCommandForm((prev) => ({ ...prev, configAirflowPasses: e.target.value }))} />
-                                  <input type="number" min={1} className="input" placeholder="Échantillons / passe" value={commandForm.configAirflowSamples} onChange={(e) => setCommandForm((prev) => ({ ...prev, configAirflowSamples: e.target.value }))} />
-                                  <input type="number" min={1} className="input" placeholder="Délai échantillons (ms)" value={commandForm.configAirflowDelay} onChange={(e) => setCommandForm((prev) => ({ ...prev, configAirflowDelay: e.target.value }))} />
-                                </div>
-                              </div>
-
-                              <div>
-                                <p className="text-sm font-semibold text-primary mb-3">⚙️ Watchdog & Modem</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  <input type="number" min={5} className="input" placeholder="Watchdog (secondes)" value={commandForm.configWatchdogSeconds} onChange={(e) => setCommandForm((prev) => ({ ...prev, configWatchdogSeconds: e.target.value }))} />
-                                  <input type="number" min={1000} className="input" placeholder="Timeout boot modem (ms)" value={commandForm.configModemBootTimeout} onChange={(e) => setCommandForm((prev) => ({ ...prev, configModemBootTimeout: e.target.value }))} />
-                                  <input type="number" min={1000} className="input" placeholder="Timeout SIM prête (ms)" value={commandForm.configSimReadyTimeout} onChange={(e) => setCommandForm((prev) => ({ ...prev, configSimReadyTimeout: e.target.value }))} />
-                                  <input type="number" min={1000} className="input" placeholder="Timeout attache réseau (ms)" value={commandForm.configNetworkAttachTimeout} onChange={(e) => setCommandForm((prev) => ({ ...prev, configNetworkAttachTimeout: e.target.value }))} />
-                                  <input type="number" min={1} className="input" placeholder="Redémarrages modem max" value={commandForm.configModemReboots} onChange={(e) => setCommandForm((prev) => ({ ...prev, configModemReboots: e.target.value }))} />
-                                </div>
-                              </div>
-
-                              <div>
-                                <p className="text-sm font-semibold text-primary mb-1">📡 Configuration OTA (Over-The-Air)</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                                  Mise à jour à distance via réseau 4G/WiFi
-                                </p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  <input className="input" placeholder="URL primaire" value={commandForm.configOtaPrimaryUrl} onChange={(e) => setCommandForm((prev) => ({ ...prev, configOtaPrimaryUrl: e.target.value }))} />
-                                  <input className="input" placeholder="URL fallback" value={commandForm.configOtaFallbackUrl} onChange={(e) => setCommandForm((prev) => ({ ...prev, configOtaFallbackUrl: e.target.value }))} />
-                                  <input className="input md:col-span-2" placeholder="MD5 attendu (optionnel)" value={commandForm.configOtaMd5} onChange={(e) => setCommandForm((prev) => ({ ...prev, configOtaMd5: e.target.value }))} />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {commandForm.command === 'UPDATE_CALIBRATION' && (
-                            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                              <p className="text-sm font-semibold text-primary mb-3">📐 Coefficients de calibration</p>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                {['a0', 'a1', 'a2'].map((coef) => (
-                                  <div key={coef}>
-                                    <label className="block text-sm font-medium text-muted mb-1">
-                                      Coefficient {coef.toUpperCase()} *
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="any"
-                                      className="input"
-                                      placeholder={`Valeur ${coef.toUpperCase()}`}
-                                      value={commandForm[`cal${coef.toUpperCase()}`]}
-                                      onChange={(e) =>
-                                        setCommandForm((prev) => ({
-                                          ...prev,
-                                          [`cal${coef.toUpperCase()}`]: e.target.value,
-                                        }))
-                                      }
-                                      required
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {commandForm.command === 'OTA_REQUEST' && (
-                            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4 space-y-3">
-                              <div className="bg-orange-100 dark:bg-orange-900/30 border-l-4 border-orange-500 dark:border-orange-400 p-3 rounded">
-                                <div className="mb-2">
-                                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">📡 Mise à jour OTA (Over-The-Air)</p>
-                                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                                    Mise à jour à distance via réseau 4G/WiFi. Le dispositif télécharge et installe le firmware automatiquement.
-                                  </p>
-                                </div>
-                                <p className="text-xs text-orange-700 dark:text-orange-300">
-                                  Laisser l&apos;URL vide pour utiliser la configuration stockée dans le dispositif.
-                                </p>
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-muted mb-2">Canal OTA</label>
-                                <select
-                                  className="input"
-                                  value={commandForm.otaChannel}
-                                  onChange={(e) => setCommandForm((prev) => ({ ...prev, otaChannel: e.target.value }))}
-                                >
-                                  <option value="primary">Primaire</option>
-                                  <option value="fallback">Fallback</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-muted mb-2">URL du firmware (optionnel)</label>
-                                <input
-                                  type="text"
-                                  className="input"
-                                  placeholder="https://..."
-                                  value={commandForm.otaUrl}
-                                  onChange={(e) => setCommandForm((prev) => ({ ...prev, otaUrl: e.target.value }))}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-muted mb-2">MD5 attendu (optionnel)</label>
-                                <input
-                                  type="text"
-                                  className="input"
-                                  placeholder="Hash MD5 du firmware"
-                                  value={commandForm.otaMd5}
-                                  onChange={(e) => setCommandForm((prev) => ({ ...prev, otaMd5: e.target.value }))}
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-200 dark:border-gray-700">
-                            <div>
-                              <label className="block text-sm font-medium text-muted mb-2">Priorité</label>
-                              <select
-                                className="input"
-                                value={commandForm.priority}
-                                onChange={(e) => setCommandForm((prev) => ({ ...prev, priority: e.target.value }))}
-                              >
-                                {priorityOptions.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-muted mb-2">Expiration (minutes)</label>
-                              <input
-                                type="number"
-                                min={5}
-                                className="input"
-                                value={commandForm.expiresInMinutes}
-                                onChange={(e) => setCommandForm((prev) => ({ ...prev, expiresInMinutes: e.target.value }))}
-                              />
-                              <p className="text-xs text-muted mt-1">Temps avant expiration de la commande</p>
-                            </div>
-                          </div>
-
-                          <button type="submit" className="btn-primary w-full" disabled={creatingCommand}>
-                            {creatingCommand ? '⏳ Envoi en cours...' : '📤 Envoyer la commande'}
-                          </button>
-                        </form>
-                      </div>
-
-                      {/* Historique des commandes */}
-                      <div className="card flex-1 overflow-y-auto">
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-md font-semibold text-primary">Historique des commandes</h4>
-                          <button 
-                            className="btn-secondary text-sm" 
-                            onClick={() => setCommandRefreshTick(tick => tick + 1)}
-                          >
-                            🔄 Actualiser
-                          </button>
-                        </div>
-                        
-                        {deviceCommands.length === 0 ? (
-                          <div className="text-center py-12 text-muted">
-                            <p className="text-sm">Aucune commande enregistrée pour ce dispositif</p>
-        </div>
-      ) : (
-                          <div className="space-y-2">
-                            {deviceCommands.map((cmd) => (
-                              <div key={cmd.id} className="border border-gray-200/80 dark:border-slate-700/50 rounded-lg p-3 text-sm bg-gradient-to-br from-white to-gray-50/50 dark:from-slate-800/50 dark:to-slate-800/30 backdrop-blur-sm hover:shadow-md transition-all duration-200">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="font-medium text-primary">{cmd.command}</span>
-                                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${commandStatusColors[cmd.status] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'}`}>
-                                    {cmd.status === 'pending' ? '⏳ En attente' :
-                                     cmd.status === 'executed' ? '✅ Exécutée' :
-                                     cmd.status === 'error' ? '❌ Erreur' :
-                                     cmd.status === 'expired' ? '⏰ Expirée' :
-                                     cmd.status === 'cancelled' ? '🚫 Annulée' :
-                                     cmd.status}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between text-xs text-muted">
-                                  <span>Priorité: {cmd.priority}</span>
-                                  <span>{new Date(cmd.created_at ?? cmd.execute_after).toLocaleString('fr-FR', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
                     </div>
                   )}
 
@@ -2980,17 +2245,6 @@ export default function DevicesPage() {
           </div>
         </div>
       )}
-
-      {/* Modal Flash USB */}
-      <FlashUSBModal
-        isOpen={showFlashUSBModal}
-        onClose={() => {
-          setShowFlashUSBModal(false)
-          setDeviceForFlash(null)
-        }}
-        device={deviceForFlash || usbVirtualDevice || usbConnectedDevice}
-        preselectedFirmwareVersion={selectedFirmwareVersion}
-      />
 
       {/* Modal Upload Firmware */}
       {showUploadFirmwareModal && (

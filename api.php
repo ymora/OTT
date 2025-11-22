@@ -702,14 +702,18 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
         error_log('[ROUTER] Route upload-ino matchée - Path: ' . $path . ' Method: ' . $method);
     }
     handleUploadFirmwareIno();
-} elseif($method === 'GET' && preg_match('#/firmwares/compile/(\d+)$#', $path, $matches)) {
+} elseif($method === 'GET' && preg_match('#^/firmwares/check-version/([^/]+)$#', $path, $matches)) {
+    handleCheckFirmwareVersion($matches[1]);
+} elseif($method === 'GET' && preg_match('#^/firmwares/compile/(\d+)$#', $path, $matches)) {
     handleCompileFirmware($matches[1]);
-} elseif($method === 'GET' && preg_match('#/firmwares/(\d+)/download$#', $path, $matches)) {
+} elseif($method === 'GET' && preg_match('#^/firmwares/(\d+)/download$#', $path, $matches)) {
     handleDownloadFirmware($matches[1]);
-} elseif($method === 'GET' && preg_match('#/firmwares$#', $path)) {
+} elseif($method === 'GET' && preg_match('#^/firmwares$#', $path)) {
     handleGetFirmwares();
-} elseif($method === 'POST' && preg_match('#/firmwares$#', $path)) {
+} elseif($method === 'POST' && preg_match('#^/firmwares$#', $path)) {
     handleUploadFirmware();
+} elseif($method === 'DELETE' && preg_match('#^/firmwares/(\d+)$#', $path, $matches)) {
+    handleDeleteFirmware($matches[1]);
 
 // Notifications
 } elseif(preg_match('#/notifications/preferences$#', $path) && $method === 'GET') {
@@ -3136,6 +3140,90 @@ function handleGetFirmwares() {
     }
 }
 
+function handleCheckFirmwareVersion($version) {
+    global $pdo;
+    requireAuth();
+    
+    // Décoder la version (au cas où elle serait encodée)
+    $version = urldecode($version);
+    
+    try {
+        $stmt = $pdo->prepare("SELECT id, version, file_path, created_at, status FROM firmware_versions WHERE version = :version");
+        $stmt->execute(['version' => $version]);
+        $existing = $stmt->fetch();
+        
+        if ($existing) {
+            echo json_encode([
+                'success' => true,
+                'exists' => true,
+                'firmware' => $existing
+            ]);
+        } else {
+            echo json_encode([
+                'success' => true,
+                'exists' => false
+            ]);
+        }
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleDeleteFirmware($firmware_id) {
+    global $pdo;
+    requirePermission('firmwares.manage');
+    
+    try {
+        // Récupérer les infos du firmware avant suppression
+        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        $stmt->execute(['id' => $firmware_id]);
+        $firmware = $stmt->fetch();
+        
+        if (!$firmware) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Firmware introuvable']);
+            return;
+        }
+        
+        // Supprimer le fichier physique s'il existe
+        if (!empty($firmware['file_path'])) {
+            $file_path = __DIR__ . '/' . ltrim($firmware['file_path'], '/');
+            if (file_exists($file_path)) {
+                @unlink($file_path);
+            }
+        }
+        
+        // Supprimer aussi le fichier .ino s'il existe dans hardware/firmware/
+        $version_dir = getVersionDir($firmware['version']);
+        $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+        if (is_dir($ino_dir)) {
+            $ino_files = glob($ino_dir . 'fw_ott_v' . $firmware['version'] . '_*.ino');
+            foreach ($ino_files as $ino_file) {
+                @unlink($ino_file);
+            }
+        }
+        
+        // Supprimer de la base de données
+        $deleteStmt = $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id");
+        $deleteStmt->execute(['id' => $firmware_id]);
+        
+        auditLog('firmware.deleted', 'firmware', $firmware_id, $firmware, null);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Firmware supprimé avec succès',
+            'deleted_version' => $firmware['version']
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleDeleteFirmware] Error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
 function extractVersionFromBin($bin_path) {
     // Tente d'extraire la version depuis le fichier .bin
     // Cherche la section .version avec OTT_FW_VERSION=
@@ -3423,6 +3511,27 @@ function handleUploadFirmwareIno() {
     if (!$version) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Version non trouvée dans le fichier .ino. Assurez-vous que FIRMWARE_VERSION_STR est défini.']);
+        return;
+    }
+    
+    // Vérifier si la version existe déjà
+    $existingStmt = $pdo->prepare("SELECT id, version, file_path, created_at FROM firmware_versions WHERE version = :version");
+    $existingStmt->execute(['version' => $version]);
+    $existingFirmware = $existingStmt->fetch();
+    
+    if ($existingFirmware) {
+        // Version existe déjà - retourner l'info pour afficher le modal
+        http_response_code(409);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Cette version de firmware existe déjà',
+            'existing_firmware' => [
+                'id' => $existingFirmware['id'],
+                'version' => $existingFirmware['version'],
+                'file_path' => $existingFirmware['file_path'],
+                'created_at' => $existingFirmware['created_at']
+            ]
+        ]);
         return;
     }
     

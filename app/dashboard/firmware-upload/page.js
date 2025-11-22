@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
+import Modal from '@/components/Modal'
+import FlashUSBModal from '@/components/FlashUSBModal'
+import { useUsb } from '@/contexts/UsbContext'
 import logger from '@/lib/logger'
 
 export default function FirmwareUploadPage() {
@@ -17,29 +20,54 @@ export default function FirmwareUploadPage() {
   const [compiling, setCompiling] = useState(false)
   const [compileLogs, setCompileLogs] = useState([])
   const [compileProgress, setCompileProgress] = useState(0)
+  const [currentStep, setCurrentStep] = useState(null) // 'upload' | 'compilation' | null
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
   const [uploadedFirmware, setUploadedFirmware] = useState(null)
+  const [showVersionExistsModal, setShowVersionExistsModal] = useState(false)
+  const [existingFirmware, setExistingFirmware] = useState(null)
+  const [pendingFile, setPendingFile] = useState(null)
+  const [deletingFirmware, setDeletingFirmware] = useState(null)
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
+  const [firmwareToDelete, setFirmwareToDelete] = useState(null)
   const fileInputRef = useRef(null)
   const compileLogsRef = useRef(null)
   const eventSourceRef = useRef(null)
 
-  // Charger la liste des firmwares
+  // Charger la liste des firmwares et dispositifs
   const { data, loading, error: dataError, refetch } = useApiData(
-    ['/api.php/firmwares'],
+    ['/api.php/firmwares', '/api.php/devices'],
     { requiresAuth: true }
   )
 
   const firmwares = data?.firmwares?.firmwares || []
+  const devices = data?.devices?.devices || []
+
+  // Contexte USB pour le flash USB
+  const {
+    usbConnectedDevice,
+    usbVirtualDevice
+  } = useUsb()
 
   // Vérifier les permissions (admin ou technicien)
   const canUpload = user?.role_name === 'admin' || user?.role_name === 'technicien'
+  const canFlash = canUpload // Même permission pour flasher
+
+  // États pour le déploiement
+  const [selectedFirmwareVersion, setSelectedFirmwareVersion] = useState('')
+  const [selectedFirmwareForFlash, setSelectedFirmwareForFlash] = useState(null)
+  const [otaDeploying, setOtaDeploying] = useState({})
+  const [flashMessage, setFlashMessage] = useState(null)
+  const [flashError, setFlashError] = useState(null)
+  const [showFlashUSBModal, setShowFlashUSBModal] = useState(false)
+  const [deviceForFlash, setDeviceForFlash] = useState(null)
 
   // Compiler le firmware avec logs en direct (déclaré EN PREMIER car utilisé par handleUpload)
   const handleCompile = useCallback(async (uploadId) => {
     if (!uploadId) return
 
     setCompiling(true)
+    setCurrentStep('compilation')
     setCompileLogs([])
     setCompileProgress(0)
     setError(null)
@@ -88,7 +116,9 @@ export default function FirmwareUploadPage() {
           } else if (data.type === 'success') {
             setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
             setCompiling(false)
-            setCompileProgress(0) // Réinitialiser la barre de progression
+            setCurrentStep(null)
+            setCompileProgress(0)
+            setUploadProgress(0)
             if (eventSourceRef.current) {
               eventSourceRef.current.close()
               eventSourceRef.current = null
@@ -97,7 +127,9 @@ export default function FirmwareUploadPage() {
           } else if (data.type === 'error') {
             setError(data.message || 'Erreur lors de la compilation')
             setCompiling(false)
-            setCompileProgress(0) // Réinitialiser la barre de progression
+            setCurrentStep(null)
+            setCompileProgress(0)
+            setUploadProgress(0)
             if (eventSourceRef.current) {
               eventSourceRef.current.close()
               eventSourceRef.current = null
@@ -112,7 +144,9 @@ export default function FirmwareUploadPage() {
         logger.error('EventSource error:', err)
         setError('Erreur de connexion lors de la compilation. Vérifiez votre connexion et que le serveur est accessible.')
         setCompiling(false)
-        setCompileProgress(0) // Réinitialiser la barre de progression
+        setCurrentStep(null)
+        setCompileProgress(0)
+        setUploadProgress(0)
         if (eventSourceRef.current) {
           eventSourceRef.current.close()
           eventSourceRef.current = null
@@ -123,7 +157,9 @@ export default function FirmwareUploadPage() {
       logger.error('Erreur lors du démarrage de la compilation:', err)
       setError(err.message || 'Erreur lors du démarrage de la compilation')
       setCompiling(false)
-      setCompileProgress(0) // Réinitialiser la barre de progression
+      setCurrentStep(null)
+      setCompileProgress(0)
+      setUploadProgress(0)
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
@@ -148,9 +184,11 @@ export default function FirmwareUploadPage() {
 
     logger.log('📤 Démarrage upload firmware:', fileToUpload.name, `(${(fileToUpload.size / 1024).toFixed(2)} KB)`)
     setUploading(true)
+    setCurrentStep('upload')
     setError(null)
     setSuccess(null)
     setUploadProgress(0)
+    setCompileProgress(0)
 
     try {
       const formData = new FormData()
@@ -200,13 +238,7 @@ export default function FirmwareUploadPage() {
           logger.log('✅ Réponse API parsée:', response)
           
           if (response.success) {
-            setSuccess('✅ Fichier .ino uploadé avec succès')
             setUploadedFirmware(response)
-            
-            // Réinitialiser la barre de progression après un court délai
-            setTimeout(() => {
-              setUploadProgress(0)
-            }, 1000)
             
             // Vérifier que l'ID est présent
             const firmwareId = response.upload_id || response.firmware_id
@@ -214,8 +246,14 @@ export default function FirmwareUploadPage() {
               logger.error('❌ Aucun ID de firmware dans la réponse:', response)
               setError('Réponse invalide: ID de firmware manquant')
               setUploading(false)
+              setCurrentStep(null)
+              setUploadProgress(0)
               return
             }
+            
+            // Upload terminé, passer à la compilation
+            setUploadProgress(100)
+            setUploading(false)
             
             logger.log('🚀 Démarrage compilation automatique dans 500ms pour ID:', firmwareId)
             
@@ -225,6 +263,7 @@ export default function FirmwareUploadPage() {
               handleCompile(firmwareId)
             }, 500)
           } else {
+            // Vérifier si c'est une erreur de version existante (ne devrait pas arriver ici car géré dans le else)
             const errorMsg = response.error || 'Erreur lors de l\'upload'
             setError(errorMsg)
             logger.error('❌ Erreur upload:', errorMsg)
@@ -242,10 +281,12 @@ export default function FirmwareUploadPage() {
           }
         }
         setUploading(false)
+        setCurrentStep(null)
         // Réinitialiser la barre de progression après un court délai en cas d'erreur
         if (xhr.status !== 200) {
           setTimeout(() => {
             setUploadProgress(0)
+            setCompileProgress(0)
           }, 1000)
         }
       })
@@ -261,8 +302,10 @@ export default function FirmwareUploadPage() {
         })
         setError('Erreur réseau lors de l\'upload. Vérifiez votre connexion et que le serveur est accessible.')
         setUploading(false)
+        setCurrentStep(null)
         setTimeout(() => {
           setUploadProgress(0)
+          setCompileProgress(0)
         }, 1000)
       })
       
@@ -273,6 +316,7 @@ export default function FirmwareUploadPage() {
       xhr.addEventListener('abort', () => {
         logger.warn('⚠️ Upload annulé (abort)')
         setUploading(false)
+        setCurrentStep(null)
       })
 
       xhr.addEventListener('timeout', () => {
@@ -281,9 +325,11 @@ export default function FirmwareUploadPage() {
         logger.error('⏱️ Response partielle:', xhr.responseText?.substring(0, 200))
         setError('La requête a pris trop de temps (30s). Vérifiez votre connexion ou la taille du fichier.')
         setUploading(false)
+        setCurrentStep(null)
         xhr.abort()
         setTimeout(() => {
           setUploadProgress(0)
+          setCompileProgress(0)
         }, 1000)
       })
 
@@ -293,8 +339,10 @@ export default function FirmwareUploadPage() {
           setError('Upload annulé')
         }
         setUploading(false)
+        setCurrentStep(null)
         setTimeout(() => {
           setUploadProgress(0)
+          setCompileProgress(0)
         }, 1000)
       })
 
@@ -313,30 +361,143 @@ export default function FirmwareUploadPage() {
       logger.error('❌ Exception lors de l\'upload:', err)
       setError(err.message || 'Erreur lors de l\'upload')
       setUploading(false)
+      setCurrentStep(null)
       setTimeout(() => {
         setUploadProgress(0)
+        setCompileProgress(0)
       }, 1000)
     }
   }, [selectedFile, canUpload, API_URL, handleCompile, token])
 
-  // Gérer la sélection de fichier et démarrer automatiquement l'upload
-  const handleFileSelect = useCallback((e) => {
+  // Extraire la version depuis le fichier .ino
+  const extractVersionFromIno = async (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const content = e.target.result
+        // Chercher FIRMWARE_VERSION_STR ou FIRMWARE_VERSION
+        const match1 = content.match(/FIRMWARE_VERSION_STR\s+"([^"]+)"/)
+        const match2 = content.match(/FIRMWARE_VERSION\s*=\s*"([^"]+)"/)
+        const version = match1 ? match1[1] : (match2 ? match2[1] : null)
+        resolve(version)
+      }
+      reader.onerror = reject
+      reader.readAsText(file)
+    })
+  }
+
+  // Vérifier si la version existe déjà
+  const checkVersionExists = async (version) => {
+    try {
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/firmwares/check-version/${encodeURIComponent(version)}`,
+        { method: 'GET' },
+        { requiresAuth: true }
+      )
+      
+      // Si l'endpoint retourne 404, c'est un problème système (endpoint non trouvé)
+      if (response.status === 404) {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || 'Endpoint de vérification non disponible'
+        logger.error('Erreur 404 lors de la vérification version:', errorMessage)
+        throw new Error(`Erreur système: ${errorMessage}`)
+      }
+      
+      // Vérifier le statut HTTP
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || `Erreur HTTP ${response.status}`
+        logger.error('Erreur lors de la vérification version:', errorMessage)
+        throw new Error(errorMessage)
+      }
+      
+      const data = await response.json()
+      
+      // Vérifier le succès de l'opération
+      if (!data.success) {
+        const errorMessage = data.error || 'Erreur API'
+        logger.error('Erreur API lors de la vérification version:', errorMessage)
+        throw new Error(errorMessage)
+      }
+      
+      logger.log('Vérification version:', version, 'existe:', data.exists)
+      return data.exists ? data.firmware : null
+    } catch (err) {
+      logger.error('Erreur vérification version:', err)
+      // Relancer l'erreur pour que handleFileSelect puisse la gérer
+      throw err
+    }
+  }
+
+  // Gérer la sélection de fichier et vérifier la version AVANT upload
+  const handleFileSelect = useCallback(async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.name.endsWith('.ino')) {
-      setSelectedFile(file)
-      setError(null)
-      setSuccess(null)
-      // Démarrer automatiquement l'upload après sélection
+    if (!file.name.endsWith('.ino')) {
+      setError('Seuls les fichiers .ino sont acceptés')
+      setSelectedFile(null)
+      return
+    }
+
+    setSelectedFile(file)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      // Extraire la version du fichier
+      const version = await extractVersionFromIno(file)
+      if (!version) {
+        setError('Version non trouvée dans le fichier .ino. Assurez-vous que FIRMWARE_VERSION_STR est défini.')
+        setSelectedFile(null)
+        return
+      }
+
+      // Vérifier si la version existe déjà
+      let existingFirmware = null
+      try {
+        existingFirmware = await checkVersionExists(version)
+      } catch (err) {
+        // Si c'est une erreur 404 (endpoint non disponible), continuer quand même l'upload
+        // mais afficher un avertissement
+        if (err.message?.includes('404') || err.message?.includes('Endpoint not found')) {
+          logger.warn('Endpoint de vérification non disponible, continuation de l\'upload sans vérification')
+          setError('⚠️ L\'endpoint de vérification n\'est pas disponible. L\'upload continue sans vérification de version existante.')
+          // Ne pas bloquer, continuer l'upload
+          existingFirmware = null
+        } else {
+          // Pour les autres erreurs, afficher l'erreur mais permettre quand même l'upload
+          logger.error('Erreur lors de la vérification de version:', err)
+          setError(`⚠️ Erreur lors de la vérification: ${err.message}. L'upload continue.`)
+          existingFirmware = null
+        }
+      }
+      
+      logger.log('Résultat vérification version:', { version, existingFirmware })
+      if (existingFirmware) {
+        logger.log('Version existe déjà, affichage du modal')
+        setExistingFirmware(existingFirmware)
+        setPendingFile(file)
+        setShowVersionExistsModal(true)
+        // Réinitialiser le fichier sélectionné pour permettre de le re-sélectionner
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+        return
+      }
+      
+      logger.log('Version n\'existe pas, démarrage upload')
+
+      // Version n'existe pas, démarrer l'upload
       setTimeout(() => {
         handleUpload(file)
       }, 100)
-    } else {
-      setError('Seuls les fichiers .ino sont acceptés')
+    } catch (err) {
+      logger.error('Erreur lors de la vérification:', err)
+      setError('Erreur lors de la lecture du fichier')
       setSelectedFile(null)
     }
-  }, [handleUpload])
+  }, [handleUpload, fetchWithAuth, API_URL])
 
 
 
@@ -353,31 +514,31 @@ export default function FirmwareUploadPage() {
   if (!canUpload) {
     return (
       <div className="p-6">
-        <ErrorMessage message="Accès refusé. Seuls les administrateurs et techniciens peuvent uploader des firmwares." />
+        <ErrorMessage error="Accès refusé. Seuls les administrateurs et techniciens peuvent uploader des firmwares." />
       </div>
     )
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">📦 Upload & Compilation Firmware</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Upload un fichier .ino, compilez-le en direct et rendez-le disponible pour le flash OTA/USB
-          </p>
+          <h1 className="text-3xl font-bold">Firmware</h1>
+          <p className="text-gray-600 mt-1">Upload et compilation de firmware</p>
         </div>
+        {(usbConnectedDevice || usbVirtualDevice) && (
+          <span className="px-3 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded text-sm font-medium animate-pulse">
+            🔌 USB {usbConnectedDevice ? 'connecté' : usbVirtualDevice ? 'virtuel' : ''}
+          </span>
+        )}
       </div>
 
       {/* Section Upload */}
       <div className="card">
-        <h2 className="text-xl font-semibold mb-4">📤 Upload du fichier .ino</h2>
+        <h2 className="text-xl font-semibold mb-4">Fichier .ino</h2>
         
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Sélectionner un fichier .ino
-            </label>
             <input
               ref={fileInputRef}
               type="file"
@@ -392,58 +553,50 @@ export default function FirmwareUploadPage() {
                 hover:file:bg-primary-600
                 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            {selectedFile && (
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Fichier sélectionné : <strong>{selectedFile.name}</strong> ({(selectedFile.size / 1024).toFixed(2)} KB)
-              </p>
-            )}
           </div>
 
-          {/* Barre de progression Upload - toujours visible */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600 dark:text-gray-400">
-                {uploading ? '⏳ Transfert en cours...' : uploadProgress > 0 ? '✅ Transfert terminé' : 'En attente...'}
-              </span>
-              <span className="font-semibold">{uploadProgress > 0 ? `${uploadProgress}%` : '0%'}</span>
+          {/* Barre de progression unifiée */}
+          {(uploading || compiling || currentStep) && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">
+                  {currentStep === 'upload' && uploading && `📤 Transfert du fichier... ${uploadProgress}%`}
+                  {currentStep === 'upload' && !uploading && uploadProgress === 100 && '✅ Transfert terminé'}
+                  {currentStep === 'compilation' && compiling && `🔨 Compilation en cours... ${compileProgress}%`}
+                  {currentStep === 'compilation' && !compiling && compileProgress === 100 && '✅ Compilation terminée'}
+                  {!currentStep && 'En attente...'}
+                </span>
+                <span className="font-semibold">
+                  {currentStep === 'upload' && `${uploadProgress}%`}
+                  {currentStep === 'compilation' && `${compileProgress}%`}
+                  {!currentStep && '0%'}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                <div
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    currentStep === 'upload' && uploading ? 'bg-primary-500' :
+                    currentStep === 'upload' && uploadProgress === 100 ? 'bg-green-500' :
+                    currentStep === 'compilation' && compiling ? 'bg-blue-500' :
+                    currentStep === 'compilation' && compileProgress === 100 ? 'bg-green-500' :
+                    'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                  style={{ 
+                    width: `${Math.max(0, Math.min(100, currentStep === 'upload' ? uploadProgress : compileProgress))}%` 
+                  }}
+                />
+              </div>
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-              <div
-                className={`h-3 rounded-full transition-all duration-300 ${
-                  uploading ? 'bg-primary-500' : uploadProgress === 100 ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                }`}
-                style={{ width: `${Math.max(0, Math.min(100, uploadProgress))}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Barre de progression Compilation - toujours visible en dessous */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600 dark:text-gray-400">
-                {compiling ? '🔨 Compilation en cours...' : compileProgress > 0 ? '✅ Compilation terminée' : 'En attente...'}
-              </span>
-              <span className="font-semibold">{compileProgress > 0 ? `${compileProgress}%` : '0%'}</span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-              <div
-                className={`h-3 rounded-full transition-all duration-300 ${
-                  compiling ? 'bg-blue-500' : compileProgress === 100 ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                }`}
-                style={{ width: `${Math.max(0, Math.min(100, compileProgress))}%` }}
-              />
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Section Compilation avec logs en direct */}
       {compiling && (
         <div className="card">
-          <h2 className="text-xl font-semibold mb-4">🔨 Compilation en cours...</h2>
+          <h2 className="text-xl font-semibold mb-4">Compilation</h2>
           
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Logs de compilation en direct :</h3>
             <div
               ref={compileLogsRef}
               className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-96 overflow-y-auto"
@@ -465,13 +618,181 @@ export default function FirmwareUploadPage() {
         </div>
       )}
 
+      {/* Modal de confirmation de suppression */}
+      <Modal
+        isOpen={showDeleteConfirmModal}
+        onClose={() => {
+          setShowDeleteConfirmModal(false)
+          setFirmwareToDelete(null)
+        }}
+        title="Confirmer la suppression"
+        maxWidth="max-w-md"
+      >
+        {firmwareToDelete && (
+          <div className="space-y-4">
+            <p className="text-gray-700 dark:text-gray-300">
+              Êtes-vous sûr de vouloir supprimer le firmware <strong>v{firmwareToDelete.version}</strong> ?
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Cette action est irréversible. Le firmware et son fichier seront définitivement supprimés.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirmModal(false)
+                  setFirmwareToDelete(null)
+                }}
+                className="btn-secondary"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={async () => {
+                  if (!firmwareToDelete) return
+                  
+                  setDeletingFirmware(firmwareToDelete.id)
+                  try {
+                    const response = await fetchWithAuth(
+                      `${API_URL}/api.php/firmwares/${firmwareToDelete.id}`,
+                      { method: 'DELETE' },
+                      { requiresAuth: true }
+                    )
+                    
+                    // Si l'endpoint retourne 404, c'est un problème système
+                    if (response.status === 404) {
+                      const errorData = await response.json().catch(() => ({}))
+                      const errorMessage = errorData.error || 'Endpoint de suppression non disponible'
+                      throw new Error(`Erreur système: ${errorMessage}. L'endpoint DELETE n'est pas disponible sur le serveur. Veuillez contacter l'administrateur.`)
+                    }
+                    
+                    if (!response.ok) {
+                      const errorData = await response.json().catch(() => ({}))
+                      throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
+                    }
+                    
+                    const data = await response.json()
+                    if (!data.success) {
+                      throw new Error(data.error || 'Erreur lors de la suppression')
+                    }
+                    
+                    setSuccess(`Firmware v${firmwareToDelete.version} supprimé avec succès`)
+                    setShowDeleteConfirmModal(false)
+                    setFirmwareToDelete(null)
+                    refetch()
+                  } catch (err) {
+                    logger.error('Erreur suppression firmware:', err)
+                    const errorMsg = err.message?.includes('404') || err.message?.includes('Endpoint not found')
+                      ? '⚠️ L\'endpoint de suppression n\'est pas disponible sur le serveur. Le serveur distant doit être mis à jour avec la dernière version du code.'
+                      : `Erreur lors de la suppression : ${err.message}`
+                    setError(errorMsg)
+                    setShowDeleteConfirmModal(false)
+                    setFirmwareToDelete(null)
+                  } finally {
+                    setDeletingFirmware(null)
+                  }
+                }}
+                disabled={deletingFirmware === firmwareToDelete?.id}
+                className="btn-danger"
+              >
+                {deletingFirmware === firmwareToDelete?.id ? '⏳ Suppression...' : '🗑️ Supprimer'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de confirmation si version existe déjà */}
+      {showVersionExistsModal && (
+        <Modal
+          isOpen={showVersionExistsModal}
+          onClose={() => {
+            setShowVersionExistsModal(false)
+            setExistingFirmware(null)
+            setPendingFile(null)
+          }}
+          title="Version de firmware déjà existante"
+          maxWidth="max-w-lg"
+        >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            La version <strong>v{existingFirmware?.version}</strong> existe déjà dans la base de données.
+          </p>
+          
+          {existingFirmware && (
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-600 mb-2">
+                <strong>Firmware existant :</strong>
+              </p>
+              <ul className="text-sm text-gray-600 space-y-1">
+                <li>Version : <strong>v{existingFirmware.version}</strong></li>
+                <li>Date : {new Date(existingFirmware.created_at).toLocaleString('fr-FR')}</li>
+                <li>Fichier : {existingFirmware.file_path}</li>
+              </ul>
+            </div>
+          )}
+          
+          <p className="text-gray-700">
+            Voulez-vous supprimer le firmware existant et le remplacer par le nouveau ?
+          </p>
+          
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => {
+                setShowVersionExistsModal(false)
+                setExistingFirmware(null)
+                setPendingFile(null)
+              }}
+              className="btn-secondary"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={async () => {
+                if (!existingFirmware) return
+                
+                setDeletingFirmware(existingFirmware.id)
+                try {
+                  await fetchJson(
+                    fetchWithAuth,
+                    API_URL,
+                    `/api.php/firmwares/${existingFirmware.id}`,
+                    { method: 'DELETE' },
+                    { requiresAuth: true }
+                  )
+                  
+                  setShowVersionExistsModal(false)
+                  setExistingFirmware(null)
+                  
+                  // Relancer l'upload après suppression
+                  if (pendingFile) {
+                    setTimeout(() => {
+                      handleUpload(pendingFile)
+                    }, 500)
+                  }
+                  setPendingFile(null)
+                  setDeletingFirmware(null)
+                } catch (err) {
+                  setError('Erreur lors de la suppression : ' + err.message)
+                  setDeletingFirmware(null)
+                }
+              }}
+              disabled={deletingFirmware !== null}
+              className="btn-danger"
+            >
+              {deletingFirmware ? 'Suppression...' : 'Supprimer et remplacer'}
+            </button>
+          </div>
+        </div>
+        </Modal>
+      )}
+
       {/* Messages d'erreur et succès */}
-      {error && <ErrorMessage message={error} />}
+      {error && <ErrorMessage error={error} />}
       {success && <SuccessMessage message={success} />}
 
       {/* Liste des firmwares disponibles */}
       <div className="card">
-        <h2 className="text-xl font-semibold mb-4">📋 Firmwares disponibles</h2>
+        <h2 className="text-xl font-semibold mb-4">Firmwares disponibles</h2>
         
         {loading ? (
           <LoadingSpinner />
@@ -494,30 +815,56 @@ export default function FirmwareUploadPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Date
                   </th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody>
                 {firmwares.map((fw) => (
-                  <tr key={fw.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="font-mono font-semibold">v{fw.version}</span>
+                  <tr key={fw.id} className="table-row">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-primary">v{fw.version}</span>
+                        {fw.is_stable ? (
+                          <span className="badge badge-success text-xs">Stable</span>
+                        ) : (
+                          <span className="badge bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 text-xs">Beta</span>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                    <td className="py-3 px-4 text-sm text-gray-600">
                       {(fw.file_size / 1024).toFixed(2)} KB
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {fw.is_stable ? (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                          ✅ Stable
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
-                          ⚠️ Beta
+                    <td className="py-3 px-4">
+                      {fw.status && (
+                        <span className={`badge ${
+                          fw.status === 'pending_compilation' ? 'bg-yellow-100 text-yellow-700' : 
+                          fw.status === 'compiling' ? 'bg-blue-100 text-blue-700' :
+                          fw.status === 'compiled' ? 'badge-success' :
+                          fw.status === 'error' ? 'badge-danger' : 'bg-gray-100 text-gray-700'
+                        } text-xs`}>
+                          {fw.status === 'pending_compilation' ? 'En attente' : 
+                           fw.status === 'compiling' ? 'Compilation' :
+                           fw.status === 'compiled' ? 'Compilé' :
+                           fw.status === 'error' ? 'Erreur' : fw.status}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                    <td className="py-3 px-4 text-sm text-gray-600">
                       {new Date(fw.created_at).toLocaleDateString('fr-FR')}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => {
+                          setFirmwareToDelete(fw)
+                          setShowDeleteConfirmModal(true)
+                        }}
+                        className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors inline-flex items-center justify-center"
+                        title="Supprimer le firmware"
+                      >
+                        <span className="text-lg">🗑️</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -526,6 +873,212 @@ export default function FirmwareUploadPage() {
           </div>
         )}
       </div>
+
+      {/* Section Flash sur dispositifs */}
+      {canFlash && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-semibold">📱 Flasher sur les dispositifs</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Sélectionnez un firmware pour le flasher sur les dispositifs (USB ou OTA)
+              </p>
+            </div>
+          </div>
+
+          {/* Sélection du firmware */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Firmware à flasher</label>
+            <select
+              value={selectedFirmwareForFlash?.id || ''}
+              onChange={(e) => {
+                const fw = firmwares.find(f => f.id === parseInt(e.target.value))
+                setSelectedFirmwareForFlash(fw)
+              }}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
+            >
+              <option value="">-- Sélectionner un firmware --</option>
+              {firmwares
+                .filter(fw => fw.status === 'compiled')
+                .map((fw) => (
+                  <option key={fw.id} value={fw.id}>
+                    v{fw.version} {fw.is_stable ? '(Stable)' : '(Beta)'}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Liste des dispositifs */}
+          {selectedFirmwareForFlash && (
+            <div className="mt-6">
+              <h3 className="font-semibold mb-3">
+                Dispositifs disponibles ({devices.length})
+              </h3>
+              {loading ? (
+                <LoadingSpinner />
+              ) : devices.length === 0 ? (
+                <p className="text-gray-600 dark:text-gray-400">Aucun dispositif disponible</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          Dispositif
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          Version actuelle
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          Statut
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {devices.map((device) => {
+                        const deviceFirmware = device.firmware_version || 'N/A'
+                        const needsUpdate = deviceFirmware !== selectedFirmwareForFlash.version
+                        const isUsbConnected = usbConnectedDevice?.id === device.id
+                        const isUsbVirtual = usbVirtualDevice && !device.id
+                        
+                        return (
+                          <tr key={device.id || `virtual-${device.sim_iccid}`} className="table-row">
+                            <td className="py-3 px-4">
+                              <div>
+                                <p className="font-semibold text-primary">
+                                  {device.device_name || device.sim_iccid || 'Dispositif inconnu'}
+                                </p>
+                                <p className="text-xs text-gray-500 font-mono">{device.sim_iccid}</p>
+                                {isUsbConnected && (
+                                  <span className="inline-block mt-1 px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded text-xs">
+                                    🔌 USB connecté
+                                  </span>
+                                )}
+                                {isUsbVirtual && (
+                                  <span className="inline-block mt-1 px-2 py-0.5 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 rounded text-xs">
+                                    🔌 USB - Non enregistré
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="font-mono text-sm">
+                                {deviceFirmware}
+                                {needsUpdate && (
+                                  <span className="ml-2 text-orange-600 dark:text-orange-400">
+                                    → v{selectedFirmwareForFlash.version}
+                                  </span>
+                                )}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              {device.last_seen ? (
+                                <span className="text-xs text-gray-600">
+                                  Vu il y a {Math.round((new Date() - new Date(device.last_seen)) / (1000 * 60))} min
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">Jamais vu</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex gap-2">
+                                {/* Bouton Flash USB */}
+                                {(isUsbConnected || isUsbVirtual) && (
+                                  <button
+                                    onClick={() => {
+                                      setDeviceForFlash(device)
+                                      setSelectedFirmwareVersion(selectedFirmwareForFlash.version)
+                                      setShowFlashUSBModal(true)
+                                    }}
+                                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors"
+                                    title="Flasher via USB"
+                                  >
+                                    🔌 USB
+                                  </button>
+                                )}
+                                
+                                {/* Bouton Flash OTA */}
+                                {device.id && (
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm(`Déployer le firmware v${selectedFirmwareForFlash.version} sur ${device.device_name || device.sim_iccid} via OTA ?`)) {
+                                        return
+                                      }
+                                      
+                                      try {
+                                        setOtaDeploying(prev => ({ ...prev, [device.id]: true }))
+                                        setFlashError(null)
+                                        
+                                        await fetchJson(
+                                          fetchWithAuth,
+                                          API_URL,
+                                          `/api.php/devices/${device.id}/ota`,
+                                          {
+                                            method: 'POST',
+                                            body: JSON.stringify({ firmware_version: selectedFirmwareForFlash.version })
+                                          },
+                                          { requiresAuth: true }
+                                        )
+                                        
+                                        setFlashMessage(`✅ OTA v${selectedFirmwareForFlash.version} programmé pour ${device.device_name || device.sim_iccid}`)
+                                        await refetch()
+                                      } catch (err) {
+                                        setFlashError(`Erreur OTA pour ${device.device_name || device.sim_iccid}: ${err.message}`)
+                                        logger.error('Erreur OTA:', err)
+                                      } finally {
+                                        setOtaDeploying(prev => {
+                                          const next = { ...prev }
+                                          delete next[device.id]
+                                          return next
+                                        })
+                                      }
+                                    }}
+                                    disabled={otaDeploying[device.id]}
+                                    className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Flasher via OTA (Over-The-Air)"
+                                  >
+                                    {otaDeploying[device.id] ? '⏳...' : '📡 OTA'}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              
+              {flashMessage && (
+                <div className="mt-4">
+                  <SuccessMessage message={flashMessage} onClose={() => setFlashMessage(null)} />
+                </div>
+              )}
+              
+              {flashError && (
+                <div className="mt-4">
+                  <ErrorMessage error={flashError} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal Flash USB */}
+      <FlashUSBModal
+        isOpen={showFlashUSBModal}
+        onClose={() => {
+          setShowFlashUSBModal(false)
+          setDeviceForFlash(null)
+        }}
+        device={deviceForFlash || usbVirtualDevice || usbConnectedDevice}
+        preselectedFirmwareVersion={selectedFirmwareVersion || selectedFirmwareForFlash?.version}
+      />
     </div>
   )
 }
