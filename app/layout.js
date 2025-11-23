@@ -41,9 +41,10 @@ export default function RootLayout({ children }) {
         {isProduction && (
           <>
             <Script id="sw-register" strategy="afterInteractive" dangerouslySetInnerHTML={{
-              __html: `if ('serviceWorker' in navigator) {
-                const swPath = ${JSON.stringify(swPath)};
-                let isUpdating = false;
+              __html: `(function() {
+                if ('serviceWorker' in navigator) {
+                  const swPath = '${swPath.replace(/'/g, "\\'")}';
+                  let isUpdating = false;
                 
                 const registerSW = () => {
                   navigator.serviceWorker.register(swPath).then(registration => {
@@ -117,7 +118,8 @@ export default function RootLayout({ children }) {
                     checkForUpdates();
                   }
                 });
-              }`
+                }
+              })();`
             }} />
           </>
         )}
