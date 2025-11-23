@@ -122,9 +122,15 @@ export default function Login() {
         <div className="text-center mt-4">
           <button
             onClick={async () => {
-              // Protection contre les clics multiples
+              // Protection contre les clics multiples et exécutions automatiques
               if (window._isClearingCache) {
                 console.warn('⚠️ Nettoyage déjà en cours...')
+                return
+              }
+              
+              // Vérifier que c'est bien un clic utilisateur (pas automatique)
+              if (!event || !event.isTrusted) {
+                console.warn('⚠️ Action non autorisée - doit être un clic utilisateur')
                 return
               }
               

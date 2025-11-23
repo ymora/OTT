@@ -22,7 +22,8 @@ const ASSETS = [
 
 // Install: Mettre en cache les assets de base
 self.addEventListener('install', (event) => {
-  self.skipWaiting() // Forcer l'activation immédiate
+  // NE PAS utiliser skipWaiting() automatiquement - éviter les boucles
+  // Le Service Worker sera activé normalement après la fermeture de tous les onglets
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS).catch((err) => {
@@ -43,8 +44,8 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
-      // Prendre le contrôle immédiatement
-      self.clients.claim(),
+      // NE PAS utiliser clients.claim() automatiquement - éviter les boucles
+      // Le Service Worker prendra le contrôle naturellement
       // Supprimer TOUS les anciens caches (pas seulement ott-dashboard-)
       caches.keys().then((keys) => {
         const deletePromises = keys
@@ -57,15 +58,8 @@ self.addEventListener('activate', (event) => {
         return Promise.all(deletePromises)
       }).then(() => {
         console.log('[SW] Nettoyage automatique des caches terminé')
-        // Notifier tous les clients que le cache a été nettoyé
-        return self.clients.matchAll().then((clients) => {
-          clients.forEach((client) => {
-            client.postMessage({
-              type: 'CACHE_CLEARED',
-              version: CACHE_VERSION
-            })
-          })
-        })
+        // NE PAS envoyer de message CACHE_CLEARED automatiquement
+        // Le nettoyage doit être uniquement manuel via le bouton
       })
     ])
   )
