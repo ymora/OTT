@@ -3350,8 +3350,89 @@ function handleGetFirmwares() {
             ORDER BY fv.created_at DESC
         ");
         $stmt->execute();
-        echo json_encode(['success' => true, 'firmwares' => $stmt->fetchAll()]);
+        $firmwares = $stmt->fetchAll();
+        
+        // Vérifier que chaque fichier existe vraiment sur le disque
+        $verifiedFirmwares = [];
+        foreach ($firmwares as $firmware) {
+            $file_exists = false;
+            $file_path_absolute = null;
+            $file_size_actual = null;
+            
+            if (!empty($firmware['file_path'])) {
+                // Essayer plusieurs chemins possibles
+                $test_paths = [
+                    $firmware['file_path'],
+                    __DIR__ . '/' . $firmware['file_path'],
+                ];
+                
+                // Si le chemin contient hardware/firmware/, essayer aussi sans préfixe
+                if (preg_match('#^hardware/firmware/#', $firmware['file_path'])) {
+                    $relative_path = preg_replace('#^hardware/firmware/#', '', $firmware['file_path']);
+                    $test_paths[] = __DIR__ . '/hardware/firmware/' . $relative_path;
+                }
+                
+                foreach ($test_paths as $test_path) {
+                    if (file_exists($test_path) && is_file($test_path)) {
+                        $file_exists = true;
+                        $file_path_absolute = $test_path;
+                        $file_size_actual = filesize($test_path);
+                        
+                        // Log pour diagnostic
+                        if (getenv('DEBUG_ERRORS') === 'true') {
+                            error_log('[handleGetFirmwares] ✅ Fichier trouvé: ' . $test_path . ' (size: ' . $file_size_actual . ')');
+                        }
+                        break;
+                    }
+                }
+                
+                if (!$file_exists) {
+                    // Log pour diagnostic
+                    if (getenv('DEBUG_ERRORS') === 'true') {
+                        error_log('[handleGetFirmwares] ❌ Fichier NON trouvé: ' . $firmware['file_path']);
+                        error_log('[handleGetFirmwares]   Chemins testés: ' . json_encode($test_paths));
+                    }
+                }
+            }
+            
+            // Ajouter les informations de vérification au firmware
+            $firmware['file_exists'] = $file_exists;
+            $firmware['file_path_absolute'] = $file_path_absolute;
+            $file_size_actual = $file_size_actual ?? null;
+            if ($file_size_actual !== null) {
+                $firmware['file_size_actual'] = $file_size_actual;
+                // Vérifier si la taille correspond à celle en base
+                if ($firmware['file_size'] != $file_size_actual) {
+                    $firmware['file_size_mismatch'] = true;
+                    if (getenv('DEBUG_ERRORS') === 'true') {
+                        error_log('[handleGetFirmwares] ⚠️ Taille fichier différente: DB=' . $firmware['file_size'] . ', FS=' . $file_size_actual);
+                    }
+                }
+            }
+            
+            $verifiedFirmwares[] = $firmware;
+        }
+        
+        // Log récapitulatif
+        $total = count($verifiedFirmwares);
+        $existing = count(array_filter($verifiedFirmwares, fn($f) => $f['file_exists']));
+        $missing = $total - $existing;
+        
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleGetFirmwares] 📊 Récapitulatif: ' . $total . ' firmwares, ' . $existing . ' fichiers existants, ' . $missing . ' fichiers manquants');
+        }
+        
+        echo json_encode([
+            'success' => true, 
+            'firmwares' => $verifiedFirmwares,
+            'stats' => [
+                'total' => $total,
+                'files_existing' => $existing,
+                'files_missing' => $missing
+            ]
+        ]);
     } catch(PDOException $e) {
+        error_log('[handleGetFirmwares] ❌ Erreur DB: ' . $e->getMessage());
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
     }

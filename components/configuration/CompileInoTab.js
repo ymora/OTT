@@ -35,6 +35,45 @@ export default function CompileInoTab() {
   )
 
   const firmwares = data?.firmwares?.firmwares || []
+  const firmwareStats = data?.firmwares?.stats || null
+  
+  // Logger les stats pour diagnostic
+  useEffect(() => {
+    if (firmwareStats) {
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('📊 STATS FIRMWARES')
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('   Total firmwares:', firmwareStats.total)
+      logger.log('   Fichiers existants:', firmwareStats.files_existing)
+      logger.log('   Fichiers manquants:', firmwareStats.files_missing)
+      logger.log('═══════════════════════════════════════════════════════')
+    }
+  }, [firmwareStats, logger])
+  
+  // Logger les firmwares avec leur statut file_exists
+  useEffect(() => {
+    if (firmwares.length > 0) {
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('📋 LISTE DES FIRMWARES (avec vérification fichiers)')
+      logger.log('═══════════════════════════════════════════════════════')
+      firmwares.forEach((fw, idx) => {
+        logger.log(`   [${idx + 1}] ID: ${fw.id}, Version: ${fw.version}`)
+        logger.log(`       file_path: ${fw.file_path || 'N/A'}`)
+        logger.log(`       file_exists: ${fw.file_exists ? '✅ OUI' : '❌ NON'}`)
+        if (fw.file_path_absolute) {
+          logger.log(`       file_path_absolute: ${fw.file_path_absolute}`)
+        }
+        if (fw.file_size_actual !== undefined) {
+          logger.log(`       file_size_actual: ${fw.file_size_actual} bytes`)
+        }
+        if (fw.file_size_mismatch) {
+          logger.warn(`       ⚠️ Taille différente: DB=${fw.file_size}, FS=${fw.file_size_actual}`)
+        }
+        logger.log(`       status: ${fw.status || 'N/A'}`)
+      })
+      logger.log('═══════════════════════════════════════════════════════')
+    }
+  }, [firmwares, logger])
   
   // Fonctions utilitaires
   const closeEventSource = useCallback(() => {
