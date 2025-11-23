@@ -24,8 +24,10 @@ export default function CompileInoTab() {
   const [compileWindowMinimized, setCompileWindowMinimized] = useState(false)
   const [compileHistory, setCompileHistory] = useState([]) // Historique des compilations
   const [copySuccess, setCopySuccess] = useState(false)
+  const [compilingFirmwareId, setCompilingFirmwareId] = useState(null)
   const compileLogsRef = useRef(null)
   const eventSourceRef = useRef(null)
+  const reconnectAttemptedRef = useRef(false)
 
   const { data, loading, refetch } = useApiData(
     ['/api.php/firmwares'],
@@ -33,48 +35,151 @@ export default function CompileInoTab() {
   )
 
   const firmwares = data?.firmwares?.firmwares || []
+  
+  // Fonctions utilitaires
+  const closeEventSource = useCallback(() => {
+    eventSourceRef.current?.close()
+    eventSourceRef.current = null
+  }, [])
+  
+  const resetCompilationState = useCallback(() => {
+    setCompiling(false)
+    setCompilingFirmwareId(null)
+    setCurrentStep(null)
+    setCompileProgress(0)
+    closeEventSource()
+  }, [closeEventSource])
+  
+  const addLog = useCallback((message, level = 'info') => {
+    setCompileLogs(prev => {
+      // Ne filtrer que les messages exactement identiques consécutifs
+      const lastLog = prev[prev.length - 1]
+      if (lastLog && lastLog.message === message && lastLog.level === level) {
+        return prev
+      }
+      return [...prev, {
+        timestamp: new Date().toLocaleTimeString('fr-FR'),
+        message,
+        level
+      }]
+    })
+  }, [])
 
   // Compiler le firmware
   const handleCompile = useCallback(async (uploadId) => {
     if (!uploadId) return
+    
+    // Éviter les appels multiples pour le même firmware
+    if (compiling && compilingFirmwareId === uploadId && eventSourceRef.current) {
+      return
+    }
+    
+    // Fermer l'ancienne connexion si elle existe
+    closeEventSource()
 
     setCompiling(true)
+    setCompilingFirmwareId(uploadId)
     setCurrentStep('compilation')
-    setCompileLogs([])
+    // Ajouter un message initial immédiatement pour qu'il s'affiche
+    setCompileLogs([{
+      timestamp: new Date().toLocaleTimeString('fr-FR'),
+      message: '⏳ Connexion au serveur...',
+      level: 'info'
+    }])
     setCompileProgress(0)
     setError(null)
     setSuccess(null)
+    reconnectAttemptedRef.current = false
 
     try {
       if (!token) {
         throw new Error('Token manquant. Veuillez vous reconnecter.')
       }
 
-      const eventSource = new EventSource(
-        `${API_URL}/api.php/firmwares/compile/${uploadId}?token=${encodeURIComponent(token)}`
-      )
+      const sseUrl = `${API_URL}/api.php/firmwares/compile/${uploadId}?token=${encodeURIComponent(token)}`
+      logger.log('🔌 Création de l\'EventSource pour firmware:', uploadId)
+      logger.log('🔗 URL SSE:', sseUrl)
+
+      const eventSource = new EventSource(sseUrl)
+      
+      logger.log('📡 EventSource créé, readyState:', eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
 
       eventSourceRef.current = eventSource
 
+      // Log immédiatement l'état de la connexion
+      setTimeout(() => {
+        logger.log('⏱️ Après 100ms, readyState:', eventSource.readyState)
+        if (eventSource.readyState === EventSource.CONNECTING) {
+          logger.log('⚠️ Toujours en connexion après 100ms...')
+        } else if (eventSource.readyState === EventSource.CLOSED) {
+          logger.error('❌ Connexion fermée après 100ms!')
+        }
+      }, 100)
+      
+      // Vérifier aussi après 2 secondes
+      setTimeout(() => {
+        logger.log('⏱️ Après 2s, readyState:', eventSource.readyState)
+        if (eventSource.readyState === EventSource.CONNECTING) {
+          logger.error('❌ Toujours en connexion après 2s - problème de connexion!')
+          setCompileLogs(prev => {
+            const lastMsg = prev[prev.length - 1]?.message
+            if (!lastMsg || !lastMsg.includes('problème de connexion')) {
+              return [...prev, {
+                timestamp: new Date().toLocaleTimeString('fr-FR'),
+                message: '❌ Problème de connexion au serveur - Vérifiez votre connexion réseau',
+                level: 'error'
+              }]
+            }
+            return prev
+          })
+        }
+      }, 2000)
+
       eventSource.onopen = () => {
-        logger.log('✅ Connexion SSE établie')
-        setCompileLogs(prev => [...prev, {
-          timestamp: new Date().toLocaleTimeString('fr-FR'),
-          message: 'Connexion établie, démarrage de la compilation...',
-          level: 'info'
-        }])
+        logger.log('✅ Connexion SSE établie - readyState:', eventSource.readyState)
+        reconnectAttemptedRef.current = false
+        // Mettre à jour le message initial
+        setCompileLogs(prev => {
+          if (prev.length === 1 && prev[0].message.includes('Connexion au serveur')) {
+            return [{
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: '✅ Connexion établie, démarrage de la compilation...',
+              level: 'info'
+            }]
+          }
+          return prev
+        })
       }
 
       eventSource.onmessage = (event) => {
+        logger.log('📥 Message SSE brut reçu:', event.data?.substring(0, 100))
+        
         try {
+          // Ignorer uniquement les messages keep-alive (commentaires SSE qui commencent par :)
+          if (!event.data || event.data.trim() === '' || event.data.trim().startsWith(':')) {
+            logger.log('⏭️ Message ignoré (keep-alive ou vide)')
+            return
+          }
+          
           const data = JSON.parse(event.data)
+          logger.log('📨 Message SSE parsé:', data.type, data.message || data.progress)
           
           if (data.type === 'log') {
-            setCompileLogs(prev => [...prev, { 
-              timestamp: new Date().toLocaleTimeString('fr-FR'),
-              message: data.message,
-              level: data.level || 'info'
-            }])
+            // Ajouter directement le log pour qu'il soit immédiatement visible
+            setCompileLogs(prev => {
+              const newLog = {
+                timestamp: new Date().toLocaleTimeString('fr-FR'),
+                message: data.message,
+                level: data.level || 'info'
+              }
+              // Ne filtrer que les messages exactement identiques consécutifs
+              const lastLog = prev[prev.length - 1]
+              if (lastLog && lastLog.message === newLog.message && lastLog.level === newLog.level) {
+                return prev
+              }
+              return [...prev, newLog]
+            })
+            // Auto-scroll vers le bas
             setTimeout(() => {
               if (compileLogsRef.current) {
                 compileLogsRef.current.scrollTop = compileLogsRef.current.scrollHeight
@@ -83,116 +188,177 @@ export default function CompileInoTab() {
           } else if (data.type === 'progress') {
             setCompileProgress(data.progress || 0)
           } else if (data.type === 'success') {
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: `✅ Compilation réussie ! Firmware v${data.version} disponible`,
+              level: 'info'
+            }])
             setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
-            // Sauvegarder dans l'historique avant de réinitialiser
             setCompileHistory(prev => [...prev, {
               id: Date.now(),
               timestamp: new Date().toISOString(),
-              logs: [...compileLogs],
-              progress: compileProgress,
-              status: 'success',
-              version: data.version
+              version: data.version,
+              status: 'success'
             }])
-            setCompiling(false)
-            setCurrentStep(null)
-            setCompileProgress(0)
-            if (eventSourceRef.current) {
-              eventSourceRef.current.close()
-              eventSourceRef.current = null
-            }
+            resetCompilationState()
             refetch()
           } else if (data.type === 'error') {
-            setError(data.message || 'Erreur lors de la compilation')
-            setCompiling(false)
-            setCurrentStep(null)
-            setCompileProgress(0)
-            if (eventSourceRef.current) {
-              eventSourceRef.current.close()
-              eventSourceRef.current = null
-            }
-          }
-        } catch (err) {
-          logger.error('Erreur parsing EventSource:', err)
-        }
-      }
-
-      eventSource.onerror = (err) => {
-        logger.error('EventSource error:', err)
-        
-        // Vérifier l'état de la connexion
-        if (eventSource.readyState === EventSource.CLOSED) {
-          // Connexion fermée - peut être normale si la compilation est terminée
-          // Vérifier si on a reçu un message de succès ou d'erreur avant
-          const lastLog = compileLogs[compileLogs.length - 1]
-          if (!lastLog || (!lastLog.message.includes('✅') && !lastLog.message.includes('❌'))) {
-            setError('Connexion fermée inattendue. La compilation peut avoir échoué ou pris trop de temps.')
             setCompileLogs(prev => [...prev, {
               timestamp: new Date().toLocaleTimeString('fr-FR'),
-              message: '⚠️ Connexion fermée - Vérifiez l\'état de la compilation dans la liste des firmwares',
+              message: data.message || 'Erreur lors de la compilation',
+              level: 'error'
+            }])
+            setError(data.message || 'Erreur lors de la compilation')
+            resetCompilationState()
+          }
+        } catch (err) {
+          logger.error('❌ Erreur parsing EventSource:', err, 'Data reçu:', event.data)
+          // Afficher le message brut si le parsing échoue
+          if (event.data && event.data.trim() && !event.data.trim().startsWith(':')) {
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: `⚠️ Message non parsé: ${event.data.substring(0, 100)}`,
               level: 'warning'
             }])
           }
-        } else if (eventSource.readyState === EventSource.CONNECTING) {
-          // En train de se reconnecter
-          setCompileLogs(prev => [...prev, {
-            timestamp: new Date().toLocaleTimeString('fr-FR'),
-            message: '🔄 Reconnexion en cours...',
-            level: 'info'
-          }])
-          return // Ne pas fermer, laisser la reconnexion se faire
+        }
+      }
+
+      eventSource.onerror = (error) => {
+        const state = eventSource.readyState
+        logger.error('❌ EventSource error détecté!')
+        logger.error('   ReadyState:', state, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
+        logger.error('   Error object:', error)
+        logger.error('   URL:', sseUrl)
+        
+        // Afficher aussi dans les logs de compilation pour que l'utilisateur le voie
+        setCompileLogs(prev => {
+          const errorMsg = state === EventSource.CLOSED 
+            ? '❌ Connexion fermée - Impossible de se connecter au serveur'
+            : state === EventSource.CONNECTING
+            ? '🔄 Tentative de reconnexion...'
+            : '⚠️ Erreur de connexion au serveur'
+          
+          const lastMsg = prev[prev.length - 1]?.message
+          if (!lastMsg || !lastMsg.includes(errorMsg)) {
+            return [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: errorMsg,
+              level: 'error'
+            }]
+          }
+          return prev
+        })
+        
+        if (state === EventSource.CLOSED) {
+          setCompileLogs(prev => {
+            const lastLog = prev[prev.length - 1]
+            const hasFinalMessage = lastLog && (lastLog.message.includes('✅') || lastLog.message.includes('❌'))
+            
+            if (hasFinalMessage) {
+              resetCompilationState()
+              return prev
+            }
+            
+            const warningMsg = '⚠️ Connexion fermée - La compilation continue en arrière-plan. Revenez sur cet onglet pour voir les logs.'
+            const lastMsg = prev[prev.length - 1]?.message
+            if (!lastMsg || !lastMsg.includes('Connexion fermée')) {
+              return [...prev, {
+                timestamp: new Date().toLocaleTimeString('fr-FR'),
+                message: warningMsg,
+                level: 'warning'
+              }]
+            }
+            return prev
+          })
+        } else if (state === EventSource.CONNECTING) {
+          logger.log('🔄 EventSource se reconnecte...')
+          setCompileLogs(prev => {
+            const lastMsg = prev[prev.length - 1]?.message
+            if (!lastMsg || !lastMsg.includes('Reconnexion')) {
+              return [...prev, {
+                timestamp: new Date().toLocaleTimeString('fr-FR'),
+                message: '🔄 Reconnexion en cours...',
+                level: 'info'
+              }]
+            }
+            return prev
+          })
+          return
         } else {
-          // Erreur de connexion
-          setError('Erreur de connexion lors de la compilation. La compilation peut toujours être en cours sur le serveur.')
-          setCompileLogs(prev => [...prev, {
-            timestamp: new Date().toLocaleTimeString('fr-FR'),
-            message: '⚠️ Erreur de connexion - Vérifiez l\'état de la compilation dans la liste des firmwares',
-            level: 'error'
-          }])
+          logger.log('⚠️ EventSource en état OPEN mais avec erreur')
+          setCompileLogs(prev => {
+            const lastMsg = prev[prev.length - 1]?.message
+            if (!lastMsg || !lastMsg.includes('Erreur de connexion')) {
+              return [...prev, {
+                timestamp: new Date().toLocaleTimeString('fr-FR'),
+                message: '⚠️ Erreur de connexion - La compilation continue sur le serveur. Vérifiez l\'état dans la liste des firmwares.',
+                level: 'warning'
+              }]
+            }
+            return prev
+          })
         }
         
-        setCompiling(false)
-        setCurrentStep(null)
-        setCompileProgress(0)
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close()
-          eventSourceRef.current = null
-        }
-        
-        // Rafraîchir la liste des firmwares pour voir l'état actuel
-        setTimeout(() => {
-          refetch()
-        }, 2000)
+        setTimeout(() => refetch(), 2000)
       }
 
     } catch (err) {
       logger.error('Erreur lors du démarrage de la compilation:', err)
       setError(err.message || 'Erreur lors du démarrage de la compilation')
-      setCompiling(false)
-      setCurrentStep(null)
-      setCompileProgress(0)
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
-      }
+      resetCompilationState()
     }
-  }, [API_URL, refetch, token, compileLogs, compileProgress])
+  }, [API_URL, token, compiling, compilingFirmwareId, closeEventSource, resetCompilationState, addLog])
 
-  // Nettoyer EventSource au démontage
+  // Ne pas fermer l'EventSource au démontage si une compilation est en cours
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
+      if (eventSourceRef.current && !compiling) {
+        closeEventSource()
       }
     }
-  }, [])
+  }, [compiling, closeEventSource])
+  
+  // Reconnexion automatique si une compilation est en cours
+  useEffect(() => {
+    if (compiling || eventSourceRef.current) return
+    
+    const compilingFirmware = firmwares.find(fw => fw.status === 'compiling')
+    
+    if (compilingFirmware) {
+      const firmwareId = compilingFirmware.id
+      if (reconnectAttemptedRef.current !== firmwareId) {
+        reconnectAttemptedRef.current = firmwareId
+        setCompilingFirmwareId(firmwareId)
+        handleCompile(firmwareId)
+      }
+    } else if (compilingFirmwareId) {
+      reconnectAttemptedRef.current = false
+    }
+  }, [firmwares, compiling, compilingFirmwareId, handleCompile])
+  
+  // Polling de secours si pas de connexion SSE active
+  useEffect(() => {
+    if (!compiling || eventSourceRef.current) return
+    
+    const pollingInterval = setInterval(() => {
+      refetch().then(() => {
+        const compilingFirmware = firmwares.find(fw => fw.id === compilingFirmwareId && fw.status === 'compiling')
+        if (!compilingFirmware && compilingFirmwareId) {
+          resetCompilationState()
+        }
+      })
+    }, 5000)
+    
+    return () => clearInterval(pollingInterval)
+  }, [compiling, compilingFirmwareId, firmwares, refetch, resetCompilationState])
 
   // Auto-scroll des logs
   useEffect(() => {
-    if (compileLogsRef.current && compiling) {
+    if (compileLogsRef.current && compiling && compileLogs.length > 0) {
       compileLogsRef.current.scrollTop = compileLogsRef.current.scrollHeight
     }
-  }, [compileLogs, compiling])
+  }, [compileLogs.length, compiling])
 
   // Copier les logs de compilation
   const handleCopyLogs = useCallback(() => {

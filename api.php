@@ -669,16 +669,14 @@ $path = parseRequestPath();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 // Définir Content-Type selon le type de route
-// Vérifier si c'est une route SSE avant de définir le header
-$isSSERoute = preg_match('#/firmwares/compile/(\d+)$#', $path) && $method === 'GET';
-if ($isSSERoute && $method !== 'OPTIONS') {
-    // Pour SSE, définir le Content-Type immédiatement (sauf pour OPTIONS qui n'a pas de body)
-    header('Content-Type: text/event-stream');
-    header('Cache-Control: no-cache');
-    header('Connection: keep-alive');
-    header('X-Accel-Buffering: no');
-} elseif (!$isSSERoute && $method !== 'OPTIONS') {
-    header('Content-Type: application/json; charset=utf-8');
+// ATTENTION: Pour SSE, les headers sont définis dans handleCompileFirmware() APRÈS l'authentification
+// Définir Content-Type selon le type de route
+// Pour SSE, les headers sont définis dans handleCompileFirmware() APRÈS l'authentification
+if ($method !== 'OPTIONS') {
+    $isSSERoute = preg_match('#/firmwares/compile/(\d+)$#', $path) && $method === 'GET';
+    if (!$isSSERoute) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
 }
 
 // Auth
@@ -754,6 +752,7 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 } elseif($method === 'GET' && preg_match('#^/firmwares/check-version/([^/]+)$#', $path, $matches)) {
     handleCheckFirmwareVersion($matches[1]);
 } elseif($method === 'GET' && preg_match('#^/firmwares/compile/(\d+)$#', $path, $matches)) {
+    error_log('[ROUTER] Route GET /firmwares/compile/' . $matches[1] . ' matchée - Path: ' . $path);
     handleCompileFirmware($matches[1]);
 } elseif($method === 'GET' && preg_match('#^/firmwares/(\d+)/download$#', $path, $matches)) {
     handleDownloadFirmware($matches[1]);

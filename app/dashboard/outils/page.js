@@ -76,13 +76,23 @@ export default function OutilsPage() {
         </nav>
       </div>
 
-      {/* Contenu des onglets */}
+      {/* Contenu des onglets - Ne pas démonter les composants pour garder les connexions SSE ouvertes */}
       <div className="mt-6">
-        {activeTab === 'ino' && <InoEditorTab />}
-        {activeTab === 'compile' && <CompileInoTab />}
-        {activeTab === 'flash' && <FirmwareFlashTab />}
-        {activeTab === 'configuration' && <DeviceConfigurationTab />}
-        {activeTab === 'streaming' && <UsbStreamingTab />}
+        <div style={{ display: activeTab === 'ino' ? 'block' : 'none' }}>
+          <InoEditorTab />
+        </div>
+        <div style={{ display: activeTab === 'compile' ? 'block' : 'none' }}>
+          <CompileInoTab />
+        </div>
+        <div style={{ display: activeTab === 'flash' ? 'block' : 'none' }}>
+          <FirmwareFlashTab />
+        </div>
+        <div style={{ display: activeTab === 'configuration' ? 'block' : 'none' }}>
+          <DeviceConfigurationTab />
+        </div>
+        <div style={{ display: activeTab === 'streaming' ? 'block' : 'none' }}>
+          <UsbStreamingTab />
+        </div>
       </div>
     </div>
   )
