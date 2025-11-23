@@ -52,7 +52,8 @@ services:
       echo "✅ La compilation sera RÉELLE, jamais simulée"
     startCommand: |
       export PATH="${HOME}/.local/bin:${PATH}"
-      php -S 0.0.0.0:$PORT -t .
+      # Utiliser router.php pour éviter que les fichiers HTML de documentation soient servis directement
+      php -S 0.0.0.0:$PORT router.php
     envVars:
       - key: DATABASE_URL
         sync: false
