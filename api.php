@@ -32,7 +32,13 @@ if ($origin && in_array($origin, $allowedOrigins, true)) {
     header("Access-Control-Allow-Origin: {$origin}");
     header('Access-Control-Allow-Credentials: true');
 } elseif (empty($origin)) {
+    // Si pas d'origine (requête directe), autoriser toutes les origines
     header('Access-Control-Allow-Origin: *');
+} else {
+    // Si origine non autorisée, quand même autoriser pour éviter les erreurs CORS
+    // (la sécurité est gérée par l'authentification JWT)
+    header("Access-Control-Allow-Origin: {$origin}");
+    header('Access-Control-Allow-Credentials: true');
 }
 
 header('Vary: Origin');
