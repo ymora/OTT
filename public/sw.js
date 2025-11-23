@@ -39,23 +39,34 @@ self.addEventListener('message', (event) => {
   }
 })
 
-// Activate: Nettoyer les anciens caches
+// Activate: Nettoyer les anciens caches automatiquement
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       // Prendre le contrôle immédiatement
       self.clients.claim(),
-      // Supprimer tous les anciens caches
-      caches.keys().then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key !== CACHE_NAME && key.startsWith('ott-dashboard-'))
-            .map((key) => {
-              console.log('SW: Suppression de l\'ancien cache', key)
-              return caches.delete(key)
+      // Supprimer TOUS les anciens caches (pas seulement ott-dashboard-)
+      caches.keys().then((keys) => {
+        const deletePromises = keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => {
+            console.log('[SW] Suppression automatique de l\'ancien cache:', key)
+            return caches.delete(key)
+          })
+        console.log(`[SW] ${deletePromises.length} ancien(s) cache(s) à supprimer`)
+        return Promise.all(deletePromises)
+      }).then(() => {
+        console.log('[SW] Nettoyage automatique des caches terminé')
+        // Notifier tous les clients que le cache a été nettoyé
+        return self.clients.matchAll().then((clients) => {
+          clients.forEach((client) => {
+            client.postMessage({
+              type: 'CACHE_CLEARED',
+              version: CACHE_VERSION
             })
-        )
-      )
+          })
+        })
+      })
     ])
   )
 })
