@@ -124,6 +124,33 @@ export default function CompileInoTab() {
         }))
       ])
 
+      // Vérifier si le token est expiré AVANT de créer EventSource
+      if (token) {
+        try {
+          const parts = token.split('.')
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+            const exp = payload.exp
+            const now = Math.floor(Date.now() / 1000)
+            if (exp && exp < now) {
+              const expiredMsg = '❌ Token expiré! Veuillez vous reconnecter.'
+              logger.error(expiredMsg)
+              setCompileLogs(prev => [...prev, {
+                timestamp: new Date().toLocaleTimeString('fr-FR'),
+                message: expiredMsg,
+                level: 'error'
+              }])
+              setError('Token expiré - Veuillez vous reconnecter')
+              resetCompilationState()
+              return
+            }
+            logger.log(`✅ Token valide (expire dans ${Math.floor((exp - now) / 60)} minutes)`)
+          }
+        } catch (e) {
+          logger.warn('⚠️ Impossible de vérifier l\'expiration du token:', e)
+        }
+      }
+
       const eventSource = new EventSource(sseUrl)
       
       logger.log('📡 EventSource créé')
@@ -131,6 +158,10 @@ export default function CompileInoTab() {
       logger.log('   URL:', eventSource.url)
 
       eventSourceRef.current = eventSource
+
+      // Buffer pour capturer les messages même si la connexion se ferme rapidement
+      let messageBuffer = []
+      let hasReceivedMessage = false
 
       // Log immédiatement l'état de la connexion
       // NOTE: Le serveur Render répond en ~350ms, donc on vérifie après 500ms
@@ -158,6 +189,14 @@ export default function CompileInoTab() {
             level: 'info'
           }])
         } else if (state === EventSource.CLOSED) {
+          // Si on a reçu des messages avant la fermeture, les afficher
+          if (messageBuffer.length > 0) {
+            logger.log(`📨 ${messageBuffer.length} message(s) reçu(s) avant fermeture`)
+            messageBuffer.forEach(msg => {
+              logger.log('   Message:', msg)
+            })
+          }
+          
           const errorMsgs = [
             '❌ Connexion fermée après 500ms!',
             '🔍 Causes possibles:',
@@ -234,7 +273,15 @@ export default function CompileInoTab() {
       }
 
       eventSource.onmessage = (event) => {
-        logger.log('📥 [SSE] Message brut reçu:', event.data?.substring(0, 150))
+        hasReceivedMessage = true
+        const rawData = event.data?.substring(0, 150)
+        logger.log('📥 [SSE] Message brut reçu:', rawData)
+        
+        // Ajouter au buffer pour diagnostic
+        messageBuffer.push({
+          timestamp: new Date().toISOString(),
+          data: rawData
+        })
         
         try {
           // Ignorer uniquement les messages keep-alive (commentaires SSE qui commencent par :)
@@ -247,6 +294,20 @@ export default function CompileInoTab() {
           logger.log('📨 [SSE] Message parsé:')
           logger.log('   Type:', data.type)
           logger.log('   Contenu:', data.message || `Progress: ${data.progress}%` || JSON.stringify(data))
+          
+          // Si c'est une erreur d'authentification, afficher immédiatement
+          if (data.type === 'error' && (data.message?.includes('Unauthorized') || data.message?.includes('token'))) {
+            logger.error('🔐 ERREUR D\'AUTHENTIFICATION DÉTECTÉE!')
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: `🔐 ${data.message || 'Erreur d\'authentification'}`,
+              level: 'error'
+            }])
+            setError(data.message || 'Erreur d\'authentification - Veuillez vous reconnecter')
+            resetCompilationState()
+            eventSource.close()
+            return
+          }
           
           if (data.type === 'log') {
             // Ajouter directement le log pour qu'il soit immédiatement visible
@@ -310,11 +371,22 @@ export default function CompileInoTab() {
 
       eventSource.onerror = (error) => {
         const state = eventSource.readyState
+        
+        // Afficher les messages reçus avant l'erreur
+        if (messageBuffer.length > 0) {
+          logger.log(`📨 Messages reçus avant erreur: ${messageBuffer.length}`)
+          messageBuffer.forEach((msg, idx) => {
+            logger.log(`   [${idx + 1}] ${msg.timestamp}: ${msg.data.substring(0, 100)}`)
+          })
+        }
+        
         const errorLogs = [
           '═══════════════════════════════════════════════════════',
           '❌ ERREUR EVENTSOURCE DÉTECTÉE!',
           '═══════════════════════════════════════════════════════',
           `   ReadyState: ${state} (0=CONNECTING, 1=OPEN, 2=CLOSED)`,
+          `   Messages reçus: ${messageBuffer.length}`,
+          `   HasReceivedMessage: ${hasReceivedMessage}`,
           `   Timestamp: ${new Date().toISOString()}`,
           '═══════════════════════════════════════════════════════'
         ]
@@ -327,11 +399,19 @@ export default function CompileInoTab() {
         
         // Afficher aussi dans les logs de compilation pour que l'utilisateur le voie
         setCompileLogs(prev => {
-          const errorMsg = state === EventSource.CLOSED 
-            ? '❌ Connexion fermée - Impossible de se connecter au serveur'
-            : state === EventSource.CONNECTING
-            ? '🔄 Tentative de reconnexion...'
-            : '⚠️ Erreur de connexion au serveur'
+          let errorMsg = ''
+          if (state === EventSource.CLOSED) {
+            if (hasReceivedMessage && messageBuffer.length > 0) {
+              // Si on a reçu des messages, c'est probablement une erreur d'auth
+              errorMsg = '❌ Connexion fermée - Vérifiez votre authentification (token peut être expiré)'
+            } else {
+              errorMsg = '❌ Connexion fermée - Impossible de se connecter au serveur'
+            }
+          } else if (state === EventSource.CONNECTING) {
+            errorMsg = '🔄 Tentative de reconnexion...'
+          } else {
+            errorMsg = '⚠️ Erreur de connexion au serveur'
+          }
           
           const lastMsg = prev[prev.length - 1]?.message
           if (!lastMsg || !lastMsg.includes(errorMsg)) {
