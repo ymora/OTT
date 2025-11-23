@@ -4169,6 +4169,11 @@ function handleCompileFirmware($firmware_id) {
     global $pdo;
     requireAuth();
     
+    // CRITIQUE: Ignorer l'arrêt du script si la connexion client se ferme
+    // Cela garantit que la compilation continue même si l'utilisateur change d'onglet
+    ignore_user_abort(true);
+    set_time_limit(0); // Pas de limite de temps pour la compilation
+    
     // Désactiver la mise en buffer pour SSE
     while (ob_get_level() > 0) {
         ob_end_clean();
@@ -4201,7 +4206,16 @@ function handleCompileFirmware($firmware_id) {
             return;
         }
         
-        if ($firmware['status'] !== 'pending_compilation') {
+        // Marquer immédiatement comme "compiling" dans la base de données
+        // Cela permet de savoir que la compilation est en cours même si la connexion SSE se ferme
+        $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = :id")->execute(['id' => $firmware_id]);
+        
+        if ($firmware['status'] !== 'pending_compilation' && $firmware['status'] !== 'compiling') {
+            // Remettre le statut d'origine si on ne peut pas compiler
+            $pdo->prepare("UPDATE firmware_versions SET status = :status WHERE id = :id")->execute([
+                'status' => $firmware['status'],
+                'id' => $firmware_id
+            ]);
             sendSSE('error', 'Firmware already compiled or invalid status: ' . ($firmware['status'] ?? 'unknown'));
             flush();
             return;
@@ -4258,6 +4272,20 @@ function handleCompileFirmware($firmware_id) {
         }
         
         if (!$ino_path || !file_exists($ino_path)) {
+            // Marquer le firmware comme erreur dans la base de données
+            try {
+                $errorMsg = 'Fichier .ino introuvable: ' . $firmware['file_path'];
+                $pdo->prepare("
+                    UPDATE firmware_versions 
+                    SET status = 'error', error_message = :error_msg
+                    WHERE id = :id
+                ")->execute([
+                    'error_msg' => $errorMsg,
+                    'id' => $firmware_id
+                ]);
+            } catch(PDOException $dbErr) {
+                error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+            }
             sendSSE('error', 'Fichier .ino introuvable: ' . $firmware['file_path']);
             sendSSE('log', 'error', 'Version: ' . $firmware['version'] . ', ID: ' . $firmware_id);
             sendSSE('log', 'error', 'Dossier recherché: hardware/firmware/' . getVersionDir($firmware['version']) . '/');
@@ -4374,18 +4402,31 @@ function handleCompileFirmware($firmware_id) {
                     foreach ($lib_dirs as $lib_dir) {
                         $lib_name = basename($lib_dir);
                         
-                        // Copier dans le dossier libraries du build (temporaire)
-                        $target_lib_dir_build = $libraries_dir . '/' . $lib_name;
-                        if (!is_dir($target_lib_dir_build)) {
-                            copyRecursive($lib_dir, $target_lib_dir_build);
-                            sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
-                        }
-                        
-                        // Copier dans arduino-data/libraries (persistant, pour réutilisation)
+                        // Copier dans arduino-data/libraries (persistant, pour réutilisation) - une seule fois
                         $target_lib_dir_persistent = $arduinoDataLibrariesDir . '/' . $lib_name;
                         if (!is_dir($target_lib_dir_persistent)) {
                             copyRecursive($lib_dir, $target_lib_dir_persistent);
                             sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' installée dans arduino-data/libraries');
+                        }
+                        
+                        // Créer un lien symbolique depuis le build vers la librairie persistante (plus rapide que copier)
+                        // Si les liens symboliques ne fonctionnent pas, copier seulement si nécessaire
+                        $target_lib_dir_build = $libraries_dir . '/' . $lib_name;
+                        if (!is_dir($target_lib_dir_build) && !is_link($target_lib_dir_build)) {
+                            // Essayer d'abord un lien symbolique (plus rapide)
+                            if (!is_windows()) {
+                                if (symlink($target_lib_dir_persistent, $target_lib_dir_build)) {
+                                    sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' liée dans le build');
+                                } else {
+                                    // Fallback: copie si le lien symbolique échoue
+                                    copyRecursive($lib_dir, $target_lib_dir_build);
+                                    sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
+                                }
+                            } else {
+                                // Windows: copier directement (pas de liens symboliques fiables)
+                                copyRecursive($lib_dir, $target_lib_dir_build);
+                                sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
+                            }
                         }
                     }
                     flush();
@@ -4433,10 +4474,25 @@ function handleCompileFirmware($firmware_id) {
                 sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
                 sendSSE('progress', 42);
                 
-                // Mettre à jour l'index puis installer le core
-                exec($envStr . $arduinoCli . ' core update-index 2>&1', $updateIndexOutput, $updateIndexReturn);
-                if ($updateIndexReturn !== 0) {
-                    sendSSE('log', 'warning', 'Avertissement lors de la mise à jour de l\'index');
+                // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
+                $indexFile = $arduinoDataDir . '/package_index.json';
+                $shouldUpdateIndex = true;
+                if (file_exists($indexFile)) {
+                    $indexAge = time() - filemtime($indexFile);
+                    // Mettre à jour l'index seulement s'il a plus de 24h
+                    if ($indexAge < 86400) {
+                        $shouldUpdateIndex = false;
+                        sendSSE('log', 'info', '✅ Index des cores récent (moins de 24h), pas besoin de mise à jour');
+                    }
+                }
+                
+                // Mettre à jour l'index seulement si nécessaire
+                if ($shouldUpdateIndex) {
+                    sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
+                    exec($envStr . $arduinoCli . ' core update-index 2>&1', $updateIndexOutput, $updateIndexReturn);
+                    if ($updateIndexReturn !== 0) {
+                        sendSSE('log', 'warning', 'Avertissement lors de la mise à jour de l\'index');
+                    }
                 }
                 
                 sendSSE('log', 'info', 'Installation du core ESP32...');
@@ -4502,6 +4558,16 @@ function handleCompileFirmware($firmware_id) {
                         if (time() - $lastOutputTime > 600) {
                             sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
                             sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
+                            // Marquer le firmware comme erreur dans la base de données
+                            try {
+                                $pdo->prepare("
+                                    UPDATE firmware_versions 
+                                    SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32'
+                                    WHERE id = :id
+                                ")->execute(['id' => $firmware_id]);
+                            } catch(PDOException $dbErr) {
+                                error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                            }
                             proc_terminate($process);
                             break;
                         }
@@ -4532,6 +4598,16 @@ function handleCompileFirmware($firmware_id) {
                 }
                 
                 if ($return !== 0) {
+                    // Marquer le firmware comme erreur dans la base de données
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'Erreur lors de l\'installation du core ESP32'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                    }
                     sendSSE('error', 'Erreur lors de l\'installation du core ESP32');
                     flush();
                     return;
@@ -4628,6 +4704,16 @@ function handleCompileFirmware($firmware_id) {
             }
             
             if ($compile_return !== 0) {
+                // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
+                try {
+                    $pdo->prepare("
+                        UPDATE firmware_versions 
+                        SET status = 'error', error_message = 'Erreur lors de la compilation'
+                        WHERE id = :id
+                    ")->execute(['id' => $firmware_id]);
+                } catch(PDOException $dbErr) {
+                    error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
+                }
                 sendSSE('error', 'Erreur lors de la compilation. Vérifiez les logs ci-dessus.');
                 flush();
                 // Nettoyer
@@ -4645,6 +4731,16 @@ function handleCompileFirmware($firmware_id) {
             }
             
             if (empty($bin_files)) {
+                // Marquer le firmware comme erreur dans la base de données
+                try {
+                    $pdo->prepare("
+                        UPDATE firmware_versions 
+                        SET status = 'error', error_message = 'Fichier .bin introuvable après compilation'
+                        WHERE id = :id
+                    ")->execute(['id' => $firmware_id]);
+                } catch(PDOException $dbErr) {
+                    error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                }
                 sendSSE('error', 'Fichier .bin introuvable après compilation');
                 flush();
                 exec('rm -rf ' . escapeshellarg($build_dir));
@@ -4659,6 +4755,16 @@ function handleCompileFirmware($firmware_id) {
             $bin_path = $bin_dir . $bin_filename;
             
             if (!copy($compiled_bin, $bin_path)) {
+                // Marquer le firmware comme erreur dans la base de données
+                try {
+                    $pdo->prepare("
+                        UPDATE firmware_versions 
+                        SET status = 'error', error_message = 'Impossible de copier le fichier .bin compilé'
+                        WHERE id = :id
+                    ")->execute(['id' => $firmware_id]);
+                } catch(PDOException $dbErr) {
+                    error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                }
                 sendSSE('error', 'Impossible de copier le fichier .bin compilé');
                 flush();
                 exec('rm -rf ' . escapeshellarg($build_dir));
@@ -4700,6 +4806,19 @@ function handleCompileFirmware($firmware_id) {
         }
         
     } catch(Exception $e) {
+        // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
+        try {
+            $pdo->prepare("
+                UPDATE firmware_versions 
+                SET status = 'error', error_message = :error
+                WHERE id = :id
+            ")->execute([
+                'error' => 'Erreur: ' . $e->getMessage(),
+                'id' => $firmware_id
+            ]);
+        } catch(PDOException $dbErr) {
+            error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
+        }
         sendSSE('error', 'Erreur: ' . $e->getMessage());
         error_log('[handleCompileFirmware] Exception: ' . $e->getMessage());
         flush();
