@@ -97,30 +97,54 @@ export default function CompileInoTab() {
       }
 
       const sseUrl = `${API_URL}/api.php/firmwares/compile/${uploadId}?token=${encodeURIComponent(token)}`
-      logger.log('🔌 Création de l\'EventSource pour firmware:', uploadId)
-      logger.log('🔗 URL SSE:', sseUrl)
+      
+      // Logs détaillés pour le diagnostic
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('🔌 DÉMARRAGE COMPILATION FIRMWARE')
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('📦 Firmware ID:', uploadId)
+      logger.log('🌐 API URL:', API_URL)
+      logger.log('🔗 URL SSE complète:', sseUrl)
+      logger.log('🔑 Token présent:', !!token, `(${token ? token.length : 0} caractères)`)
+      logger.log('⏰ Timestamp:', new Date().toISOString())
+      logger.log('═══════════════════════════════════════════════════════')
 
       const eventSource = new EventSource(sseUrl)
       
-      logger.log('📡 EventSource créé, readyState:', eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
+      logger.log('📡 EventSource créé')
+      logger.log('   readyState:', eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
+      logger.log('   URL:', eventSource.url)
 
       eventSourceRef.current = eventSource
 
       // Log immédiatement l'état de la connexion
       setTimeout(() => {
-        logger.log('⏱️ Après 100ms, readyState:', eventSource.readyState)
+        logger.log('⏱️ [100ms] État de la connexion:')
+        logger.log('   readyState:', eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
         if (eventSource.readyState === EventSource.CONNECTING) {
-          logger.log('⚠️ Toujours en connexion après 100ms...')
+          logger.log('   ⚠️ Toujours en connexion... (normal si le serveur est lent)')
+        } else if (eventSource.readyState === EventSource.OPEN) {
+          logger.log('   ✅ Connexion ouverte avec succès!')
         } else if (eventSource.readyState === EventSource.CLOSED) {
-          logger.error('❌ Connexion fermée après 100ms!')
+          logger.error('   ❌ Connexion fermée après 100ms!')
+          logger.error('   🔍 Causes possibles:')
+          logger.error('      • Token expiré ou invalide')
+          logger.error('      • Serveur inaccessible')
+          logger.error('      • Erreur d\'authentification')
+          logger.error('      • Timeout du serveur')
         }
       }, 100)
       
       // Vérifier aussi après 2 secondes
       setTimeout(() => {
-        logger.log('⏱️ Après 2s, readyState:', eventSource.readyState)
+        logger.log('⏱️ [2s] État de la connexion:')
+        logger.log('   readyState:', eventSource.readyState)
         if (eventSource.readyState === EventSource.CONNECTING) {
-          logger.error('❌ Toujours en connexion après 2s - problème de connexion!')
+          logger.error('   ❌ Toujours en connexion après 2s - problème de connexion!')
+          logger.error('   🔍 Vérifiez:')
+          logger.error('      • La connexion réseau')
+          logger.error('      • Que le serveur Render est accessible')
+          logger.error('      • Les logs du serveur pour plus de détails')
           setCompileLogs(prev => {
             const lastMsg = prev[prev.length - 1]?.message
             if (!lastMsg || !lastMsg.includes('problème de connexion')) {
@@ -136,7 +160,12 @@ export default function CompileInoTab() {
       }, 2000)
 
       eventSource.onopen = () => {
-        logger.log('✅ Connexion SSE établie - readyState:', eventSource.readyState)
+        logger.log('═══════════════════════════════════════════════════════')
+        logger.log('✅ CONNEXION SSE ÉTABLIE!')
+        logger.log('   readyState:', eventSource.readyState, '(devrait être 1=OPEN)')
+        logger.log('   URL:', eventSource.url)
+        logger.log('   ⏰ Timestamp:', new Date().toISOString())
+        logger.log('═══════════════════════════════════════════════════════')
         reconnectAttemptedRef.current = false
         // Mettre à jour le message initial
         setCompileLogs(prev => {
@@ -152,17 +181,19 @@ export default function CompileInoTab() {
       }
 
       eventSource.onmessage = (event) => {
-        logger.log('📥 Message SSE brut reçu:', event.data?.substring(0, 100))
+        logger.log('📥 [SSE] Message brut reçu:', event.data?.substring(0, 150))
         
         try {
           // Ignorer uniquement les messages keep-alive (commentaires SSE qui commencent par :)
           if (!event.data || event.data.trim() === '' || event.data.trim().startsWith(':')) {
-            logger.log('⏭️ Message ignoré (keep-alive ou vide)')
+            logger.log('⏭️ [SSE] Message ignoré (keep-alive ou vide)')
             return
           }
           
           const data = JSON.parse(event.data)
-          logger.log('📨 Message SSE parsé:', data.type, data.message || data.progress)
+          logger.log('📨 [SSE] Message parsé:')
+          logger.log('   Type:', data.type)
+          logger.log('   Contenu:', data.message || `Progress: ${data.progress}%` || JSON.stringify(data))
           
           if (data.type === 'log') {
             // Ajouter directement le log pour qu'il soit immédiatement visible
@@ -226,10 +257,14 @@ export default function CompileInoTab() {
 
       eventSource.onerror = (error) => {
         const state = eventSource.readyState
-        logger.error('❌ EventSource error détecté!')
+        logger.error('═══════════════════════════════════════════════════════')
+        logger.error('❌ ERREUR EVENTSOURCE DÉTECTÉE!')
+        logger.error('═══════════════════════════════════════════════════════')
         logger.error('   ReadyState:', state, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
         logger.error('   Error object:', error)
         logger.error('   URL:', sseUrl)
+        logger.error('   Timestamp:', new Date().toISOString())
+        logger.error('═══════════════════════════════════════════════════════')
         
         // Afficher aussi dans les logs de compilation pour que l'utilisateur le voie
         setCompileLogs(prev => {
