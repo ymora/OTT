@@ -1,20 +1,8 @@
-// Configuration PostCSS pour Tailwind CSS
-// Détection automatique de la version de Tailwind installée
-let tailwindPlugin = 'tailwindcss'
-
-try {
-  // Essayer d'utiliser @tailwindcss/postcss si disponible (Tailwind v4)
-  require.resolve('@tailwindcss/postcss')
-  tailwindPlugin = '@tailwindcss/postcss'
-  console.log('[PostCSS] Utilisation de @tailwindcss/postcss (Tailwind v4)')
-} catch (e) {
-  // Utiliser tailwindcss classique (Tailwind v3)
-  console.log('[PostCSS] Utilisation de tailwindcss (Tailwind v3)')
-}
-
+// Configuration PostCSS pour Tailwind CSS v3
+// Utilisation de tailwindcss classique (v3) - compatible avec Next.js 14
 module.exports = {
   plugins: {
-    [tailwindPlugin]: {},
+    tailwindcss: {},
     autoprefixer: {},
   },
 }

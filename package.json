@@ -6,7 +6,7 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
-    "export": "cross-env NEXT_STATIC_EXPORT=true NEXT_PUBLIC_BASE_PATH=/OTT next build",
+    "export": "powershell -Command \"$env:NEXT_STATIC_EXPORT='true'; $env:NEXT_PUBLIC_BASE_PATH='/OTT'; $env:NEXT_PUBLIC_API_URL='https://ott-jbln.onrender.com'; $env:NODE_ENV='production'; npx next build\"",
     "deploy": "npm run export",
     "test:connection": "node scripts/test_connection.js",
     "lint": "next lint",
@@ -27,7 +27,6 @@
     "react-leaflet": "^4.2.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.17",
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
     "@testing-library/user-event": "^14.5.1",
