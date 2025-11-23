@@ -6,7 +6,7 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
-    "export": "powershell -Command \"$env:NEXT_STATIC_EXPORT='true'; $env:NEXT_PUBLIC_BASE_PATH='/OTT'; $env:NEXT_PUBLIC_API_URL='https://ott-jbln.onrender.com'; $env:NODE_ENV='production'; npx next build\"",
+    "export": "powershell -ExecutionPolicy Bypass -File ./scripts/export_static.ps1",
     "deploy": "npm run export",
     "test:connection": "node scripts/test_connection.js",
     "lint": "next lint",
