@@ -872,14 +872,14 @@ export default function InoEditorTab() {
                 />
                 {isEdited && (
                   <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                    ⚠️ Le fichier a été modifié. N'oubliez pas d'enregistrer !
+                    ⚠️ Le fichier a été modifié. N&apos;oubliez pas d&apos;enregistrer !
                   </p>
                 )}
               </div>
             ) : (
               <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <p className="mb-2">Aucun fichier chargé</p>
-                <p className="text-sm">Sélectionnez un fichier .ino ci-dessus ou cliquez sur un fichier existant pour l'éditer</p>
+                <p className="text-sm">Sélectionnez un fichier .ino ci-dessus ou cliquez sur un fichier existant pour l&apos;éditer</p>
               </div>
             )}
           </div>

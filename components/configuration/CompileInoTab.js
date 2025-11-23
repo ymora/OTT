@@ -465,7 +465,7 @@ export default function CompileInoTab() {
         {loading ? (
           <LoadingSpinner />
         ) : firmwares.length === 0 ? (
-          <p className="text-gray-600 dark:text-gray-400">Aucun firmware disponible. Uploader un fichier .ino dans l'onglet "INO" pour commencer.</p>
+          <p className="text-gray-600 dark:text-gray-400">Aucun firmware disponible. Uploader un fichier .ino dans l&apos;onglet &quot;INO&quot; pour commencer.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
