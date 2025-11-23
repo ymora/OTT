@@ -267,6 +267,39 @@ export default function CompileInoTab() {
       logger.log('   URL:', sseUrl)
       logger.log('   Timestamp avant création:', new Date().toISOString())
       
+      // Vérifier d'abord avec fetch si l'endpoint est accessible
+      logger.log('🔍 [handleCompile] Vérification préalable de l\'endpoint...')
+      try {
+        const testResponse = await fetch(sseUrl, {
+          method: 'HEAD',
+          headers: {
+            'Accept': 'text/event-stream',
+            'Cache-Control': 'no-cache'
+          }
+        }).catch(err => {
+          logger.error('   ❌ Erreur fetch HEAD:', err)
+          return null
+        })
+        
+        if (testResponse) {
+          logger.log('   ✅ Endpoint accessible')
+          logger.log('   Status:', testResponse.status)
+          logger.log('   StatusText:', testResponse.statusText)
+          logger.log('   Headers:', Object.fromEntries(testResponse.headers.entries()))
+          logger.log('   Content-Type:', testResponse.headers.get('content-type'))
+          
+          if (testResponse.status !== 200) {
+            logger.error('   ⚠️ Status HTTP non-200:', testResponse.status)
+            const text = await testResponse.text().catch(() => '')
+            logger.error('   Réponse:', text.substring(0, 200))
+          }
+        } else {
+          logger.warn('   ⚠️ Impossible de vérifier l\'endpoint avec fetch')
+        }
+      } catch (fetchErr) {
+        logger.error('   ❌ Erreur lors de la vérification fetch:', fetchErr)
+      }
+      
       const beforeCreation = performance.now()
       const eventSource = new EventSource(sseUrl)
       const afterCreation = performance.now()
@@ -355,6 +388,8 @@ export default function CompileInoTab() {
           }])
         } else if (state === EventSource.CLOSED) {
           logger.error('   État: CLOSED - Connexion fermée!')
+          logger.error('   Historique readyState:', readyStateHistory)
+          
           // Si on a reçu des messages avant la fermeture, les afficher
           if (messageBuffer.length > 0) {
             logger.log(`   📨 ${messageBuffer.length} message(s) reçu(s) avant fermeture:`)
@@ -363,6 +398,14 @@ export default function CompileInoTab() {
             })
           } else {
             logger.error('   ⚠️  AUCUN MESSAGE REÇU AVANT FERMETURE!')
+            logger.error('   🔍 DIAGNOSTIC:')
+            logger.error('      • Aucun événement onopen déclenché')
+            logger.error('      • Aucun événement onerror déclenché')
+            logger.error('      • Aucun événement onmessage déclenché')
+            logger.error('      • La connexion s\'est fermée immédiatement')
+            logger.error('      • Possible: erreur HTTP avant établissement SSE')
+            logger.error('      • Possible: problème CORS')
+            logger.error('      • Possible: serveur ferme la connexion immédiatement')
           }
           
           const errorMsgs = [
