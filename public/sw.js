@@ -1,5 +1,5 @@
 // Version du cache - incrémenter à chaque déploiement pour forcer la mise à jour
-const CACHE_VERSION = 'v3.0.1'
+const CACHE_VERSION = 'v3.0.2'
 const CACHE_NAME = `ott-dashboard-${CACHE_VERSION}`
 const BASE_PATH = self.location.pathname.replace(/\/sw\.js$/, '')
 
