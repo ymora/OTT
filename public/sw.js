@@ -15,9 +15,9 @@ const ASSETS = [
   withBase('/manifest.json'),
   withBase('/icon-192.png'),
   withBase('/icon-512.png'),
-  withBase('/DOCUMENTATION_PRESENTATION.html'),
-  withBase('/DOCUMENTATION_DEVELOPPEURS.html'),
-  withBase('/DOCUMENTATION_COMMERCIALE.html')
+  withBase('/docs/DOCUMENTATION_PRESENTATION.html'),
+  withBase('/docs/DOCUMENTATION_DEVELOPPEURS.html'),
+  withBase('/docs/DOCUMENTATION_COMMERCIALE.html')
 ]
 
 // Install: Mettre en cache les assets de base

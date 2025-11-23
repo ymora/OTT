@@ -43,15 +43,8 @@ jobs:
         run: |
           echo "Contenu du dossier out/:"
           ls -la out/ | head -20
-          if [ ! -f "out/index.html" ]; then
-            echo "ERREUR: index.html non trouvé dans out/"
-            exit 1
-          fi
-          # Vérifier que le fichier index.html contient bien l'application
-          if ! grep -q "OTT Dashboard" out/index.html; then
-            echo "ERREUR: index.html ne contient pas l'application"
-            exit 1
-          fi
+          # Utiliser le script de vérification dédié
+          bash scripts/deploy/verify-build.sh out
       
       - name: Ensure .nojekyll exists
         run: touch out/.nojekyll
@@ -62,26 +55,41 @@ jobs:
           if [ -f "out/README.md" ]; then
             rm out/README.md
           fi
-          # Déplacer les fichiers HTML de documentation dans un sous-dossier pour éviter les conflits
-          if [ -d "out" ]; then
-            mkdir -p out/docs
-            for doc in DOCUMENTATION_PRESENTATION.html DOCUMENTATION_DEVELOPPEURS.html DOCUMENTATION_COMMERCIALE.html; do
-              if [ -f "out/$doc" ]; then
-                mv "out/$doc" "out/docs/$doc"
-                echo "✅ $doc déplacé dans out/docs/"
-              fi
-            done
+          
+          # PROTECTION: Vérifier qu'il n'y a pas de fichiers HTML à la racine sauf index.html et 404.html
+          echo "🔍 Vérification des fichiers HTML à la racine..."
+          html_files=$(find out -maxdepth 1 -name "*.html" -type f ! -name "index.html" ! -name "404.html")
+          if [ -n "$html_files" ]; then
+            echo "❌ ERREUR: Fichiers HTML trouvés à la racine de out/ (sauf index.html et 404.html):"
+            echo "$html_files"
+            echo "⚠️  Ces fichiers peuvent être servis par GitHub Pages au lieu de index.html"
+            echo "📝 Solution: Déplacer ces fichiers dans un sous-dossier (ex: docs/)"
+            exit 1
+          else
+            echo "✅ Aucun fichier HTML indésirable à la racine"
           fi
+          
           # Vérifier que index.html existe et contient l'application
           if [ -f "out/index.html" ]; then
             echo "✅ index.html trouvé"
             # Vérifier que index.html contient bien l'application React
             if ! grep -q "OTT Dashboard\|root\|__next" out/index.html; then
               echo "⚠️  index.html ne semble pas contenir l'application React"
+              echo "⚠️  Vérifiez que le build Next.js s'est bien déroulé"
+            else
+              echo "✅ index.html contient l'application React"
             fi
           else
             echo "❌ ERREUR: index.html manquant"
             exit 1
+          fi
+          
+          # Vérifier que les fichiers de documentation sont bien dans docs/
+          if [ -d "out/docs" ]; then
+            doc_count=$(find out/docs -name "DOCUMENTATION_*.html" -type f | wc -l)
+            if [ "$doc_count" -gt 0 ]; then
+              echo "✅ $doc_count fichier(s) de documentation trouvé(s) dans out/docs/"
+            fi
           fi
       
       - name: Upload artifact
