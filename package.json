@@ -9,6 +9,7 @@
     "export": "powershell -ExecutionPolicy Bypass -File ./scripts/export_static.ps1",
     "deploy": "npm run export",
     "test:connection": "node scripts/test_connection.js",
+    "test:compile-api": "node scripts/test_compile_api.js",
     "lint": "next lint",
     "test": "jest",
     "test:watch": "jest --watch",
