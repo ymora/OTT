@@ -4186,16 +4186,25 @@ function handleCompileFirmware($firmware_id) {
         header('X-Accel-Buffering: no'); // Désactiver la mise en buffer pour nginx
     }
     
-    // Envoyer immédiatement pour établir la connexion
+    // Envoyer immédiatement pour établir la connexion SSE
+    // IMPORTANT: Envoyer plusieurs keep-alive pour maintenir la connexion
     echo ": keep-alive\n\n";
+    flush();
+    
+    // Envoyer un message de connexion immédiatement pour confirmer que la connexion est établie
+    sendSSE('log', 'info', 'Connexion SSE établie...');
     flush();
     
     // Vérifier l'authentification APRÈS avoir envoyé les headers SSE
     // Si l'auth échoue, envoyer une erreur via SSE au lieu d'un JSON avec exit()
     $user = getCurrentUser();
     if (!$user) {
-        sendSSE('error', 'Unauthorized - Veuillez vous reconnecter');
+        // Logger pour diagnostic
+        error_log('[handleCompileFirmware] Authentification échouée - token: ' . (isset($_GET['token']) ? 'présent (' . strlen($_GET['token']) . ' chars)' : 'absent'));
+        sendSSE('error', 'Unauthorized - Veuillez vous reconnecter. Token manquant ou expiré.');
         flush();
+        // Attendre un peu avant de fermer pour que le client reçoive le message
+        sleep(1);
         return;
     }
     
