@@ -50,6 +50,48 @@ if [ ! -f "out/index.html" ]; then
   exit 1
 fi
 
+# Vérifier les fichiers critiques
+echo "🔍 Vérification des fichiers critiques..."
+CRITICAL_FILES=(
+  "out/index.html"
+  "out/sw.js"
+  "out/manifest.json"
+  "out/icon-192.png"
+  "out/icon-512.png"
+)
+
+MISSING_FILES=0
+for file in "${CRITICAL_FILES[@]}"; do
+  if [ -f "$file" ]; then
+    echo "  ✓ $(basename $file)"
+  else
+    echo "  ✗ $(basename $file) - MANQUANT"
+    MISSING_FILES=$((MISSING_FILES + 1))
+  fi
+done
+
+# Vérifier les fichiers CSS
+CSS_COUNT=$(find out/_next/static/css -name "*.css" 2>/dev/null | wc -l || echo "0")
+if [ "$CSS_COUNT" -gt 0 ]; then
+  echo "  ✓ Fichiers CSS: $CSS_COUNT trouvé(s)"
+else
+  echo "  ⚠️  Aucun fichier CSS trouvé dans out/_next/static/css"
+fi
+
+# Vérifier les fichiers JS
+JS_COUNT=$(find out/_next/static/chunks -name "*.js" 2>/dev/null | wc -l || echo "0")
+if [ "$JS_COUNT" -gt 0 ]; then
+  echo "  ✓ Fichiers JS: $JS_COUNT trouvé(s)"
+else
+  echo "  ⚠️  Aucun fichier JS trouvé dans out/_next/static/chunks"
+fi
+
+if [ $MISSING_FILES -gt 0 ]; then
+  echo ""
+  echo "⚠️  ATTENTION: $MISSING_FILES fichier(s) critique(s) manquant(s)"
+  echo "   Le déploiement pourrait échouer"
+fi
+
 echo ""
 echo "✅ Export réussi !"
 echo "   Dossier: out/"

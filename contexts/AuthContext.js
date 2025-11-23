@@ -4,19 +4,14 @@
  
  const AuthContext = createContext()
  
- // En développement, utiliser localhost si pas défini
- // En production, utiliser l'URL de production
- const getDefaultApiUrl = () => {
-   if (typeof window !== 'undefined') {
-     // Côté client : vérifier si on est en localhost
-     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-       return 'http://localhost:8000' // Port par défaut pour PHP built-in server
-     }
-   }
-   return 'https://ott-jbln.onrender.com' // Production par défaut
- }
- 
- const API_URL = (process.env.NEXT_PUBLIC_API_URL || getDefaultApiUrl()).replace(/\/$/, '')
+// URL de l'API - toujours utiliser Render en production
+// En développement, utiliser la variable d'environnement ou Render par défaut
+const getDefaultApiUrl = () => {
+  // Toujours utiliser Render par défaut (plus fiable)
+  return 'https://ott-jbln.onrender.com'
+}
+
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || getDefaultApiUrl()).replace(/\/$/, '')
  const isAbsoluteUrl = url => /^https?:\/\//i.test(url)
  
  const buildAbsoluteApiUrl = (input = '') => {

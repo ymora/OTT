@@ -21,10 +21,11 @@ const nextConfig = {
   // Proxy API en développement local
   async rewrites() {
     if (isDev && !isStaticExport) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
       return [
         {
           source: '/api.php/:path*',
-          destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api.php/:path*`
+          destination: `${apiUrl}/api.php/:path*`
         }
       ]
     }
