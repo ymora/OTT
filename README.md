@@ -258,7 +258,7 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
   - `test/` - Tests et diagnostics
   - `db/` - Migrations base de données
   - `hardware/` - Firmware & Arduino CLI
-- `public/` - Assets statiques (PWA, manifest, screenshots)
+- `public/` - Assets statiques (PWA, manifest, documentation)
 - `hardware/` - Firmware & Hardware
   - `firmware/vX.X/` - Firmwares compilés (.bin) et uploadés (.ino) par version
   - `lib/` - Bibliothèques Arduino (TinyGSM)
