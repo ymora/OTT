@@ -48,6 +48,32 @@ export default function Topbar() {
     router.push('/')
   }
 
+  const handleClearCache = async () => {
+    if (!confirm('Vider le cache et recharger la page ?')) return
+    
+    try {
+      // Désinscrire tous les service workers
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      for (const reg of registrations) {
+        await reg.unregister()
+        console.log('✅ Service worker désinscrit')
+      }
+      
+      // Vider tous les caches
+      const cacheNames = await caches.keys()
+      for (const name of cacheNames) {
+        await caches.delete(name)
+        console.log('✅ Cache supprimé:', name)
+      }
+      
+      // Recharger la page
+      setTimeout(() => window.location.reload(true), 500)
+    } catch (err) {
+      console.error('❌ Erreur lors du nettoyage:', err)
+      alert('Erreur lors du nettoyage du cache')
+    }
+  }
+
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-gradient-to-r from-white via-white to-primary-50/30 dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-[rgb(var(--night-blue-start))] border-b border-gray-200/80 dark:border-[rgb(var(--night-border))] z-50 backdrop-blur-md shadow-sm">
       <div className="flex items-center justify-between h-full px-6">
@@ -99,7 +125,19 @@ export default function Topbar() {
             {showMenu && (
               <div className="absolute right-0 top-full mt-2 w-48 bg-gradient-to-br from-white to-gray-50/80 dark:from-[rgb(var(--night-surface))] dark:via-[rgb(var(--night-bg-mid))] dark:to-[rgb(var(--night-blue-start))]/20 rounded-lg shadow-xl border border-gray-100/80 dark:border-[rgb(var(--night-border))] animate-slide-down backdrop-blur-md">
                 <button
-                  onClick={handleLogout}
+                  onClick={() => {
+                    handleClearCache()
+                    setShowMenu(false)
+                  }}
+                  className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-300 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-50/50 dark:hover:from-gray-800/20 dark:hover:to-gray-800/10 rounded-lg transition-all duration-200"
+                >
+                  🧹 Vider le cache
+                </button>
+                <button
+                  onClick={() => {
+                    handleLogout()
+                    setShowMenu(false)
+                  }}
                   className="w-full px-4 py-2 text-left text-red-600 dark:text-red-400 hover:bg-gradient-to-r hover:from-red-50 hover:to-red-50/50 dark:hover:from-red-900/20 dark:hover:to-red-900/10 rounded-lg transition-all duration-200"
                 >
                   🚪 Déconnexion
