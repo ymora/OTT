@@ -722,9 +722,29 @@ export default function CompileInoTab() {
       }
 
     } catch (err) {
-      logger.error('Erreur lors du démarrage de la compilation:', err)
+      const errorTime = new Date()
+      const timeSinceFunctionStart = errorTime - functionStartTime
+      logger.error('═══════════════════════════════════════════════════════')
+      logger.error('❌ [handleCompile] ERREUR CAPTURÉE DANS TRY/CATCH')
+      logger.error('═══════════════════════════════════════════════════════')
+      logger.error('   Timestamp:', errorTime.toISOString())
+      logger.error('   Temps depuis début handleCompile:', timeSinceFunctionStart, 'ms')
+      logger.error('   Error message:', err.message)
+      logger.error('   Error name:', err.name)
+      logger.error('   Error stack:', err.stack)
+      logger.error('   Error object:', err)
+      logger.error('═══════════════════════════════════════════════════════')
       setError(err.message || 'Erreur lors du démarrage de la compilation')
       resetCompilationState()
+    } finally {
+      const endTime = new Date()
+      const totalTime = endTime - functionStartTime
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('🏁 [handleCompile] FIN DE LA FONCTION')
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('   Timestamp:', endTime.toISOString())
+      logger.log('   Durée totale:', totalTime, 'ms')
+      logger.log('═══════════════════════════════════════════════════════')
     }
   }, [API_URL, token, compiling, compilingFirmwareId, closeEventSource, resetCompilationState, addLog])
 
