@@ -37,7 +37,8 @@ fi
 
 # Exporter le site statique
 echo "🔨 Build et export en cours..."
-npm run export
+# Appeler directement next build au lieu de npm run export (qui utilise PowerShell)
+npx next build
 
 # Vérifier que le build a réussi
 if [ ! -d "out" ]; then

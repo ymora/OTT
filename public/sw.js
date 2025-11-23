@@ -1,5 +1,5 @@
 // Version du cache - incrémenter à chaque déploiement pour forcer la mise à jour
-const CACHE_VERSION = 'v3.0.2'
+const CACHE_VERSION = 'v3.0.3'
 const CACHE_NAME = `ott-dashboard-${CACHE_VERSION}`
 const BASE_PATH = self.location.pathname.replace(/\/sw\.js$/, '')
 
@@ -117,18 +117,13 @@ self.addEventListener('fetch', (event) => {
             try {
               const responseToCache = response.clone()
               caches.open(CACHE_NAME).then((cache) => {
-                // Vérifier que la requête peut être mise en cache
-                if (event.request.url.startsWith('chrome-extension:') || 
-                    event.request.url.startsWith('moz-extension:') ||
-                    event.request.url.startsWith('safari-extension:') ||
-                    event.request.url.startsWith('ms-browser-extension:')) {
-                  // Ne pas essayer de mettre en cache les extensions
-                  return
-                }
+                // La vérification du schéma a déjà été faite plus haut, on peut mettre en cache
                 cache.put(event.request, responseToCache).catch((err) => {
-                  // Ignorer silencieusement les erreurs de cache pour les extensions
-                  if (!err.message.includes('chrome-extension') && 
-                      !err.message.includes('moz-extension')) {
+                  // Ignorer silencieusement les erreurs de cache
+                  // (peut arriver pour certaines requêtes spéciales)
+                  if (!err.message || (!err.message.includes('chrome-extension') && 
+                      !err.message.includes('moz-extension') &&
+                      !err.message.includes('unsupported'))) {
                     console.warn('[SW] Erreur lors de la mise en cache:', err)
                   }
                 })
@@ -137,7 +132,12 @@ self.addEventListener('fetch', (event) => {
               })
             } catch (err) {
               // Ignorer les erreurs de mise en cache (requêtes non clonables, etc.)
-              console.warn('[SW] Impossible de mettre en cache:', err)
+              // Ne pas logger les erreurs liées aux extensions
+              if (!err.message || (!err.message.includes('chrome-extension') && 
+                  !err.message.includes('moz-extension') &&
+                  !err.message.includes('unsupported'))) {
+                console.warn('[SW] Impossible de mettre en cache:', err)
+              }
             }
           }
           return response
