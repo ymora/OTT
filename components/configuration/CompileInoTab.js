@@ -133,15 +133,16 @@ export default function CompileInoTab() {
       eventSourceRef.current = eventSource
 
       // Log immédiatement l'état de la connexion
+      // NOTE: Le serveur Render répond en ~350ms, donc on vérifie après 500ms
       setTimeout(() => {
         const state = eventSource.readyState
         const stateText = state === EventSource.CONNECTING ? 'CONNECTING' : state === EventSource.OPEN ? 'OPEN' : 'CLOSED'
-        const stateMsg = `⏱️ [100ms] État: ${stateText} (${state})`
+        const stateMsg = `⏱️ [500ms] État: ${stateText} (${state})`
         
         logger.log(stateMsg)
         
         if (state === EventSource.CONNECTING) {
-          const msg = '⚠️ Toujours en connexion... (normal si le serveur est lent)'
+          const msg = '⚠️ Toujours en connexion... (normal, le serveur Render répond en ~350ms)'
           logger.log(msg)
           setCompileLogs(prev => [...prev, {
             timestamp: new Date().toLocaleTimeString('fr-FR'),
@@ -158,7 +159,7 @@ export default function CompileInoTab() {
           }])
         } else if (state === EventSource.CLOSED) {
           const errorMsgs = [
-            '❌ Connexion fermée après 100ms!',
+            '❌ Connexion fermée après 500ms!',
             '🔍 Causes possibles:',
             '   • Token expiré ou invalide',
             '   • Serveur inaccessible',
@@ -172,18 +173,24 @@ export default function CompileInoTab() {
             level: 'error'
           }))])
         }
-      }, 100)
+      }, 500) // Augmenté à 500ms car le serveur répond en ~350ms
       
-      // Vérifier aussi après 2 secondes
+      // Vérifier aussi après 3 secondes (augmenté car Render peut être lent)
       setTimeout(() => {
-        logger.log('⏱️ [2s] État de la connexion:')
-        logger.log('   readyState:', eventSource.readyState)
-        if (eventSource.readyState === EventSource.CONNECTING) {
-          logger.error('   ❌ Toujours en connexion après 2s - problème de connexion!')
+        const state = eventSource.readyState
+        logger.log('⏱️ [3s] État de la connexion:')
+        logger.log('   readyState:', state)
+        if (state === EventSource.CONNECTING) {
+          logger.error('   ❌ Toujours en connexion après 3s - problème de connexion!')
           logger.error('   🔍 Vérifiez:')
           logger.error('      • La connexion réseau')
           logger.error('      • Que le serveur Render est accessible')
           logger.error('      • Les logs du serveur pour plus de détails')
+          setCompileLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: '❌ Problème de connexion après 3s - Vérifiez votre connexion réseau',
+            level: 'error'
+          }])
           setCompileLogs(prev => {
             const lastMsg = prev[prev.length - 1]?.message
             if (!lastMsg || !lastMsg.includes('problème de connexion')) {
