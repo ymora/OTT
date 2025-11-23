@@ -152,12 +152,32 @@ export default function CompileInoTab() {
       }
 
       const eventSource = new EventSource(sseUrl)
+      const creationTime = new Date()
       
-      logger.log('📡 EventSource créé')
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('📡 EVENTSOURCE CRÉÉ')
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('   Timestamp:', creationTime.toISOString())
       logger.log('   readyState:', eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
       logger.log('   URL:', eventSource.url)
+      logger.log('   URL length:', eventSource.url.length, 'caractères')
+      logger.log('   withCredentials:', eventSource.withCredentials)
+      logger.log('   Protocol:', new URL(eventSource.url).protocol)
+      logger.log('   Host:', new URL(eventSource.url).host)
+      logger.log('   Pathname:', new URL(eventSource.url).pathname)
+      logger.log('   Search:', new URL(eventSource.url).search.substring(0, 50) + '...')
+      logger.log('═══════════════════════════════════════════════════════')
 
       eventSourceRef.current = eventSource
+      
+      // Logger toutes les propriétés de l'EventSource pour diagnostic
+      logger.log('📋 Propriétés EventSource:')
+      logger.log('   readyState:', eventSource.readyState)
+      logger.log('   url:', eventSource.url)
+      logger.log('   withCredentials:', eventSource.withCredentials)
+      logger.log('   onopen:', typeof eventSource.onopen)
+      logger.log('   onmessage:', typeof eventSource.onmessage)
+      logger.log('   onerror:', typeof eventSource.onerror)
 
       // Buffer pour capturer les messages même si la connexion se ferme rapidement
       let messageBuffer = []
@@ -245,11 +265,16 @@ export default function CompileInoTab() {
       }, 2000)
 
       eventSource.onopen = () => {
+        const openTime = new Date()
+        const timeSinceStart = openTime - new Date(startLogs[0]?.includes('Timestamp') ? startLogs[0] : Date.now())
         const openLogs = [
           '═══════════════════════════════════════════════════════',
           '✅ CONNEXION SSE ÉTABLIE!',
           `   readyState: ${eventSource.readyState} (devrait être 1=OPEN)`,
-          `   ⏰ Timestamp: ${new Date().toISOString()}`,
+          `   URL: ${eventSource.url.substring(0, 100)}...`,
+          `   ⏰ Timestamp: ${openTime.toISOString()}`,
+          `   ⏱️  Temps depuis création: ${timeSinceStart}ms`,
+          `   🔗 withCredentials: ${eventSource.withCredentials}`,
           '═══════════════════════════════════════════════════════'
         ]
         openLogs.forEach(log => logger.log(log))
@@ -274,26 +299,45 @@ export default function CompileInoTab() {
 
       eventSource.onmessage = (event) => {
         hasReceivedMessage = true
+        const messageTime = new Date()
         const rawData = event.data?.substring(0, 150)
-        logger.log('📥 [SSE] Message brut reçu:', rawData)
+        
+        logger.log('═══════════════════════════════════════════════════════')
+        logger.log('📥 [SSE] MESSAGE REÇU')
+        logger.log('   Timestamp:', messageTime.toISOString())
+        logger.log('   ReadyState:', eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
+        logger.log('   URL:', eventSource.url.substring(0, 100))
+        logger.log('   Data length:', event.data?.length || 0, 'caractères')
+        logger.log('   Data brut:', rawData)
+        logger.log('═══════════════════════════════════════════════════════')
         
         // Ajouter au buffer pour diagnostic
         messageBuffer.push({
-          timestamp: new Date().toISOString(),
-          data: rawData
+          timestamp: messageTime.toISOString(),
+          data: rawData,
+          readyState: eventSource.readyState
         })
         
         try {
           // Ignorer uniquement les messages keep-alive (commentaires SSE qui commencent par :)
           if (!event.data || event.data.trim() === '' || event.data.trim().startsWith(':')) {
             logger.log('⏭️ [SSE] Message ignoré (keep-alive ou vide)')
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: '⏭️ Keep-alive reçu (normal)',
+              level: 'info'
+            }])
             return
           }
           
           const data = JSON.parse(event.data)
-          logger.log('📨 [SSE] Message parsé:')
+          logger.log('📨 [SSE] Message parsé avec succès:')
           logger.log('   Type:', data.type)
-          logger.log('   Contenu:', data.message || `Progress: ${data.progress}%` || JSON.stringify(data))
+          logger.log('   Level:', data.level || 'N/A')
+          logger.log('   Message:', data.message || 'N/A')
+          logger.log('   Progress:', data.progress || 'N/A')
+          logger.log('   Version:', data.version || 'N/A')
+          logger.log('   Full data:', JSON.stringify(data, null, 2))
           
           // Si c'est une erreur d'authentification, afficher immédiatement
           if (data.type === 'error' && (data.message?.includes('Unauthorized') || data.message?.includes('token'))) {
@@ -370,15 +414,32 @@ export default function CompileInoTab() {
       }
 
       eventSource.onerror = (error) => {
+        const errorTime = new Date()
         const state = eventSource.readyState
+        
+        logger.error('═══════════════════════════════════════════════════════')
+        logger.error('❌ ERREUR EVENTSOURCE DÉTECTÉE!')
+        logger.error('═══════════════════════════════════════════════════════')
+        logger.error('   Timestamp:', errorTime.toISOString())
+        logger.error('   ReadyState:', state, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
+        logger.error('   URL:', eventSource.url.substring(0, 100))
+        logger.error('   Error object:', error)
+        logger.error('   Error type:', error?.type || 'N/A')
+        logger.error('   Error target:', error?.target || 'N/A')
+        logger.error('   Messages reçus: ', messageBuffer.length)
+        logger.error('   HasReceivedMessage:', hasReceivedMessage)
+        logger.error('   withCredentials:', eventSource.withCredentials)
         
         // Afficher les messages reçus avant l'erreur
         if (messageBuffer.length > 0) {
-          logger.log(`📨 Messages reçus avant erreur: ${messageBuffer.length}`)
+          logger.error('   📨 Messages reçus avant erreur:')
           messageBuffer.forEach((msg, idx) => {
-            logger.log(`   [${idx + 1}] ${msg.timestamp}: ${msg.data.substring(0, 100)}`)
+            logger.error(`      [${idx + 1}] ${msg.timestamp} (readyState: ${msg.readyState}): ${msg.data.substring(0, 100)}`)
           })
+        } else {
+          logger.error('   ⚠️  AUCUN MESSAGE REÇU AVANT L\'ERREUR!')
         }
+        logger.error('═══════════════════════════════════════════════════════')
         
         const errorLogs = [
           '═══════════════════════════════════════════════════════',
@@ -387,9 +448,12 @@ export default function CompileInoTab() {
           `   ReadyState: ${state} (0=CONNECTING, 1=OPEN, 2=CLOSED)`,
           `   Messages reçus: ${messageBuffer.length}`,
           `   HasReceivedMessage: ${hasReceivedMessage}`,
-          `   Timestamp: ${new Date().toISOString()}`,
+          `   Timestamp: ${errorTime.toISOString()}`,
+          `   URL: ${eventSource.url.substring(0, 80)}...`,
+          messageBuffer.length === 0 ? '   ⚠️  AUCUN MESSAGE REÇU AVANT L\'ERREUR!' : '',
           '═══════════════════════════════════════════════════════'
-        ]
+        ].filter(Boolean)
+        
         errorLogs.forEach(log => logger.error(log))
         setCompileLogs(prev => [...prev, ...errorLogs.map(msg => ({
           timestamp: new Date().toLocaleTimeString('fr-FR'),
