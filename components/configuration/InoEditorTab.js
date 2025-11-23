@@ -9,7 +9,7 @@ import ErrorMessage from '@/components/ErrorMessage'
 import Modal from '@/components/Modal'
 import logger from '@/lib/logger'
 
-export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
+export default function InoEditorTab({ onUploadSuccess }) {
   const { fetchWithAuth, API_URL, token } = useAuth()
   const [selectedFile, setSelectedFile] = useState(null)
   const [inoContent, setInoContent] = useState('')

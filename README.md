@@ -8,6 +8,7 @@
 
 ## 📖 Documentation
 
+### Documentation Utilisateur (Dashboard)
 La documentation est divisée en 3 parties accessibles depuis le dashboard :
 
 👉 **Accès depuis le dashboard** : Menu latéral → Documentation (menu déroulant)
@@ -16,6 +17,15 @@ La documentation est divisée en 3 parties accessibles depuis le dashboard :
 - 📸 **Présentation** : Vue d'ensemble, fonctionnalités, captures d'écran
 - 💻 **Développeurs** : Architecture, API, firmware, déploiement, troubleshooting
 - 💼 **Commerciale** : Analyse marché, business plan, ROI, avantages concurrentiels
+
+### Documentation Technique (Repository)
+📚 **Index complet** : Voir [`docs/INDEX.md`](docs/INDEX.md)
+
+**Documentations principales :**
+- 🏗️ [Architecture](./docs/ARCHITECTURE.md) - Structure complète du projet
+- 🛠️ [Développement Local](./docs/UTILITE_DEVELOPPEMENT_LOCAL.md) - Guide développement
+- 🚢 [Déploiement](./docs/DEPLOIEMENT_TROUBLESHOOTING.md) - Guide déploiement
+- 🔍 [Audits & Vérifications](./docs/AUDIT_COMPLET_PROJET.md) - Rapports d'audit
 
 ---
 
@@ -107,7 +117,7 @@ git push origin main
 4. **Confirmer côté dashboard**
    - Une fois la mesure enregistrée, le boîtier apparaît dans `/api.php/devices`. Utiliser la recherche ICCID sur la page “Dispositifs” pour le localiser, puis l’associer à un patient.
 5. **Toujours absent ?**
-   - Relancer `scripts/db_migrate.sh --seed` si vous êtes sur un environnement de démo.
+   - Relancer `scripts/db/db_migrate.sh --seed` si vous êtes sur un environnement de démo.
    - Vérifier que `ENABLE_DEMO_RESET` n’a pas été déclenché récemment (les boîtiers “réels” doivent être ré-injectés après un reset).
 
 ---
@@ -143,7 +153,7 @@ NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 | `SENDGRID_*`, `TWILIO_*` | Clés notification | laisser vide si non utilisées |
 | `CORS_ALLOWED_ORIGINS` | Origines additionnelles autorisées (CSV) | `https://mon-dashboard.com,https://foo.app` |
 
-> Astuce : le healthcheck et l’API partagent désormais la même résolution de configuration. Renseignez au minimum `DB_HOST/DB_NAME/DB_USER/DB_PASS` (et `DB_PORT` si besoin). `DATABASE_URL` reste utile pour les scripts (`scripts/db_migrate.sh`) ou pour forcer une configuration complète, mais n’est plus obligatoire pour obtenir `database: "connected"`. Pour autoriser la réinitialisation complète depuis le dashboard admin, définissez `ENABLE_DEMO_RESET=true` côté backend et `NEXT_PUBLIC_ENABLE_DEMO_RESET=true` côté frontend.
+> Astuce : le healthcheck et l'API partagent désormais la même résolution de configuration. Renseignez au minimum `DB_HOST/DB_NAME/DB_USER/DB_PASS` (et `DB_PORT` si besoin). `DATABASE_URL` reste utile pour les scripts (`scripts/db/db_migrate.sh`) ou pour forcer une configuration complète, mais n'est plus obligatoire pour obtenir `database: "connected"`. Pour autoriser la réinitialisation complète depuis le dashboard admin, définissez `ENABLE_DEMO_RESET=true` côté backend et `NEXT_PUBLIC_ENABLE_DEMO_RESET=true` côté frontend.
 
 ---
 
@@ -160,12 +170,12 @@ NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 # Récupérer DATABASE_URL depuis Render Dashboard
 # Render > PostgreSQL > Connect > Internal Database URL
 
-.\scripts\migrate_render.ps1 -DATABASE_URL "postgresql://..."
+.\scripts\db\migrate_render.ps1 -DATABASE_URL "postgresql://..."
 ```
 
 **Sur Linux/Mac :**
 ```bash
-DATABASE_URL="postgresql://..." ./scripts/db_migrate.sh
+DATABASE_URL="postgresql://..." ./scripts/db/db_migrate.sh
 ```
 
 #### 2. Configurer le frontend (`.env.local`)
@@ -241,16 +251,19 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 - `Dockerfile` - Container pour Render
 
 ### Données & Scripts
-- `sql/schema.sql` - Schéma complet + seeds minima
-- `sql/base_seed.sql` - Données de base (rôles, utilisateurs, config)
-- `sql/demo_seed.sql` - Jeu de données de démo (emails génériques)
-- `sql/create_demo_user.sql` - Création utilisateur `demo@example.com`
-- `sql/UPDATE_PASSWORDS_RENDER.sql` - Rotation de mots de passe Render
-- `public/manifest.json` / `public/sw.js` - PWA installable
-- `hardware/` - CAD + doc modem + firmware ESP32/SIM7600 (`cad/`, `docs/`, `firmware/`, `scripts/`)
-  - `hardware/firmware/fw_ott_optimized/` contient le code source du firmware (v3.0-rebuild)
-  - `hardware/firmware/vX.X/` contient les firmwares compilés (.bin) et uploadés (.ino) organisés par version
-  - `hardware/lib/TinyGSM/` contient la bibliothèque TinyGSM utilisée par l'ESP32
+- `sql/` - Scripts SQL (schéma, seeds, migrations)
+- `scripts/` - Scripts organisés par catégorie :
+  - `dev/` - Développement local
+  - `deploy/` - Déploiement (export, GitHub Actions)
+  - `test/` - Tests et diagnostics
+  - `db/` - Migrations base de données
+  - `hardware/` - Firmware & Arduino CLI
+- `public/` - Assets statiques (PWA, manifest, screenshots)
+- `hardware/` - Firmware & Hardware
+  - `firmware/vX.X/` - Firmwares compilés (.bin) et uploadés (.ino) par version
+  - `lib/` - Bibliothèques Arduino (TinyGSM)
+  - `cad/` - Plans CAO
+- `docs/` - Documentation technique complète (voir [INDEX.md](docs/INDEX.md))
 
 ---
 
@@ -280,7 +293,7 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 6. **Installation arduino-cli (requis pour compilation firmware)**  
    - **⚠️ IMPORTANT** : La compilation des firmwares est toujours réelle, jamais simulée. Si `arduino-cli` n'est pas disponible, la compilation est refusée avec une erreur explicite.
    - **Docker** : `arduino-cli` est automatiquement installé dans le `Dockerfile` lors du build.
-   - **Render** : Le script `scripts/install_arduino_cli.sh` est exécuté automatiquement via `render.yaml` lors du déploiement.
+   - **Render** : Le script `scripts/hardware/install_arduino_cli.sh` est exécuté automatiquement via `render.yaml` lors du déploiement.
    - **Persistent Disk sur Render (RECOMMANDÉ)** : Pour éviter de retélécharger le core ESP32 (~430MB) à chaque déploiement, configurez un Persistent Disk dans le dashboard Render :
      - Service ott-api → Disks → Add Disk
      - Mount Path: `/opt/render/project/src/arduino-data`
@@ -447,7 +460,7 @@ Commandes durant la session :
 
 - **Initialiser / réinitialiser la base Render :**
   ```bash
-  DATABASE_URL="postgresql://..." ./scripts/db_migrate.sh --seed
+  DATABASE_URL="postgresql://..." ./scripts/db/db_migrate.sh --seed
   # ou, pour rejouer seulement les seeds
   psql $DATABASE_URL -f sql/demo_seed.sql
   ```

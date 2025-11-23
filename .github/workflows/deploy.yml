@@ -31,7 +31,7 @@ jobs:
         run: npm ci
       
       - name: Build & export static site
-        run: bash scripts/export_static.sh
+        run: bash scripts/deploy/export_static.sh
         env:
           NEXT_PUBLIC_API_URL: https://ott-jbln.onrender.com
           NEXT_PUBLIC_ENABLE_DEMO_RESET: 'false'
