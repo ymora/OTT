@@ -3727,14 +3727,37 @@ function handleUpdateFirmwareIno($firmware_id) {
         
         // Si la version a changé ou si pas de fichier trouvé, utiliser le nouveau dossier
         if ($firmware['version'] !== $target_version || !$ino_path) {
-            // Chercher dans le nouveau dossier
-            $new_ino_files = glob($ino_dir . 'fw_ott_v' . $target_version . '_*.ino');
-            if (!empty($new_ino_files)) {
-                $ino_path = $new_ino_files[0];
+            // PRIORITÉ: Chercher d'abord le fichier avec l'ID exact
+            $pattern_with_id = 'fw_ott_v' . $target_version . '_id' . $firmware_id . '.ino';
+            $ino_path_with_id = $ino_dir . $pattern_with_id;
+            
+            if (file_exists($ino_path_with_id)) {
+                $ino_path = $ino_path_with_id;
+                error_log('[handleUpdateFirmwareIno] ✅ Fichier trouvé avec ID: ' . basename($ino_path));
             } else {
-                // Créer un nouveau fichier dans le nouveau dossier avec l'ID
-                $ino_filename = 'fw_ott_v' . $target_version . '_id' . $firmware_id . '.ino';
-                $ino_path = $ino_dir . $ino_filename;
+                // Chercher dans le nouveau dossier (fallback)
+                $new_ino_files = glob($ino_dir . 'fw_ott_v' . $target_version . '_*.ino');
+                if (!empty($new_ino_files)) {
+                    // Vérifier si un fichier contient l'ID
+                    $found_with_id = false;
+                    foreach ($new_ino_files as $file) {
+                        if (preg_match('/_id' . $firmware_id . '\.ino$/', basename($file))) {
+                            $ino_path = $file;
+                            $found_with_id = true;
+                            error_log('[handleUpdateFirmwareIno] ✅ Fichier trouvé avec ID dans glob: ' . basename($ino_path));
+                            break;
+                        }
+                    }
+                    if (!$found_with_id) {
+                        $ino_path = $new_ino_files[0];
+                        error_log('[handleUpdateFirmwareIno] ⚠️ Fichier trouvé sans ID (fallback): ' . basename($ino_path));
+                    }
+                } else {
+                    // Créer un nouveau fichier dans le nouveau dossier avec l'ID
+                    $ino_filename = 'fw_ott_v' . $target_version . '_id' . $firmware_id . '.ino';
+                    $ino_path = $ino_dir . $ino_filename;
+                    error_log('[handleUpdateFirmwareIno] Nouveau fichier créé avec ID: ' . $ino_filename);
+                }
             }
         }
         
@@ -4159,12 +4182,22 @@ function handleUploadFirmwareIno() {
         $firmware_id = $result['id'] ?? $pdo->lastInsertId();
         
         // Renommer le fichier avec l'ID pour garantir l'unicité et la retrouvabilité
+        // Format: fw_ott_v{version}_id{firmware_id}.ino
         $ino_filename = 'fw_ott_v' . $version . '_id' . $firmware_id . '.ino';
         $ino_path = $ino_dir . $ino_filename;
         $final_file_path = 'hardware/firmware/' . $version_dir . '/' . $ino_filename;
         
+        // Log pour diagnostic
+        error_log('[handleUploadFirmwareIno] Renommage fichier:');
+        error_log('   Firmware ID: ' . $firmware_id);
+        error_log('   Version: ' . $version);
+        error_log('   Nom temporaire: ' . $temp_filename);
+        error_log('   Nom final: ' . $ino_filename);
+        error_log('   Chemin final: ' . $final_file_path);
+        
         if (!rename($temp_path, $ino_path)) {
             // Si le renommage échoue, nettoyer et retourner une erreur
+            error_log('[handleUploadFirmwareIno] ❌ Échec renommage: ' . $temp_path . ' -> ' . $ino_path);
             @unlink($temp_path);
             // Supprimer l'entrée en DB
             $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
@@ -4173,12 +4206,39 @@ function handleUploadFirmwareIno() {
             return;
         }
         
+        // Vérifier que le fichier renommé existe bien
+        if (!file_exists($ino_path)) {
+            error_log('[handleUploadFirmwareIno] ❌ Fichier renommé introuvable: ' . $ino_path);
+            // Supprimer l'entrée en DB
+            $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Fichier .ino introuvable après renommage']);
+            return;
+        }
+        
+        // Vérifier que le nom du fichier contient bien l'ID
+        if (strpos($ino_filename, '_id' . $firmware_id . '.ino') === false) {
+            error_log('[handleUploadFirmwareIno] ⚠️ Nom de fichier ne contient pas l\'ID: ' . $ino_filename);
+        }
+        
+        error_log('[handleUploadFirmwareIno] ✅ Fichier renommé avec succès: ' . $ino_filename);
+        
         // Mettre à jour le file_path dans la base de données avec le nom final
         $updateStmt = $pdo->prepare("UPDATE firmware_versions SET file_path = :file_path WHERE id = :id");
         $updateStmt->execute([
             'file_path' => $final_file_path,
             'id' => $firmware_id
         ]);
+        
+        // Vérifier que la mise à jour a réussi
+        $verifyStmt = $pdo->prepare("SELECT file_path FROM firmware_versions WHERE id = :id");
+        $verifyStmt->execute(['id' => $firmware_id]);
+        $verify = $verifyStmt->fetch();
+        if ($verify && $verify['file_path'] !== $final_file_path) {
+            error_log('[handleUploadFirmwareIno] ⚠️ file_path en DB ne correspond pas: ' . $verify['file_path'] . ' != ' . $final_file_path);
+        } else {
+            error_log('[handleUploadFirmwareIno] ✅ file_path mis à jour en DB: ' . $final_file_path);
+        }
         
         auditLog('firmware.ino.uploaded', 'firmware', $firmware_id, null, [
             'version' => $version,
