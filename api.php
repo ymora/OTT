@@ -278,128 +278,50 @@ function getVersionDir($version) {
  * @param array $firmware Données du firmware depuis la DB (doit contenir 'file_path' et 'version')
  * @return string|null Chemin absolu du fichier .ino trouvé, ou null si introuvable
  */
+/**
+ * Trouve le fichier .ino d'un firmware - VERSION SIMPLIFIÉE
+ * 
+ * Principe: Le file_path en DB est la source de vérité absolue.
+ * Si le fichier n'existe pas à ce chemin, il n'a jamais été uploadé correctement.
+ * 
+ * @param int $firmware_id ID unique du firmware
+ * @param array $firmware Données du firmware depuis la DB (doit contenir 'file_path')
+ * @return string|null Chemin absolu du fichier .ino trouvé, ou null si introuvable
+ */
 function findFirmwareInoFile($firmware_id, $firmware) {
-    $firmware_base_dir = __DIR__ . '/hardware/firmware/';
-    $pattern_id = '_id' . $firmware_id . '.ino';
-    
-    // PRIORITÉ 1: Utiliser le file_path de la base de données (source de vérité)
-    if (!empty($firmware['file_path'])) {
-        // Tester plusieurs variantes du chemin
-        $test_paths = [
-            __DIR__ . '/' . $firmware['file_path'],  // Chemin absolu standard
-            $firmware['file_path'],  // Chemin relatif
-        ];
-        
-        // Si le chemin commence par hardware/firmware/, essayer aussi avec realpath
-        if (preg_match('#^hardware/firmware/#', $firmware['file_path'])) {
-            $firmware_base = realpath($firmware_base_dir);
-            if ($firmware_base) {
-                $relative_path = preg_replace('#^hardware/firmware/#', '', $firmware['file_path']);
-                $test_paths[] = $firmware_base . '/' . $relative_path;
-                // Essayer aussi sans le préfixe hardware/firmware/
-                $test_paths[] = $firmware_base . '/' . basename($firmware['file_path']);
-            }
-        }
-        
-        foreach ($test_paths as $test_path) {
-            if ($test_path && file_exists($test_path) && is_file($test_path) && preg_match('/\.ino$/', $test_path)) {
-                error_log('[findFirmwareInoFile] ✅ Fichier trouvé avec file_path DB: ' . $test_path);
-                return $test_path;
-            }
-        }
-        
-        error_log('[findFirmwareInoFile] ⚠️ file_path DB testé mais introuvable: ' . $firmware['file_path']);
-    }
-    
-    // PRIORITÉ 2: Recherche par ID unique dans tous les dossiers (récursive)
-    if (!is_dir($firmware_base_dir)) {
-        error_log('[findFirmwareInoFile] ❌ Dossier base introuvable: ' . $firmware_base_dir);
+    // Le file_path en DB est la source de vérité - pas de recherche complexe
+    if (empty($firmware['file_path'])) {
+        error_log('[findFirmwareInoFile] ❌ file_path vide en DB pour firmware_id=' . $firmware_id);
         return null;
     }
     
-    // Lire tous les dossiers de versions
-    $all_items = scandir($firmware_base_dir);
-    $version_dirs = [];
-    foreach ($all_items as $item) {
-        if ($item === '.' || $item === '..') continue;
-        $full_path = $firmware_base_dir . $item;
-        if (is_dir($full_path)) {
-            $version_dirs[] = $item;
+    // Chemin absolu standard (le seul qui devrait être nécessaire)
+    $absolute_path = __DIR__ . '/' . $firmware['file_path'];
+    
+    if (file_exists($absolute_path) && is_file($absolute_path) && preg_match('/\.ino$/', $absolute_path)) {
+        error_log('[findFirmwareInoFile] ✅ Fichier trouvé: ' . $absolute_path);
+        return $absolute_path;
+    }
+    
+    // Si le fichier n'existe pas, c'est qu'il n'a jamais été uploadé correctement
+    // On vérifie juste si le dossier parent existe pour le diagnostic
+    $parent_dir = dirname($absolute_path);
+    $dir_exists = is_dir($parent_dir);
+    
+    error_log('[findFirmwareInoFile] ❌ Fichier introuvable: ' . $firmware['file_path']);
+    error_log('[findFirmwareInoFile]    Chemin absolu testé: ' . $absolute_path);
+    error_log('[findFirmwareInoFile]    Dossier parent existe: ' . ($dir_exists ? 'OUI' : 'NON'));
+    
+    if ($dir_exists) {
+        // Lister les fichiers dans le dossier pour diagnostic
+        $files_in_dir = glob($parent_dir . '/*.ino');
+        error_log('[findFirmwareInoFile]    Fichiers .ino dans le dossier: ' . count($files_in_dir));
+        if (count($files_in_dir) > 0) {
+            $file_list = array_map('basename', array_slice($files_in_dir, 0, 5));
+            error_log('[findFirmwareInoFile]    Liste: ' . implode(', ', $file_list));
         }
     }
     
-    error_log('[findFirmwareInoFile] 🔍 Recherche par ID ' . $firmware_id . ' dans ' . count($version_dirs) . ' dossier(s): ' . implode(', ', $version_dirs));
-    
-    // Chercher le fichier avec cet ID dans chaque dossier (récursif)
-    foreach ($version_dirs as $version_dir) {
-        $ino_dir = $firmware_base_dir . $version_dir . '/';
-        
-        // Méthode 1: glob avec pattern exact
-        $files = glob($ino_dir . '*' . $pattern_id);
-        
-        // Méthode 2: glob tous les .ino puis filtrer
-        if (empty($files)) {
-            $all_ino = glob($ino_dir . '*.ino');
-            foreach ($all_ino as $file) {
-                if (strpos(basename($file), $pattern_id) !== false) {
-                    $files[] = $file;
-                }
-            }
-        }
-        
-        // Méthode 3: opendir/readdir si glob échoue
-        if (empty($files)) {
-            $dir_handle = opendir($ino_dir);
-            if ($dir_handle) {
-                while (($file = readdir($dir_handle)) !== false) {
-                    if ($file !== '.' && $file !== '..' && preg_match('/\.ino$/i', $file)) {
-                        if (strpos($file, $pattern_id) !== false) {
-                            $files[] = $ino_dir . $file;
-                        }
-                    }
-                }
-                closedir($dir_handle);
-            }
-        }
-        
-        // Méthode 4: Recherche récursive dans les sous-dossiers
-        if (empty($files)) {
-            try {
-                $iterator = new RecursiveIteratorIterator(
-                    new RecursiveDirectoryIterator($ino_dir, RecursiveDirectoryIterator::SKIP_DOTS),
-                    RecursiveIteratorIterator::SELF_FIRST
-                );
-                
-                foreach ($iterator as $file) {
-                    if ($file->isFile() && $file->getExtension() === 'ino') {
-                        $filename = $file->getFilename();
-                        if (strpos($filename, $pattern_id) !== false) {
-                            $files[] = $file->getPathname();
-                        }
-                    }
-                }
-            } catch (Exception $e) {
-                error_log('[findFirmwareInoFile] ⚠️ Erreur recherche récursive dans ' . $version_dir . ': ' . $e->getMessage());
-            }
-        }
-        
-        error_log('[findFirmwareInoFile] 📁 Dossier ' . $version_dir . ': ' . count($files) . ' fichier(s) correspondant(s)');
-        
-        if (!empty($files)) {
-            foreach ($files as $file) {
-                $filename = basename($file);
-                if (strpos($filename, $pattern_id) !== false) {
-                    $full_path = is_file($file) ? $file : $ino_dir . $filename;
-                    if (file_exists($full_path)) {
-                        error_log('[findFirmwareInoFile] ✅ Fichier trouvé par ID unique: ' . $filename . ' dans ' . $version_dir);
-                        return $full_path;
-                    }
-                }
-            }
-        }
-    }
-    
-    error_log('[findFirmwareInoFile] ❌ Fichier avec ID ' . $firmware_id . ' introuvable dans ' . count($version_dirs) . ' dossier(s)');
     return null;
 }
 
@@ -3746,41 +3668,25 @@ function handleGetFirmwareIno($firmware_id) {
         $ino_path = findFirmwareInoFile($firmware_id, $firmware);
         
         if (!$ino_path || !file_exists($ino_path)) {
-            // Diagnostic détaillé pour l'édition
-            $firmware_base_dir = __DIR__ . '/hardware/firmware/';
-            $diagnostic = [
-                'file_path_db' => $firmware['file_path'] ?? 'N/A',
-                'version' => $firmware['version'] ?? 'N/A',
-                'firmware_id' => $firmware_id,
-                'base_dir_exists' => is_dir($firmware_base_dir),
-            ];
+            // Diagnostic simple
+            $absolute_path = !empty($firmware['file_path']) ? __DIR__ . '/' . $firmware['file_path'] : null;
+            $parent_dir = $absolute_path ? dirname($absolute_path) : null;
+            $dir_exists = $parent_dir && is_dir($parent_dir);
             
-            if (is_dir($firmware_base_dir)) {
-                $all_dirs = array_filter(scandir($firmware_base_dir), function($item) use ($firmware_base_dir) {
-                    return is_dir($firmware_base_dir . $item) && $item !== '.' && $item !== '..';
-                });
-                $diagnostic['available_dirs'] = array_values($all_dirs);
-                
-                // Chercher le fichier par ID dans tous les dossiers
-                $pattern_id = '_id' . $firmware_id . '.ino';
-                $found_files = [];
-                foreach ($all_dirs as $dir) {
-                    $search_dir = $firmware_base_dir . $dir . '/';
-                    $files = glob($search_dir . '*' . $pattern_id);
-                    foreach ($files as $file) {
-                        $found_files[] = $dir . '/' . basename($file);
-                    }
-                }
-                $diagnostic['found_by_id'] = $found_files;
+            error_log('[handleGetFirmwareIno] ❌ Fichier introuvable');
+            error_log('[handleGetFirmwareIno]    file_path DB: ' . ($firmware['file_path'] ?? 'N/A'));
+            error_log('[handleGetFirmwareIno]    Chemin absolu: ' . ($absolute_path ?? 'N/A'));
+            error_log('[handleGetFirmwareIno]    Dossier parent existe: ' . ($dir_exists ? 'OUI' : 'NON'));
+            
+            if ($dir_exists) {
+                $files_in_dir = glob($parent_dir . '/*.ino');
+                error_log('[handleGetFirmwareIno]    Fichiers .ino dans le dossier: ' . count($files_in_dir));
             }
-            
-            error_log('[handleGetFirmwareIno] ❌ Fichier introuvable - Diagnostic: ' . json_encode($diagnostic));
             
             http_response_code(404);
             $error_msg = 'Fichier .ino introuvable: ' . ($firmware['file_path'] ?? 'N/A');
             if (getenv('DEBUG_ERRORS') === 'true') {
                 $error_msg .= ' (Version: ' . $firmware['version'] . ', ID: ' . $firmware_id . ')';
-                $error_msg .= ' | Dossiers disponibles: ' . (isset($diagnostic['available_dirs']) ? implode(', ', $diagnostic['available_dirs']) : 'N/A');
             }
             echo json_encode(['success' => false, 'error' => $error_msg]);
             return;
