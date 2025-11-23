@@ -39,21 +39,49 @@ export default function RootLayout({ children }) {
         </AuthProvider>
 
         {isProduction && (
-          <Script id="sw-register" strategy="afterInteractive">
-            {`if ('serviceWorker' in navigator) {
-              const registerSW = () => {
-                if (navigator.serviceWorker.controller) return;
-                navigator.serviceWorker.register('${swPath}').catch(err => {
-                  logger.warn('SW registration failed', err);
-                });
-              };
-              if (document.readyState === 'complete') {
-                registerSW();
-              } else {
-                window.addEventListener('load', registerSW, { once: true });
-              }
-            }`}
-          </Script>
+          <>
+            <Script id="sw-register" strategy="afterInteractive">
+              {`if ('serviceWorker' in navigator) {
+                const registerSW = () => {
+                  // Vérifier si un nouveau service worker est disponible
+                  navigator.serviceWorker.register('${swPath}').then(registration => {
+                    // Écouter les mises à jour
+                    registration.addEventListener('updatefound', () => {
+                      const newWorker = registration.installing;
+                      if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // Nouveau service worker disponible, forcer la mise à jour
+                            newWorker.postMessage({ type: 'SKIP_WAITING' });
+                            window.location.reload();
+                          }
+                        });
+                      }
+                    });
+                  }).catch(err => {
+                    logger.warn('SW registration failed', err);
+                  });
+                };
+                if (document.readyState === 'complete') {
+                  registerSW();
+                } else {
+                  window.addEventListener('load', registerSW, { once: true });
+                }
+              }`}
+            </Script>
+            <Script id="sw-update-check" strategy="afterInteractive">
+              {`// Vérifier les mises à jour toutes les heures
+              if ('serviceWorker' in navigator) {
+                setInterval(() => {
+                  navigator.serviceWorker.getRegistration('${swPath}').then(registration => {
+                    if (registration) {
+                      registration.update();
+                    }
+                  });
+                }, 3600000); // 1 heure
+              }`}
+            </Script>
+          </>
         )}
       </body>
     </html>

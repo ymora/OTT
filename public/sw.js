@@ -32,6 +32,13 @@ self.addEventListener('install', (event) => {
   )
 })
 
+// Écouter les messages pour forcer la mise à jour
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
+})
+
 // Activate: Nettoyer les anciens caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -110,8 +117,20 @@ self.addEventListener('fetch', (event) => {
             try {
               const responseToCache = response.clone()
               caches.open(CACHE_NAME).then((cache) => {
+                // Vérifier que la requête peut être mise en cache
+                if (event.request.url.startsWith('chrome-extension:') || 
+                    event.request.url.startsWith('moz-extension:') ||
+                    event.request.url.startsWith('safari-extension:') ||
+                    event.request.url.startsWith('ms-browser-extension:')) {
+                  // Ne pas essayer de mettre en cache les extensions
+                  return
+                }
                 cache.put(event.request, responseToCache).catch((err) => {
-                  console.warn('[SW] Erreur lors de la mise en cache:', err)
+                  // Ignorer silencieusement les erreurs de cache pour les extensions
+                  if (!err.message.includes('chrome-extension') && 
+                      !err.message.includes('moz-extension')) {
+                    console.warn('[SW] Erreur lors de la mise en cache:', err)
+                  }
                 })
               }).catch((err) => {
                 console.warn('[SW] Erreur ouverture cache:', err)
