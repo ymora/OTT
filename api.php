@@ -3647,7 +3647,9 @@ function handleGetFirmwareIno($firmware_id) {
                     return is_dir($firmware_base_dir . $item) && $item !== '.' && $item !== '..';
                 });
                 
-                error_log('[handleGetFirmwareIno] 🔍 Recherche par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)');
+                error_log('[handleCompileFirmware] 🔍 Recherche par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)');
+                sendSSE('log', 'info', '🔍 Recherche du fichier par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)...');
+                flush();
                 
                 // Chercher le fichier avec cet ID dans chaque dossier
                 foreach ($version_dirs as $version_dir) {
@@ -3656,13 +3658,17 @@ function handleGetFirmwareIno($firmware_id) {
                     if (is_dir($ino_dir)) {
                         // Chercher tous les fichiers .ino dans ce dossier
                         $files = glob($ino_dir . '*.ino');
+                        sendSSE('log', 'info', '   📁 Recherche dans ' . $version_dir . ' (' . count($files) . ' fichier(s) .ino)');
+                        flush();
                         
                         foreach ($files as $file) {
                             $filename = basename($file);
                             // Vérifier si le fichier contient l'ID unique
                             if (strpos($filename, $pattern_id) !== false) {
                                 $ino_path = $file;
-                                error_log('[handleGetFirmwareIno] ✅ Fichier trouvé par ID unique: ' . $filename . ' dans ' . $version_dir);
+                                error_log('[handleCompileFirmware] ✅ Fichier trouvé par ID unique: ' . $filename . ' dans ' . $version_dir);
+                                sendSSE('log', 'info', '✅ Fichier trouvé: ' . $filename . ' dans ' . $version_dir);
+                                flush();
                                 break 2; // Sortir des deux boucles
                             }
                         }
@@ -3670,10 +3676,14 @@ function handleGetFirmwareIno($firmware_id) {
                 }
                 
                 if (!$ino_path || !file_exists($ino_path)) {
-                    error_log('[handleGetFirmwareIno] ❌ Fichier avec ID ' . $firmware_id . ' introuvable dans tous les dossiers');
+                    error_log('[handleCompileFirmware] ❌ Fichier avec ID ' . $firmware_id . ' introuvable dans tous les dossiers');
+                    sendSSE('log', 'error', '❌ Fichier avec ID ' . $firmware_id . ' introuvable dans tous les dossiers');
+                    flush();
                 }
             } else {
-                error_log('[handleGetFirmwareIno] ⚠️ Dossier base introuvable: ' . $firmware_base_dir);
+                error_log('[handleCompileFirmware] ⚠️ Dossier base introuvable: ' . $firmware_base_dir);
+                sendSSE('log', 'error', '⚠️ Dossier base introuvable: hardware/firmware/');
+                flush();
             }
         }
         
@@ -4477,7 +4487,9 @@ function handleCompileFirmware($firmware_id) {
                     return is_dir($firmware_base_dir . $item) && $item !== '.' && $item !== '..';
                 });
                 
-                error_log('[handleGetFirmwareIno] 🔍 Recherche par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)');
+                error_log('[handleCompileFirmware] 🔍 Recherche par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)');
+                sendSSE('log', 'info', '🔍 Recherche du fichier par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)...');
+                flush();
                 
                 // Chercher le fichier avec cet ID dans chaque dossier
                 foreach ($version_dirs as $version_dir) {
@@ -4486,13 +4498,17 @@ function handleCompileFirmware($firmware_id) {
                     if (is_dir($ino_dir)) {
                         // Chercher tous les fichiers .ino dans ce dossier
                         $files = glob($ino_dir . '*.ino');
+                        sendSSE('log', 'info', '   📁 Recherche dans ' . $version_dir . ' (' . count($files) . ' fichier(s) .ino)');
+                        flush();
                         
                         foreach ($files as $file) {
                             $filename = basename($file);
                             // Vérifier si le fichier contient l'ID unique
                             if (strpos($filename, $pattern_id) !== false) {
                                 $ino_path = $file;
-                                error_log('[handleGetFirmwareIno] ✅ Fichier trouvé par ID unique: ' . $filename . ' dans ' . $version_dir);
+                                error_log('[handleCompileFirmware] ✅ Fichier trouvé par ID unique: ' . $filename . ' dans ' . $version_dir);
+                                sendSSE('log', 'info', '✅ Fichier trouvé: ' . $filename . ' dans ' . $version_dir);
+                                flush();
                                 break 2; // Sortir des deux boucles
                             }
                         }
@@ -4500,10 +4516,14 @@ function handleCompileFirmware($firmware_id) {
                 }
                 
                 if (!$ino_path || !file_exists($ino_path)) {
-                    error_log('[handleGetFirmwareIno] ❌ Fichier avec ID ' . $firmware_id . ' introuvable dans tous les dossiers');
+                    error_log('[handleCompileFirmware] ❌ Fichier avec ID ' . $firmware_id . ' introuvable dans tous les dossiers');
+                    sendSSE('log', 'error', '❌ Fichier avec ID ' . $firmware_id . ' introuvable dans tous les dossiers');
+                    flush();
                 }
             } else {
-                error_log('[handleGetFirmwareIno] ⚠️ Dossier base introuvable: ' . $firmware_base_dir);
+                error_log('[handleCompileFirmware] ⚠️ Dossier base introuvable: ' . $firmware_base_dir);
+                sendSSE('log', 'error', '⚠️ Dossier base introuvable: hardware/firmware/');
+                flush();
             }
         }
         
