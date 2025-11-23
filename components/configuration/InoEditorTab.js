@@ -38,6 +38,7 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
   const [compileLogs, setCompileLogs] = useState([])
   const [compilingFirmwareId, setCompilingFirmwareId] = useState(null)
   const [compileWindowMinimized, setCompileWindowMinimized] = useState(false)
+  const [copyLogsSuccess, setCopyLogsSuccess] = useState(false)
   const eventSourceRef = useRef(null)
   const compileLogsRef = useRef(null)
 
@@ -711,6 +712,24 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
     }
   }, [compileLogs.length, compiling])
 
+  // Copier les logs de compilation
+  const handleCopyLogs = useCallback(() => {
+    if (compileLogs.length === 0) {
+      return
+    }
+
+    const logsText = compileLogs.map(log =>
+      `[${log.timestamp}] ${log.message}`
+    ).join('\n')
+
+    navigator.clipboard.writeText(logsText).then(() => {
+      setCopyLogsSuccess(true)
+      setTimeout(() => setCopyLogsSuccess(false), 2000)
+    }).catch(err => {
+      setError('Erreur lors de la copie des logs')
+    })
+  }, [compileLogs])
+
   return (
     <div className="space-y-6">
       {/* Liste des fichiers .ino existants - EN HAUT */}
@@ -829,6 +848,15 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
                 <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
                   {compileProgress}%
                 </span>
+              )}
+              {compileLogs.length > 0 && (
+                <button
+                  onClick={handleCopyLogs}
+                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="Copier les logs"
+                >
+                  {copyLogsSuccess ? '✅ Copié!' : '📋 Copier'}
+                </button>
               )}
               <button
                 onClick={() => setCompileWindowMinimized(!compileWindowMinimized)}
