@@ -40,9 +40,9 @@ export default function RootLayout({ children }) {
 
         {isProduction && (
           <>
-            <Script id="sw-register" strategy="afterInteractive">
-{`if ('serviceWorker' in navigator) {
-                const swPath = '${swPath}';
+            <Script id="sw-register" strategy="afterInteractive" dangerouslySetInnerHTML={{
+              __html: `if ('serviceWorker' in navigator) {
+                const swPath = ${JSON.stringify(swPath)};
                 let isUpdating = false;
                 
                 const registerSW = () => {
@@ -117,8 +117,8 @@ export default function RootLayout({ children }) {
                     checkForUpdates();
                   }
                 });
-              }`}
-            </Script>
+              }`
+            }} />
           </>
         )}
       </body>
