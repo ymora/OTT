@@ -110,12 +110,50 @@ export default function Login() {
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-100 text-center">
             <p className="text-sm text-gray-500">
-              Besoin d’un accès de démonstration&nbsp;?
+              Besoin d'un accès de démonstration&nbsp;?
             </p>
             <p className="text-xs text-gray-400 mt-1">
               Contactez support@happlyz.com pour obtenir des identifiants temporaires.
             </p>
           </div>
+        </div>
+
+        {/* Bouton de vidage de cache */}
+        <div className="text-center mt-4">
+          <button
+            onClick={async () => {
+              if (!confirm('Vider le cache et recharger la page ?')) return
+              
+              try {
+                // Désinscrire tous les service workers
+                const registrations = await navigator.serviceWorker.getRegistrations()
+                for (const reg of registrations) {
+                  await reg.unregister()
+                  console.log('✅ Service worker désinscrit')
+                }
+                
+                // Vider tous les caches
+                const cacheNames = await caches.keys()
+                for (const name of cacheNames) {
+                  await caches.delete(name)
+                  console.log('✅ Cache supprimé:', name)
+                }
+                
+                // Vider le localStorage
+                localStorage.clear()
+                
+                // Recharger la page
+                setTimeout(() => window.location.reload(true), 500)
+              } catch (err) {
+                console.error('❌ Erreur lors du nettoyage:', err)
+                alert('Erreur lors du nettoyage du cache')
+              }
+            }}
+            className="text-xs text-white/60 hover:text-white/80 underline transition-colors"
+            title="Vider le cache et recharger la page"
+          >
+            🧹 Vider le cache
+          </button>
         </div>
 
         {/* Version badge */}

@@ -85,6 +85,14 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, password })
     })
 
+    // Vérifier si la réponse est du JSON ou du HTML (erreur PHP)
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text()
+      console.error('[AuthContext] Réponse non-JSON reçue:', text.substring(0, 200))
+      throw new Error('Erreur serveur: la réponse n\'est pas au format JSON. Vérifiez que le serveur fonctionne correctement.')
+    }
+
     const data = await response.json()
 
     if (!data.success) {
