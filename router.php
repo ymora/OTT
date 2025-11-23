@@ -17,7 +17,11 @@ $extension = pathinfo($path, PATHINFO_EXTENSION);
 
 // Si c'est un fichier statique avec extension autorisée et qu'il existe
 if ($extension && in_array(strtolower($extension), $staticExtensions)) {
-    $filePath = __DIR__ . $path;
+    // Vérifier dans public/ d'abord (Next.js), puis à la racine
+    $filePath = __DIR__ . '/public' . $path;
+    if (!file_exists($filePath)) {
+        $filePath = __DIR__ . $path;
+    }
     if (file_exists($filePath) && is_file($filePath)) {
         // Servir le fichier statique directement
         return false; // Laisser PHP built-in servir le fichier
