@@ -59,6 +59,21 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url)
   const pathname = url.pathname
+  const scheme = url.protocol
+
+  // Ignorer les schémas non supportés (chrome-extension, moz-extension, etc.)
+  // Ces requêtes ne peuvent pas être mises en cache
+  const unsupportedSchemes = ['chrome-extension:', 'moz-extension:', 'safari-extension:', 'ms-browser-extension:']
+  if (unsupportedSchemes.includes(scheme)) {
+    // Laisser passer la requête sans intervention du service worker
+    return
+  }
+
+  // Ignorer les requêtes vers des domaines externes non autorisés
+  // (sauf l'API qui est gérée séparément)
+  if (scheme !== 'http:' && scheme !== 'https:') {
+    return
+  }
 
   // Pour les fichiers _next/static (CSS, JS avec hash), utiliser "network first"
   // Ces fichiers changent de nom à chaque build, donc on ne doit pas les mettre en cache
@@ -87,12 +102,24 @@ self.addEventListener('fetch', (event) => {
 
       return fetch(event.request)
         .then((response) => {
-          // Mettre en cache uniquement les réponses valides
-          if (response.status === 200) {
-            const responseToCache = response.clone()
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache)
-            })
+          // Mettre en cache uniquement les réponses valides et supportées
+          // Vérifier que la réponse est clonable et que le schéma est supporté
+          if (response.status === 200 && 
+              response.type === 'basic' && 
+              (scheme === 'http:' || scheme === 'https:')) {
+            try {
+              const responseToCache = response.clone()
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseToCache).catch((err) => {
+                  console.warn('[SW] Erreur lors de la mise en cache:', err)
+                })
+              }).catch((err) => {
+                console.warn('[SW] Erreur ouverture cache:', err)
+              })
+            } catch (err) {
+              // Ignorer les erreurs de mise en cache (requêtes non clonables, etc.)
+              console.warn('[SW] Impossible de mettre en cache:', err)
+            }
           }
           return response
         })

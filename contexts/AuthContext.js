@@ -31,16 +31,51 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Vérifier si token existe dans localStorage
-    const storedToken = localStorage.getItem('ott_token')
-    const storedUser = localStorage.getItem('ott_user')
-
-    if (storedToken && storedUser) {
-      setToken(storedToken)
-      setUser(JSON.parse(storedUser))
+    // Logging pour le débogage
+    if (typeof window !== 'undefined') {
+      console.log('[AuthContext] Initialisation...')
     }
 
-    setLoading(false)
+    try {
+      // Vérifier si token existe dans localStorage
+      const storedToken = localStorage.getItem('ott_token')
+      const storedUser = localStorage.getItem('ott_user')
+
+      if (typeof window !== 'undefined') {
+        console.log('[AuthContext] localStorage:', { 
+          hasToken: !!storedToken, 
+          hasUser: !!storedUser,
+          tokenLength: storedToken?.length || 0
+        })
+      }
+
+      if (storedToken && storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser)
+          setToken(storedToken)
+          setUser(parsedUser)
+          if (typeof window !== 'undefined') {
+            console.log('[AuthContext] Utilisateur restauré:', parsedUser.email || parsedUser.username)
+          }
+        } catch (parseError) {
+          console.error('[AuthContext] Erreur parsing user:', parseError)
+          // Nettoyer les données corrompues
+          localStorage.removeItem('ott_token')
+          localStorage.removeItem('ott_user')
+        }
+      } else {
+        if (typeof window !== 'undefined') {
+          console.log('[AuthContext] Aucun utilisateur stocké')
+        }
+      }
+    } catch (error) {
+      console.error('[AuthContext] Erreur lors de l\'initialisation:', error)
+    } finally {
+      setLoading(false)
+      if (typeof window !== 'undefined') {
+        console.log('[AuthContext] Initialisation terminée, loading=false')
+      }
+    }
   }, [])
 
   const login = async (email, password) => {
