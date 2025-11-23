@@ -4166,7 +4166,6 @@ function handleUploadFirmwareIno() {
 
 function handleCompileFirmware($firmware_id) {
     global $pdo;
-    requireAuth();
     
     // CRITIQUE: Ignorer l'arrêt du script si la connexion client se ferme
     // Cela garantit que la compilation continue même si l'utilisateur change d'onglet
@@ -4190,6 +4189,15 @@ function handleCompileFirmware($firmware_id) {
     // Envoyer immédiatement pour établir la connexion
     echo ": keep-alive\n\n";
     flush();
+    
+    // Vérifier l'authentification APRÈS avoir envoyé les headers SSE
+    // Si l'auth échoue, envoyer une erreur via SSE au lieu d'un JSON avec exit()
+    $user = getCurrentUser();
+    if (!$user) {
+        sendSSE('error', 'Unauthorized - Veuillez vous reconnecter');
+        flush();
+        return;
+    }
     
     // Vérifier que le firmware existe et est en attente de compilation
     try {
