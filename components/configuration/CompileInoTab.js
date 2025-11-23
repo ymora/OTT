@@ -67,16 +67,44 @@ export default function CompileInoTab() {
 
   // Compiler le firmware
   const handleCompile = useCallback(async (uploadId) => {
-    if (!uploadId) return
+    const functionStartTime = new Date()
+    logger.log('═══════════════════════════════════════════════════════')
+    logger.log('🚀 [handleCompile] DÉBUT DE LA FONCTION')
+    logger.log('═══════════════════════════════════════════════════════')
+    logger.log('   Timestamp:', functionStartTime.toISOString())
+    logger.log('   uploadId:', uploadId)
+    logger.log('   compiling:', compiling)
+    logger.log('   compilingFirmwareId:', compilingFirmwareId)
+    logger.log('   eventSourceRef.current:', !!eventSourceRef.current)
+    logger.log('   token présent:', !!token)
+    logger.log('   API_URL:', API_URL)
+    logger.log('   User Agent:', navigator.userAgent)
+    logger.log('   Platform:', navigator.platform)
+    logger.log('   Language:', navigator.language)
+    logger.log('   Online:', navigator.onLine)
+    logger.log('   Connection:', navigator.connection ? JSON.stringify({
+      effectiveType: navigator.connection.effectiveType,
+      downlink: navigator.connection.downlink,
+      rtt: navigator.connection.rtt
+    }) : 'N/A')
+    logger.log('═══════════════════════════════════════════════════════')
     
-    // Éviter les appels multiples pour le même firmware
-    if (compiling && compilingFirmwareId === uploadId && eventSourceRef.current) {
+    if (!uploadId) {
+      logger.warn('⚠️ [handleCompile] uploadId manquant, arrêt')
       return
     }
     
+    // Éviter les appels multiples pour le même firmware
+    if (compiling && compilingFirmwareId === uploadId && eventSourceRef.current) {
+      logger.warn('⚠️ [handleCompile] Compilation déjà en cours pour ce firmware, arrêt')
+      return
+    }
+    
+    logger.log('🔧 [handleCompile] Fermeture de l\'ancienne connexion si elle existe')
     // Fermer l'ancienne connexion si elle existe
     closeEventSource()
 
+    logger.log('🔧 [handleCompile] Mise à jour des états React')
     setCompiling(true)
     setCompilingFirmwareId(uploadId)
     setCurrentStep('compilation')
@@ -90,13 +118,38 @@ export default function CompileInoTab() {
     setError(null)
     setSuccess(null)
     reconnectAttemptedRef.current = false
+    logger.log('✅ [handleCompile] États React mis à jour')
 
     try {
+      logger.log('🔍 [handleCompile] Vérification du token')
       if (!token) {
+        logger.error('❌ [handleCompile] Token manquant!')
         throw new Error('Token manquant. Veuillez vous reconnecter.')
       }
+      logger.log('✅ [handleCompile] Token présent')
 
-      const sseUrl = `${API_URL}/api.php/firmwares/compile/${uploadId}?token=${encodeURIComponent(token)}`
+      logger.log('🔧 [handleCompile] Construction de l\'URL SSE')
+      const tokenEncoded = encodeURIComponent(token)
+      logger.log('   Token original length:', token.length)
+      logger.log('   Token encoded length:', tokenEncoded.length)
+      logger.log('   Token encoded preview:', tokenEncoded.substring(0, 50) + '...')
+      
+      const sseUrl = `${API_URL}/api.php/firmwares/compile/${uploadId}?token=${tokenEncoded}`
+      logger.log('   URL SSE construite:', sseUrl.substring(0, 100) + '...')
+      logger.log('   URL SSE length:', sseUrl.length)
+      
+      // Vérifier que l'URL est valide
+      try {
+        const urlObj = new URL(sseUrl)
+        logger.log('✅ [handleCompile] URL valide:')
+        logger.log('   Protocol:', urlObj.protocol)
+        logger.log('   Host:', urlObj.host)
+        logger.log('   Pathname:', urlObj.pathname)
+        logger.log('   Search params count:', urlObj.searchParams.toString().length)
+      } catch (urlError) {
+        logger.error('❌ [handleCompile] URL invalide:', urlError)
+        throw urlError
+      }
       
       // Logs détaillés pour le diagnostic (console ET interface)
       const startLogs = [
@@ -125,16 +178,26 @@ export default function CompileInoTab() {
       ])
 
       // Vérifier si le token est expiré AVANT de créer EventSource
+      logger.log('🔍 [handleCompile] Vérification expiration du token')
       if (token) {
         try {
+          logger.log('   Découpage du token en parties')
           const parts = token.split('.')
+          logger.log('   Nombre de parties:', parts.length)
           if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+            logger.log('   Décodage du payload JWT')
+            const base64Payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+            logger.log('   Base64 payload length:', base64Payload.length)
+            const payload = JSON.parse(atob(base64Payload))
+            logger.log('   Payload décodé:', JSON.stringify(payload, null, 2))
             const exp = payload.exp
             const now = Math.floor(Date.now() / 1000)
+            logger.log('   Expiration (exp):', exp, new Date(exp * 1000).toISOString())
+            logger.log('   Maintenant (now):', now, new Date(now * 1000).toISOString())
+            logger.log('   Différence:', exp - now, 'secondes')
             if (exp && exp < now) {
               const expiredMsg = '❌ Token expiré! Veuillez vous reconnecter.'
-              logger.error(expiredMsg)
+              logger.error('❌ [handleCompile]', expiredMsg)
               setCompileLogs(prev => [...prev, {
                 timestamp: new Date().toLocaleTimeString('fr-FR'),
                 message: expiredMsg,
@@ -144,15 +207,34 @@ export default function CompileInoTab() {
               resetCompilationState()
               return
             }
-            logger.log(`✅ Token valide (expire dans ${Math.floor((exp - now) / 60)} minutes)`)
+            const minutesLeft = Math.floor((exp - now) / 60)
+            logger.log(`✅ [handleCompile] Token valide (expire dans ${minutesLeft} minutes)`)
+            addLog(`✅ Token valide (expire dans ${minutesLeft} minutes)`, 'info')
+          } else {
+            logger.warn('⚠️ [handleCompile] Token n\'a pas 3 parties, format invalide')
           }
         } catch (e) {
-          logger.warn('⚠️ Impossible de vérifier l\'expiration du token:', e)
+          logger.error('❌ [handleCompile] Erreur vérification token:', e)
+          logger.error('   Stack:', e.stack)
+          logger.warn('⚠️ [handleCompile] Impossible de vérifier l\'expiration du token, continuation...')
         }
+      } else {
+        logger.warn('⚠️ [handleCompile] Token null/undefined')
       }
 
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('🔨 [handleCompile] CRÉATION EVENTSOURCE')
+      logger.log('═══════════════════════════════════════════════════════')
+      logger.log('   URL:', sseUrl)
+      logger.log('   Timestamp avant création:', new Date().toISOString())
+      
+      const beforeCreation = performance.now()
       const eventSource = new EventSource(sseUrl)
+      const afterCreation = performance.now()
       const creationTime = new Date()
+      
+      logger.log('   Temps création EventSource:', (afterCreation - beforeCreation).toFixed(2), 'ms')
+      logger.log('   Timestamp après création:', creationTime.toISOString())
       
       logger.log('═══════════════════════════════════════════════════════')
       logger.log('📡 EVENTSOURCE CRÉÉ')
@@ -182,19 +264,43 @@ export default function CompileInoTab() {
       // Buffer pour capturer les messages même si la connexion se ferme rapidement
       let messageBuffer = []
       let hasReceivedMessage = false
+      let openEventFired = false
+      let errorEventFired = false
+      let messageEventFired = false
+      
+      logger.log('📋 [handleCompile] Variables de suivi initialisées:')
+      logger.log('   messageBuffer:', messageBuffer.length, 'éléments')
+      logger.log('   hasReceivedMessage:', hasReceivedMessage)
+      logger.log('   openEventFired:', openEventFired)
+      logger.log('   errorEventFired:', errorEventFired)
+      logger.log('   messageEventFired:', messageEventFired)
 
       // Log immédiatement l'état de la connexion
+      logger.log('⏱️ [handleCompile] Configuration des timeouts de vérification')
       // NOTE: Le serveur Render répond en ~350ms, donc on vérifie après 500ms
-      setTimeout(() => {
+      const timeout500 = setTimeout(() => {
+        const checkTime = new Date()
+        const timeSinceCreation = checkTime - creationTime
+        logger.log('═══════════════════════════════════════════════════════')
+        logger.log('⏱️ [TIMEOUT 500ms] VÉRIFICATION ÉTAT')
+        logger.log('═══════════════════════════════════════════════════════')
+        logger.log('   Timestamp:', checkTime.toISOString())
+        logger.log('   Temps depuis création:', timeSinceCreation, 'ms')
         const state = eventSource.readyState
         const stateText = state === EventSource.CONNECTING ? 'CONNECTING' : state === EventSource.OPEN ? 'OPEN' : 'CLOSED'
         const stateMsg = `⏱️ [500ms] État: ${stateText} (${state})`
         
-        logger.log(stateMsg)
+        logger.log('   readyState:', state, `(${stateText})`)
+        logger.log('   openEventFired:', openEventFired)
+        logger.log('   errorEventFired:', errorEventFired)
+        logger.log('   messageEventFired:', messageEventFired)
+        logger.log('   messages reçus:', messageBuffer.length)
+        logger.log('   hasReceivedMessage:', hasReceivedMessage)
+        logger.log('═══════════════════════════════════════════════════════')
         
         if (state === EventSource.CONNECTING) {
           const msg = '⚠️ Toujours en connexion... (normal, le serveur Render répond en ~350ms)'
-          logger.log(msg)
+          logger.log('   État: CONNECTING -', msg)
           setCompileLogs(prev => [...prev, {
             timestamp: new Date().toLocaleTimeString('fr-FR'),
             message: `${stateMsg} - ${msg}`,
@@ -202,19 +308,22 @@ export default function CompileInoTab() {
           }])
         } else if (state === EventSource.OPEN) {
           const msg = '✅ Connexion ouverte avec succès!'
-          logger.log(msg)
+          logger.log('   État: OPEN -', msg)
           setCompileLogs(prev => [...prev, {
             timestamp: new Date().toLocaleTimeString('fr-FR'),
             message: `${stateMsg} - ${msg}`,
             level: 'info'
           }])
         } else if (state === EventSource.CLOSED) {
+          logger.error('   État: CLOSED - Connexion fermée!')
           // Si on a reçu des messages avant la fermeture, les afficher
           if (messageBuffer.length > 0) {
-            logger.log(`📨 ${messageBuffer.length} message(s) reçu(s) avant fermeture`)
-            messageBuffer.forEach(msg => {
-              logger.log('   Message:', msg)
+            logger.log(`   📨 ${messageBuffer.length} message(s) reçu(s) avant fermeture:`)
+            messageBuffer.forEach((msg, idx) => {
+              logger.log(`      [${idx + 1}] ${msg.timestamp} (readyState: ${msg.readyState}): ${msg.data.substring(0, 100)}`)
             })
+          } else {
+            logger.error('   ⚠️  AUCUN MESSAGE REÇU AVANT FERMETURE!')
           }
           
           const errorMsgs = [
@@ -223,9 +332,13 @@ export default function CompileInoTab() {
             '   • Token expiré ou invalide',
             '   • Serveur inaccessible',
             '   • Erreur d\'authentification',
-            '   • Timeout du serveur'
+            '   • Timeout du serveur',
+            `   • openEventFired: ${openEventFired}`,
+            `   • errorEventFired: ${errorEventFired}`,
+            `   • messageEventFired: ${messageEventFired}`,
+            `   • Messages reçus: ${messageBuffer.length}`
           ]
-          errorMsgs.forEach(msg => logger.error(msg))
+          errorMsgs.forEach(msg => logger.error('   ', msg))
           setCompileLogs(prev => [...prev, ...errorMsgs.map(msg => ({
             timestamp: new Date().toLocaleTimeString('fr-FR'),
             message: msg,
@@ -234,11 +347,26 @@ export default function CompileInoTab() {
         }
       }, 500) // Augmenté à 500ms car le serveur répond en ~350ms
       
+      logger.log('   ✅ Timeout 500ms configuré')
+      
       // Vérifier aussi après 3 secondes (augmenté car Render peut être lent)
-      setTimeout(() => {
+      const timeout3000 = setTimeout(() => {
+        const checkTime = new Date()
+        const timeSinceCreation = checkTime - creationTime
+        logger.log('═══════════════════════════════════════════════════════')
+        logger.log('⏱️ [TIMEOUT 3000ms] VÉRIFICATION ÉTAT')
+        logger.log('═══════════════════════════════════════════════════════')
+        logger.log('   Timestamp:', checkTime.toISOString())
+        logger.log('   Temps depuis création:', timeSinceCreation, 'ms')
         const state = eventSource.readyState
-        logger.log('⏱️ [3s] État de la connexion:')
-        logger.log('   readyState:', state)
+        logger.log('   readyState:', state, `(${state === EventSource.CONNECTING ? 'CONNECTING' : state === EventSource.OPEN ? 'OPEN' : 'CLOSED'})`)
+        logger.log('   openEventFired:', openEventFired)
+        logger.log('   errorEventFired:', errorEventFired)
+        logger.log('   messageEventFired:', messageEventFired)
+        logger.log('   messages reçus:', messageBuffer.length)
+        logger.log('   hasReceivedMessage:', hasReceivedMessage)
+        logger.log('═══════════════════════════════════════════════════════')
+        
         if (state === EventSource.CONNECTING) {
           logger.error('   ❌ Toujours en connexion après 3s - problème de connexion!')
           logger.error('   🔍 Vérifiez:')
@@ -261,19 +389,43 @@ export default function CompileInoTab() {
             }
             return prev
           })
+        } else {
+          logger.log('   ✅ État OK après 3s')
         }
-      }, 2000)
+      }, 3000)
+      
+      logger.log('   ✅ Timeout 3000ms configuré')
 
+      logger.log('🔧 [handleCompile] Configuration des event listeners')
+      
       eventSource.onopen = () => {
+        openEventFired = true
         const openTime = new Date()
-        const timeSinceStart = openTime - new Date(startLogs[0]?.includes('Timestamp') ? startLogs[0] : Date.now())
+        const timeSinceCreation = openTime - creationTime
+        const timeSinceFunctionStart = openTime - functionStartTime
+        
+        logger.log('═══════════════════════════════════════════════════════')
+        logger.log('🎉 [EVENT: onopen] CONNEXION SSE ÉTABLIE!')
+        logger.log('═══════════════════════════════════════════════════════')
+        logger.log('   Timestamp:', openTime.toISOString())
+        logger.log('   Temps depuis création EventSource:', timeSinceCreation, 'ms')
+        logger.log('   Temps depuis début handleCompile:', timeSinceFunctionStart, 'ms')
+        logger.log('   readyState:', eventSource.readyState, '(devrait être 1=OPEN)')
+        logger.log('   URL:', eventSource.url.substring(0, 100) + '...')
+        logger.log('   withCredentials:', eventSource.withCredentials)
+        logger.log('   openEventFired:', openEventFired)
+        logger.log('   errorEventFired:', errorEventFired)
+        logger.log('   messageEventFired:', messageEventFired)
+        logger.log('   messages reçus avant onopen:', messageBuffer.length)
+        logger.log('═══════════════════════════════════════════════════════')
+        
         const openLogs = [
           '═══════════════════════════════════════════════════════',
           '✅ CONNEXION SSE ÉTABLIE!',
           `   readyState: ${eventSource.readyState} (devrait être 1=OPEN)`,
           `   URL: ${eventSource.url.substring(0, 100)}...`,
           `   ⏰ Timestamp: ${openTime.toISOString()}`,
-          `   ⏱️  Temps depuis création: ${timeSinceStart}ms`,
+          `   ⏱️  Temps depuis création: ${timeSinceCreation}ms`,
           `   🔗 withCredentials: ${eventSource.withCredentials}`,
           '═══════════════════════════════════════════════════════'
         ]
@@ -296,6 +448,8 @@ export default function CompileInoTab() {
           return prev
         })
       }
+      
+      logger.log('   ✅ onopen listener configuré')
 
       eventSource.onmessage = (event) => {
         hasReceivedMessage = true
@@ -413,22 +567,35 @@ export default function CompileInoTab() {
         }
       }
 
+      logger.log('   ✅ onmessage listener configuré')
+      
       eventSource.onerror = (error) => {
+        errorEventFired = true
         const errorTime = new Date()
+        const timeSinceCreation = errorTime - creationTime
+        const timeSinceFunctionStart = errorTime - functionStartTime
         const state = eventSource.readyState
         
         logger.error('═══════════════════════════════════════════════════════')
-        logger.error('❌ ERREUR EVENTSOURCE DÉTECTÉE!')
+        logger.error('❌ [EVENT: onerror] ERREUR EVENTSOURCE DÉTECTÉE!')
         logger.error('═══════════════════════════════════════════════════════')
         logger.error('   Timestamp:', errorTime.toISOString())
+        logger.error('   Temps depuis création EventSource:', timeSinceCreation, 'ms')
+        logger.error('   Temps depuis début handleCompile:', timeSinceFunctionStart, 'ms')
         logger.error('   ReadyState:', state, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
-        logger.error('   URL:', eventSource.url.substring(0, 100))
+        logger.error('   URL:', eventSource.url.substring(0, 100) + '...')
         logger.error('   Error object:', error)
         logger.error('   Error type:', error?.type || 'N/A')
         logger.error('   Error target:', error?.target || 'N/A')
+        logger.error('   Error bubbles:', error?.bubbles || 'N/A')
+        logger.error('   Error cancelable:', error?.cancelable || 'N/A')
+        logger.error('   Error defaultPrevented:', error?.defaultPrevented || 'N/A')
         logger.error('   Messages reçus: ', messageBuffer.length)
         logger.error('   HasReceivedMessage:', hasReceivedMessage)
         logger.error('   withCredentials:', eventSource.withCredentials)
+        logger.error('   openEventFired:', openEventFired)
+        logger.error('   errorEventFired:', errorEventFired)
+        logger.error('   messageEventFired:', messageEventFired)
         
         // Afficher les messages reçus avant l'erreur
         if (messageBuffer.length > 0) {
