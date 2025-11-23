@@ -339,6 +339,34 @@ export default function CompileInoTab() {
       let openEventFired = false
       let errorEventFired = false
       let messageEventFired = false
+      let readyStateHistory = []
+      
+      // Surveiller les changements de readyState en continu
+      const readyStateMonitor = setInterval(() => {
+        const currentState = eventSource.readyState
+        const stateText = currentState === EventSource.CONNECTING ? 'CONNECTING' : currentState === EventSource.OPEN ? 'OPEN' : 'CLOSED'
+        const now = new Date()
+        
+        // Enregistrer seulement si l'état a changé
+        const lastState = readyStateHistory[readyStateHistory.length - 1]
+        if (!lastState || lastState.state !== currentState) {
+          readyStateHistory.push({
+            timestamp: now.toISOString(),
+            timeSinceCreation: now - creationTime,
+            state: currentState,
+            stateText: stateText
+          })
+          
+          logger.log(`🔄 [readyStateMonitor] État changé: ${stateText} (${currentState}) après ${now - creationTime}ms`)
+        }
+      }, 50) // Vérifier toutes les 50ms
+      
+      // Nettoyer le monitor après 10 secondes
+      setTimeout(() => {
+        clearInterval(readyStateMonitor)
+        logger.log('🛑 [readyStateMonitor] Arrêté après 10s')
+        logger.log('   Historique readyState:', readyStateHistory)
+      }, 10000)
       
       logger.log('📋 [handleCompile] Variables de suivi initialisées:')
       logger.log('   messageBuffer:', messageBuffer.length, 'éléments')
@@ -346,6 +374,7 @@ export default function CompileInoTab() {
       logger.log('   openEventFired:', openEventFired)
       logger.log('   errorEventFired:', errorEventFired)
       logger.log('   messageEventFired:', messageEventFired)
+      logger.log('   readyStateMonitor: actif (vérification toutes les 50ms)')
 
       // Log immédiatement l'état de la connexion
       logger.log('⏱️ [handleCompile] Configuration des timeouts de vérification')
