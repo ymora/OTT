@@ -16,7 +16,7 @@ export default function DocumentationPage() {
   
   const docUrl = useMemo(() => {
     const fileName = DOCUMENTATION_FILES[docType] || DOCUMENTATION_FILES.presentation
-    return withBasePath(`/${fileName}`)
+    return withBasePath(`/docs/${fileName}`)
   }, [docType])
 
   useEffect(() => {

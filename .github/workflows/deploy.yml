@@ -62,15 +62,23 @@ jobs:
           if [ -f "out/README.md" ]; then
             rm out/README.md
           fi
-          # S'assurer que le fichier HTML de documentation n'est pas à la racine
-          if [ -f "out/DOCUMENTATION_COMPLETE_OTT.html" ]; then
-            # Le déplacer dans un sous-dossier si nécessaire, ou le supprimer
-            # Pour l'instant, on le laisse dans public/ mais pas à la racine de out/
-            echo "Documentation HTML trouvée mais ne sera pas servie à la racine"
+          # Déplacer les fichiers HTML de documentation dans un sous-dossier pour éviter les conflits
+          if [ -d "out" ]; then
+            mkdir -p out/docs
+            for doc in DOCUMENTATION_PRESENTATION.html DOCUMENTATION_DEVELOPPEURS.html DOCUMENTATION_COMMERCIALE.html; do
+              if [ -f "out/$doc" ]; then
+                mv "out/$doc" "out/docs/$doc"
+                echo "✅ $doc déplacé dans out/docs/"
+              fi
+            done
           fi
           # Vérifier que index.html existe et contient l'application
           if [ -f "out/index.html" ]; then
             echo "✅ index.html trouvé"
+            # Vérifier que index.html contient bien l'application React
+            if ! grep -q "OTT Dashboard\|root\|__next" out/index.html; then
+              echo "⚠️  index.html ne semble pas contenir l'application React"
+            fi
           else
             echo "❌ ERREUR: index.html manquant"
             exit 1
