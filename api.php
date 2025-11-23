@@ -3353,51 +3353,88 @@ function handleGetFirmwares() {
         $firmwares = $stmt->fetchAll();
         
         // Vérifier que chaque fichier existe vraiment sur le disque
+        // Pour chaque firmware, on doit vérifier :
+        // - Si compilé (status = 'compiled') : chercher le .bin
+        // - Sinon : chercher le .ino
         $verifiedFirmwares = [];
         foreach ($firmwares as $firmware) {
             $file_exists = false;
             $file_path_absolute = null;
             $file_size_actual = null;
+            $file_type = null; // 'ino' ou 'bin'
             
-            if (!empty($firmware['file_path'])) {
-                // Essayer plusieurs chemins possibles
+            $firmware_id = $firmware['id'];
+            $firmware_version = $firmware['version'];
+            $firmware_status = $firmware['status'] ?? 'unknown';
+            $version_dir = getVersionDir($firmware_version);
+            
+            // Déterminer quel type de fichier chercher selon le statut
+            if ($firmware_status === 'compiled') {
+                // Si compilé, chercher le .bin
+                $file_type = 'bin';
+                $bin_filename = 'fw_ott_v' . $firmware_version . '.bin';
+                $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+                $bin_path = $bin_dir . $bin_filename;
+                
                 $test_paths = [
-                    $firmware['file_path'],
-                    __DIR__ . '/' . $firmware['file_path'],
+                    $bin_path,
+                    'hardware/firmware/' . $version_dir . '/' . $bin_filename,
+                    __DIR__ . '/hardware/firmware/' . $version_dir . '/' . $bin_filename,
                 ];
                 
-                // Si le chemin contient hardware/firmware/, essayer aussi sans préfixe
-                if (preg_match('#^hardware/firmware/#', $firmware['file_path'])) {
-                    $relative_path = preg_replace('#^hardware/firmware/#', '', $firmware['file_path']);
-                    $test_paths[] = __DIR__ . '/hardware/firmware/' . $relative_path;
+                // Aussi vérifier le file_path en DB s'il pointe vers un .bin
+                if (!empty($firmware['file_path']) && preg_match('/\.bin$/', $firmware['file_path'])) {
+                    $test_paths[] = $firmware['file_path'];
+                    $test_paths[] = __DIR__ . '/' . $firmware['file_path'];
                 }
+            } else {
+                // Si pas compilé, chercher le .ino avec l'ID
+                $file_type = 'ino';
+                $ino_filename = 'fw_ott_v' . $firmware_version . '_id' . $firmware_id . '.ino';
+                $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+                $ino_path = $ino_dir . $ino_filename;
                 
-                foreach ($test_paths as $test_path) {
-                    if (file_exists($test_path) && is_file($test_path)) {
-                        $file_exists = true;
-                        $file_path_absolute = $test_path;
-                        $file_size_actual = filesize($test_path);
-                        
-                        // Log pour diagnostic
-                        if (getenv('DEBUG_ERRORS') === 'true') {
-                            error_log('[handleGetFirmwares] ✅ Fichier trouvé: ' . $test_path . ' (size: ' . $file_size_actual . ')');
-                        }
-                        break;
-                    }
+                $test_paths = [
+                    $ino_path,
+                    'hardware/firmware/' . $version_dir . '/' . $ino_filename,
+                    __DIR__ . '/hardware/firmware/' . $version_dir . '/' . $ino_filename,
+                ];
+                
+                // Aussi vérifier le file_path en DB s'il pointe vers un .ino
+                if (!empty($firmware['file_path']) && preg_match('/\.ino$/', $firmware['file_path'])) {
+                    $test_paths[] = $firmware['file_path'];
+                    $test_paths[] = __DIR__ . '/' . $firmware['file_path'];
                 }
-                
-                if (!$file_exists) {
+            }
+            
+            // Tester chaque chemin
+            foreach ($test_paths as $test_path) {
+                if (file_exists($test_path) && is_file($test_path)) {
+                    $file_exists = true;
+                    $file_path_absolute = $test_path;
+                    $file_size_actual = filesize($test_path);
+                    
                     // Log pour diagnostic
                     if (getenv('DEBUG_ERRORS') === 'true') {
-                        error_log('[handleGetFirmwares] ❌ Fichier NON trouvé: ' . $firmware['file_path']);
-                        error_log('[handleGetFirmwares]   Chemins testés: ' . json_encode($test_paths));
+                        error_log('[handleGetFirmwares] ✅ Fichier ' . $file_type . ' trouvé: ' . $test_path . ' (size: ' . $file_size_actual . ')');
                     }
+                    break;
+                }
+            }
+            
+            if (!$file_exists) {
+                // Log pour diagnostic
+                if (getenv('DEBUG_ERRORS') === 'true') {
+                    error_log('[handleGetFirmwares] ❌ Fichier ' . $file_type . ' NON trouvé pour firmware ID ' . $firmware_id);
+                    error_log('[handleGetFirmwares]   Statut: ' . $firmware_status);
+                    error_log('[handleGetFirmwares]   Chemins testés: ' . json_encode($test_paths));
                 }
             }
             
             // Ajouter les informations de vérification au firmware
             $firmware['file_exists'] = $file_exists;
             $firmware['file_path_absolute'] = $file_path_absolute;
+            $firmware['file_type'] = $file_type; // 'ino' ou 'bin'
             $file_size_actual = $file_size_actual ?? null;
             if ($file_size_actual !== null) {
                 $firmware['file_size_actual'] = $file_size_actual;
@@ -3484,35 +3521,64 @@ function handleDeleteFirmware($firmware_id) {
             return;
         }
         
-        // Supprimer le fichier physique s'il existe
-        if (!empty($firmware['file_path'])) {
-            $file_path = __DIR__ . '/' . ltrim($firmware['file_path'], '/');
-            if (file_exists($file_path)) {
-                @unlink($file_path);
-            }
-        }
-        
-        // Supprimer aussi le fichier .ino s'il existe dans hardware/firmware/
+        $firmware_status = $firmware['status'] ?? 'unknown';
         $version_dir = getVersionDir($firmware['version']);
-        $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
-        if (is_dir($ino_dir)) {
-            $ino_files = glob($ino_dir . 'fw_ott_v' . $firmware['version'] . '_*.ino');
-            foreach ($ino_files as $ino_file) {
-                @unlink($ino_file);
+        
+        // Supprimer les fichiers selon le statut
+        if ($firmware_status === 'compiled') {
+            // Si compilé, supprimer le .bin mais GARDER le .ino et l'entrée DB
+            // Cela permet de recompiler plus tard
+            $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
+            $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            $bin_path = $bin_dir . $bin_filename;
+            
+            if (file_exists($bin_path)) {
+                @unlink($bin_path);
+                error_log('[handleDeleteFirmware] ✅ Fichier .bin supprimé: ' . basename($bin_path));
             }
+            
+            // Remettre le statut à 'pending_compilation' pour permettre la recompilation
+            $pdo->prepare("
+                UPDATE firmware_versions 
+                SET status = 'pending_compilation', 
+                    file_path = NULL,
+                    file_size = NULL,
+                    checksum = NULL
+                WHERE id = :id
+            ")->execute(['id' => $firmware_id]);
+            
+            auditLog('firmware.bin.deleted', 'firmware', $firmware_id, $firmware, ['action' => 'bin_deleted_kept_ino']);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Fichier .bin supprimé. Le firmware .ino est conservé et peut être recompilé.',
+                'deleted_version' => $firmware['version']
+            ]);
+        } else {
+            // Si pas compilé, supprimer le .ino ET l'entrée DB (suppression complète)
+            $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            if (is_dir($ino_dir)) {
+                // Supprimer UNIQUEMENT le fichier avec l'ID (format obligatoire)
+                $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
+                $ino_file_with_id = $ino_dir . $pattern_with_id;
+                if (file_exists($ino_file_with_id)) {
+                    @unlink($ino_file_with_id);
+                    error_log('[handleDeleteFirmware] ✅ Fichier .ino supprimé: ' . basename($ino_file_with_id));
+                }
+            }
+            
+            // Supprimer de la base de données
+            $deleteStmt = $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id");
+            $deleteStmt->execute(['id' => $firmware_id]);
+            
+            auditLog('firmware.deleted', 'firmware', $firmware_id, $firmware, null);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Firmware supprimé avec succès',
+                'deleted_version' => $firmware['version']
+            ]);
         }
-        
-        // Supprimer de la base de données
-        $deleteStmt = $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id");
-        $deleteStmt->execute(['id' => $firmware_id]);
-        
-        auditLog('firmware.deleted', 'firmware', $firmware_id, $firmware, null);
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Firmware supprimé avec succès',
-            'deleted_version' => $firmware['version']
-        ]);
         
     } catch(PDOException $e) {
         http_response_code(500);
@@ -3573,23 +3639,15 @@ function handleGetFirmwareIno($firmware_id) {
             $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
             
             if (is_dir($ino_dir)) {
-                // Chercher le fichier avec l'ID dans le nom (pattern le plus fiable)
+                // Chercher UNIQUEMENT le fichier avec l'ID dans le nom (format obligatoire)
                 $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
                 $ino_path_with_id = $ino_dir . $pattern_with_id;
                 
                 if (file_exists($ino_path_with_id)) {
                     $ino_path = $ino_path_with_id;
+                    error_log('[handleGetFirmwareIno] ✅ Fichier trouvé avec ID: ' . basename($ino_path));
                 } else {
-                    // Fallback : chercher tous les fichiers .ino pour cette version (pour compatibilité avec anciens fichiers)
-                    $pattern = 'fw_ott_v' . $firmware['version'] . '_*.ino';
-                    $ino_files = glob($ino_dir . $pattern);
-                    if (!empty($ino_files)) {
-                        // Trier par date de modification (le plus récent en premier)
-                        usort($ino_files, function($a, $b) {
-                            return filemtime($b) - filemtime($a);
-                        });
-                        $ino_path = $ino_files[0];
-                    }
+                    error_log('[handleGetFirmwareIno] ❌ Fichier introuvable avec pattern ID: ' . $pattern_with_id);
                 }
             }
         }
@@ -3705,14 +3763,17 @@ function handleUpdateFirmwareIno($firmware_id) {
             }
         }
         
-        // Si pas trouvé, chercher dans le dossier de l'ancienne version
+        // Si pas trouvé, chercher dans le dossier de l'ancienne version avec l'ID
         if (!$ino_path) {
             $old_version_dir = getVersionDir($firmware['version']);
             $old_ino_dir = __DIR__ . '/hardware/firmware/' . $old_version_dir . '/';
             if (is_dir($old_ino_dir)) {
-                $old_ino_files = glob($old_ino_dir . 'fw_ott_v' . $firmware['version'] . '_*.ino');
-                if (!empty($old_ino_files)) {
-                    $ino_path = $old_ino_files[0];
+                // Chercher UNIQUEMENT avec l'ID (format obligatoire)
+                $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
+                $old_ino_path_with_id = $old_ino_dir . $pattern_with_id;
+                if (file_exists($old_ino_path_with_id)) {
+                    $ino_path = $old_ino_path_with_id;
+                    error_log('[handleUpdateFirmwareIno] ✅ Fichier trouvé dans ancienne version avec ID: ' . basename($ino_path));
                 }
             }
         }
@@ -3727,7 +3788,7 @@ function handleUpdateFirmwareIno($firmware_id) {
         
         // Si la version a changé ou si pas de fichier trouvé, utiliser le nouveau dossier
         if ($firmware['version'] !== $target_version || !$ino_path) {
-            // PRIORITÉ: Chercher d'abord le fichier avec l'ID exact
+            // Chercher UNIQUEMENT le fichier avec l'ID exact (format obligatoire)
             $pattern_with_id = 'fw_ott_v' . $target_version . '_id' . $firmware_id . '.ino';
             $ino_path_with_id = $ino_dir . $pattern_with_id;
             
@@ -3735,29 +3796,10 @@ function handleUpdateFirmwareIno($firmware_id) {
                 $ino_path = $ino_path_with_id;
                 error_log('[handleUpdateFirmwareIno] ✅ Fichier trouvé avec ID: ' . basename($ino_path));
             } else {
-                // Chercher dans le nouveau dossier (fallback)
-                $new_ino_files = glob($ino_dir . 'fw_ott_v' . $target_version . '_*.ino');
-                if (!empty($new_ino_files)) {
-                    // Vérifier si un fichier contient l'ID
-                    $found_with_id = false;
-                    foreach ($new_ino_files as $file) {
-                        if (preg_match('/_id' . $firmware_id . '\.ino$/', basename($file))) {
-                            $ino_path = $file;
-                            $found_with_id = true;
-                            error_log('[handleUpdateFirmwareIno] ✅ Fichier trouvé avec ID dans glob: ' . basename($ino_path));
-                            break;
-                        }
-                    }
-                    if (!$found_with_id) {
-                        $ino_path = $new_ino_files[0];
-                        error_log('[handleUpdateFirmwareIno] ⚠️ Fichier trouvé sans ID (fallback): ' . basename($ino_path));
-                    }
-                } else {
-                    // Créer un nouveau fichier dans le nouveau dossier avec l'ID
-                    $ino_filename = 'fw_ott_v' . $target_version . '_id' . $firmware_id . '.ino';
-                    $ino_path = $ino_dir . $ino_filename;
-                    error_log('[handleUpdateFirmwareIno] Nouveau fichier créé avec ID: ' . $ino_filename);
-                }
+                // Créer un nouveau fichier dans le nouveau dossier avec l'ID (format obligatoire)
+                $ino_filename = 'fw_ott_v' . $target_version . '_id' . $firmware_id . '.ino';
+                $ino_path = $ino_dir . $ino_filename;
+                error_log('[handleUpdateFirmwareIno] Nouveau fichier créé avec ID: ' . $ino_filename);
             }
         }
         
@@ -4365,18 +4407,13 @@ function handleCompileFirmware($firmware_id) {
         
         // Marquer immédiatement comme "compiling" dans la base de données
         // Cela permet de savoir que la compilation est en cours même si la connexion SSE se ferme
+        // Permettre de compiler même si déjà compilé (pour recompiler)
         $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = :id")->execute(['id' => $firmware_id]);
         
-        if ($firmware['status'] !== 'pending_compilation' && $firmware['status'] !== 'compiling') {
-            // Remettre le statut d'origine si on ne peut pas compiler
-            $pdo->prepare("UPDATE firmware_versions SET status = :status WHERE id = :id")->execute([
-                'status' => $firmware['status'],
-                'id' => $firmware_id
-            ]);
-            sendSSE('error', 'Firmware already compiled or invalid status: ' . ($firmware['status'] ?? 'unknown'));
-            flush();
-            return;
-        }
+        // Note: On permet maintenant de compiler même si le statut est 'compiled' ou 'error'
+        // pour permettre de relancer la compilation
+        sendSSE('log', 'info', 'Démarrage de la compilation... (statut précédent: ' . ($firmware['status'] ?? 'unknown') . ')');
+        flush();
         
         // Construire le chemin du fichier .ino en utilisant l'ID du firmware
         $ino_path = null;
@@ -4407,23 +4444,15 @@ function handleCompileFirmware($firmware_id) {
             $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
             
             if (is_dir($ino_dir)) {
-                // Chercher le fichier avec l'ID dans le nom (pattern le plus fiable)
+                // Chercher UNIQUEMENT le fichier avec l'ID dans le nom (format obligatoire)
                 $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
                 $ino_path_with_id = $ino_dir . $pattern_with_id;
                 
                 if (file_exists($ino_path_with_id)) {
                     $ino_path = $ino_path_with_id;
+                    error_log('[handleGetFirmwareIno] ✅ Fichier trouvé avec ID: ' . basename($ino_path));
                 } else {
-                    // Fallback : chercher tous les fichiers .ino pour cette version (pour compatibilité avec anciens fichiers)
-                    $pattern = 'fw_ott_v' . $firmware['version'] . '_*.ino';
-                    $ino_files = glob($ino_dir . $pattern);
-                    if (!empty($ino_files)) {
-                        // Trier par date de modification (le plus récent en premier)
-                        usort($ino_files, function($a, $b) {
-                            return filemtime($b) - filemtime($a);
-                        });
-                        $ino_path = $ino_files[0];
-                    }
+                    error_log('[handleGetFirmwareIno] ❌ Fichier introuvable avec pattern ID: ' . $pattern_with_id);
                 }
             }
         }
@@ -4677,9 +4706,11 @@ function handleCompileFirmware($firmware_id) {
                     $startTime = time();
                     $lastOutputTime = $startTime;
                     $lastHeartbeatTime = $startTime;
+                    $lastKeepAliveTime = $startTime;
                     
                     while (true) {
                         $status = proc_get_status($process);
+                        $currentTime = time();
                         
                         // Lire stdout
                         $line = fgets($stdout);
@@ -4689,7 +4720,7 @@ function handleCompileFirmware($firmware_id) {
                                 $installOutput[] = $line;
                                 sendSSE('log', 'info', $line);
                                 flush();
-                                $lastOutputTime = time();
+                                $lastOutputTime = $currentTime;
                             }
                         }
                         
@@ -4701,7 +4732,7 @@ function handleCompileFirmware($firmware_id) {
                                 $installOutput[] = $errLine;
                                 sendSSE('log', 'info', $errLine);
                                 flush();
-                                $lastOutputTime = time();
+                                $lastOutputTime = $currentTime;
                             }
                         }
                         
@@ -4712,7 +4743,7 @@ function handleCompileFirmware($firmware_id) {
                         
                         // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
                         // (L'installation du core ESP32 peut prendre du temps)
-                        if (time() - $lastOutputTime > 600) {
+                        if ($currentTime - $lastOutputTime > 600) {
                             sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
                             sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
                             // Marquer le firmware comme erreur dans la base de données
@@ -4729,12 +4760,28 @@ function handleCompileFirmware($firmware_id) {
                             break;
                         }
                         
-                        // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion
-                        $currentTime = time();
-                        if ($currentTime - $lastHeartbeatTime >= 10) {
+                        // Envoyer un keep-alive SSE toutes les 3 secondes pour maintenir la connexion active
+                        // (Les commentaires SSE `: keep-alive` maintiennent la connexion ouverte)
+                        if ($currentTime - $lastKeepAliveTime >= 3) {
+                            $lastKeepAliveTime = $currentTime;
+                            echo ": keep-alive\n\n";
+                            flush();
+                        }
+                        
+                        // Envoyer un heartbeat avec message toutes les 5 secondes pour montrer que le système est vivant
+                        if ($currentTime - $lastHeartbeatTime >= 5) {
                             // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
                             $lastHeartbeatTime = $currentTime;
-                            sendSSE('log', 'info', '⏳ Installation en cours... (patientez, cela peut prendre plusieurs minutes)');
+                            $elapsedSeconds = $currentTime - $startTime;
+                            $elapsedMinutes = floor($elapsedSeconds / 60);
+                            $elapsedSecondsRemainder = $elapsedSeconds % 60;
+                            
+                            // Message avec timestamp pour montrer que le système est toujours actif
+                            $timeStr = $elapsedMinutes > 0 
+                                ? sprintf('%dm %ds', $elapsedMinutes, $elapsedSecondsRemainder)
+                                : sprintf('%ds', $elapsedSecondsRemainder);
+                            
+                            sendSSE('log', 'info', '⏳ Installation en cours... (temps écoulé: ' . $timeStr . ' - le système est actif)');
                             flush();
                         }
                         

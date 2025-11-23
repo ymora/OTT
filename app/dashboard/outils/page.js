@@ -22,6 +22,8 @@ export default function OutilsPage() {
 
   // Onglet actif
   const [activeTab, setActiveTab] = useState('ino')
+  // Badge "Nouveau" pour l'onglet Compile (affiché après un upload)
+  const [hasNewFirmware, setHasNewFirmware] = useState(false)
 
   if (!canAccess) {
     return (
@@ -59,9 +61,15 @@ export default function OutilsPage() {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id)
+                // Retirer le badge "Nouveau" quand on clique sur l'onglet Compile
+                if (tab.id === 'compile' && hasNewFirmware) {
+                  setHasNewFirmware(false)
+                }
+              }}
               className={`
-                py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                py-4 px-1 border-b-2 font-medium text-sm transition-colors relative
                 ${
                   activeTab === tab.id
                     ? 'border-primary-500 text-primary-600 dark:text-primary-400'
@@ -71,6 +79,11 @@ export default function OutilsPage() {
             >
               <span className="mr-2">{tab.icon}</span>
               {tab.label}
+              {tab.id === 'compile' && hasNewFirmware && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                  !
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -79,10 +92,18 @@ export default function OutilsPage() {
       {/* Contenu des onglets - Ne pas démonter les composants pour garder les connexions SSE ouvertes */}
       <div className="mt-6">
         <div style={{ display: activeTab === 'ino' ? 'block' : 'none' }}>
-          <InoEditorTab />
+          <InoEditorTab 
+            onUploadSuccess={(firmwareId) => {
+              // Afficher le badge "Nouveau" sur l'onglet Compile
+              setHasNewFirmware(true)
+            }}
+            onSwitchToCompile={() => setActiveTab('compile')}
+          />
         </div>
         <div style={{ display: activeTab === 'compile' ? 'block' : 'none' }}>
-          <CompileInoTab />
+          <CompileInoTab 
+            onSwitchToIno={() => setActiveTab('ino')}
+          />
         </div>
         <div style={{ display: activeTab === 'flash' ? 'block' : 'none' }}>
           <FirmwareFlashTab />

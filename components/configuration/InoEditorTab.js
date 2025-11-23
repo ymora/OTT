@@ -9,7 +9,7 @@ import ErrorMessage from '@/components/ErrorMessage'
 import Modal from '@/components/Modal'
 import logger from '@/lib/logger'
 
-export default function InoEditorTab() {
+export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
   const { fetchWithAuth, API_URL, token } = useAuth()
   const [selectedFile, setSelectedFile] = useState(null)
   const [inoContent, setInoContent] = useState('')
@@ -152,6 +152,11 @@ export default function InoEditorTab() {
               message: '✅ Upload réussi ! Firmware prêt pour compilation.',
               level: 'info'
             }])
+            
+            // Notifier le parent qu'un upload a réussi
+            if (onUploadSuccess && response.firmware_id) {
+              onUploadSuccess(response.firmware_id)
+            }
             
             // Invalider le cache et rafraîchir la liste pour mettre à jour le tableau
             invalidateCache()
@@ -624,6 +629,26 @@ export default function InoEditorTab() {
     }
   }, [uploadLogs, uploading])
 
+  // Auto-fermer les messages de succès après 4 secondes
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess(null)
+      }, 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [success])
+
+  // Auto-fermer les messages d'erreur après 4 secondes
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null)
+      }, 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [error])
+
   return (
     <div className="space-y-6">
       {/* Bouton de chargement seul en haut */}
@@ -715,6 +740,47 @@ export default function InoEditorTab() {
               ))
             )}
           </div>
+          
+          {/* Notification après upload réussi avec actions rapides */}
+          {uploadProgress === 100 && !uploading && onSwitchToCompile && (
+            <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✅</span>
+                  <div>
+                    <p className="font-semibold text-green-800 dark:text-green-200">
+                      Firmware uploadé avec succès !
+                    </p>
+                    <p className="text-sm text-green-600 dark:text-green-300 mt-1">
+                      Le firmware est prêt pour la compilation.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (onSwitchToCompile) {
+                        onSwitchToCompile()
+                      }
+                    }}
+                    className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                  >
+                    🔨 Compiler maintenant
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUploadLogs([])
+                      setCurrentStep(null)
+                      setUploadProgress(0)
+                    }}
+                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -888,7 +954,7 @@ export default function InoEditorTab() {
       )}
 
       {/* Messages d'erreur */}
-      {error && <ErrorMessage error={error} />}
+      {error && <ErrorMessage error={error} onClose={() => setError(null)} autoClose={4000} />}
 
       {/* Modal confirmation suppression */}
       <Modal

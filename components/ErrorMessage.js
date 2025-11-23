@@ -3,7 +3,19 @@
  * @module components/ErrorMessage
  */
 
-export default function ErrorMessage({ error, onRetry = null, className = '' }) {
+import { useEffect } from 'react'
+
+export default function ErrorMessage({ error, onRetry = null, onClose = null, autoClose = null, className = '' }) {
+  // Auto-fermer le message d'erreur si autoClose est défini
+  useEffect(() => {
+    if (autoClose && onClose && error) {
+      const timer = setTimeout(() => {
+        onClose()
+      }, autoClose)
+      return () => clearTimeout(timer)
+    }
+  }, [autoClose, onClose, error])
+
   if (!error) return null
 
   return (
@@ -13,14 +25,25 @@ export default function ErrorMessage({ error, onRetry = null, className = '' }) 
           <p className="text-sm font-medium">❌ Erreur</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
-        {onRetry && (
-          <button
-            onClick={onRetry}
-            className="ml-4 text-red-700 hover:text-red-900 underline text-sm"
-          >
-            Réessayer
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="ml-4 text-red-700 hover:text-red-900 underline text-sm"
+            >
+              Réessayer
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="ml-4 text-red-700 hover:text-red-900 text-sm"
+              aria-label="Fermer"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

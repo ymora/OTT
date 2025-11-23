@@ -10,7 +10,7 @@ import SuccessMessage from '@/components/SuccessMessage'
 import Modal from '@/components/Modal'
 import logger from '@/lib/logger'
 
-export default function CompileInoTab() {
+export default function CompileInoTab({ onSwitchToIno }) {
   const { fetchWithAuth, API_URL, token } = useAuth()
   const [compiling, setCompiling] = useState(false)
   const [compileLogs, setCompileLogs] = useState([])
@@ -28,14 +28,41 @@ export default function CompileInoTab() {
   const compileLogsRef = useRef(null)
   const eventSourceRef = useRef(null)
   const reconnectAttemptedRef = useRef(false)
+  const [statusFilter, setStatusFilter] = useState('all') // Filtre par statut
+  const [versionFilter, setVersionFilter] = useState('') // Filtre par version
 
   const { data, loading, refetch } = useApiData(
     ['/api.php/firmwares'],
     { requiresAuth: true }
   )
 
-  const firmwares = data?.firmwares?.firmwares || []
+  const allFirmwares = data?.firmwares?.firmwares || []
   const firmwareStats = data?.firmwares?.stats || null
+  
+  // Filtrer les firmwares selon les critères
+  const firmwares = allFirmwares.filter(fw => {
+    // Filtre par statut
+    if (statusFilter !== 'all' && fw.status !== statusFilter) {
+      return false
+    }
+    // Filtre par version
+    if (versionFilter && !fw.version.toLowerCase().includes(versionFilter.toLowerCase())) {
+      return false
+    }
+    return true
+  })
+  
+  // Statistiques des firmwares filtrés
+  const filteredStats = {
+    total: firmwares.length,
+    pending: firmwares.filter(fw => fw.status === 'pending_compilation').length,
+    compiling: firmwares.filter(fw => fw.status === 'compiling').length,
+    compiled: firmwares.filter(fw => fw.status === 'compiled').length,
+    error: firmwares.filter(fw => fw.status === 'error').length
+  }
+  
+  // Liste des versions uniques pour le filtre
+  const uniqueVersions = [...new Set(allFirmwares.map(fw => fw.version))].sort()
   
   // Logger les stats pour diagnostic
   useEffect(() => {
@@ -144,18 +171,21 @@ export default function CompileInoTab() {
     closeEventSource()
 
     logger.log('🔧 [handleCompile] Mise à jour des états React')
-    setCompiling(true)
-    setCompilingFirmwareId(uploadId)
-    setCurrentStep('compilation')
-    // Ajouter un message initial immédiatement pour qu'il s'affiche
-    setCompileLogs([{
-      timestamp: new Date().toLocaleTimeString('fr-FR'),
-      message: '⏳ Connexion au serveur...',
-      level: 'info'
-    }])
-    setCompileProgress(0)
-    setError(null)
-    setSuccess(null)
+          setCompiling(true)
+          setCompilingFirmwareId(uploadId)
+          setCurrentStep('compilation')
+          // Ajouter un message initial immédiatement pour qu'il s'affiche
+          setCompileLogs([{
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: '⏳ Connexion au serveur...',
+            level: 'info'
+          }])
+          setCompileProgress(0)
+          setError(null)
+          setSuccess(null)
+          
+          // Rafraîchir immédiatement la liste pour voir le statut passer à "compiling"
+          refetch()
     reconnectAttemptedRef.current = false
     logger.log('✅ [handleCompile] États React mis à jour')
 
@@ -700,6 +730,10 @@ export default function CompileInoTab() {
         const timeSinceFunctionStart = errorTime - functionStartTime
         const state = eventSource.readyState
         
+        // Si on a reçu beaucoup de messages et que c'est juste une reconnexion, ne pas afficher d'erreur
+        // (EventSource se reconnecte automatiquement en cas de perte de connexion temporaire)
+        const isReconnecting = state === EventSource.CONNECTING && hasReceivedMessage && messageBuffer.length > 10
+        
         logger.error('═══════════════════════════════════════════════════════')
         logger.error('❌ [EVENT: onerror] ERREUR EVENTSOURCE DÉTECTÉE!')
         logger.error('═══════════════════════════════════════════════════════')
@@ -779,42 +813,60 @@ export default function CompileInoTab() {
           return prev
         })
         
-        if (state === EventSource.CLOSED) {
-          setCompileLogs(prev => {
-            const lastLog = prev[prev.length - 1]
-            const hasFinalMessage = lastLog && (lastLog.message.includes('✅') || lastLog.message.includes('❌'))
-            
-            if (hasFinalMessage) {
-              resetCompilationState()
-              return prev
-            }
-            
-            const warningMsg = '⚠️ Connexion fermée - La compilation continue en arrière-plan. Revenez sur cet onglet pour voir les logs.'
-            const lastMsg = prev[prev.length - 1]?.message
-            if (!lastMsg || !lastMsg.includes('Connexion fermée')) {
-              return [...prev, {
-                timestamp: new Date().toLocaleTimeString('fr-FR'),
-                message: warningMsg,
-                level: 'warning'
-              }]
-            }
-            return prev
-          })
-        } else if (state === EventSource.CONNECTING) {
-          logger.log('🔄 EventSource se reconnecte...')
-          setCompileLogs(prev => {
-            const lastMsg = prev[prev.length - 1]?.message
-            if (!lastMsg || !lastMsg.includes('Reconnexion')) {
-              return [...prev, {
-                timestamp: new Date().toLocaleTimeString('fr-FR'),
-                message: '🔄 Reconnexion en cours...',
-                level: 'info'
-              }]
-            }
-            return prev
-          })
-          return
-        } else {
+               if (state === EventSource.CLOSED) {
+                 // Si on a reçu beaucoup de messages, c'est probablement juste une reconnexion
+                 if (hasReceivedMessage && messageBuffer.length > 10) {
+                   logger.log('🔄 Connexion fermée mais beaucoup de messages reçus - reconnexion automatique en cours...')
+                   setCompileLogs(prev => {
+                     const lastMsg = prev[prev.length - 1]?.message
+                     if (!lastMsg || !lastMsg.includes('Reconnexion')) {
+                       return [...prev, {
+                         timestamp: new Date().toLocaleTimeString('fr-FR'),
+                         message: '🔄 Reconnexion automatique en cours... (la compilation continue)',
+                         level: 'info'
+                       }]
+                     }
+                     return prev
+                   })
+                   // Ne pas réinitialiser l'état, laisser EventSource se reconnecter
+                   return
+                 }
+                 
+                 setCompileLogs(prev => {
+                   const lastLog = prev[prev.length - 1]
+                   const hasFinalMessage = lastLog && (lastLog.message.includes('✅') || lastLog.message.includes('❌'))
+                   
+                   if (hasFinalMessage) {
+                     resetCompilationState()
+                     return prev
+                   }
+                   
+                   const warningMsg = '⚠️ Connexion fermée - La compilation continue en arrière-plan. Revenez sur cet onglet pour voir les logs.'
+                   const lastMsg = prev[prev.length - 1]?.message
+                   if (!lastMsg || !lastMsg.includes('Connexion fermée')) {
+                     return [...prev, {
+                       timestamp: new Date().toLocaleTimeString('fr-FR'),
+                       message: warningMsg,
+                       level: 'warning'
+                     }]
+                   }
+                   return prev
+                 })
+               } else if (state === EventSource.CONNECTING) {
+                 logger.log('🔄 EventSource se reconnecte...')
+                 setCompileLogs(prev => {
+                   const lastMsg = prev[prev.length - 1]?.message
+                   if (!lastMsg || !lastMsg.includes('Reconnexion')) {
+                     return [...prev, {
+                       timestamp: new Date().toLocaleTimeString('fr-FR'),
+                       message: '🔄 Reconnexion en cours... (la compilation continue)',
+                       level: 'info'
+                     }]
+                   }
+                   return prev
+                 })
+                 return
+               } else {
           logger.log('⚠️ EventSource en état OPEN mais avec erreur')
           setCompileLogs(prev => {
             const lastMsg = prev[prev.length - 1]?.message
@@ -895,6 +947,26 @@ export default function CompileInoTab() {
       compileLogsRef.current.scrollTop = compileLogsRef.current.scrollHeight
     }
   }, [compileLogs.length, compiling])
+
+  // Auto-fermer les messages de succès après 4 secondes
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess(null)
+      }, 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [success])
+
+  // Auto-fermer les messages d'erreur après 4 secondes
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null)
+      }, 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [error])
 
   // Copier les logs de compilation
   const handleCopyLogs = useCallback(() => {
@@ -991,17 +1063,109 @@ export default function CompileInoTab() {
       )}
 
       {/* Messages d'erreur et succès */}
-      {error && <ErrorMessage error={error} />}
-      {success && <SuccessMessage message={success} />}
+      {error && <ErrorMessage error={error} onClose={() => setError(null)} autoClose={4000} />}
+      {success && <SuccessMessage message={success} onClose={() => setSuccess(null)} autoClose={4000} />}
 
       {/* Liste des firmwares */}
       <div className="card">
-        <h2 className="text-xl font-semibold mb-4">📦 Firmwares disponibles</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">📦 Firmwares disponibles</h2>
+          {filteredStats.total !== allFirmwares.length && (
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {filteredStats.total} / {allFirmwares.length} affiché(s)
+            </span>
+          )}
+        </div>
+        
+        {/* Filtres */}
+        <div className="mb-4 flex flex-wrap gap-3 items-end">
+          {/* Filtre par statut */}
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Statut
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="all">Tous ({allFirmwares.length})</option>
+              <option value="pending_compilation">En attente ({allFirmwares.filter(fw => fw.status === 'pending_compilation').length})</option>
+              <option value="compiling">Compilation ({allFirmwares.filter(fw => fw.status === 'compiling').length})</option>
+              <option value="compiled">Compilé ({allFirmwares.filter(fw => fw.status === 'compiled').length})</option>
+              <option value="error">Erreur ({allFirmwares.filter(fw => fw.status === 'error').length})</option>
+            </select>
+          </div>
+          
+          {/* Filtre par version */}
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Version
+            </label>
+            <input
+              type="text"
+              value={versionFilter}
+              onChange={(e) => setVersionFilter(e.target.value)}
+              placeholder="Rechercher une version..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+          
+          {/* Bouton réinitialiser les filtres */}
+          {(statusFilter !== 'all' || versionFilter) && (
+            <button
+              onClick={() => {
+                setStatusFilter('all')
+                setVersionFilter('')
+              }}
+              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              🔄 Réinitialiser
+            </button>
+          )}
+        </div>
+        
+        {/* Statistiques rapides */}
+        {statusFilter === 'all' && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
+              ⏳ {filteredStats.pending} en attente
+            </span>
+            <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              🔄 {filteredStats.compiling} en compilation
+            </span>
+            <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+              ✅ {filteredStats.compiled} compilé(s)
+            </span>
+            {filteredStats.error > 0 && (
+              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                ❌ {filteredStats.error} erreur(s)
+              </span>
+            )}
+          </div>
+        )}
         
         {loading ? (
           <LoadingSpinner />
         ) : firmwares.length === 0 ? (
-          <p className="text-gray-600 dark:text-gray-400">Aucun firmware disponible. Uploader un fichier .ino dans l&apos;onglet &quot;INO&quot; pour commencer.</p>
+          <div className="text-center py-8">
+            <p className="text-gray-600 dark:text-gray-400 mb-2">
+              {allFirmwares.length === 0 
+                ? "Aucun firmware disponible. Uploader un fichier .ino dans l'onglet \"INO\" pour commencer."
+                : "Aucun firmware ne correspond aux filtres sélectionnés."}
+            </p>
+            {(statusFilter !== 'all' || versionFilter) && (
+              <button
+                onClick={() => {
+                  setStatusFilter('all')
+                  setVersionFilter('')
+                }}
+                className="text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -1016,19 +1180,44 @@ export default function CompileInoTab() {
               </thead>
               <tbody>
                 {firmwares.map((fw) => {
-                  // Debug: logger le statut pour vérifier pourquoi l'icône ne s'affiche pas
-                  const showCompileButton = fw.status === 'pending_compilation'
-                  if (showCompileButton) {
-                    logger.log(`[CompileInoTab] 🔨 Bouton compilation visible pour firmware ID ${fw.id}, version ${fw.version}, status: ${fw.status}`)
-                  }
+                  // Afficher le bouton de compilation pour TOUS les firmwares (sauf si compilation en cours pour ce firmware)
+                  const isCurrentlyCompiling = compiling && compilingFirmwareId === fw.id
+                  const showCompileButton = !isCurrentlyCompiling
                   
                   return (
                     <tr key={fw.id} className="table-row">
                       <td className="py-3 px-4">
-                        <span className="font-mono font-semibold text-primary">v{fw.version}</span>
+                        <div className="flex flex-col">
+                          <span className="font-mono font-semibold text-primary">v{fw.version}</span>
+                          {fw.file_type && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {fw.file_type === 'bin' ? '📦 .bin' : '📄 .ino'}
+                              </span>
+                              {fw.file_type === 'ino' && onSwitchToIno && (
+                                <button
+                                  onClick={() => {
+                                    if (onSwitchToIno) {
+                                      onSwitchToIno(fw.id)
+                                    }
+                                  }}
+                                  className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 hover:underline"
+                                  title="Éditer le fichier .ino"
+                                >
+                                  ✏️ Éditer
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
                         {fw.file_size ? `${(fw.file_size / 1024).toFixed(2)} KB` : '-'}
+                        {fw.file_exists === false && fw.file_type && (
+                          <span className="block text-xs text-red-500 dark:text-red-400 mt-1">
+                            ⚠️ Fichier {fw.file_type} introuvable
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         {fw.status && (
@@ -1050,13 +1239,17 @@ export default function CompileInoTab() {
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {/* Bouton de compilation - visible uniquement pour les firmwares en attente */}
+                          {/* Bouton de compilation - visible pour TOUS les firmwares (pour permettre de relancer) */}
                           {showCompileButton && (
                             <button
                               onClick={() => handleCompile(fw.id)}
-                              disabled={compiling}
+                              disabled={compiling && compilingFirmwareId !== fw.id}
                               className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={compiling ? "Compilation en cours..." : "Compiler le firmware"}
+                              title={
+                                isCurrentlyCompiling ? "Compilation en cours..." : 
+                                fw.status === 'compiled' ? "Recompiler le firmware" :
+                                "Compiler le firmware"
+                              }
                             >
                               <span className="text-lg">🔨</span>
                             </button>
