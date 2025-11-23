@@ -3649,6 +3649,8 @@ function handleGetFirmwareIno($firmware_id) {
                 
                 error_log('[handleCompileFirmware] 🔍 Recherche par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)');
                 sendSSE('log', 'info', '🔍 Recherche du fichier par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)...');
+                sendSSE('log', 'info', '   Pattern recherché: *_id' . $firmware_id . '.ino');
+                sendSSE('log', 'info', '   Dossiers trouvés: ' . implode(', ', $version_dirs));
                 flush();
                 
                 // Chercher le fichier avec cet ID dans chaque dossier
@@ -3659,6 +3661,12 @@ function handleGetFirmwareIno($firmware_id) {
                         // Chercher tous les fichiers .ino dans ce dossier
                         $files = glob($ino_dir . '*.ino');
                         sendSSE('log', 'info', '   📁 Recherche dans ' . $version_dir . ' (' . count($files) . ' fichier(s) .ino)');
+                        
+                        // Lister tous les fichiers trouvés pour diagnostic
+                        if (count($files) > 0) {
+                            $file_list = array_map('basename', array_slice($files, 0, 10)); // Limiter à 10 pour ne pas surcharger
+                            sendSSE('log', 'info', '      Fichiers: ' . implode(', ', $file_list) . (count($files) > 10 ? '...' : ''));
+                        }
                         flush();
                         
                         foreach ($files as $file) {
@@ -3672,6 +3680,9 @@ function handleGetFirmwareIno($firmware_id) {
                                 break 2; // Sortir des deux boucles
                             }
                         }
+                    } else {
+                        sendSSE('log', 'warning', '   ⚠️ Dossier ' . $version_dir . ' n\'est pas un dossier valide');
+                        flush();
                     }
                 }
                 
@@ -4489,6 +4500,8 @@ function handleCompileFirmware($firmware_id) {
                 
                 error_log('[handleCompileFirmware] 🔍 Recherche par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)');
                 sendSSE('log', 'info', '🔍 Recherche du fichier par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)...');
+                sendSSE('log', 'info', '   Pattern recherché: *_id' . $firmware_id . '.ino');
+                sendSSE('log', 'info', '   Dossiers trouvés: ' . implode(', ', $version_dirs));
                 flush();
                 
                 // Chercher le fichier avec cet ID dans chaque dossier
@@ -4499,6 +4512,12 @@ function handleCompileFirmware($firmware_id) {
                         // Chercher tous les fichiers .ino dans ce dossier
                         $files = glob($ino_dir . '*.ino');
                         sendSSE('log', 'info', '   📁 Recherche dans ' . $version_dir . ' (' . count($files) . ' fichier(s) .ino)');
+                        
+                        // Lister tous les fichiers trouvés pour diagnostic
+                        if (count($files) > 0) {
+                            $file_list = array_map('basename', array_slice($files, 0, 10)); // Limiter à 10 pour ne pas surcharger
+                            sendSSE('log', 'info', '      Fichiers: ' . implode(', ', $file_list) . (count($files) > 10 ? '...' : ''));
+                        }
                         flush();
                         
                         foreach ($files as $file) {
@@ -4512,6 +4531,9 @@ function handleCompileFirmware($firmware_id) {
                                 break 2; // Sortir des deux boucles
                             }
                         }
+                    } else {
+                        sendSSE('log', 'warning', '   ⚠️ Dossier ' . $version_dir . ' n\'est pas un dossier valide');
+                        flush();
                     }
                 }
                 
