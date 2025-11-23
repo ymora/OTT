@@ -1015,60 +1015,68 @@ export default function CompileInoTab() {
                 </tr>
               </thead>
               <tbody>
-                {firmwares.map((fw) => (
-                  <tr key={fw.id} className="table-row">
-                    <td className="py-3 px-4">
-                      <span className="font-mono font-semibold text-primary">v{fw.version}</span>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
-                      {fw.file_size ? `${(fw.file_size / 1024).toFixed(2)} KB` : '-'}
-                    </td>
-                    <td className="py-3 px-4">
-                      {fw.status && (
-                        <span className={`badge ${
-                          fw.status === 'pending_compilation' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' : 
-                          fw.status === 'compiling' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
-                          fw.status === 'compiled' ? 'badge-success' :
-                          fw.status === 'error' ? 'badge-danger' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                        } text-xs`}>
-                          {fw.status === 'pending_compilation' ? 'En attente' : 
-                           fw.status === 'compiling' ? 'Compilation' :
-                           fw.status === 'compiled' ? 'Compilé' :
-                           fw.status === 'error' ? 'Erreur' : fw.status}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
-                      {new Date(fw.created_at).toLocaleDateString('fr-FR')}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        {/* Bouton de compilation - visible uniquement pour les firmwares en attente */}
-                        {fw.status === 'pending_compilation' && (
-                          <button
-                            onClick={() => handleCompile(fw.id)}
-                            disabled={compiling}
-                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={compiling ? "Compilation en cours..." : "Compiler le firmware"}
-                          >
-                            <span className="text-lg">🔨</span>
-                          </button>
+                {firmwares.map((fw) => {
+                  // Debug: logger le statut pour vérifier pourquoi l'icône ne s'affiche pas
+                  const showCompileButton = fw.status === 'pending_compilation'
+                  if (showCompileButton) {
+                    logger.log(`[CompileInoTab] 🔨 Bouton compilation visible pour firmware ID ${fw.id}, version ${fw.version}, status: ${fw.status}`)
+                  }
+                  
+                  return (
+                    <tr key={fw.id} className="table-row">
+                      <td className="py-3 px-4">
+                        <span className="font-mono font-semibold text-primary">v{fw.version}</span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                        {fw.file_size ? `${(fw.file_size / 1024).toFixed(2)} KB` : '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {fw.status && (
+                          <span className={`badge ${
+                            fw.status === 'pending_compilation' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' : 
+                            fw.status === 'compiling' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                            fw.status === 'compiled' ? 'badge-success' :
+                            fw.status === 'error' ? 'badge-danger' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                          } text-xs`}>
+                            {fw.status === 'pending_compilation' ? 'En attente' : 
+                             fw.status === 'compiling' ? 'Compilation' :
+                             fw.status === 'compiled' ? 'Compilé' :
+                             fw.status === 'error' ? 'Erreur' : fw.status}
+                          </span>
                         )}
-                        {/* Bouton de suppression - toujours visible */}
-                        <button
-                          onClick={() => {
-                            setFirmwareToDelete(fw)
-                            setShowDeleteConfirmModal(true)
-                          }}
-                          className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                          title="Supprimer le firmware"
-                        >
-                          <span className="text-lg">🗑️</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                        {new Date(fw.created_at).toLocaleDateString('fr-FR')}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {/* Bouton de compilation - visible uniquement pour les firmwares en attente */}
+                          {showCompileButton && (
+                            <button
+                              onClick={() => handleCompile(fw.id)}
+                              disabled={compiling}
+                              className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={compiling ? "Compilation en cours..." : "Compiler le firmware"}
+                            >
+                              <span className="text-lg">🔨</span>
+                            </button>
+                          )}
+                          {/* Bouton de suppression - toujours visible */}
+                          <button
+                            onClick={() => {
+                              setFirmwareToDelete(fw)
+                              setShowDeleteConfirmModal(true)
+                            }}
+                            className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                            title="Supprimer le firmware"
+                          >
+                            <span className="text-lg">🗑️</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
