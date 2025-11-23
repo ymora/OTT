@@ -18,7 +18,6 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [currentStep, setCurrentStep] = useState(null)
-  const [uploadLogs, setUploadLogs] = useState([])
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
   const [showVersionExistsModal, setShowVersionExistsModal] = useState(false)
@@ -31,7 +30,6 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
   const [deletingFirmware, setDeletingFirmware] = useState(null)
   const [editorMinimized, setEditorMinimized] = useState(true)
   const fileInputRef = useRef(null)
-  const uploadLogsRef = useRef(null)
   const textareaRef = useRef(null)
 
   const { data, loading, refetch, invalidateCache } = useApiData(
@@ -74,14 +72,6 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
     setError(null)
     setSuccess(null)
     setUploadProgress(0)
-    setUploadLogs([])
-
-    // Ajouter un log initial
-    setUploadLogs(prev => [...prev, {
-      timestamp: new Date().toLocaleTimeString('fr-FR'),
-      message: '🚀 Démarrage de l\'upload...',
-      level: 'info'
-    }])
 
     try {
       const formData = new FormData()
@@ -108,24 +98,6 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
         if (e.lengthComputable) {
           const percent = Math.round((e.loaded / e.total) * 100)
           setUploadProgress(percent)
-          setUploadLogs(prev => {
-            const newLogs = [...prev]
-            if (newLogs.length === 0 || !newLogs[newLogs.length - 1].message.includes(`${percent}%`)) {
-              newLogs.push({
-                timestamp: new Date().toLocaleTimeString('fr-FR'),
-                message: `📤 Transfert... ${percent}%`,
-                level: 'info'
-              })
-            } else {
-              newLogs[newLogs.length - 1].message = `📤 Transfert... ${percent}%`
-            }
-            return newLogs
-          })
-          setTimeout(() => {
-            if (uploadLogsRef.current) {
-              uploadLogsRef.current.scrollTop = uploadLogsRef.current.scrollHeight
-            }
-          }, 100)
         }
       })
 
@@ -136,22 +108,13 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
             response = JSON.parse(xhr.responseText)
           } catch (parseErr) {
             setError('Réponse invalide du serveur')
-            setUploadLogs(prev => [...prev, {
-              timestamp: new Date().toLocaleTimeString('fr-FR'),
-              message: '❌ Réponse invalide du serveur',
-              level: 'error'
-            }])
             setUploading(false)
             return
           }
           
           if (response.success) {
             setUploadProgress(100)
-            setUploadLogs(prev => [...prev, {
-              timestamp: new Date().toLocaleTimeString('fr-FR'),
-              message: '✅ Upload réussi ! Firmware prêt pour compilation.',
-              level: 'info'
-            }])
+            setSuccess('Firmware uploadé avec succès !')
             
             // Notifier le parent qu'un upload a réussi
             if (onUploadSuccess && response.firmware_id) {
@@ -189,11 +152,6 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
               setUploadProgress(0)
             } else {
               setError(response.error || 'Erreur lors de l\'upload')
-              setUploadLogs(prev => [...prev, {
-                timestamp: new Date().toLocaleTimeString('fr-FR'),
-                message: `❌ Erreur: ${response.error || 'Erreur lors de l\'upload'}`,
-                level: 'error'
-              }])
               setUploading(false)
               setCurrentStep(null)
             }
@@ -210,19 +168,9 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
               setUploadProgress(0)
             } else {
               setError(error.error || `Erreur HTTP ${xhr.status}`)
-              setUploadLogs(prev => [...prev, {
-                timestamp: new Date().toLocaleTimeString('fr-FR'),
-                message: `❌ Erreur HTTP ${xhr.status}: ${error.error || xhr.statusText}`,
-                level: 'error'
-              }])
             }
           } catch {
             setError(`Erreur HTTP ${xhr.status}: ${xhr.statusText}`)
-            setUploadLogs(prev => [...prev, {
-              timestamp: new Date().toLocaleTimeString('fr-FR'),
-              message: `❌ Erreur HTTP ${xhr.status}: ${xhr.statusText}`,
-              level: 'error'
-            }])
           }
           setUploading(false)
           setCurrentStep(null)
@@ -231,22 +179,12 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
 
       xhr.addEventListener('error', () => {
         setError('Erreur réseau lors de l\'upload.')
-        setUploadLogs(prev => [...prev, {
-          timestamp: new Date().toLocaleTimeString('fr-FR'),
-          message: '❌ Erreur réseau lors de l\'upload',
-          level: 'error'
-        }])
         setUploading(false)
         setCurrentStep(null)
       })
 
       xhr.addEventListener('timeout', () => {
         setError('La requête a pris trop de temps (30s).')
-        setUploadLogs(prev => [...prev, {
-          timestamp: new Date().toLocaleTimeString('fr-FR'),
-          message: '❌ La requête a pris trop de temps (30s)',
-          level: 'error'
-        }])
         setUploading(false)
         setCurrentStep(null)
         xhr.abort()
@@ -259,11 +197,6 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
     } catch (err) {
       logger.error('❌ Exception lors de l\'upload:', err)
       setError(err.message || 'Erreur lors de l\'upload')
-      setUploadLogs(prev => [...prev, {
-        timestamp: new Date().toLocaleTimeString('fr-FR'),
-        message: `❌ Exception: ${err.message || 'Erreur lors de l\'upload'}`,
-        level: 'error'
-      }])
       setUploading(false)
       setCurrentStep(null)
     }
@@ -442,16 +375,11 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
     // Si on édite un fichier existant, mettre à jour via l'API (même si non modifié)
     if (editingFirmwareId) {
       const hasChanges = inoContent !== originalContent
-      setUploading(true)
-      setCurrentStep('upload')
-      setError(null)
-      setSuccess(null)
-      setUploadProgress(0)
-      setUploadLogs([{
-        timestamp: new Date().toLocaleTimeString('fr-FR'),
-        message: hasChanges ? '🚀 Mise à jour du fichier .ino...' : '🚀 Upload du fichier .ino...',
-        level: 'info'
-      }])
+        setUploading(true)
+        setCurrentStep('upload')
+        setError(null)
+        setSuccess(null)
+        setUploadProgress(0)
 
       try {
         const response = await fetchWithAuth(
@@ -477,11 +405,7 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
         }
 
         setUploadProgress(100)
-        setUploadLogs(prev => [...prev, {
-          timestamp: new Date().toLocaleTimeString('fr-FR'),
-          message: hasChanges ? '✅ Fichier .ino mis à jour avec succès !' : '✅ Fichier .ino uploadé avec succès !',
-          level: 'info'
-        }])
+        setSuccess(hasChanges ? 'Fichier .ino mis à jour avec succès !' : 'Fichier .ino uploadé avec succès !')
 
         // Invalider le cache et rafraîchir la liste pour mettre à jour le tableau
         invalidateCache()
@@ -498,11 +422,6 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
       } catch (err) {
         logger.error('❌ Erreur lors de la mise à jour:', err)
         setError(err.message || 'Erreur lors de la mise à jour')
-        setUploadLogs(prev => [...prev, {
-          timestamp: new Date().toLocaleTimeString('fr-FR'),
-          message: `❌ Erreur: ${err.message || 'Erreur lors de la mise à jour'}`,
-          level: 'error'
-        }])
         setUploading(false)
         setCurrentStep(null)
       }
@@ -622,12 +541,6 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
     }
   }, [firmwareToDelete, editingFirmwareId, API_URL, fetchWithAuth, refetch])
 
-  // Auto-scroll des logs
-  useEffect(() => {
-    if (uploadLogsRef.current && uploading) {
-      uploadLogsRef.current.scrollTop = uploadLogsRef.current.scrollHeight
-    }
-  }, [uploadLogs, uploading])
 
   // Auto-fermer les messages de succès après 4 secondes
   useEffect(() => {
@@ -651,140 +564,7 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
 
   return (
     <div className="space-y-6">
-      {/* Bouton de chargement seul en haut */}
-      <div className="card">
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            📤 Charger un nouveau fichier .ino
-          </label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".ino"
-            onChange={handleFileSelect}
-            disabled={uploading}
-            className="block w-full text-sm text-gray-500 dark:text-gray-400
-              file:mr-4 file:py-2 file:px-4
-              file:rounded-lg file:border-0
-              file:text-sm file:font-semibold
-              file:bg-primary-500 file:text-white
-              hover:file:bg-primary-600
-              disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-        </div>
-      </div>
-
-      {/* Section Upload avec logs persistants */}
-      {(uploading || currentStep === 'upload' || uploadLogs.length > 0) && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">
-              {uploading ? '📤 Upload en cours' : uploadProgress === 100 ? '✅ Upload terminé' : '📤 Upload'}
-            </h2>
-            <div className="flex items-center gap-2">
-              {uploadProgress > 0 && (
-                <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
-                  {uploadProgress}%
-                </span>
-              )}
-              {!uploading && uploadLogs.length > 0 && (
-                <button
-                  onClick={() => {
-                    setUploadLogs([])
-                    setCurrentStep(null)
-                    setUploadProgress(0)
-                    setError(null)
-                  }}
-                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                  title="Fermer la fenêtre d'upload"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          </div>
-          
-          {/* Barre de progression */}
-          {(uploading || uploadProgress > 0) && (
-            <div className="space-y-2 mb-4">
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                <div
-                  className={`h-3 rounded-full transition-all duration-300 ${
-                    uploading ? 'bg-primary-500' :
-                    uploadProgress === 100 ? 'bg-green-500' :
-                    'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                  style={{ 
-                    width: `${Math.max(0, Math.min(100, uploadProgress))}%` 
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Logs d'upload */}
-          <div
-            ref={uploadLogsRef}
-            className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-64 overflow-y-auto"
-          >
-            {uploadLogs.length === 0 ? (
-              <div className="text-gray-500">En attente des logs...</div>
-            ) : (
-              uploadLogs.map((log, idx) => (
-                <div key={idx} className="mb-1">
-                  <span className="text-gray-500 pr-3">{log.timestamp}</span>
-                  <span className={log.level === 'error' ? 'text-red-400' : log.level === 'warning' ? 'text-yellow-400' : 'text-green-300'}>
-                    {log.message}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-          
-          {/* Notification après upload réussi avec actions rapides */}
-          {uploadProgress === 100 && !uploading && onSwitchToCompile && (
-            <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">✅</span>
-                  <div>
-                    <p className="font-semibold text-green-800 dark:text-green-200">
-                      Firmware uploadé avec succès !
-                    </p>
-                    <p className="text-sm text-green-600 dark:text-green-300 mt-1">
-                      Le firmware est prêt pour la compilation.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      if (onSwitchToCompile) {
-                        onSwitchToCompile()
-                      }
-                    }}
-                    className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-                  >
-                    🔨 Compiler maintenant
-                  </button>
-                  <button
-                    onClick={() => {
-                      setUploadLogs([])
-                      setCurrentStep(null)
-                      setUploadProgress(0)
-                    }}
-                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
-                  >
-                    Fermer
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Liste des fichiers .ino existants */}
+      {/* Liste des fichiers .ino existants - EN HAUT */}
       <div className="card">
         <h2 className="text-xl font-semibold mb-4">📦 Fichiers INO existants</h2>
         
@@ -879,6 +659,31 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
             </table>
           </div>
         )}
+      </div>
+
+      {/* Gros bouton violet "Ajouter" */}
+      <div className="card">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".ino"
+          onChange={handleFileSelect}
+          disabled={uploading}
+          className="hidden"
+          id="file-upload-input"
+        />
+        <label
+          htmlFor="file-upload-input"
+          className={`
+            block w-full py-4 px-6 text-center text-lg font-semibold rounded-lg
+            bg-purple-600 hover:bg-purple-700 text-white
+            transition-all duration-200 cursor-pointer
+            disabled:opacity-50 disabled:cursor-not-allowed
+            ${uploading ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}
+          `}
+        >
+          {uploading ? '⏳ Upload en cours...' : '➕ Ajouter'}
+        </label>
       </div>
 
       {/* Éditeur INO - affiché seulement après clic sur le crayon */}

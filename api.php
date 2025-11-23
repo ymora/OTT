@@ -3633,22 +3633,47 @@ function handleGetFirmwareIno($firmware_id) {
             }
         }
         
-        // Si le fichier n'est pas trouvé avec le chemin exact, chercher par ID
+        // Si le fichier n'est pas trouvé avec le chemin exact, chercher par ID UNIQUE dans TOUS les dossiers
         if (!$ino_path || !file_exists($ino_path)) {
-            $version_dir = getVersionDir($firmware['version']);
-            $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            // Pattern de recherche par ID unique (peu importe la version)
+            $pattern_id = '_id' . $firmware_id . '.ino';
             
-            if (is_dir($ino_dir)) {
-                // Chercher UNIQUEMENT le fichier avec l'ID dans le nom (format obligatoire)
-                $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
-                $ino_path_with_id = $ino_dir . $pattern_with_id;
+            // Parcourir TOUS les dossiers de versions dans hardware/firmware/
+            $firmware_base_dir = __DIR__ . '/hardware/firmware/';
+            
+            if (is_dir($firmware_base_dir)) {
+                // Lire tous les dossiers de versions
+                $version_dirs = array_filter(scandir($firmware_base_dir), function($item) use ($firmware_base_dir) {
+                    return is_dir($firmware_base_dir . $item) && $item !== '.' && $item !== '..';
+                });
                 
-                if (file_exists($ino_path_with_id)) {
-                    $ino_path = $ino_path_with_id;
-                    error_log('[handleGetFirmwareIno] ✅ Fichier trouvé avec ID: ' . basename($ino_path));
-                } else {
-                    error_log('[handleGetFirmwareIno] ❌ Fichier introuvable avec pattern ID: ' . $pattern_with_id);
+                error_log('[handleGetFirmwareIno] 🔍 Recherche par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)');
+                
+                // Chercher le fichier avec cet ID dans chaque dossier
+                foreach ($version_dirs as $version_dir) {
+                    $ino_dir = $firmware_base_dir . $version_dir . '/';
+                    
+                    if (is_dir($ino_dir)) {
+                        // Chercher tous les fichiers .ino dans ce dossier
+                        $files = glob($ino_dir . '*.ino');
+                        
+                        foreach ($files as $file) {
+                            $filename = basename($file);
+                            // Vérifier si le fichier contient l'ID unique
+                            if (strpos($filename, $pattern_id) !== false) {
+                                $ino_path = $file;
+                                error_log('[handleGetFirmwareIno] ✅ Fichier trouvé par ID unique: ' . $filename . ' dans ' . $version_dir);
+                                break 2; // Sortir des deux boucles
+                            }
+                        }
+                    }
                 }
+                
+                if (!$ino_path || !file_exists($ino_path)) {
+                    error_log('[handleGetFirmwareIno] ❌ Fichier avec ID ' . $firmware_id . ' introuvable dans tous les dossiers');
+                }
+            } else {
+                error_log('[handleGetFirmwareIno] ⚠️ Dossier base introuvable: ' . $firmware_base_dir);
             }
         }
         
@@ -4438,22 +4463,47 @@ function handleCompileFirmware($firmware_id) {
             }
         }
         
-        // Si le fichier n'est pas trouvé avec le chemin exact, chercher par ID
+        // Si le fichier n'est pas trouvé avec le chemin exact, chercher par ID UNIQUE dans TOUS les dossiers
         if (!$ino_path || !file_exists($ino_path)) {
-            $version_dir = getVersionDir($firmware['version']);
-            $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            // Pattern de recherche par ID unique (peu importe la version)
+            $pattern_id = '_id' . $firmware_id . '.ino';
             
-            if (is_dir($ino_dir)) {
-                // Chercher UNIQUEMENT le fichier avec l'ID dans le nom (format obligatoire)
-                $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
-                $ino_path_with_id = $ino_dir . $pattern_with_id;
+            // Parcourir TOUS les dossiers de versions dans hardware/firmware/
+            $firmware_base_dir = __DIR__ . '/hardware/firmware/';
+            
+            if (is_dir($firmware_base_dir)) {
+                // Lire tous les dossiers de versions
+                $version_dirs = array_filter(scandir($firmware_base_dir), function($item) use ($firmware_base_dir) {
+                    return is_dir($firmware_base_dir . $item) && $item !== '.' && $item !== '..';
+                });
                 
-                if (file_exists($ino_path_with_id)) {
-                    $ino_path = $ino_path_with_id;
-                    error_log('[handleGetFirmwareIno] ✅ Fichier trouvé avec ID: ' . basename($ino_path));
-                } else {
-                    error_log('[handleGetFirmwareIno] ❌ Fichier introuvable avec pattern ID: ' . $pattern_with_id);
+                error_log('[handleGetFirmwareIno] 🔍 Recherche par ID unique (' . $firmware_id . ') dans ' . count($version_dirs) . ' dossier(s)');
+                
+                // Chercher le fichier avec cet ID dans chaque dossier
+                foreach ($version_dirs as $version_dir) {
+                    $ino_dir = $firmware_base_dir . $version_dir . '/';
+                    
+                    if (is_dir($ino_dir)) {
+                        // Chercher tous les fichiers .ino dans ce dossier
+                        $files = glob($ino_dir . '*.ino');
+                        
+                        foreach ($files as $file) {
+                            $filename = basename($file);
+                            // Vérifier si le fichier contient l'ID unique
+                            if (strpos($filename, $pattern_id) !== false) {
+                                $ino_path = $file;
+                                error_log('[handleGetFirmwareIno] ✅ Fichier trouvé par ID unique: ' . $filename . ' dans ' . $version_dir);
+                                break 2; // Sortir des deux boucles
+                            }
+                        }
+                    }
                 }
+                
+                if (!$ino_path || !file_exists($ino_path)) {
+                    error_log('[handleGetFirmwareIno] ❌ Fichier avec ID ' . $firmware_id . ' introuvable dans tous les dossiers');
+                }
+            } else {
+                error_log('[handleGetFirmwareIno] ⚠️ Dossier base introuvable: ' . $firmware_base_dir);
             }
         }
         
@@ -4474,8 +4524,8 @@ function handleCompileFirmware($firmware_id) {
             }
             sendSSE('error', 'Fichier .ino introuvable: ' . $firmware['file_path']);
             sendSSE('log', 'error', 'Version: ' . $firmware['version'] . ', ID: ' . $firmware_id);
-            sendSSE('log', 'error', 'Dossier recherché: hardware/firmware/' . getVersionDir($firmware['version']) . '/');
-            sendSSE('log', 'error', 'Pattern recherché: fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino');
+            sendSSE('log', 'error', 'Recherche effectuée dans TOUS les dossiers de versions par ID unique: ' . $firmware_id);
+            sendSSE('log', 'error', 'Pattern recherché: *_id' . $firmware_id . '.ino (dans tous les dossiers hardware/firmware/*/)');
             sendSSE('log', 'error', 'Vérifiez que le fichier existe dans hardware/firmware/');
             flush();
             return;
