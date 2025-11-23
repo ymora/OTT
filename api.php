@@ -48,10 +48,18 @@ header('Access-Control-Max-Age: 86400');
 // Content-Type sera défini par chaque handler (JSON par défaut, SSE pour compilation)
 
 // Debug mode activable via variable d'environnement
+// IMPORTANT: En production, désactiver display_errors pour éviter les erreurs HTML dans les réponses JSON
 if (getenv('DEBUG_ERRORS') === 'true') {
     ini_set('display_errors', 1);
     ini_set('display_startup_errors', 1);
     error_reporting(E_ALL);
+} else {
+    // En production, désactiver l'affichage des erreurs pour éviter les réponses HTML
+    ini_set('display_errors', 0);
+    ini_set('display_startup_errors', 0);
+    error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
+    // Logger les erreurs au lieu de les afficher
+    ini_set('log_errors', 1);
 }
 
 // Répondre immédiatement aux requêtes OPTIONS (preflight)
