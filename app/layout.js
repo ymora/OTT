@@ -63,13 +63,12 @@ export default function RootLayout({ children }) {
                         newWorker.addEventListener('statechange', () => {
                           if (newWorker.state === 'installed') {
                             if (navigator.serviceWorker.controller) {
-                              // Nouveau service worker disponible, forcer la mise à jour immédiatement
+                              // Nouveau service worker disponible
                               console.log('[SW] Nouveau service worker installé, activation...');
                               newWorker.postMessage({ type: 'SKIP_WAITING' });
-                              // Attendre un peu pour que le nouveau SW prenne le contrôle
-                              setTimeout(() => {
-                                window.location.reload();
-                              }, 100);
+                              // NE PAS recharger automatiquement pour éviter les boucles
+                              // L'utilisateur peut recharger manuellement si nécessaire
+                              isUpdating = false;
                             } else {
                               // Premier chargement, pas besoin de recharger
                               console.log('[SW] Service worker installé pour la première fois');
@@ -84,6 +83,7 @@ export default function RootLayout({ children }) {
                     navigator.serviceWorker.addEventListener('message', (event) => {
                       if (event.data && event.data.type === 'CACHE_CLEARED') {
                         console.log('[SW] Cache nettoyé automatiquement, version:', event.data.version);
+                        // NE PAS recharger automatiquement - laisser l'utilisateur décider
                       }
                     });
                   }).catch(err => {

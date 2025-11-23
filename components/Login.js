@@ -122,31 +122,54 @@ export default function Login() {
         <div className="text-center mt-4">
           <button
             onClick={async () => {
+              // Protection contre les clics multiples
+              if (window._isClearingCache) {
+                console.warn('⚠️ Nettoyage déjà en cours...')
+                return
+              }
+              
               if (!confirm('Vider le cache et recharger la page ?')) return
               
+              // Marquer que le nettoyage est en cours
+              window._isClearingCache = true
+              
               try {
+                console.log('🔄 Début du nettoyage du cache...')
+                
                 // Désinscrire tous les service workers
                 const registrations = await navigator.serviceWorker.getRegistrations()
+                console.log(`📋 ${registrations.length} service worker(s) trouvé(s)`)
                 for (const reg of registrations) {
                   await reg.unregister()
                   console.log('✅ Service worker désinscrit')
                 }
+                console.log('✅ Tous les service workers désinscrits')
                 
                 // Vider tous les caches
                 const cacheNames = await caches.keys()
+                console.log(`📋 ${cacheNames.length} cache(s) trouvé(s)`)
                 for (const name of cacheNames) {
                   await caches.delete(name)
                   console.log('✅ Cache supprimé:', name)
                 }
+                console.log('✅ Tous les caches supprimés')
                 
                 // Vider le localStorage
                 localStorage.clear()
+                console.log('✅ localStorage vidé')
                 
-                // Recharger la page
-                setTimeout(() => window.location.reload(true), 500)
+                console.log('✅ Nettoyage terminé')
+                console.log('🔄 Rechargement de la page dans 2 secondes...')
+                
+                // Recharger la page après un délai
+                setTimeout(() => {
+                  window._isClearingCache = false
+                  window.location.reload(true)
+                }, 2000)
               } catch (err) {
                 console.error('❌ Erreur lors du nettoyage:', err)
                 alert('Erreur lors du nettoyage du cache')
+                window._isClearingCache = false
               }
             }}
             className="text-xs text-white/60 hover:text-white/80 underline transition-colors"
