@@ -868,32 +868,19 @@ export default function CompileInoTab() {
     }
   }, [compiling, closeEventSource])
   
-  // Reconnexion automatique si une compilation est en cours
-  useEffect(() => {
-    if (compiling || eventSourceRef.current) return
-    
-    const compilingFirmware = firmwares.find(fw => fw.status === 'compiling')
-    
-    if (compilingFirmware) {
-      const firmwareId = compilingFirmware.id
-      if (reconnectAttemptedRef.current !== firmwareId) {
-        reconnectAttemptedRef.current = firmwareId
-        setCompilingFirmwareId(firmwareId)
-        handleCompile(firmwareId)
-      }
-    } else if (compilingFirmwareId) {
-      reconnectAttemptedRef.current = false
-    }
-  }, [firmwares, compiling, compilingFirmwareId, handleCompile])
+  // NOTE: Reconnexion automatique DÉSACTIVÉE pour éviter les lancements automatiques
+  // La compilation doit être lancée manuellement via le bouton 🔨
   
-  // Polling de secours si pas de connexion SSE active
+  // Polling de secours uniquement pour mettre à jour l'état (sans lancer de compilation)
   useEffect(() => {
     if (!compiling || eventSourceRef.current) return
     
     const pollingInterval = setInterval(() => {
       refetch().then(() => {
+        // Vérifier si la compilation est terminée pour réinitialiser l'état
         const compilingFirmware = firmwares.find(fw => fw.id === compilingFirmwareId && fw.status === 'compiling')
         if (!compilingFirmware && compilingFirmwareId) {
+          // La compilation est terminée, réinitialiser l'état
           resetCompilationState()
         }
       })
@@ -1056,16 +1043,18 @@ export default function CompileInoTab() {
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-2">
+                        {/* Bouton de compilation - visible uniquement pour les firmwares en attente */}
                         {fw.status === 'pending_compilation' && (
                           <button
                             onClick={() => handleCompile(fw.id)}
                             disabled={compiling}
-                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                            title="Compiler le firmware"
+                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={compiling ? "Compilation en cours..." : "Compiler le firmware"}
                           >
                             <span className="text-lg">🔨</span>
                           </button>
                         )}
+                        {/* Bouton de suppression - toujours visible */}
                         <button
                           onClick={() => {
                             setFirmwareToDelete(fw)
