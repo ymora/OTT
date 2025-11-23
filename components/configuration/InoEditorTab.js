@@ -32,6 +32,15 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
 
+  // États pour la compilation
+  const [compiling, setCompiling] = useState(false)
+  const [compileProgress, setCompileProgress] = useState(0)
+  const [compileLogs, setCompileLogs] = useState([])
+  const [compilingFirmwareId, setCompilingFirmwareId] = useState(null)
+  const [compileWindowMinimized, setCompileWindowMinimized] = useState(false)
+  const eventSourceRef = useRef(null)
+  const compileLogsRef = useRef(null)
+
   const { data, loading, refetch, invalidateCache } = useApiData(
     ['/api.php/firmwares'],
     { requiresAuth: true, cacheTTL: 0 } // Désactiver le cache pour avoir les données en temps réel
@@ -562,6 +571,146 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
     }
   }, [error])
 
+  // Fonctions utilitaires pour la compilation
+  const closeEventSource = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+  }, [])
+
+  const resetCompilationState = useCallback(() => {
+    setCompiling(false)
+    setCompilingFirmwareId(null)
+    setCompileProgress(0)
+    closeEventSource()
+  }, [closeEventSource])
+
+  // Compiler le firmware
+  const handleCompile = useCallback(async (firmwareId) => {
+    if (!firmwareId) {
+      setError('ID du firmware manquant pour la compilation.')
+      return
+    }
+
+    if (compiling && compilingFirmwareId === firmwareId) {
+      setError('Compilation déjà en cours pour ce firmware.')
+      return
+    }
+
+    // Fermer l'ancienne connexion si elle existe
+    closeEventSource()
+
+    // Réinitialiser les logs et états de compilation
+    setCompiling(true)
+    setCompilingFirmwareId(firmwareId)
+    setCompileProgress(0)
+    setError(null)
+    setSuccess(null)
+    setCompileWindowMinimized(false) // Ouvrir la console
+    setCompileLogs([{
+      timestamp: new Date().toLocaleTimeString('fr-FR'),
+      message: '⏳ Démarrage de la compilation...',
+      level: 'info'
+    }])
+
+    // Mettre à jour le statut du firmware dans la liste locale immédiatement
+    refetch()
+
+    try {
+      const tokenEncoded = encodeURIComponent(token)
+      const sseUrl = `${API_URL}/api.php/firmwares/compile/${firmwareId}?token=${tokenEncoded}`
+
+      const eventSource = new EventSource(sseUrl)
+      eventSourceRef.current = eventSource
+
+      eventSource.onopen = () => {
+        setCompileLogs(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: '✅ Connexion SSE établie, démarrage de la compilation...',
+          level: 'info'
+        }])
+      }
+
+      eventSource.onmessage = (event) => {
+        if (!event.data || event.data.trim() === '' || event.data.trim().startsWith(':')) {
+          return // Ignorer les keep-alive
+        }
+
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'log') {
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: data.message,
+              level: data.level || 'info'
+            }])
+          } else if (data.type === 'progress') {
+            setCompileProgress(data.progress || 0)
+          } else if (data.type === 'success') {
+            setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: `✅ Compilation terminée avec succès !`,
+              level: 'info'
+            }])
+            resetCompilationState()
+            eventSource.close()
+            refetch() // Rafraîchir la liste des firmwares
+          } else if (data.type === 'error') {
+            setError(data.message || 'Erreur lors de la compilation')
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: `❌ Erreur de compilation: ${data.message || 'Inconnue'}`,
+              level: 'error'
+            }])
+            resetCompilationState()
+            eventSource.close()
+            refetch() // Rafraîchir la liste des firmwares
+          }
+        } catch (err) {
+          setCompileLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: `❌ Erreur de traitement du message SSE: ${err.message}`,
+            level: 'error'
+          }])
+        }
+      }
+
+      eventSource.onerror = (err) => {
+        setCompileLogs(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: `❌ Erreur de connexion SSE: ${err.message || 'Inconnue'}`,
+          level: 'error'
+        }])
+        setError('Erreur de connexion SSE. Vérifiez les logs pour plus de détails.')
+        resetCompilationState()
+        eventSource.close()
+        refetch() // Rafraîchir la liste des firmwares
+      }
+
+    } catch (err) {
+      setError(err.message || 'Erreur lors du démarrage de la compilation.')
+      resetCompilationState()
+    }
+  }, [API_URL, token, compiling, compilingFirmwareId, closeEventSource, resetCompilationState, refetch])
+
+  // Fermer EventSource au démontage
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        closeEventSource()
+      }
+    }
+  }, [closeEventSource])
+
+  // Auto-scroll des logs de compilation
+  useEffect(() => {
+    if (compileLogsRef.current && compiling && compileLogs.length > 0) {
+      compileLogsRef.current.scrollTop = compileLogsRef.current.scrollHeight
+    }
+  }, [compileLogs.length, compiling])
+
   return (
     <div className="space-y-6">
       {/* Liste des fichiers .ino existants - EN HAUT */}
@@ -618,6 +767,15 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-2">
+                        {/* Bouton de compilation */}
+                        <button
+                          onClick={() => handleCompile(fw.id)}
+                          disabled={compiling && compilingFirmwareId === fw.id}
+                          className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={compiling && compilingFirmwareId === fw.id ? "Compilation en cours..." : "Compiler le firmware"}
+                        >
+                          <span className="text-lg">🔨</span>
+                        </button>
                         <button
                           onClick={() => {
                             // Si le fichier est déjà chargé, fermer l'éditeur
@@ -660,6 +818,70 @@ export default function InoEditorTab({ onUploadSuccess, onSwitchToCompile }) {
           </div>
         )}
       </div>
+
+      {/* Console de compilation */}
+      {(compiling || compileLogs.length > 0) && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">🔨 Compilation en cours</h2>
+            <div className="flex items-center gap-2">
+              {compileProgress > 0 && (
+                <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
+                  {compileProgress}%
+                </span>
+              )}
+              <button
+                onClick={() => setCompileWindowMinimized(!compileWindowMinimized)}
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                title={compileWindowMinimized ? 'Afficher les logs' : 'Masquer les logs'}
+              >
+                {compileWindowMinimized ? '⬆️' : '⬇️'}
+              </button>
+            </div>
+          </div>
+
+          {!compileWindowMinimized && (
+            <>
+              {/* Barre de progression */}
+              {compileProgress > 0 && (
+                <div className="space-y-2 mb-4">
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                    <div
+                      className={`h-3 rounded-full transition-all duration-300 ${
+                        compiling ? 'bg-blue-500' :
+                        compileProgress === 100 ? 'bg-green-500' :
+                        'bg-gray-300 dark:bg-gray-600'
+                      }`}
+                      style={{
+                        width: `${Math.max(0, Math.min(100, compileProgress))}%`
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Logs de compilation */}
+              <div
+                ref={compileLogsRef}
+                className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-96 overflow-y-auto"
+              >
+                {compileLogs.length === 0 ? (
+                  <div className="text-gray-500">En attente des logs...</div>
+                ) : (
+                  compileLogs.map((log, idx) => (
+                    <div key={idx} className="mb-1">
+                      <span className="text-gray-500 pr-3">{log.timestamp}</span>
+                      <span className={log.level === 'error' ? 'text-red-400' : log.level === 'warning' ? 'text-yellow-400' : 'text-green-300'}>
+                        {log.message}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Gros bouton violet "Ajouter" */}
       <div className="card">
