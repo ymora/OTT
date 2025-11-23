@@ -452,17 +452,30 @@ export default function CompileInoTab() {
       logger.log('   ✅ onopen listener configuré')
 
       eventSource.onmessage = (event) => {
+        messageEventFired = true
         hasReceivedMessage = true
         const messageTime = new Date()
+        const timeSinceCreation = messageTime - creationTime
+        const timeSinceFunctionStart = messageTime - functionStartTime
         const rawData = event.data?.substring(0, 150)
         
         logger.log('═══════════════════════════════════════════════════════')
-        logger.log('📥 [SSE] MESSAGE REÇU')
+        logger.log('📥 [EVENT: onmessage] MESSAGE SSE REÇU')
+        logger.log('═══════════════════════════════════════════════════════')
         logger.log('   Timestamp:', messageTime.toISOString())
+        logger.log('   Temps depuis création EventSource:', timeSinceCreation, 'ms')
+        logger.log('   Temps depuis début handleCompile:', timeSinceFunctionStart, 'ms')
         logger.log('   ReadyState:', eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
-        logger.log('   URL:', eventSource.url.substring(0, 100))
+        logger.log('   URL:', eventSource.url.substring(0, 100) + '...')
         logger.log('   Data length:', event.data?.length || 0, 'caractères')
         logger.log('   Data brut:', rawData)
+        logger.log('   Event type:', event.type || 'N/A')
+        logger.log('   Event origin:', event.origin || 'N/A')
+        logger.log('   Event lastEventId:', event.lastEventId || 'N/A')
+        logger.log('   openEventFired:', openEventFired)
+        logger.log('   errorEventFired:', errorEventFired)
+        logger.log('   messageEventFired:', messageEventFired)
+        logger.log('   Total messages reçus:', messageBuffer.length + 1)
         logger.log('═══════════════════════════════════════════════════════')
         
         // Ajouter au buffer pour diagnostic
