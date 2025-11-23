@@ -98,16 +98,31 @@ export default function CompileInoTab() {
 
       const sseUrl = `${API_URL}/api.php/firmwares/compile/${uploadId}?token=${encodeURIComponent(token)}`
       
-      // Logs détaillés pour le diagnostic
-      logger.log('═══════════════════════════════════════════════════════')
-      logger.log('🔌 DÉMARRAGE COMPILATION FIRMWARE')
-      logger.log('═══════════════════════════════════════════════════════')
-      logger.log('📦 Firmware ID:', uploadId)
-      logger.log('🌐 API URL:', API_URL)
-      logger.log('🔗 URL SSE complète:', sseUrl)
-      logger.log('🔑 Token présent:', !!token, `(${token ? token.length : 0} caractères)`)
-      logger.log('⏰ Timestamp:', new Date().toISOString())
-      logger.log('═══════════════════════════════════════════════════════')
+      // Logs détaillés pour le diagnostic (console ET interface)
+      const startLogs = [
+        '═══════════════════════════════════════════════════════',
+        '🔌 DÉMARRAGE COMPILATION FIRMWARE',
+        '═══════════════════════════════════════════════════════',
+        `📦 Firmware ID: ${uploadId}`,
+        `🌐 API URL: ${API_URL}`,
+        `🔗 URL SSE: ${sseUrl.substring(0, 100)}...`,
+        `🔑 Token présent: ${!!token} (${token ? token.length : 0} caractères)`,
+        `⏰ Timestamp: ${new Date().toISOString()}`,
+        '═══════════════════════════════════════════════════════'
+      ]
+      
+      // Afficher dans la console
+      startLogs.forEach(log => logger.log(log))
+      
+      // Afficher aussi dans l'interface
+      setCompileLogs(prev => [
+        ...prev,
+        ...startLogs.map(msg => ({
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: msg,
+          level: 'info'
+        }))
+      ])
 
       const eventSource = new EventSource(sseUrl)
       
@@ -119,19 +134,43 @@ export default function CompileInoTab() {
 
       // Log immédiatement l'état de la connexion
       setTimeout(() => {
-        logger.log('⏱️ [100ms] État de la connexion:')
-        logger.log('   readyState:', eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
-        if (eventSource.readyState === EventSource.CONNECTING) {
-          logger.log('   ⚠️ Toujours en connexion... (normal si le serveur est lent)')
-        } else if (eventSource.readyState === EventSource.OPEN) {
-          logger.log('   ✅ Connexion ouverte avec succès!')
-        } else if (eventSource.readyState === EventSource.CLOSED) {
-          logger.error('   ❌ Connexion fermée après 100ms!')
-          logger.error('   🔍 Causes possibles:')
-          logger.error('      • Token expiré ou invalide')
-          logger.error('      • Serveur inaccessible')
-          logger.error('      • Erreur d\'authentification')
-          logger.error('      • Timeout du serveur')
+        const state = eventSource.readyState
+        const stateText = state === EventSource.CONNECTING ? 'CONNECTING' : state === EventSource.OPEN ? 'OPEN' : 'CLOSED'
+        const stateMsg = `⏱️ [100ms] État: ${stateText} (${state})`
+        
+        logger.log(stateMsg)
+        
+        if (state === EventSource.CONNECTING) {
+          const msg = '⚠️ Toujours en connexion... (normal si le serveur est lent)'
+          logger.log(msg)
+          setCompileLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: `${stateMsg} - ${msg}`,
+            level: 'info'
+          }])
+        } else if (state === EventSource.OPEN) {
+          const msg = '✅ Connexion ouverte avec succès!'
+          logger.log(msg)
+          setCompileLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: `${stateMsg} - ${msg}`,
+            level: 'info'
+          }])
+        } else if (state === EventSource.CLOSED) {
+          const errorMsgs = [
+            '❌ Connexion fermée après 100ms!',
+            '🔍 Causes possibles:',
+            '   • Token expiré ou invalide',
+            '   • Serveur inaccessible',
+            '   • Erreur d\'authentification',
+            '   • Timeout du serveur'
+          ]
+          errorMsgs.forEach(msg => logger.error(msg))
+          setCompileLogs(prev => [...prev, ...errorMsgs.map(msg => ({
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: msg,
+            level: 'error'
+          }))])
         }
       }, 100)
       
@@ -160,12 +199,19 @@ export default function CompileInoTab() {
       }, 2000)
 
       eventSource.onopen = () => {
-        logger.log('═══════════════════════════════════════════════════════')
-        logger.log('✅ CONNEXION SSE ÉTABLIE!')
-        logger.log('   readyState:', eventSource.readyState, '(devrait être 1=OPEN)')
-        logger.log('   URL:', eventSource.url)
-        logger.log('   ⏰ Timestamp:', new Date().toISOString())
-        logger.log('═══════════════════════════════════════════════════════')
+        const openLogs = [
+          '═══════════════════════════════════════════════════════',
+          '✅ CONNEXION SSE ÉTABLIE!',
+          `   readyState: ${eventSource.readyState} (devrait être 1=OPEN)`,
+          `   ⏰ Timestamp: ${new Date().toISOString()}`,
+          '═══════════════════════════════════════════════════════'
+        ]
+        openLogs.forEach(log => logger.log(log))
+        setCompileLogs(prev => [...prev, ...openLogs.map(msg => ({
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: msg,
+          level: 'info'
+        }))])
         reconnectAttemptedRef.current = false
         // Mettre à jour le message initial
         setCompileLogs(prev => {
@@ -257,14 +303,20 @@ export default function CompileInoTab() {
 
       eventSource.onerror = (error) => {
         const state = eventSource.readyState
-        logger.error('═══════════════════════════════════════════════════════')
-        logger.error('❌ ERREUR EVENTSOURCE DÉTECTÉE!')
-        logger.error('═══════════════════════════════════════════════════════')
-        logger.error('   ReadyState:', state, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
-        logger.error('   Error object:', error)
-        logger.error('   URL:', sseUrl)
-        logger.error('   Timestamp:', new Date().toISOString())
-        logger.error('═══════════════════════════════════════════════════════')
+        const errorLogs = [
+          '═══════════════════════════════════════════════════════',
+          '❌ ERREUR EVENTSOURCE DÉTECTÉE!',
+          '═══════════════════════════════════════════════════════',
+          `   ReadyState: ${state} (0=CONNECTING, 1=OPEN, 2=CLOSED)`,
+          `   Timestamp: ${new Date().toISOString()}`,
+          '═══════════════════════════════════════════════════════'
+        ]
+        errorLogs.forEach(log => logger.error(log))
+        setCompileLogs(prev => [...prev, ...errorLogs.map(msg => ({
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: msg,
+          level: 'error'
+        }))])
         
         // Afficher aussi dans les logs de compilation pour que l'utilisateur le voie
         setCompileLogs(prev => {
