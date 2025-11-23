@@ -21,9 +21,9 @@ if ! command -v arduino-cli &> /dev/null; then
     fi
 fi
 
-# Créer le répertoire arduino-data dans le projet
+# Créer le répertoire hardware/arduino-data dans le projet (versionné avec GitHub LFS)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ARDUINO_DATA_DIR="$PROJECT_ROOT/arduino-data"
+ARDUINO_DATA_DIR="$PROJECT_ROOT/hardware/arduino-data"
 
 echo "📁 Création du répertoire arduino-data..."
 mkdir -p "$ARDUINO_DATA_DIR"

@@ -1,0 +1,17 @@
+# ================================================================================
+# Git Attributes - Configuration GitHub LFS
+# ================================================================================
+# HAPPLYZ MEDICAL SAS
+# Configuration pour stocker les gros fichiers binaires avec GitHub LFS
+# ================================================================================
+
+# Core ESP32 Arduino (~430MB) - stocké avec GitHub LFS (gratuit jusqu'à 1GB)
+hardware/arduino-data/** filter=lfs diff=lfs merge=lfs -text
+
+# Binaires arduino-cli (déjà dans bin/)
+bin/arduino-cli.exe filter=lfs diff=lfs merge=lfs -text
+bin/arduino-cli filter=lfs diff=lfs merge=lfs -text
+
+# Fichiers .bin compilés (peuvent être gros)
+hardware/firmware/**/*.bin filter=lfs diff=lfs merge=lfs -text
+

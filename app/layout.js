@@ -43,7 +43,7 @@ export default function RootLayout({ children }) {
             <Script id="sw-register" strategy="afterInteractive" dangerouslySetInnerHTML={{
               __html: `(function() {
                 if ('serviceWorker' in navigator) {
-                  const swPath = '${swPath.replace(/'/g, "\\'")}';
+                  const swPath = ${JSON.stringify(swPath)};
                   let isUpdating = false;
                 
                 const registerSW = () => {

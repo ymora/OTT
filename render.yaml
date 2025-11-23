@@ -40,11 +40,15 @@ services:
         exit 1
       fi
       echo "✅ arduino-cli disponible et fonctionnel: $(arduino-cli version)"
-      # Préparer le répertoire arduino-data avec le core ESP32 déjà installé
-      echo "🔧 Préparation du répertoire arduino-data avec le core ESP32..."
-      bash scripts/hardware/prepare_arduino_core.sh
-      echo "✅ Le core ESP32 est maintenant installé et prêt dans arduino-data/"
-      echo "✅ Les compilations futures utiliseront ce core directement (pas de retéléchargement)"
+      # Vérifier si le core ESP32 est déjà dans hardware/arduino-data/ (versionné avec GitHub LFS)
+      if [ -d "hardware/arduino-data/packages/esp32/hardware/esp32" ]; then
+        echo "✅ Core ESP32 trouvé dans hardware/arduino-data/ (versionné avec le projet)"
+        echo "✅ Pas besoin d'installation - le core est déjà dans le repo"
+      else
+        echo "⚠️ Core ESP32 non trouvé dans hardware/arduino-data/"
+        echo "⚠️ Le core sera téléchargé lors de la première compilation"
+        echo "⚠️ Pour éviter cela, installez le core localement et ajoutez-le à GitHub LFS"
+      fi
       echo "✅ La compilation sera RÉELLE, jamais simulée"
     startCommand: |
       export PATH="${HOME}/.local/bin:${PATH}"

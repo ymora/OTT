@@ -4524,7 +4524,7 @@ function handleCompileFirmware($firmware_id) {
         foreach ([$localArduinoCli, $localArduinoCliAlt] as $testPath) {
             if (file_exists($testPath) && is_readable($testPath)) {
                 $arduinoCli = $testPath;
-                sendSSE('log', 'info', '✅ arduino-cli trouvé dans bin/ du projet');
+                sendSSE('log', 'info', '✅ arduino-cli trouvé dans bin/ du projet (versionné)');
                 break;
             }
         }
@@ -4645,10 +4645,15 @@ function handleCompileFirmware($firmware_id) {
                 }
             }
             
-            // Configurer un répertoire persistant pour arduino-cli (évite de retélécharger à chaque fois)
-            $arduinoDataDir = __DIR__ . '/arduino-data';
+            // Utiliser le répertoire hardware/arduino-data du projet (versionné avec GitHub LFS)
+            // Si le core est déjà dans le projet, on l'utilise directement (pas de téléchargement)
+            $arduinoDataDir = __DIR__ . '/hardware/arduino-data';
             if (!is_dir($arduinoDataDir)) {
-                mkdir($arduinoDataDir, 0755, true);
+                // Fallback: créer arduino-data/ à la racine si hardware/arduino-data/ n'existe pas
+                $arduinoDataDir = __DIR__ . '/arduino-data';
+                if (!is_dir($arduinoDataDir)) {
+                    mkdir($arduinoDataDir, 0755, true);
+                }
             }
             
             // Définir HOME et ARDUINO_DIRECTORIES_USER pour arduino-cli
@@ -4680,11 +4685,20 @@ function handleCompileFirmware($firmware_id) {
             
             if ($esp32Installed) {
                 sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
+                sendSSE('log', 'info', '   Source: hardware/arduino-data/ (versionné avec le projet)');
                 sendSSE('progress', 50);
             } else {
-                sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
-                sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
-                sendSSE('progress', 42);
+                // Vérifier si le core existe dans hardware/arduino-data/ mais n'est pas encore indexé
+                $corePath = $arduinoDataDir . '/packages/esp32/hardware/esp32';
+                if (is_dir($corePath)) {
+                    sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (versionné)');
+                    sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
+                    sendSSE('progress', 50);
+                } else {
+                    sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
+                    sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
+                    sendSSE('log', 'info', '   ⚠️ Après installation, ajoutez hardware/arduino-data/ à GitHub LFS');
+                    sendSSE('progress', 42);
                 
                 // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
                 $indexFile = $arduinoDataDir . '/package_index.json';
