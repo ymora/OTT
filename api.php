@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
+require_once __DIR__ . '/api/helpers.php';
 
 // Démarrer le buffer de sortie pour capturer toute sortie HTML accidentelle
 ob_start();
