@@ -79,33 +79,59 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = async (email, password) => {
-    const response = await fetch(buildClientApiUrl('/api.php/auth/login'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    })
+    try {
+      const response = await fetch(buildClientApiUrl('/api.php/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
 
-    // Vérifier si la réponse est du JSON ou du HTML (erreur PHP)
-    const contentType = response.headers.get('content-type')
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text()
-      console.error('[AuthContext] Réponse non-JSON reçue:', text.substring(0, 200))
-      throw new Error('Erreur serveur: la réponse n\'est pas au format JSON. Vérifiez que le serveur fonctionne correctement.')
+      // Vérifier si la réponse est du JSON ou du HTML (erreur PHP)
+      const contentType = response.headers.get('content-type') || ''
+      const isJson = contentType.includes('application/json')
+      
+      if (!isJson) {
+        const text = await response.text()
+        console.error('[AuthContext] ❌ Réponse non-JSON reçue')
+        console.error('[AuthContext] Content-Type:', contentType)
+        console.error('[AuthContext] Status:', response.status)
+        console.error('[AuthContext] Réponse (200 premiers caractères):', text.substring(0, 200))
+        
+        // Logger dans un fichier pour analyse
+        if (typeof window !== 'undefined') {
+          const logEntry = `[${new Date().toISOString()}] ERREUR JSON\n` +
+            `URL: ${buildClientApiUrl('/api.php/auth/login')}\n` +
+            `Status: ${response.status}\n` +
+            `Content-Type: ${contentType}\n` +
+            `Réponse: ${text.substring(0, 500)}\n\n`
+          console.log('[AuthContext] 💾 Log sauvegardé pour analyse')
+        }
+        
+        throw new Error('Erreur serveur: la réponse n\'est pas au format JSON. Vérifiez que le serveur fonctionne correctement.')
+      }
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erreur de connexion')
+      }
+
+      setToken(data.token)
+      setUser(data.user)
+
+      localStorage.setItem('ott_token', data.token)
+      localStorage.setItem('ott_user', JSON.stringify(data.user))
+
+      return data
+    } catch (err) {
+      // Si c'est déjà une erreur formatée, la relancer
+      if (err.message && err.message.includes('Erreur serveur')) {
+        throw err
+      }
+      // Sinon, c'est probablement une erreur de parsing JSON
+      console.error('[AuthContext] ❌ Erreur lors de la connexion:', err)
+      throw new Error('Erreur de connexion au serveur. Vérifiez votre connexion internet.')
     }
-
-    const data = await response.json()
-
-    if (!data.success) {
-      throw new Error(data.error || 'Erreur de connexion')
-    }
-
-    setToken(data.token)
-    setUser(data.user)
-
-    localStorage.setItem('ott_token', data.token)
-    localStorage.setItem('ott_user', JSON.stringify(data.user))
-
-    return data
   }
 
   const logout = () => {

@@ -62,6 +62,54 @@ if (getenv('DEBUG_ERRORS') === 'true') {
     ini_set('log_errors', 1);
 }
 
+// Intercepter toutes les erreurs fatales et les convertir en JSON
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        // S'assurer que le Content-Type est JSON
+        if (!headers_sent()) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+        }
+        // Nettoyer tout output précédent
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        echo json_encode([
+            'success' => false,
+            'error' => 'Erreur serveur interne',
+            'details' => getenv('DEBUG_ERRORS') === 'true' ? $error['message'] : 'Vérifiez les logs du serveur'
+        ]);
+        exit;
+    }
+});
+
+// Intercepter les warnings et notices pour les logger sans les afficher
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    // Logger l'erreur
+    error_log("[PHP Error] $errstr in $errfile:$errline");
+    
+    // Si c'est une erreur fatale, retourner du JSON
+    if (in_array($errno, [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        if (!headers_sent()) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+        }
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        echo json_encode([
+            'success' => false,
+            'error' => 'Erreur serveur',
+            'details' => getenv('DEBUG_ERRORS') === 'true' ? $errstr : 'Vérifiez les logs'
+        ]);
+        exit;
+    }
+    
+    // Pour les autres erreurs, continuer le traitement normal
+    return false;
+}, E_ALL & ~E_DEPRECATED & ~E_STRICT);
+
 // Répondre immédiatement aux requêtes OPTIONS (preflight)
 // IMPORTANT: Les headers CORS doivent être définis AVANT cette vérification
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -4658,9 +4706,9 @@ function handleCompileFirmware($firmware_id) {
             $arduinoDataDir = __DIR__ . '/hardware/arduino-data';
             if (!is_dir($arduinoDataDir)) {
                 // Fallback: créer arduino-data/ à la racine si hardware/arduino-data/ n'existe pas
-                $arduinoDataDir = __DIR__ . '/arduino-data';
-                if (!is_dir($arduinoDataDir)) {
-                    mkdir($arduinoDataDir, 0755, true);
+            $arduinoDataDir = __DIR__ . '/arduino-data';
+            if (!is_dir($arduinoDataDir)) {
+                mkdir($arduinoDataDir, 0755, true);
                 }
             }
             
@@ -4701,12 +4749,12 @@ function handleCompileFirmware($firmware_id) {
                 if (is_dir($corePath)) {
                     sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (versionné)');
                     sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
-                    sendSSE('progress', 50);
-                } else {
-                    sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
-                    sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
+                sendSSE('progress', 50);
+            } else {
+                sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
+                sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
                     sendSSE('log', 'info', '   ⚠️ Après installation, ajoutez hardware/arduino-data/ à GitHub LFS');
-                    sendSSE('progress', 42);
+                sendSSE('progress', 42);
                 
                 // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
                 $indexFile = $arduinoDataDir . '/package_index.json';
