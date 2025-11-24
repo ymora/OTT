@@ -41,7 +41,15 @@ self.addEventListener('message', (event) => {
 })
 
 // Activate: Nettoyer les anciens caches automatiquement
+let isActivating = false
 self.addEventListener('activate', (event) => {
+  // Protection contre les activations multiples en boucle
+  if (isActivating) {
+    console.log('[SW] Activation déjà en cours, ignorée')
+    return
+  }
+  
+  isActivating = true
   event.waitUntil(
     Promise.all([
       // NE PAS utiliser clients.claim() automatiquement - éviter les boucles
@@ -60,6 +68,10 @@ self.addEventListener('activate', (event) => {
         console.log('[SW] Nettoyage automatique des caches terminé')
         // NE PAS envoyer de message CACHE_CLEARED automatiquement
         // Le nettoyage doit être uniquement manuel via le bouton
+        isActivating = false
+      }).catch((err) => {
+        console.error('[SW] Erreur lors de l\'activation:', err)
+        isActivating = false
       })
     ])
   )

@@ -92,7 +92,16 @@ export default function RootLayout({ children }) {
                 };
                 
                 // Vérifier les mises à jour régulièrement (toutes les 5 minutes)
+                let lastUpdateCheck = 0
+                const UPDATE_CHECK_INTERVAL = 300000 // 5 minutes
                 const checkForUpdates = () => {
+                  const now = Date.now()
+                  // Éviter les vérifications trop fréquentes (minimum 1 minute entre chaque)
+                  if (now - lastUpdateCheck < 60000) {
+                    return
+                  }
+                  lastUpdateCheck = now
+                  
                   navigator.serviceWorker.getRegistration(swPath).then(registration => {
                     if (registration) {
                       registration.update().catch(err => {
@@ -110,12 +119,14 @@ export default function RootLayout({ children }) {
                 }
                 
                 // Vérifier les mises à jour toutes les 5 minutes (au lieu de 1 heure)
-                setInterval(checkForUpdates, 300000);
+                setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL);
                 
                 // Vérifier aussi lors du retour de focus (l'utilisateur revient sur l'onglet)
+                // Mais avec une protection contre les vérifications trop fréquentes
                 document.addEventListener('visibilitychange', () => {
                   if (!document.hidden) {
-                    checkForUpdates();
+                    // Attendre 2 secondes avant de vérifier pour éviter les boucles
+                    setTimeout(checkForUpdates, 2000);
                   }
                 });
                 }
