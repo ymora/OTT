@@ -4496,32 +4496,32 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('log', 'info', 'Connexion établie, vérification du firmware...');
             
             $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
-        $stmt->execute(['id' => $firmware_id]);
-        $firmware = $stmt->fetch();
-        
-        if (!$firmware) {
-            sendSSE('error', 'Firmware not found');
+            $stmt->execute(['id' => $firmware_id]);
+            $firmware = $stmt->fetch();
+            
+            if (!$firmware) {
+                sendSSE('error', 'Firmware not found');
+                flush();
+                return;
+            }
+            
+            // Marquer immédiatement comme "compiling" dans la base de données
+            // Cela permet de savoir que la compilation est en cours même si la connexion SSE se ferme
+            // Permettre de compiler même si déjà compilé (pour recompiler)
+            $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = :id")->execute(['id' => $firmware_id]);
+            
+            // Note: On permet maintenant de compiler même si le statut est 'compiled' ou 'error'
+            // pour permettre de relancer la compilation
+            sendSSE('log', 'info', 'Démarrage de la compilation... (statut précédent: ' . ($firmware['status'] ?? 'unknown') . ')');
             flush();
-            return;
-        }
-        
-        // Marquer immédiatement comme "compiling" dans la base de données
-        // Cela permet de savoir que la compilation est en cours même si la connexion SSE se ferme
-        // Permettre de compiler même si déjà compilé (pour recompiler)
-        $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = :id")->execute(['id' => $firmware_id]);
-        
-        // Note: On permet maintenant de compiler même si le statut est 'compiled' ou 'error'
-        // pour permettre de relancer la compilation
-        sendSSE('log', 'info', 'Démarrage de la compilation... (statut précédent: ' . ($firmware['status'] ?? 'unknown') . ')');
+            
+            // Trouver le fichier .ino en utilisant la fonction helper simplifiée
+            sendSSE('log', 'info', '🔍 Recherche du fichier .ino...');
+            sendSSE('log', 'info', '   file_path DB: ' . ($firmware['file_path'] ?? 'N/A'));
+            sendSSE('log', 'info', '   ID firmware: ' . $firmware_id);
             flush();
-        
-        // Trouver le fichier .ino en utilisant la fonction helper simplifiée
-        sendSSE('log', 'info', '🔍 Recherche du fichier .ino...');
-        sendSSE('log', 'info', '   file_path DB: ' . ($firmware['file_path'] ?? 'N/A'));
-        sendSSE('log', 'info', '   ID firmware: ' . $firmware_id);
-        flush();
-        
-        $ino_path = findFirmwareInoFile($firmware_id, $firmware);
+            
+            $ino_path = findFirmwareInoFile($firmware_id, $firmware);
         
         if ($ino_path && file_exists($ino_path)) {
             sendSSE('log', 'info', '✅ Fichier trouvé: ' . basename($ino_path));
