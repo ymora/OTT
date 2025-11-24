@@ -56,9 +56,12 @@ RUN chown -R www-data:www-data /var/www/html \
 RUN mkdir -p /var/www/html/hardware/firmware/v3.0 \
     && chown -R www-data:www-data /var/www/html/hardware
 
-# Activer affichage erreurs PHP (pour debug)
-RUN echo "display_errors = On" >> /usr/local/etc/php/php.ini \
-    && echo "error_reporting = E_ALL" >> /usr/local/etc/php/php.ini
+# Désactiver affichage erreurs PHP en production (pour éviter HTML dans JSON)
+# Les erreurs sont loggées mais pas affichées
+RUN echo "display_errors = Off" >> /usr/local/etc/php/php.ini \
+    && echo "display_startup_errors = Off" >> /usr/local/etc/php/php.ini \
+    && echo "error_reporting = E_ALL" >> /usr/local/etc/php/php.ini \
+    && echo "log_errors = On" >> /usr/local/etc/php/php.ini
 
 # Port exposé
 EXPOSE 80

@@ -83,7 +83,18 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url)
   const pathname = url.pathname
+  const hostname = url.hostname
   const scheme = url.protocol
+
+  // CRITIQUE: Ne JAMAIS mettre en cache les requêtes API (Render, localhost, api.php)
+  // Cela peut causer des problèmes de données et des boucles de rechargement
+  if (pathname.includes('/api.php') || 
+      hostname.includes('onrender.com') || 
+      hostname.includes('localhost') ||
+      hostname.includes('127.0.0.1')) {
+    // Laisser passer toutes les requêtes API sans intervention du service worker
+    return
+  }
 
   // Ignorer les schémas non supportés (chrome-extension, moz-extension, etc.)
   // Ces requêtes ne peuvent pas être mises en cache
@@ -117,55 +128,26 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Pour les autres fichiers, utiliser "cache first" avec fallback réseau
+  // Pour les autres fichiers, utiliser "network first" pour éviter les problèmes de cache
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse
-      }
-
-      return fetch(event.request)
-        .then((response) => {
-          // Mettre en cache uniquement les réponses valides et supportées
-          // Vérifier que la réponse est clonable et que le schéma est supporté
-          if (response.status === 200 && 
-              response.type === 'basic' && 
-              (scheme === 'http:' || scheme === 'https:')) {
-            try {
-              const responseToCache = response.clone()
-              caches.open(CACHE_NAME).then((cache) => {
-                // La vérification du schéma a déjà été faite plus haut, on peut mettre en cache
-                cache.put(event.request, responseToCache).catch((err) => {
-                  // Ignorer silencieusement les erreurs de cache
-                  // (peut arriver pour certaines requêtes spéciales)
-                  if (!err.message || (!err.message.includes('chrome-extension') && 
-                      !err.message.includes('moz-extension') &&
-                      !err.message.includes('unsupported'))) {
-                    console.warn('[SW] Erreur lors de la mise en cache:', err)
-                  }
-                })
-              }).catch((err) => {
-                console.warn('[SW] Erreur ouverture cache:', err)
-              })
-            } catch (err) {
-              // Ignorer les erreurs de mise en cache (requêtes non clonables, etc.)
-              // Ne pas logger les erreurs liées aux extensions
-              if (!err.message || (!err.message.includes('chrome-extension') && 
-                  !err.message.includes('moz-extension') &&
-                  !err.message.includes('unsupported'))) {
-                console.warn('[SW] Impossible de mettre en cache:', err)
-              }
-            }
+    fetch(event.request)
+      .then((response) => {
+        // Ne pas mettre en cache automatiquement pour éviter les problèmes
+        // Le cache peut causer des boucles de rechargement
+        return response
+      })
+      .catch(() => {
+        // En dernier recours, essayer le cache
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse
           }
-          return response
-        })
-        .catch(() => {
-          // En dernier recours, retourner la page d'accueil
+          // Si pas de cache et pas de réseau, retourner la page d'accueil
           if (event.request.destination === 'document') {
             return caches.match(withBase('/'))
           }
         })
-    })
+      })
   )
 })
 
