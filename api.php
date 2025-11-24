@@ -790,8 +790,6 @@ $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 // Définir Content-Type selon le type de route
 // ATTENTION: Pour SSE, les headers sont définis dans handleCompileFirmware() APRÈS l'authentification
-// Définir Content-Type selon le type de route
-// Pour SSE, les headers sont définis dans handleCompileFirmware() APRÈS l'authentification
 if ($method !== 'OPTIONS') {
     $isSSERoute = preg_match('#/firmwares/compile/(\d+)$#', $path) && $method === 'GET';
     if (!$isSSERoute) {
