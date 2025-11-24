@@ -178,5 +178,110 @@
   
   console.log(`[MONITOR] ✅ Monitoring activé (redémarrage #${rebootData.count})`);
   console.log('[MONITOR] Tapez getRebootReport() dans la console pour voir le rapport complet');
+  
+  // Créer un panneau de monitoring visible sur la page
+  function createMonitorPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'monitor-panel';
+    panel.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 400px;
+      max-height: 500px;
+      background: rgba(0, 0, 0, 0.9);
+      color: #00ff00;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      z-index: 99998;
+      overflow-y: auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      border: 2px solid #00ff00;
+    `;
+    
+    const header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #00ff00; padding-bottom: 5px;';
+    header.innerHTML = `
+      <strong style="color: #00ff00;">🔍 MONITOR ACTIF</strong>
+      <button id="monitor-toggle" style="background: #00ff00; color: #000; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px;">Masquer</button>
+    `;
+    
+    const content = document.createElement('div');
+    content.id = 'monitor-content';
+    content.style.cssText = 'line-height: 1.6;';
+    
+    panel.appendChild(header);
+    panel.appendChild(content);
+    document.body.appendChild(panel);
+    
+    // Toggle visibility
+    document.getElementById('monitor-toggle').addEventListener('click', () => {
+      const isHidden = content.style.display === 'none';
+      content.style.display = isHidden ? 'block' : 'none';
+      document.getElementById('monitor-toggle').textContent = isHidden ? 'Masquer' : 'Afficher';
+    });
+    
+    // Mettre à jour le panneau toutes les secondes
+    function updatePanel() {
+      const recent = rebootData.timestamps.slice(-5);
+      const timeSpans = recent.length > 1 ? recent.slice(1).map((t, i) => t - recent[i]) : [];
+      const avgTime = timeSpans.length > 0 ? timeSpans.reduce((a, b) => a + b, 0) / timeSpans.length : 0;
+      
+      const isLooping = recent.length >= 3 && (recent[recent.length - 1] - recent[0]) < 10000;
+      
+      content.innerHTML = `
+        <div style="margin-bottom: 10px;">
+          <strong style="color: ${isLooping ? '#ff0000' : '#00ff00'};">Redémarrages:</strong> ${rebootData.count}
+          ${isLooping ? ' <span style="color: #ff0000;">🔴 BOUCLE!</span>' : ''}
+        </div>
+        <div style="margin-bottom: 10px;">
+          <strong>Redirections:</strong> ${redirectCount}
+        </div>
+        <div style="margin-bottom: 10px;">
+          <strong>Temps moyen entre redémarrages:</strong> ${avgTime > 0 ? (avgTime / 1000).toFixed(1) + 's' : 'N/A'}
+        </div>
+        <div style="margin-bottom: 10px;">
+          <strong>Derniers redémarrages:</strong>
+          <div style="margin-left: 10px; font-size: 10px; color: #888;">
+            ${recent.map((t, i) => {
+              const date = new Date(t);
+              return `${i + 1}. ${date.toLocaleTimeString()}`;
+            }).join('<br>')}
+          </div>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <strong>Derniers logs importants:</strong>
+          <div style="margin-left: 10px; font-size: 10px; max-height: 150px; overflow-y: auto;">
+            ${rebootData.logs.slice(-5).map(log => {
+              const date = new Date(log.timestamp);
+              const color = log.level === 'error' ? '#ff4444' : log.level === 'warn' ? '#ffaa00' : '#888';
+              return `<div style="color: ${color}; margin-bottom: 3px;">
+                [${date.toLocaleTimeString()}] ${log.message.substring(0, 80)}${log.message.length > 80 ? '...' : ''}
+              </div>`;
+            }).join('') || '<div style="color: #888;">Aucun log</div>'}
+          </div>
+        </div>
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">
+          <button onclick="sessionStorage.clear(); location.reload();" 
+                  style="background: #ff0000; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; width: 100%;">
+            🔄 Vider cache et redémarrer
+          </button>
+        </div>
+      `;
+    }
+    
+    // Mettre à jour toutes les secondes
+    setInterval(updatePanel, 1000);
+    updatePanel();
+  }
+  
+  // Attendre que le DOM soit prêt
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createMonitorPanel);
+  } else {
+    createMonitorPanel();
+  }
 })();
 
