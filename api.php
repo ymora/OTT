@@ -4574,543 +4574,545 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('log', 'info', 'Démarrage de la compilation...');
             sendSSE('progress', 10);
             flush();
-        
-        // Vérifier si arduino-cli est disponible
-        // ⚠️ CRITIQUE: La compilation ne doit JAMAIS être simulée - soit OK, soit ÉCHEC
-        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
-        $arduinoCli = null;
-        
-        // 1. Chercher dans bin/ du projet (priorité absolue)
-        $localArduinoCli = __DIR__ . '/bin/arduino-cli' . ($isWindows ? '.exe' : '');
-        $localArduinoCliAlt = __DIR__ . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'arduino-cli' . ($isWindows ? '.exe' : '');
-        
-        // Essayer les deux formats de chemin (normalisé et avec séparateurs)
-        foreach ([$localArduinoCli, $localArduinoCliAlt] as $testPath) {
-            if (file_exists($testPath) && is_readable($testPath)) {
-                $arduinoCli = $testPath;
-                sendSSE('log', 'info', '✅ arduino-cli trouvé dans bin/ du projet (versionné)');
-                break;
-            }
-        }
-        
-        // 2. Chercher dans ~/.local/bin/ (emplacement standard pour Render)
-        if (empty($arduinoCli) && !$isWindows) {
-            $homeDir = getenv('HOME');
-            if (!empty($homeDir)) {
-                $renderArduinoCli = $homeDir . '/.local/bin/arduino-cli';
-                if (file_exists($renderArduinoCli) && is_readable($renderArduinoCli)) {
-                    $arduinoCli = $renderArduinoCli;
-                    sendSSE('log', 'info', '✅ arduino-cli trouvé dans ~/.local/bin/');
+            
+            // Vérifier si arduino-cli est disponible
+            // ⚠️ CRITIQUE: La compilation ne doit JAMAIS être simulée - soit OK, soit ÉCHEC
+            $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+            $arduinoCli = null;
+            
+            // 1. Chercher dans bin/ du projet (priorité absolue)
+            $localArduinoCli = __DIR__ . '/bin/arduino-cli' . ($isWindows ? '.exe' : '');
+            $localArduinoCliAlt = __DIR__ . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'arduino-cli' . ($isWindows ? '.exe' : '');
+            
+            // Essayer les deux formats de chemin (normalisé et avec séparateurs)
+            foreach ([$localArduinoCli, $localArduinoCliAlt] as $testPath) {
+                if (file_exists($testPath) && is_readable($testPath)) {
+                    $arduinoCli = $testPath;
+                    sendSSE('log', 'info', '✅ arduino-cli trouvé dans bin/ du projet (versionné)');
+                    break;
                 }
             }
-        }
-        
-        // 3. Si pas trouvé localement, chercher dans le PATH système
-        if (empty($arduinoCli)) {
-            if ($isWindows) {
-                $pathCli = trim(shell_exec('where arduino-cli 2>nul || echo ""'));
+            
+            // 2. Chercher dans ~/.local/bin/ (emplacement standard pour Render)
+            if (empty($arduinoCli) && !$isWindows) {
+                $homeDir = getenv('HOME');
+                if (!empty($homeDir)) {
+                    $renderArduinoCli = $homeDir . '/.local/bin/arduino-cli';
+                    if (file_exists($renderArduinoCli) && is_readable($renderArduinoCli)) {
+                        $arduinoCli = $renderArduinoCli;
+                        sendSSE('log', 'info', '✅ arduino-cli trouvé dans ~/.local/bin/');
+                    }
+                }
+            }
+            
+            // 3. Si pas trouvé localement, chercher dans le PATH système
+            if (empty($arduinoCli)) {
+                if ($isWindows) {
+                    $pathCli = trim(shell_exec('where arduino-cli 2>nul || echo ""'));
+                } else {
+                    $pathCli = trim(shell_exec('which arduino-cli 2>/dev/null || echo ""'));
+                }
+                
+                if (!empty($pathCli) && file_exists($pathCli)) {
+                    $arduinoCli = $pathCli;
+                    sendSSE('log', 'info', '✅ arduino-cli trouvé dans le PATH système');
+                }
+            }
+            
+            // 3. Vérification finale - ÉCHEC si arduino-cli n'est pas disponible
+            if (empty($arduinoCli) || !file_exists($arduinoCli)) {
+                sendSSE('error', '❌ ÉCHEC: arduino-cli non trouvé. La compilation réelle est requise.');
+                sendSSE('log', 'error', 'Pour activer la compilation, installez arduino-cli:');
+                sendSSE('log', 'error', '  - Windows: .\\scripts\\download_arduino_cli.ps1');
+                sendSSE('log', 'error', '  - Linux/Mac: ./scripts/download_arduino_cli.sh');
+                sendSSE('log', 'error', '  - Ou placez arduino-cli dans bin/ du projet');
+                sendSSE('log', 'error', 'Instructions: https://arduino.github.io/arduino-cli/latest/installation/');
+                
+                // Marquer le firmware comme erreur dans la base de données
+                $pdo->prepare("
+                    UPDATE firmware_versions 
+                    SET status = 'error', error_message = 'arduino-cli non trouvé - compilation échouée'
+                    WHERE id = :id
+                ")->execute(['id' => $firmware_id]);
+                
+                flush();
+                return;
             } else {
-                $pathCli = trim(shell_exec('which arduino-cli 2>/dev/null || echo ""'));
-            }
-            
-            if (!empty($pathCli) && file_exists($pathCli)) {
-                $arduinoCli = $pathCli;
-                sendSSE('log', 'info', '✅ arduino-cli trouvé dans le PATH système');
-            }
-        }
-        
-        // 3. Vérification finale - ÉCHEC si arduino-cli n'est pas disponible
-        if (empty($arduinoCli) || !file_exists($arduinoCli)) {
-            sendSSE('error', '❌ ÉCHEC: arduino-cli non trouvé. La compilation réelle est requise.');
-            sendSSE('log', 'error', 'Pour activer la compilation, installez arduino-cli:');
-            sendSSE('log', 'error', '  - Windows: .\\scripts\\download_arduino_cli.ps1');
-            sendSSE('log', 'error', '  - Linux/Mac: ./scripts/download_arduino_cli.sh');
-            sendSSE('log', 'error', '  - Ou placez arduino-cli dans bin/ du projet');
-            sendSSE('log', 'error', 'Instructions: https://arduino.github.io/arduino-cli/latest/installation/');
-            
-            // Marquer le firmware comme erreur dans la base de données
-            $pdo->prepare("
-                UPDATE firmware_versions 
-                SET status = 'error', error_message = 'arduino-cli non trouvé - compilation échouée'
-                WHERE id = :id
-            ")->execute(['id' => $firmware_id]);
-            
-            flush();
-            return;
-        } else {
-            // Compilation réelle avec arduino-cli
-            sendSSE('log', 'info', '✅ arduino-cli disponible - démarrage de la compilation réelle');
-            sendSSE('progress', 20);
-            
-            // Créer un dossier temporaire pour la compilation
-            $build_dir = sys_get_temp_dir() . '/ott_firmware_build_' . $firmware_id . '_' . time();
-            mkdir($build_dir, 0755, true);
-            
-            sendSSE('log', 'info', 'Préparation de l\'environnement de compilation...');
-            sendSSE('progress', 30);
-            
-            // Copier le fichier .ino dans le dossier de build
-            $sketch_name = 'fw_ott_optimized';
-            $sketch_dir = $build_dir . '/' . $sketch_name;
-            mkdir($sketch_dir, 0755, true);
-            copy($ino_path, $sketch_dir . '/' . $sketch_name . '.ino');
-            
-            // Copier les librairies externes (TinyGSM) dans le dossier de compilation
-            // Arduino-cli cherche les librairies dans plusieurs emplacements :
-            // 1. Le dossier 'libraries' à côté du sketch (pour cette compilation)
-            // 2. Le dossier 'libraries' dans ARDUINO_DIRECTORIES_USER (persistant)
-            $hardware_lib_dir = __DIR__ . '/hardware/lib';
-            if (is_dir($hardware_lib_dir)) {
-                $lib_dirs = glob($hardware_lib_dir . '/TinyGSM*', GLOB_ONLYDIR);
-                if (!empty($lib_dirs)) {
-                    // 1. Copier dans le dossier libraries à côté du sketch (pour cette compilation)
-                    $libraries_dir = $sketch_dir . '/../libraries';
-                    if (!is_dir($libraries_dir)) {
-                        mkdir($libraries_dir, 0755, true);
-                    }
-                    
-                    // 2. Copier aussi dans arduino-data/libraries (persistant, réutilisable)
-                    $arduinoDataLibrariesDir = __DIR__ . '/arduino-data/libraries';
-                    if (!is_dir($arduinoDataLibrariesDir)) {
-                        mkdir($arduinoDataLibrariesDir, 0755, true);
-                    }
-                    
-                    foreach ($lib_dirs as $lib_dir) {
-                        $lib_name = basename($lib_dir);
-                        
-                        // Copier dans arduino-data/libraries (persistant, pour réutilisation) - une seule fois
-                        $target_lib_dir_persistent = $arduinoDataLibrariesDir . '/' . $lib_name;
-                        if (!is_dir($target_lib_dir_persistent)) {
-                            copyRecursive($lib_dir, $target_lib_dir_persistent);
-                            sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' installée dans arduino-data/libraries');
+                // Compilation réelle avec arduino-cli
+                sendSSE('log', 'info', '✅ arduino-cli disponible - démarrage de la compilation réelle');
+                sendSSE('progress', 20);
+                
+                // Créer un dossier temporaire pour la compilation
+                $build_dir = sys_get_temp_dir() . '/ott_firmware_build_' . $firmware_id . '_' . time();
+                mkdir($build_dir, 0755, true);
+                
+                sendSSE('log', 'info', 'Préparation de l\'environnement de compilation...');
+                sendSSE('progress', 30);
+                
+                // Copier le fichier .ino dans le dossier de build
+                $sketch_name = 'fw_ott_optimized';
+                $sketch_dir = $build_dir . '/' . $sketch_name;
+                mkdir($sketch_dir, 0755, true);
+                copy($ino_path, $sketch_dir . '/' . $sketch_name . '.ino');
+                
+                // Copier les librairies externes (TinyGSM) dans le dossier de compilation
+                // Arduino-cli cherche les librairies dans plusieurs emplacements :
+                // 1. Le dossier 'libraries' à côté du sketch (pour cette compilation)
+                // 2. Le dossier 'libraries' dans ARDUINO_DIRECTORIES_USER (persistant)
+                $hardware_lib_dir = __DIR__ . '/hardware/lib';
+                if (is_dir($hardware_lib_dir)) {
+                    $lib_dirs = glob($hardware_lib_dir . '/TinyGSM*', GLOB_ONLYDIR);
+                    if (!empty($lib_dirs)) {
+                        // 1. Copier dans le dossier libraries à côté du sketch (pour cette compilation)
+                        $libraries_dir = $sketch_dir . '/../libraries';
+                        if (!is_dir($libraries_dir)) {
+                            mkdir($libraries_dir, 0755, true);
                         }
                         
-                        // Créer un lien symbolique depuis le build vers la librairie persistante (plus rapide que copier)
-                        // Si les liens symboliques ne fonctionnent pas, copier seulement si nécessaire
-                        $target_lib_dir_build = $libraries_dir . '/' . $lib_name;
-                        if (!is_dir($target_lib_dir_build) && !is_link($target_lib_dir_build)) {
-                            // Essayer d'abord un lien symbolique (plus rapide)
-                            if (!is_windows()) {
-                                if (symlink($target_lib_dir_persistent, $target_lib_dir_build)) {
-                                    sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' liée dans le build');
+                        // 2. Copier aussi dans arduino-data/libraries (persistant, réutilisable)
+                        $arduinoDataLibrariesDir = __DIR__ . '/arduino-data/libraries';
+                        if (!is_dir($arduinoDataLibrariesDir)) {
+                            mkdir($arduinoDataLibrariesDir, 0755, true);
+                        }
+                        
+                        foreach ($lib_dirs as $lib_dir) {
+                            $lib_name = basename($lib_dir);
+                            
+                            // Copier dans arduino-data/libraries (persistant, pour réutilisation) - une seule fois
+                            $target_lib_dir_persistent = $arduinoDataLibrariesDir . '/' . $lib_name;
+                            if (!is_dir($target_lib_dir_persistent)) {
+                                copyRecursive($lib_dir, $target_lib_dir_persistent);
+                                sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' installée dans arduino-data/libraries');
+                            }
+                            
+                            // Créer un lien symbolique depuis le build vers la librairie persistante (plus rapide que copier)
+                            // Si les liens symboliques ne fonctionnent pas, copier seulement si nécessaire
+                            $target_lib_dir_build = $libraries_dir . '/' . $lib_name;
+                            if (!is_dir($target_lib_dir_build) && !is_link($target_lib_dir_build)) {
+                                // Essayer d'abord un lien symbolique (plus rapide)
+                                if (!is_windows()) {
+                                    if (symlink($target_lib_dir_persistent, $target_lib_dir_build)) {
+                                        sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' liée dans le build');
+                                    } else {
+                                        // Fallback: copie si le lien symbolique échoue
+                                        copyRecursive($lib_dir, $target_lib_dir_build);
+                                        sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
+                                    }
                                 } else {
-                                    // Fallback: copie si le lien symbolique échoue
+                                    // Windows: copier directement (pas de liens symboliques fiables)
                                     copyRecursive($lib_dir, $target_lib_dir_build);
                                     sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
                                 }
-                            } else {
-                                // Windows: copier directement (pas de liens symboliques fiables)
-                                copyRecursive($lib_dir, $target_lib_dir_build);
-                                sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
                             }
                         }
+                        flush();
+                    }
+                }
+                
+                // Utiliser le répertoire hardware/arduino-data du projet (versionné avec GitHub LFS)
+                // Si le core est déjà dans le projet, on l'utilise directement (pas de téléchargement)
+                $arduinoDataDir = __DIR__ . '/hardware/arduino-data';
+                if (!is_dir($arduinoDataDir)) {
+                    // Fallback: créer arduino-data/ à la racine si hardware/arduino-data/ n'existe pas
+                    $arduinoDataDir = __DIR__ . '/arduino-data';
+                    if (!is_dir($arduinoDataDir)) {
+                        mkdir($arduinoDataDir, 0755, true);
+                    }
+                }
+                
+                // Définir HOME et ARDUINO_DIRECTORIES_USER pour arduino-cli
+                $env = [];
+                if (empty(getenv('HOME'))) {
+                    $env['HOME'] = sys_get_temp_dir() . '/arduino-cli-home';
+                    if (!is_dir($env['HOME'])) {
+                        mkdir($env['HOME'], 0755, true);
+                    }
+                }
+                // Utiliser un répertoire persistant pour les données arduino-cli
+                $env['ARDUINO_DIRECTORIES_USER'] = $arduinoDataDir;
+                
+                $envStr = '';
+                foreach ($env as $key => $value) {
+                    $envStr .= $key . '=' . escapeshellarg($value) . ' ';
+                }
+                
+                sendSSE('log', 'info', 'Vérification du core ESP32...');
+                sendSSE('progress', 40);
+                
+                // Vérifier si le core ESP32 est déjà installé via arduino-cli core list
+                // C'est la méthode la plus fiable car elle vérifie la base de données d'arduino-cli
+                // La commande 'core list' retourne les cores installés, pas seulement téléchargés
+                exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
+                $coreListStr = implode("\n", $coreListOutput);
+                // Vérifier si le core ESP32 apparaît dans la liste (format: esp32:esp32 ou esp-rv32)
+                $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || strpos($coreListStr, 'esp-rv32') !== false;
+                
+                if ($esp32Installed) {
+                    sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
+                    sendSSE('log', 'info', '   Source: hardware/arduino-data/ (versionné avec le projet)');
+                    sendSSE('progress', 50);
+                } else {
+                    // Vérifier si le core existe dans hardware/arduino-data/ mais n'est pas encore indexé
+                    $corePath = $arduinoDataDir . '/packages/esp32/hardware/esp32';
+                    if (is_dir($corePath)) {
+                        sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (versionné)');
+                        sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
+                        sendSSE('progress', 50);
+                    } else {
+                        sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
+                        sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
+                        sendSSE('log', 'info', '   ⚠️ Après installation, ajoutez hardware/arduino-data/ à GitHub LFS');
+                        sendSSE('progress', 42);
+                        
+                        // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
+                        $indexFile = $arduinoDataDir . '/package_index.json';
+                        $shouldUpdateIndex = true;
+                        if (file_exists($indexFile)) {
+                            $indexAge = time() - filemtime($indexFile);
+                            // Mettre à jour l'index seulement s'il a plus de 24h
+                            if ($indexAge < 86400) {
+                                $shouldUpdateIndex = false;
+                                sendSSE('log', 'info', '✅ Index des cores récent (moins de 24h), pas besoin de mise à jour');
+                            }
+                        }
+                        
+                        // Mettre à jour l'index seulement si nécessaire
+                        if ($shouldUpdateIndex) {
+                            sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
+                            exec($envStr . $arduinoCli . ' core update-index 2>&1', $updateIndexOutput, $updateIndexReturn);
+                            if ($updateIndexReturn !== 0) {
+                                sendSSE('log', 'warning', 'Avertissement lors de la mise à jour de l\'index');
+                            }
+                        }
+                        
+                        sendSSE('log', 'info', 'Installation du core ESP32...');
+                        sendSSE('progress', 45);
+                        
+                        // Exécuter avec output en temps réel pour voir la progression
+                        $descriptorspec = [
+                            0 => ["pipe", "r"],  // stdin
+                            1 => ["pipe", "w"],  // stdout
+                            2 => ["pipe", "w"]   // stderr
+                        ];
+                        
+                        $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
+                        
+                        if (is_resource($process)) {
+                            // Lire la sortie ligne par ligne pour afficher la progression
+                            $installOutput = [];
+                            $stdout = $pipes[1];
+                            $stderr = $pipes[2];
+                            
+                            // Configurer les streams en non-bloquant
+                            stream_set_blocking($stdout, false);
+                            stream_set_blocking($stderr, false);
+                            
+                            $startTime = time();
+                            $lastOutputTime = $startTime;
+                            $lastHeartbeatTime = $startTime;
+                            $lastKeepAliveTime = $startTime;
+                            
+                            while (true) {
+                                $status = proc_get_status($process);
+                                $currentTime = time();
+                                
+                                // Lire stdout
+                                $line = fgets($stdout);
+                                if ($line !== false) {
+                                    $line = trim($line);
+                                    if (!empty($line)) {
+                                        $installOutput[] = $line;
+                                        sendSSE('log', 'info', $line);
+                                        flush();
+                                        $lastOutputTime = $currentTime;
+                                    }
+                                }
+                                
+                                // Lire stderr
+                                $errLine = fgets($stderr);
+                                if ($errLine !== false) {
+                                    $errLine = trim($errLine);
+                                    if (!empty($errLine)) {
+                                        $installOutput[] = $errLine;
+                                        sendSSE('log', 'info', $errLine);
+                                        flush();
+                                        $lastOutputTime = $currentTime;
+                                    }
+                                }
+                                
+                                // Vérifier si le processus est terminé
+                                if ($status['running'] === false) {
+                                    break;
+                                }
+                                
+                                // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
+                                // (L'installation du core ESP32 peut prendre du temps)
+                                if ($currentTime - $lastOutputTime > 600) {
+                                    sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
+                                    sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
+                                    // Marquer le firmware comme erreur dans la base de données
+                                    try {
+                                        $pdo->prepare("
+                                            UPDATE firmware_versions 
+                                            SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32'
+                                            WHERE id = :id
+                                        ")->execute(['id' => $firmware_id]);
+                                    } catch(PDOException $dbErr) {
+                                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                                    }
+                                    proc_terminate($process);
+                                    break;
+                                }
+                                
+                                // Envoyer un keep-alive SSE toutes les 3 secondes pour maintenir la connexion active
+                                // (Les commentaires SSE `: keep-alive` maintiennent la connexion ouverte)
+                                if ($currentTime - $lastKeepAliveTime >= 3) {
+                                    $lastKeepAliveTime = $currentTime;
+                                    echo ": keep-alive\n\n";
+                                    flush();
+                                }
+                                
+                                // Envoyer un heartbeat avec message toutes les 5 secondes pour montrer que le système est vivant
+                                if ($currentTime - $lastHeartbeatTime >= 5) {
+                                    // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
+                                    $lastHeartbeatTime = $currentTime;
+                                    $elapsedSeconds = $currentTime - $startTime;
+                                    $elapsedMinutes = floor($elapsedSeconds / 60);
+                                    $elapsedSecondsRemainder = $elapsedSeconds % 60;
+                                    
+                                    // Message avec timestamp pour montrer que le système est toujours actif
+                                    $timeStr = $elapsedMinutes > 0 
+                                        ? sprintf('%dm %ds', $elapsedMinutes, $elapsedSecondsRemainder)
+                                        : sprintf('%ds', $elapsedSecondsRemainder);
+                                    
+                                    sendSSE('log', 'info', '⏳ Installation en cours... (temps écoulé: ' . $timeStr . ' - le système est actif)');
+                                    flush();
+                                }
+                                
+                                // Attendre un peu avant de relire
+                                usleep(100000); // 100ms
+                            }
+                            
+                            // Fermer les pipes
+                            fclose($pipes[0]);
+                            fclose($pipes[1]);
+                            fclose($pipes[2]);
+                            
+                            $return = proc_close($process);
+                        } else {
+                            // Fallback sur exec si proc_open échoue
+                            exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $installOutput, $return);
+                            sendSSE('log', 'info', implode("\n", $installOutput));
+                        }
+                        
+                        if ($return !== 0) {
+                            // Marquer le firmware comme erreur dans la base de données
+                            try {
+                                $pdo->prepare("
+                                    UPDATE firmware_versions 
+                                    SET status = 'error', error_message = 'Erreur lors de l\'installation du core ESP32'
+                                    WHERE id = :id
+                                ")->execute(['id' => $firmware_id]);
+                            } catch(PDOException $dbErr) {
+                                error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                            }
+                            sendSSE('error', 'Erreur lors de l\'installation du core ESP32');
+                            flush();
+                            return;
+                        }
+                        
+                        sendSSE('log', 'info', '✅ Core ESP32 installé avec succès');
+                    }
+                }
+                
+                sendSSE('log', 'info', 'Compilation du firmware...');
+                sendSSE('progress', 60);
+                flush();
+                
+                $fqbn = 'esp32:esp32:esp32';
+                $compile_cmd = $envStr . $arduinoCli . ' compile --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
+                
+                // Exécuter avec output en temps réel pour voir la progression et maintenir la connexion SSE
+                $descriptorspec = [
+                    0 => ["pipe", "r"],  // stdin
+                    1 => ["pipe", "w"],  // stdout
+                    2 => ["pipe", "w"]   // stderr
+                ];
+                
+                $compile_process = proc_open($compile_cmd, $descriptorspec, $compile_pipes);
+                
+                if (is_resource($compile_process)) {
+                    $compile_stdout = $compile_pipes[1];
+                    $compile_stderr = $compile_pipes[2];
+                    
+                    // Configurer les streams en non-bloquant
+                    stream_set_blocking($compile_stdout, false);
+                    stream_set_blocking($compile_stderr, false);
+                    
+                    $compile_start_time = time();
+                    $compile_last_heartbeat = $compile_start_time;
+                    $compile_output_lines = [];
+                    
+                    while (true) {
+                        $compile_status = proc_get_status($compile_process);
+                        
+                        // Lire stdout
+                        $line = fgets($compile_stdout);
+                        if ($line !== false) {
+                            $line = trim($line);
+                            if (!empty($line)) {
+                                $compile_output_lines[] = $line;
+                                sendSSE('log', 'info', $line);
+                                flush();
+                            }
+                        }
+                        
+                        // Lire stderr
+                        $errLine = fgets($compile_stderr);
+                        if ($errLine !== false) {
+                            $errLine = trim($errLine);
+                            if (!empty($errLine)) {
+                                $compile_output_lines[] = $errLine;
+                                sendSSE('log', 'info', $errLine);
+                                flush();
+                            }
+                        }
+                        
+                        // Vérifier si le processus est terminé
+                        if ($compile_status['running'] === false) {
+                            break;
+                        }
+                        
+                        // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion SSE
+                        $current_time = time();
+                        if ($current_time - $compile_last_heartbeat >= 10) {
+                            $compile_last_heartbeat = $current_time;
+                            sendSSE('log', 'info', '⏳ Compilation en cours...');
+                            flush();
+                        }
+                        
+                        // Attendre un peu avant de relire
+                        usleep(100000); // 100ms
+                    }
+                    
+                    // Fermer les pipes
+                    fclose($compile_pipes[0]);
+                    fclose($compile_pipes[1]);
+                    fclose($compile_pipes[2]);
+                    
+                    $compile_return = proc_close($compile_process);
+                    $compile_output = $compile_output_lines;
+                } else {
+                    // Fallback sur exec si proc_open échoue
+                    exec($compile_cmd, $compile_output, $compile_return);
+                    
+                    foreach ($compile_output as $line) {
+                        sendSSE('log', 'info', $line);
                     }
                     flush();
                 }
-            }
-            
-            // Utiliser le répertoire hardware/arduino-data du projet (versionné avec GitHub LFS)
-            // Si le core est déjà dans le projet, on l'utilise directement (pas de téléchargement)
-            $arduinoDataDir = __DIR__ . '/hardware/arduino-data';
-            if (!is_dir($arduinoDataDir)) {
-                // Fallback: créer arduino-data/ à la racine si hardware/arduino-data/ n'existe pas
-            $arduinoDataDir = __DIR__ . '/arduino-data';
-            if (!is_dir($arduinoDataDir)) {
-                mkdir($arduinoDataDir, 0755, true);
-                }
-            }
-            
-            // Définir HOME et ARDUINO_DIRECTORIES_USER pour arduino-cli
-            $env = [];
-            if (empty(getenv('HOME'))) {
-                $env['HOME'] = sys_get_temp_dir() . '/arduino-cli-home';
-                if (!is_dir($env['HOME'])) {
-                    mkdir($env['HOME'], 0755, true);
-                }
-            }
-            // Utiliser un répertoire persistant pour les données arduino-cli
-            $env['ARDUINO_DIRECTORIES_USER'] = $arduinoDataDir;
-            
-            $envStr = '';
-            foreach ($env as $key => $value) {
-                $envStr .= $key . '=' . escapeshellarg($value) . ' ';
-            }
-            
-            sendSSE('log', 'info', 'Vérification du core ESP32...');
-            sendSSE('progress', 40);
-            
-            // Vérifier si le core ESP32 est déjà installé via arduino-cli core list
-            // C'est la méthode la plus fiable car elle vérifie la base de données d'arduino-cli
-            // La commande 'core list' retourne les cores installés, pas seulement téléchargés
-            exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
-            $coreListStr = implode("\n", $coreListOutput);
-            // Vérifier si le core ESP32 apparaît dans la liste (format: esp32:esp32 ou esp-rv32)
-            $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || strpos($coreListStr, 'esp-rv32') !== false;
-            
-            if ($esp32Installed) {
-                sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
-                sendSSE('log', 'info', '   Source: hardware/arduino-data/ (versionné avec le projet)');
-                sendSSE('progress', 50);
-            } else {
-                // Vérifier si le core existe dans hardware/arduino-data/ mais n'est pas encore indexé
-                $corePath = $arduinoDataDir . '/packages/esp32/hardware/esp32';
-                if (is_dir($corePath)) {
-                    sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (versionné)');
-                    sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
-                    sendSSE('progress', 50);
-                } else {
-                    sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
-                    sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
-                    sendSSE('log', 'info', '   ⚠️ Après installation, ajoutez hardware/arduino-data/ à GitHub LFS');
-                    sendSSE('progress', 42);
-                    
-                    // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
-                    $indexFile = $arduinoDataDir . '/package_index.json';
-                    $shouldUpdateIndex = true;
-                    if (file_exists($indexFile)) {
-                        $indexAge = time() - filemtime($indexFile);
-                        // Mettre à jour l'index seulement s'il a plus de 24h
-                        if ($indexAge < 86400) {
-                            $shouldUpdateIndex = false;
-                            sendSSE('log', 'info', '✅ Index des cores récent (moins de 24h), pas besoin de mise à jour');
-                        }
-                    }
-                    
-                    // Mettre à jour l'index seulement si nécessaire
-                    if ($shouldUpdateIndex) {
-                        sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
-                        exec($envStr . $arduinoCli . ' core update-index 2>&1', $updateIndexOutput, $updateIndexReturn);
-                        if ($updateIndexReturn !== 0) {
-                            sendSSE('log', 'warning', 'Avertissement lors de la mise à jour de l\'index');
-                        }
-                    }
-                    
-                    sendSSE('log', 'info', 'Installation du core ESP32...');
-                    sendSSE('progress', 45);
-                    
-                    // Exécuter avec output en temps réel pour voir la progression
-                    $descriptorspec = [
-                        0 => ["pipe", "r"],  // stdin
-                        1 => ["pipe", "w"],  // stdout
-                        2 => ["pipe", "w"]   // stderr
-                    ];
-                    
-                    $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
-                    
-                    if (is_resource($process)) {
-                        // Lire la sortie ligne par ligne pour afficher la progression
-                        $installOutput = [];
-                        $stdout = $pipes[1];
-                        $stderr = $pipes[2];
-                        
-                        // Configurer les streams en non-bloquant
-                        stream_set_blocking($stdout, false);
-                        stream_set_blocking($stderr, false);
-                        
-                        $startTime = time();
-                        $lastOutputTime = $startTime;
-                        $lastHeartbeatTime = $startTime;
-                        $lastKeepAliveTime = $startTime;
-                        
-                        while (true) {
-                            $status = proc_get_status($process);
-                            $currentTime = time();
-                            
-                            // Lire stdout
-                            $line = fgets($stdout);
-                            if ($line !== false) {
-                                $line = trim($line);
-                                if (!empty($line)) {
-                                    $installOutput[] = $line;
-                                    sendSSE('log', 'info', $line);
-                                    flush();
-                                    $lastOutputTime = $currentTime;
-                                }
-                            }
-                            
-                            // Lire stderr
-                            $errLine = fgets($stderr);
-                            if ($errLine !== false) {
-                                $errLine = trim($errLine);
-                                if (!empty($errLine)) {
-                                    $installOutput[] = $errLine;
-                                    sendSSE('log', 'info', $errLine);
-                                    flush();
-                                    $lastOutputTime = $currentTime;
-                                }
-                            }
-                            
-                            // Vérifier si le processus est terminé
-                            if ($status['running'] === false) {
-                                break;
-                            }
-                            
-                            // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
-                            // (L'installation du core ESP32 peut prendre du temps)
-                            if ($currentTime - $lastOutputTime > 600) {
-                                sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
-                                sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
-                                // Marquer le firmware comme erreur dans la base de données
-                                try {
-                                    $pdo->prepare("
-                                        UPDATE firmware_versions 
-                                        SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32'
-                                        WHERE id = :id
-                                    ")->execute(['id' => $firmware_id]);
-                                } catch(PDOException $dbErr) {
-                                    error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                                }
-                                proc_terminate($process);
-                                break;
-                            }
-                            
-                            // Envoyer un keep-alive SSE toutes les 3 secondes pour maintenir la connexion active
-                            // (Les commentaires SSE `: keep-alive` maintiennent la connexion ouverte)
-                            if ($currentTime - $lastKeepAliveTime >= 3) {
-                                $lastKeepAliveTime = $currentTime;
-                                echo ": keep-alive\n\n";
-                                flush();
-                            }
-                            
-                            // Envoyer un heartbeat avec message toutes les 5 secondes pour montrer que le système est vivant
-                            if ($currentTime - $lastHeartbeatTime >= 5) {
-                                // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
-                                $lastHeartbeatTime = $currentTime;
-                                $elapsedSeconds = $currentTime - $startTime;
-                                $elapsedMinutes = floor($elapsedSeconds / 60);
-                                $elapsedSecondsRemainder = $elapsedSeconds % 60;
-                                
-                                // Message avec timestamp pour montrer que le système est toujours actif
-                                $timeStr = $elapsedMinutes > 0 
-                                    ? sprintf('%dm %ds', $elapsedMinutes, $elapsedSecondsRemainder)
-                                    : sprintf('%ds', $elapsedSecondsRemainder);
-                                
-                                sendSSE('log', 'info', '⏳ Installation en cours... (temps écoulé: ' . $timeStr . ' - le système est actif)');
-                                flush();
-                            }
-                            
-                            // Attendre un peu avant de relire
-                            usleep(100000); // 100ms
-                        }
-                        
-                        // Fermer les pipes
-                        fclose($pipes[0]);
-                        fclose($pipes[1]);
-                        fclose($pipes[2]);
-                        
-                        $return = proc_close($process);
-                    } else {
-                        // Fallback sur exec si proc_open échoue
-                        exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $installOutput, $return);
-                        sendSSE('log', 'info', implode("\n", $installOutput));
-                    }
-                    
-                    if ($return !== 0) {
-                        // Marquer le firmware comme erreur dans la base de données
-                        try {
-                            $pdo->prepare("
-                                UPDATE firmware_versions 
-                                SET status = 'error', error_message = 'Erreur lors de l\'installation du core ESP32'
-                                WHERE id = :id
-                            ")->execute(['id' => $firmware_id]);
-                        } catch(PDOException $dbErr) {
-                            error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                        }
-                        sendSSE('error', 'Erreur lors de l\'installation du core ESP32');
-                        flush();
-                        return;
-                    }
-                    
-                    sendSSE('log', 'info', '✅ Core ESP32 installé avec succès');
-                }
-            
-            sendSSE('log', 'info', 'Compilation du firmware...');
-            sendSSE('progress', 60);
-            flush();
-            
-            $fqbn = 'esp32:esp32:esp32';
-            $compile_cmd = $envStr . $arduinoCli . ' compile --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
-            
-            // Exécuter avec output en temps réel pour voir la progression et maintenir la connexion SSE
-            $descriptorspec = [
-                0 => ["pipe", "r"],  // stdin
-                1 => ["pipe", "w"],  // stdout
-                2 => ["pipe", "w"]   // stderr
-            ];
-            
-            $compile_process = proc_open($compile_cmd, $descriptorspec, $compile_pipes);
-            
-            if (is_resource($compile_process)) {
-                $compile_stdout = $compile_pipes[1];
-                $compile_stderr = $compile_pipes[2];
                 
-                // Configurer les streams en non-bloquant
-                stream_set_blocking($compile_stdout, false);
-                stream_set_blocking($compile_stderr, false);
-                
-                $compile_start_time = time();
-                $compile_last_heartbeat = $compile_start_time;
-                $compile_output_lines = [];
-                
-                while (true) {
-                    $compile_status = proc_get_status($compile_process);
-                    
-                    // Lire stdout
-                    $line = fgets($compile_stdout);
-                    if ($line !== false) {
-                        $line = trim($line);
-                        if (!empty($line)) {
-                            $compile_output_lines[] = $line;
-                            sendSSE('log', 'info', $line);
-                            flush();
-                        }
+                if ($compile_return !== 0) {
+                    // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'Erreur lors de la compilation'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
                     }
-                    
-                    // Lire stderr
-                    $errLine = fgets($compile_stderr);
-                    if ($errLine !== false) {
-                        $errLine = trim($errLine);
-                        if (!empty($errLine)) {
-                            $compile_output_lines[] = $errLine;
-                            sendSSE('log', 'info', $errLine);
-                            flush();
-                        }
-                    }
-                    
-                    // Vérifier si le processus est terminé
-                    if ($compile_status['running'] === false) {
-                        break;
-                    }
-                    
-                    // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion SSE
-                    $current_time = time();
-                    if ($current_time - $compile_last_heartbeat >= 10) {
-                        $compile_last_heartbeat = $current_time;
-                        sendSSE('log', 'info', '⏳ Compilation en cours...');
-                        flush();
-                    }
-                    
-                    // Attendre un peu avant de relire
-                    usleep(100000); // 100ms
+                    sendSSE('error', 'Erreur lors de la compilation. Vérifiez les logs ci-dessus.');
+                    flush();
+                    // Nettoyer
+                    exec('rm -rf ' . escapeshellarg($build_dir));
+                    return;
                 }
                 
-                // Fermer les pipes
-                fclose($compile_pipes[0]);
-                fclose($compile_pipes[1]);
-                fclose($compile_pipes[2]);
+                sendSSE('progress', 80);
+                sendSSE('log', 'info', 'Recherche du fichier .bin généré...');
                 
-                $compile_return = proc_close($compile_process);
-                $compile_output = $compile_output_lines;
-            } else {
-                // Fallback sur exec si proc_open échoue
-                exec($compile_cmd, $compile_output, $compile_return);
+                // Trouver le fichier .bin
+                $bin_files = glob($build_dir . '/*.bin');
+                if (empty($bin_files)) {
+                    $bin_files = glob($build_dir . '/**/*.bin');
+                }
                 
-                foreach ($compile_output as $line) {
-                    sendSSE('log', 'info', $line);
+                if (empty($bin_files)) {
+                    // Marquer le firmware comme erreur dans la base de données
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'Fichier .bin introuvable après compilation'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                    }
+                    sendSSE('error', 'Fichier .bin introuvable après compilation');
+                    flush();
+                    exec('rm -rf ' . escapeshellarg($build_dir));
+                    return;
                 }
-                flush();
-            }
-            
-            if ($compile_return !== 0) {
-                // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
-                try {
-                    $pdo->prepare("
-                        UPDATE firmware_versions 
-                        SET status = 'error', error_message = 'Erreur lors de la compilation'
-                        WHERE id = :id
-                    ")->execute(['id' => $firmware_id]);
-                } catch(PDOException $dbErr) {
-                    error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
+                
+                $compiled_bin = $bin_files[0];
+                $version_dir = getVersionDir($firmware['version']);
+                $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+                if (!is_dir($bin_dir)) mkdir($bin_dir, 0755, true);
+                $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
+                $bin_path = $bin_dir . $bin_filename;
+                
+                if (!copy($compiled_bin, $bin_path)) {
+                    // Marquer le firmware comme erreur dans la base de données
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'Impossible de copier le fichier .bin compilé'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                    }
+                    sendSSE('error', 'Impossible de copier le fichier .bin compilé');
+                    flush();
+                    exec('rm -rf ' . escapeshellarg($build_dir));
+                    return;
                 }
-                sendSSE('error', 'Erreur lors de la compilation. Vérifiez les logs ci-dessus.');
-                flush();
+                
+                sendSSE('progress', 95);
+                sendSSE('log', 'info', 'Calcul des checksums...');
+                
+                $md5 = hash_file('md5', $bin_path);
+                $checksum = hash_file('sha256', $bin_path);
+                $file_size = filesize($bin_path);
+                
+                // Mettre à jour la base de données
+                $version_dir = getVersionDir($firmware['version']);
+                $pdo->prepare("
+                    UPDATE firmware_versions 
+                    SET file_path = :file_path, 
+                        file_size = :file_size, 
+                        checksum = :checksum,
+                        status = 'compiled'
+                    WHERE id = :id
+                ")->execute([
+                    'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
+                    'file_size' => $file_size,
+                    'checksum' => $checksum,
+                    'id' => $firmware_id
+                ]);
+                
                 // Nettoyer
                 exec('rm -rf ' . escapeshellarg($build_dir));
-                return;
+                
+                sendSSE('progress', 100);
+                sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
+                sendSSE('success', 'Firmware v' . $firmware['version'] . ' compilé avec succès', $firmware['version']);
+                
+                // Fermer la connexion après un court délai pour permettre au client de recevoir les messages
+                sleep(1);
             }
-            
-            sendSSE('progress', 80);
-            sendSSE('log', 'info', 'Recherche du fichier .bin généré...');
-            
-            // Trouver le fichier .bin
-            $bin_files = glob($build_dir . '/*.bin');
-            if (empty($bin_files)) {
-                $bin_files = glob($build_dir . '/**/*.bin');
-            }
-            
-            if (empty($bin_files)) {
-                // Marquer le firmware comme erreur dans la base de données
-                try {
-                    $pdo->prepare("
-                        UPDATE firmware_versions 
-                        SET status = 'error', error_message = 'Fichier .bin introuvable après compilation'
-                        WHERE id = :id
-                    ")->execute(['id' => $firmware_id]);
-                } catch(PDOException $dbErr) {
-                    error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                }
-                sendSSE('error', 'Fichier .bin introuvable après compilation');
-                flush();
-                exec('rm -rf ' . escapeshellarg($build_dir));
-                return;
-            }
-            
-            $compiled_bin = $bin_files[0];
-            $version_dir = getVersionDir($firmware['version']);
-            $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
-            if (!is_dir($bin_dir)) mkdir($bin_dir, 0755, true);
-            $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
-            $bin_path = $bin_dir . $bin_filename;
-            
-            if (!copy($compiled_bin, $bin_path)) {
-                // Marquer le firmware comme erreur dans la base de données
-                try {
-                    $pdo->prepare("
-                        UPDATE firmware_versions 
-                        SET status = 'error', error_message = 'Impossible de copier le fichier .bin compilé'
-                        WHERE id = :id
-                    ")->execute(['id' => $firmware_id]);
-                } catch(PDOException $dbErr) {
-                    error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                }
-                sendSSE('error', 'Impossible de copier le fichier .bin compilé');
-                flush();
-                exec('rm -rf ' . escapeshellarg($build_dir));
-                return;
-            }
-            
-            sendSSE('progress', 95);
-            sendSSE('log', 'info', 'Calcul des checksums...');
-            
-            $md5 = hash_file('md5', $bin_path);
-            $checksum = hash_file('sha256', $bin_path);
-            $file_size = filesize($bin_path);
-            
-            // Mettre à jour la base de données
-            $version_dir = getVersionDir($firmware['version']);
-            $pdo->prepare("
-                UPDATE firmware_versions 
-                SET file_path = :file_path, 
-                    file_size = :file_size, 
-                    checksum = :checksum,
-                    status = 'compiled'
-                WHERE id = :id
-            ")->execute([
-                'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
-                'file_size' => $file_size,
-                'checksum' => $checksum,
-                'id' => $firmware_id
-            ]);
-            
-            // Nettoyer
-            exec('rm -rf ' . escapeshellarg($build_dir));
-            
-            sendSSE('progress', 100);
-            sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
-            sendSSE('success', 'Firmware v' . $firmware['version'] . ' compilé avec succès', $firmware['version']);
-            
-            // Fermer la connexion après un court délai pour permettre au client de recevoir les messages
-            sleep(1);
         } catch(PDOException $e) {
             // Erreur lors de la vérification du firmware
             sendSSE('error', 'Erreur base de données: ' . $e->getMessage());
