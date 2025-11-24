@@ -4478,24 +4478,24 @@ function handleCompileFirmware($firmware_id) {
     flush();
     
     try {
-    // Vérifier l'authentification APRÈS avoir envoyé les headers SSE
-    // Si l'auth échoue, envoyer une erreur via SSE au lieu d'un JSON avec exit()
-    $user = getCurrentUser();
-    if (!$user) {
-        // Logger pour diagnostic
-        error_log('[handleCompileFirmware] Authentification échouée - token: ' . (isset($_GET['token']) ? 'présent (' . strlen($_GET['token']) . ' chars)' : 'absent'));
-        sendSSE('error', 'Unauthorized - Veuillez vous reconnecter. Token manquant ou expiré.');
-        flush();
-        // Attendre un peu avant de fermer pour que le client reçoive le message
-        sleep(1);
-        return;
-    }
-    
-    // Vérifier que le firmware existe et est en attente de compilation
-    try {
-        sendSSE('log', 'info', 'Connexion établie, vérification du firmware...');
+        // Vérifier l'authentification APRÈS avoir envoyé les headers SSE
+        // Si l'auth échoue, envoyer une erreur via SSE au lieu d'un JSON avec exit()
+        $user = getCurrentUser();
+        if (!$user) {
+            // Logger pour diagnostic
+            error_log('[handleCompileFirmware] Authentification échouée - token: ' . (isset($_GET['token']) ? 'présent (' . strlen($_GET['token']) . ' chars)' : 'absent'));
+            sendSSE('error', 'Unauthorized - Veuillez vous reconnecter. Token manquant ou expiré.');
+            flush();
+            // Attendre un peu avant de fermer pour que le client reçoive le message
+            sleep(1);
+            return;
+        }
         
-        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        // Vérifier que le firmware existe et est en attente de compilation
+        try {
+            sendSSE('log', 'info', 'Connexion établie, vérification du firmware...');
+            
+            $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
         $stmt->execute(['id' => $firmware_id]);
         $firmware = $stmt->fetch();
         
