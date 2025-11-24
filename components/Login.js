@@ -14,72 +14,58 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault()
+    e.stopPropagation()
+    if (loading) return
+    
     setLoading(true)
     setError('')
 
     try {
       await login(email, password)
-      router.replace('/dashboard')
+      // Redirection manuelle uniquement après succès
+      setTimeout(() => {
+        window.location.href = '/dashboard'
+      }, 100)
     } catch (err) {
       setError(err.message || 'Erreur de connexion')
       setLoading(false)
     }
   }
 
-  const handleClearCache = async (e) => {
-    e.preventDefault()
-    if (window._isClearingCache) return
-    if (!confirm('Vider le cache et recharger ?')) return
-    
-    window._isClearingCache = true
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations()
-      regs.forEach(r => r.unregister())
-      const caches = await caches.keys()
-      caches.forEach(c => caches.delete(c))
-      localStorage.clear()
-      setTimeout(() => window.location.reload(true), 1000)
-    } catch (err) {
-      console.error('Erreur:', err)
-      window._isClearingCache = false
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-xl p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">OTT Dashboard</h1>
-          <p className="text-sm text-gray-600">HAPPLYZ MEDICAL</p>
-        </div>
-
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', background: '#f3f4f6' }}>
+      <div style={{ width: '100%', maxWidth: '400px', background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+        <h1 style={{ textAlign: 'center', marginBottom: '30px', fontSize: '24px', fontWeight: 'bold' }}>Connexion</h1>
+        
+        <form onSubmit={handleLogin}>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '500' }}>Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="votre@email.com"
+              style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
+              placeholder="email@example.com"
               required
+              disabled={loading}
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mot de passe</label>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '500' }}>Mot de passe</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }}
               placeholder="••••••••"
               required
+              disabled={loading}
             />
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">
+            <div style={{ marginBottom: '20px', padding: '10px', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '4px', color: '#dc2626', fontSize: '14px' }}>
               {error}
             </div>
           )}
@@ -87,20 +73,21 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary-600 text-white py-2 rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: loading ? '#9ca3af' : '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: '16px',
+              fontWeight: '500',
+              cursor: loading ? 'not-allowed' : 'pointer'
+            }}
           >
-            {loading ? 'Connexion...' : 'Connexion'}
+            {loading ? 'Connexion...' : 'Se connecter'}
           </button>
         </form>
-
-        <div className="mt-6 text-center">
-          <button
-            onClick={handleClearCache}
-            className="text-xs text-gray-500 hover:text-gray-700 underline"
-          >
-            Vider le cache
-          </button>
-        </div>
       </div>
     </div>
   )

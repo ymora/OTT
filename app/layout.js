@@ -38,12 +38,7 @@ export default function RootLayout({ children }) {
           {children}
         </AuthProvider>
         
-        {/* Script de monitoring des redémarrages (toujours actif pour debug) */}
-        <Script
-          id="monitor-reboot"
-          strategy="afterInteractive"
-          src={withBasePath('/monitor-reboot.js')}
-        />
+        {/* Script de monitoring désactivé temporairement pour éviter les conflits */}
 
         {isProduction && (
           <>
