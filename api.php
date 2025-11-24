@@ -5112,7 +5112,6 @@ function handleCompileFirmware($firmware_id) {
                 
                 // Fermer la connexion après un court délai pour permettre au client de recevoir les messages
                 sleep(1);
-                }
             }
         } catch(PDOException $e) {
             // Erreur lors de la vérification du firmware
