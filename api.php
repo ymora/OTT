@@ -4759,170 +4759,170 @@ function handleCompileFirmware($firmware_id) {
                     sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
                     sendSSE('progress', 50);
                 } else {
-                sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
-                sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
+                    sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
+                    sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
                     sendSSE('log', 'info', '   ⚠️ Après installation, ajoutez hardware/arduino-data/ à GitHub LFS');
-                sendSSE('progress', 42);
-                
-                // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
-                $indexFile = $arduinoDataDir . '/package_index.json';
-                $shouldUpdateIndex = true;
-                if (file_exists($indexFile)) {
-                    $indexAge = time() - filemtime($indexFile);
-                    // Mettre à jour l'index seulement s'il a plus de 24h
-                    if ($indexAge < 86400) {
-                        $shouldUpdateIndex = false;
-                        sendSSE('log', 'info', '✅ Index des cores récent (moins de 24h), pas besoin de mise à jour');
+                    sendSSE('progress', 42);
+                    
+                    // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
+                    $indexFile = $arduinoDataDir . '/package_index.json';
+                    $shouldUpdateIndex = true;
+                    if (file_exists($indexFile)) {
+                        $indexAge = time() - filemtime($indexFile);
+                        // Mettre à jour l'index seulement s'il a plus de 24h
+                        if ($indexAge < 86400) {
+                            $shouldUpdateIndex = false;
+                            sendSSE('log', 'info', '✅ Index des cores récent (moins de 24h), pas besoin de mise à jour');
+                        }
                     }
-                }
-                
-                // Mettre à jour l'index seulement si nécessaire
-                if ($shouldUpdateIndex) {
-                    sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
-                    exec($envStr . $arduinoCli . ' core update-index 2>&1', $updateIndexOutput, $updateIndexReturn);
-                    if ($updateIndexReturn !== 0) {
-                        sendSSE('log', 'warning', 'Avertissement lors de la mise à jour de l\'index');
+                    
+                    // Mettre à jour l'index seulement si nécessaire
+                    if ($shouldUpdateIndex) {
+                        sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
+                        exec($envStr . $arduinoCli . ' core update-index 2>&1', $updateIndexOutput, $updateIndexReturn);
+                        if ($updateIndexReturn !== 0) {
+                            sendSSE('log', 'warning', 'Avertissement lors de la mise à jour de l\'index');
+                        }
                     }
-                }
-                
-                sendSSE('log', 'info', 'Installation du core ESP32...');
-                sendSSE('progress', 45);
-                
-                // Exécuter avec output en temps réel pour voir la progression
-                $descriptorspec = [
-                    0 => ["pipe", "r"],  // stdin
-                    1 => ["pipe", "w"],  // stdout
-                    2 => ["pipe", "w"]   // stderr
-                ];
-                
-                $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
-                
-                if (is_resource($process)) {
-                    // Lire la sortie ligne par ligne pour afficher la progression
-                    $installOutput = [];
-                    $stdout = $pipes[1];
-                    $stderr = $pipes[2];
                     
-                    // Configurer les streams en non-bloquant
-                    stream_set_blocking($stdout, false);
-                    stream_set_blocking($stderr, false);
+                    sendSSE('log', 'info', 'Installation du core ESP32...');
+                    sendSSE('progress', 45);
                     
-                    $startTime = time();
-                    $lastOutputTime = $startTime;
-                    $lastHeartbeatTime = $startTime;
-                    $lastKeepAliveTime = $startTime;
+                    // Exécuter avec output en temps réel pour voir la progression
+                    $descriptorspec = [
+                        0 => ["pipe", "r"],  // stdin
+                        1 => ["pipe", "w"],  // stdout
+                        2 => ["pipe", "w"]   // stderr
+                    ];
                     
-                    while (true) {
-                        $status = proc_get_status($process);
-                        $currentTime = time();
+                    $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
+                    
+                    if (is_resource($process)) {
+                        // Lire la sortie ligne par ligne pour afficher la progression
+                        $installOutput = [];
+                        $stdout = $pipes[1];
+                        $stderr = $pipes[2];
                         
-                        // Lire stdout
-                        $line = fgets($stdout);
-                        if ($line !== false) {
-                            $line = trim($line);
-                            if (!empty($line)) {
-                                $installOutput[] = $line;
-                                sendSSE('log', 'info', $line);
-                                flush();
-                                $lastOutputTime = $currentTime;
-                            }
-                        }
+                        // Configurer les streams en non-bloquant
+                        stream_set_blocking($stdout, false);
+                        stream_set_blocking($stderr, false);
                         
-                        // Lire stderr
-                        $errLine = fgets($stderr);
-                        if ($errLine !== false) {
-                            $errLine = trim($errLine);
-                            if (!empty($errLine)) {
-                                $installOutput[] = $errLine;
-                                sendSSE('log', 'info', $errLine);
-                                flush();
-                                $lastOutputTime = $currentTime;
-                            }
-                        }
+                        $startTime = time();
+                        $lastOutputTime = $startTime;
+                        $lastHeartbeatTime = $startTime;
+                        $lastKeepAliveTime = $startTime;
                         
-                        // Vérifier si le processus est terminé
-                        if ($status['running'] === false) {
-                            break;
-                        }
-                        
-                        // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
-                        // (L'installation du core ESP32 peut prendre du temps)
-                        if ($currentTime - $lastOutputTime > 600) {
-                            sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
-                            sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
-                            // Marquer le firmware comme erreur dans la base de données
-                            try {
-                                $pdo->prepare("
-                                    UPDATE firmware_versions 
-                                    SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32'
-                                    WHERE id = :id
-                                ")->execute(['id' => $firmware_id]);
-                            } catch(PDOException $dbErr) {
-                                error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                            }
-                            proc_terminate($process);
-                            break;
-                        }
-                        
-                        // Envoyer un keep-alive SSE toutes les 3 secondes pour maintenir la connexion active
-                        // (Les commentaires SSE `: keep-alive` maintiennent la connexion ouverte)
-                        if ($currentTime - $lastKeepAliveTime >= 3) {
-                            $lastKeepAliveTime = $currentTime;
-                            echo ": keep-alive\n\n";
-                            flush();
-                        }
-                        
-                        // Envoyer un heartbeat avec message toutes les 5 secondes pour montrer que le système est vivant
-                        if ($currentTime - $lastHeartbeatTime >= 5) {
-                            // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
-                            $lastHeartbeatTime = $currentTime;
-                            $elapsedSeconds = $currentTime - $startTime;
-                            $elapsedMinutes = floor($elapsedSeconds / 60);
-                            $elapsedSecondsRemainder = $elapsedSeconds % 60;
+                        while (true) {
+                            $status = proc_get_status($process);
+                            $currentTime = time();
                             
-                            // Message avec timestamp pour montrer que le système est toujours actif
-                            $timeStr = $elapsedMinutes > 0 
-                                ? sprintf('%dm %ds', $elapsedMinutes, $elapsedSecondsRemainder)
-                                : sprintf('%ds', $elapsedSecondsRemainder);
+                            // Lire stdout
+                            $line = fgets($stdout);
+                            if ($line !== false) {
+                                $line = trim($line);
+                                if (!empty($line)) {
+                                    $installOutput[] = $line;
+                                    sendSSE('log', 'info', $line);
+                                    flush();
+                                    $lastOutputTime = $currentTime;
+                                }
+                            }
                             
-                            sendSSE('log', 'info', '⏳ Installation en cours... (temps écoulé: ' . $timeStr . ' - le système est actif)');
-                            flush();
+                            // Lire stderr
+                            $errLine = fgets($stderr);
+                            if ($errLine !== false) {
+                                $errLine = trim($errLine);
+                                if (!empty($errLine)) {
+                                    $installOutput[] = $errLine;
+                                    sendSSE('log', 'info', $errLine);
+                                    flush();
+                                    $lastOutputTime = $currentTime;
+                                }
+                            }
+                            
+                            // Vérifier si le processus est terminé
+                            if ($status['running'] === false) {
+                                break;
+                            }
+                            
+                            // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
+                            // (L'installation du core ESP32 peut prendre du temps)
+                            if ($currentTime - $lastOutputTime > 600) {
+                                sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
+                                sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
+                                // Marquer le firmware comme erreur dans la base de données
+                                try {
+                                    $pdo->prepare("
+                                        UPDATE firmware_versions 
+                                        SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32'
+                                        WHERE id = :id
+                                    ")->execute(['id' => $firmware_id]);
+                                } catch(PDOException $dbErr) {
+                                    error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                                }
+                                proc_terminate($process);
+                                break;
+                            }
+                            
+                            // Envoyer un keep-alive SSE toutes les 3 secondes pour maintenir la connexion active
+                            // (Les commentaires SSE `: keep-alive` maintiennent la connexion ouverte)
+                            if ($currentTime - $lastKeepAliveTime >= 3) {
+                                $lastKeepAliveTime = $currentTime;
+                                echo ": keep-alive\n\n";
+                                flush();
+                            }
+                            
+                            // Envoyer un heartbeat avec message toutes les 5 secondes pour montrer que le système est vivant
+                            if ($currentTime - $lastHeartbeatTime >= 5) {
+                                // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
+                                $lastHeartbeatTime = $currentTime;
+                                $elapsedSeconds = $currentTime - $startTime;
+                                $elapsedMinutes = floor($elapsedSeconds / 60);
+                                $elapsedSecondsRemainder = $elapsedSeconds % 60;
+                                
+                                // Message avec timestamp pour montrer que le système est toujours actif
+                                $timeStr = $elapsedMinutes > 0 
+                                    ? sprintf('%dm %ds', $elapsedMinutes, $elapsedSecondsRemainder)
+                                    : sprintf('%ds', $elapsedSecondsRemainder);
+                                
+                                sendSSE('log', 'info', '⏳ Installation en cours... (temps écoulé: ' . $timeStr . ' - le système est actif)');
+                                flush();
+                            }
+                            
+                            // Attendre un peu avant de relire
+                            usleep(100000); // 100ms
                         }
                         
-                        // Attendre un peu avant de relire
-                        usleep(100000); // 100ms
+                        // Fermer les pipes
+                        fclose($pipes[0]);
+                        fclose($pipes[1]);
+                        fclose($pipes[2]);
+                        
+                        $return = proc_close($process);
+                    } else {
+                        // Fallback sur exec si proc_open échoue
+                        exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $installOutput, $return);
+                        sendSSE('log', 'info', implode("\n", $installOutput));
                     }
                     
-                    // Fermer les pipes
-                    fclose($pipes[0]);
-                    fclose($pipes[1]);
-                    fclose($pipes[2]);
-                    
-                    $return = proc_close($process);
-                } else {
-                    // Fallback sur exec si proc_open échoue
-                    exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $installOutput, $return);
-                    sendSSE('log', 'info', implode("\n", $installOutput));
-                }
-                
-                if ($return !== 0) {
-                    // Marquer le firmware comme erreur dans la base de données
-                    try {
-                        $pdo->prepare("
-                            UPDATE firmware_versions 
-                            SET status = 'error', error_message = 'Erreur lors de l\'installation du core ESP32'
-                            WHERE id = :id
-                        ")->execute(['id' => $firmware_id]);
-                    } catch(PDOException $dbErr) {
-                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                    if ($return !== 0) {
+                        // Marquer le firmware comme erreur dans la base de données
+                        try {
+                            $pdo->prepare("
+                                UPDATE firmware_versions 
+                                SET status = 'error', error_message = 'Erreur lors de l\'installation du core ESP32'
+                                WHERE id = :id
+                            ")->execute(['id' => $firmware_id]);
+                        } catch(PDOException $dbErr) {
+                            error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                        }
+                        sendSSE('error', 'Erreur lors de l\'installation du core ESP32');
+                        flush();
+                        return;
                     }
-                    sendSSE('error', 'Erreur lors de l\'installation du core ESP32');
-                    flush();
-                    return;
+                    
+                    sendSSE('log', 'info', '✅ Core ESP32 installé avec succès');
                 }
-                
-                sendSSE('log', 'info', '✅ Core ESP32 installé avec succès');
-            }
             
             sendSSE('log', 'info', 'Compilation du firmware...');
             sendSSE('progress', 60);
