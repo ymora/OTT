@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
 import { useAuth } from '@/contexts/AuthContext'
@@ -12,23 +12,32 @@ const REQUIRE_AUTH = true
 
 function DashboardLayoutContent({ children }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { user, loading } = useAuth()
+  const hasRedirected = useRef(false)
 
   // Logging pour le débogage
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      console.log('[DashboardLayout] État:', { loading, hasUser: !!user, user })
+      console.log('[DashboardLayout] État:', { loading, hasUser: !!user, pathname })
     }
-  }, [loading, user])
+  }, [loading, user, pathname])
 
   useEffect(() => {
     if (!REQUIRE_AUTH) return
+    // Ne pas rediriger si on est déjà en train de rediriger ou si on n'est pas dans le dashboard
+    if (hasRedirected.current || !pathname?.startsWith('/dashboard')) return
+    
     if (!loading && !user) {
       console.log('[DashboardLayout] Redirection vers / (pas d\'utilisateur)')
+      hasRedirected.current = true
       // Next.js gère automatiquement le basePath
-      router.push('/')
+      router.replace('/')
+    } else if (!loading && user) {
+      // Réinitialiser le flag si l'utilisateur est authentifié
+      hasRedirected.current = false
     }
-  }, [user, loading, router])
+  }, [user, loading, router, pathname])
 
   if (REQUIRE_AUTH && loading) {
     console.log('[DashboardLayout] Affichage du loader (loading=true)')

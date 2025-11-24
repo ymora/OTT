@@ -1,31 +1,37 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Login from '@/components/Login'
 
 export default function HomePage() {
   const router = useRouter()
+  const pathname = usePathname()
   const { user, loading } = useAuth()
+  const hasRedirected = useRef(false)
 
   // Logging pour le débogage
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      console.log('[HomePage] État:', { loading, hasUser: !!user, user })
+      console.log('[HomePage] État:', { loading, hasUser: !!user, pathname })
     }
-  }, [loading, user])
+  }, [loading, user, pathname])
 
   useEffect(() => {
+    // Ne pas rediriger si on est déjà en train de rediriger ou si on n'est pas sur la page d'accueil
+    if (hasRedirected.current || pathname !== '/') return
+    
     // Si l'utilisateur est déjà authentifié, rediriger vers le dashboard
-    // Next.js router gère automatiquement le basePath
     if (!loading && user) {
       console.log('[HomePage] Utilisateur authentifié, redirection vers /dashboard')
+      hasRedirected.current = true
       router.replace('/dashboard')
     } else if (!loading && !user) {
       console.log('[HomePage] Pas d\'utilisateur, affichage du login')
+      hasRedirected.current = false
     }
-  }, [user, loading, router])
+  }, [user, loading, router, pathname])
 
   // Afficher le login si pas authentifié
   if (loading) {
