@@ -72,7 +72,7 @@ export default function DiagnosticsPanel() {
             <h1 className="text-2xl font-bold text-gray-900">Statut API & Base de données</h1>
           </div>
           <span className="px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-700 font-medium">
-            Build {process.env.NODE_ENV === 'production' ? 'production' : 'développement'}
+            Build {process.env.NODE_ENV === 'production' ? 'production' : 'local'}
           </span>
         </header>
 

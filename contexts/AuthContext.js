@@ -4,10 +4,15 @@
  
  const AuthContext = createContext()
  
-// URL de l'API - toujours utiliser Render en production
-// En développement, utiliser la variable d'environnement ou Render par défaut
+// URL de l'API - utiliser localhost en local, Render en production
+// En local (port 3000), utiliser l'API locale (port 8000)
+// En production (en ligne), utiliser Render
 const getDefaultApiUrl = () => {
-  // Toujours utiliser Render par défaut (plus fiable)
+  // Si on est en local (pas en production), utiliser l'API locale
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'http://localhost:8000'
+  }
+  // Sinon, utiliser Render (production)
   return 'https://ott-jbln.onrender.com'
 }
 

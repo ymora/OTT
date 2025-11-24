@@ -40,101 +40,55 @@ export default function RootLayout({ children }) {
         
         {/* Script de monitoring désactivé temporairement pour éviter les conflits */}
 
-        {isProduction && (
-          <>
-            <Script id="sw-register" strategy="afterInteractive" dangerouslySetInnerHTML={{
-              __html: `(function() {
-                if ('serviceWorker' in navigator) {
-                  const swPath = ${JSON.stringify(swPath || '/sw.js')};
-                  let isUpdating = false;
-                
-                const registerSW = () => {
-                  navigator.serviceWorker.register(swPath).then(registration => {
-                    console.log('[SW] Service worker enregistré');
-                    
-                    // Vérifier immédiatement les mises à jour
-                    registration.update();
-                    
-                    // Écouter les mises à jour
-                    registration.addEventListener('updatefound', () => {
-                      const newWorker = registration.installing;
-                      if (newWorker && !isUpdating) {
-                        isUpdating = true;
-                        console.log('[SW] Nouveau service worker détecté, mise à jour en cours...');
-                        
-                        newWorker.addEventListener('statechange', () => {
-                          if (newWorker.state === 'installed') {
-                            if (navigator.serviceWorker.controller) {
-                              // Nouveau service worker disponible
-                              console.log('[SW] Nouveau service worker installé, activation...');
-                              newWorker.postMessage({ type: 'SKIP_WAITING' });
-                              // NE PAS recharger automatiquement pour éviter les boucles
-                              // L'utilisateur peut recharger manuellement si nécessaire
-                              isUpdating = false;
-                            } else {
-                              // Premier chargement, pas besoin de recharger
-                              console.log('[SW] Service worker installé pour la première fois');
-                              isUpdating = false;
-                            }
+        {/* Local (port 3000) : Désactiver le service worker */}
+        {/* Production (en ligne) : Service worker activé automatiquement ci-dessous */}
+        {!isProduction && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                (function() {
+                  if ('serviceWorker' in navigator) {
+                    // Désenregistrer tous les service workers en local (port 3000)
+                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                      for(let registration of registrations) {
+                        registration.unregister().then(function(success) {
+                          if (success) {
+                            console.log('[SW] Service worker désenregistré (mode local)');
                           }
                         });
                       }
                     });
+                  }
+                })();
+              `
+            }}
+          />
+        )}
+
+        {/* Production (version en ligne) : Activer le service worker */}
+        {isProduction && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                (function() {
+                  if ('serviceWorker' in navigator) {
+                    const swPath = ${JSON.stringify(swPath || '/sw.js')};
                     
-                    // Écouter les messages du service worker
-                    navigator.serviceWorker.addEventListener('message', (event) => {
-                      if (event.data && event.data.type === 'CACHE_CLEARED') {
-                        console.log('[SW] Cache nettoyé automatiquement, version:', event.data.version);
-                        // NE PAS recharger automatiquement - laisser l'utilisateur décider
-                      }
+                    // Enregistrer le service worker uniquement en production (version en ligne)
+                    window.addEventListener('load', () => {
+                      navigator.serviceWorker.register(swPath)
+                        .then(registration => {
+                          console.log('[SW] Service worker enregistré (production):', registration.scope);
+                        })
+                        .catch(err => {
+                          console.warn('[SW] Échec enregistrement:', err);
+                        });
                     });
-                  }).catch(err => {
-                    console.warn('[SW] Échec de l\'enregistrement:', err);
-                  });
-                };
-                
-                // Vérifier les mises à jour régulièrement (toutes les 5 minutes)
-                let lastUpdateCheck = 0
-                const UPDATE_CHECK_INTERVAL = 300000 // 5 minutes
-                const checkForUpdates = () => {
-                  const now = Date.now()
-                  // Éviter les vérifications trop fréquentes (minimum 1 minute entre chaque)
-                  if (now - lastUpdateCheck < 60000) {
-                    return
                   }
-                  lastUpdateCheck = now
-                  
-                  navigator.serviceWorker.getRegistration(swPath).then(registration => {
-                    if (registration) {
-                      registration.update().catch(err => {
-                        console.warn('[SW] Erreur lors de la vérification des mises à jour:', err);
-                      });
-                    }
-                  });
-                };
-                
-                // Enregistrer au chargement
-                if (document.readyState === 'complete') {
-                  registerSW();
-                } else {
-                  window.addEventListener('load', registerSW, { once: true });
-                }
-                
-                // Vérifier les mises à jour toutes les 5 minutes (au lieu de 1 heure)
-                setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL);
-                
-                // Vérifier aussi lors du retour de focus (l'utilisateur revient sur l'onglet)
-                // Mais avec une protection contre les vérifications trop fréquentes
-                document.addEventListener('visibilitychange', () => {
-                  if (!document.hidden) {
-                    // Attendre 2 secondes avant de vérifier pour éviter les boucles
-                    setTimeout(checkForUpdates, 2000);
-                  }
-                });
-                }
-              })();`
-            }} />
-          </>
+                })();
+              `
+            }}
+          />
         )}
       </body>
     </html>

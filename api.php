@@ -7,13 +7,16 @@
 require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
 
+// Démarrer le buffer de sortie pour capturer toute sortie HTML accidentelle
+ob_start();
+
 // Headers CORS (DOIT être en tout premier)
 // Origines par défaut (production)
 $defaultAllowedOrigins = [
     'https://ymora.github.io'
 ];
 
-// En développement, ajouter localhost
+// En local, ajouter localhost
 $isDev = getenv('APP_ENV') !== 'production' && getenv('APP_ENV') !== 'prod';
 if ($isDev) {
     $defaultAllowedOrigins = array_merge($defaultAllowedOrigins, [
@@ -66,20 +69,20 @@ if (getenv('DEBUG_ERRORS') === 'true') {
 register_shutdown_function(function() {
     $error = error_get_last();
     if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        // Nettoyer tout output précédent (HTML, warnings, etc.)
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         // S'assurer que le Content-Type est JSON
         if (!headers_sent()) {
-            header('Content-Type: application/json');
+            header('Content-Type: application/json; charset=utf-8');
             http_response_code(500);
-        }
-        // Nettoyer tout output précédent
-        if (ob_get_level() > 0) {
-            ob_clean();
         }
         echo json_encode([
             'success' => false,
             'error' => 'Erreur serveur interne',
             'details' => getenv('DEBUG_ERRORS') === 'true' ? $error['message'] : 'Vérifiez les logs du serveur'
-        ]);
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
 });
@@ -91,12 +94,13 @@ set_error_handler(function($errno, $errstr, $errfile, $errline) {
     
     // Si c'est une erreur fatale, retourner du JSON
     if (in_array($errno, [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
-        if (!headers_sent()) {
-            header('Content-Type: application/json');
-            http_response_code(500);
+        // Nettoyer tout output précédent
+        while (ob_get_level() > 0) {
+            ob_end_clean();
         }
-        if (ob_get_level() > 0) {
-            ob_clean();
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
         }
         echo json_encode([
             'success' => false,
@@ -146,7 +150,7 @@ if (empty($jwtSecret)) {
         http_response_code(500);
         die(json_encode(['success' => false, 'error' => 'JWT_SECRET must be set in production']));
     }
-    // En développement, utiliser un secret par défaut (mais loguer un avertissement)
+    // En local, utiliser un secret par défaut (mais loguer un avertissement)
     $jwtSecret = 'CHANGEZ_CE_SECRET_EN_PRODUCTION';
     error_log('[SECURITY WARNING] JWT_SECRET not set, using default. This is UNSAFE in production!');
 }
@@ -984,6 +988,7 @@ function handleLogin() {
     $password = $input['password'] ?? '';
     
     if (empty($email) || empty($password)) {
+        ob_end_clean();
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Email and password required']);
         return;
@@ -996,6 +1001,7 @@ function handleLogin() {
         
         if (!$user || !password_verify($password, $user['password_hash'])) {
             auditLog('user.login_failed', 'user', null, null, ['email' => $email]);
+            ob_end_clean();
             http_response_code(401);
             echo json_encode(['success' => false, 'error' => 'Invalid credentials']);
             return;
@@ -1014,6 +1020,7 @@ function handleLogin() {
         unset($user['password_hash']);
         $user['permissions'] = $user['permissions'] ? explode(',', $user['permissions']) : [];
         
+        ob_end_clean();
         echo json_encode(['success' => true, 'token' => $token, 'user' => $user]);
         
     } catch(PDOException $e) {
@@ -4470,6 +4477,7 @@ function handleCompileFirmware($firmware_id) {
     sendSSE('log', 'info', 'Connexion SSE établie...');
     flush();
     
+    try {
     // Vérifier l'authentification APRÈS avoir envoyé les headers SSE
     // Si l'auth échoue, envoyer une erreur via SSE au lieu d'un JSON avec exit()
     $user = getCurrentUser();
@@ -4749,8 +4757,8 @@ function handleCompileFirmware($firmware_id) {
                 if (is_dir($corePath)) {
                     sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (versionné)');
                     sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
-                sendSSE('progress', 50);
-            } else {
+                    sendSSE('progress', 50);
+                } else {
                 sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
                 sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
                     sendSSE('log', 'info', '   ⚠️ Après installation, ajoutez hardware/arduino-data/ à GitHub LFS');
@@ -5165,16 +5173,21 @@ function handleGetNotificationPreferences() {
         
         if (!$prefs) {
             // Créer avec valeurs par défaut (toutes désactivées)
-            $pdo->prepare("
+            $insertStmt = $pdo->prepare("
                 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled) 
                 VALUES (:user_id, FALSE, FALSE, FALSE)
-            ")->execute(['user_id' => $user['id']]);
+            ");
+            $insertStmt->execute(['user_id' => $user['id']]);
+            
+            // Réexécuter le SELECT pour récupérer les préférences créées
             $stmt->execute(['user_id' => $user['id']]);
             $prefs = $stmt->fetch();
         }
         
+        ob_end_clean();
         echo json_encode(['success' => true, 'preferences' => $prefs]);
     } catch(PDOException $e) {
+        ob_end_clean();
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
     }
