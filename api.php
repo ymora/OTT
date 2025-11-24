@@ -5121,15 +5121,20 @@ function handleCompileFirmware($firmware_id) {
         
     } catch(Exception $e) {
         // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
-        try {
-            $pdo->prepare("
-                UPDATE firmware_versions 
-                SET status = 'error', error_message = :error
-                WHERE id = :id
-            ")->execute([
-                'error' => 'Erreur: ' . $e->getMessage(),
-                'id' => $firmware_id
-            ]);
+        if (isset($firmware_id)) {
+            try {
+                $pdo->prepare("
+                    UPDATE firmware_versions 
+                    SET status = 'error', error_message = :error
+                    WHERE id = :id
+                ")->execute([
+                    'error' => 'Erreur: ' . $e->getMessage(),
+                    'id' => $firmware_id
+                ]);
+            } catch(PDOException $dbErr) {
+                error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
+            }
+        }
         } catch(PDOException $dbErr) {
             error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
         }
