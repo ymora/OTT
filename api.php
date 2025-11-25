@@ -304,7 +304,76 @@ function handleClearFirmwares() {
     }
 }
 
-function handleInitFirmwareDb() {
+       function handleMigrateFirmwareBlob() {
+           global $pdo;
+           requireAdmin();
+           
+           try {
+               // Lire le fichier SQL
+               $migrationFile = __DIR__ . '/sql/migration_firmware_blob.sql';
+               if (!file_exists($migrationFile)) {
+                   http_response_code(404);
+                   echo json_encode(['success' => false, 'error' => 'Fichier migration introuvable']);
+                   return;
+               }
+               
+               $sql = file_get_contents($migrationFile);
+               if ($sql === false) {
+                   http_response_code(500);
+                   echo json_encode(['success' => false, 'error' => 'Impossible de lire le fichier SQL']);
+                   return;
+               }
+               
+               // Diviser le SQL en commandes individuelles
+               $commands = array_filter(
+                   array_map('trim', explode(';', $sql)),
+                   function($cmd) {
+                       return !empty($cmd) && !preg_match('/^\s*--/', $cmd);
+                   }
+               );
+               
+               $results = [];
+               foreach ($commands as $command) {
+                   if (empty(trim($command))) continue;
+                   
+                   try {
+                       $pdo->exec($command);
+                       $results[] = ['command' => substr($command, 0, 50) . '...', 'status' => 'success'];
+                   } catch (PDOException $e) {
+                       // Ignorer les erreurs "already exists" pour IF NOT EXISTS
+                       if (strpos($e->getMessage(), 'already exists') !== false || 
+                           strpos($e->getMessage(), 'duplicate') !== false) {
+                           $results[] = ['command' => substr($command, 0, 50) . '...', 'status' => 'already_exists'];
+                       } else {
+                           throw $e;
+                       }
+                   }
+               }
+               
+               // Vérifier que les colonnes existent
+               $checkStmt = $pdo->query("
+                   SELECT column_name, data_type 
+                   FROM information_schema.columns 
+                   WHERE table_name = 'firmware_versions' 
+                   AND column_name IN ('ino_content', 'bin_content')
+                   ORDER BY column_name
+               ");
+               $columns = $checkStmt->fetchAll(PDO::FETCH_ASSOC);
+               
+               echo json_encode([
+                   'success' => true,
+                   'message' => 'Migration firmware_blob appliquée avec succès',
+                   'results' => $results,
+                   'columns' => $columns
+               ]);
+               
+           } catch(PDOException $e) {
+               http_response_code(500);
+               echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+           }
+       }
+
+       function handleInitFirmwareDb() {
            global $pdo;
            requireAdmin();
            
@@ -621,6 +690,8 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleRunMigration();
 } elseif(preg_match('#/migrate/firmware-status$#', $path) && $method === 'POST') {
     handleMigrateFirmwareStatus();
+} elseif(preg_match('#/migrate/firmware-blob$#', $path) && $method === 'POST') {
+    handleMigrateFirmwareBlob();
 } elseif(preg_match('#/admin/clear-firmwares$#', $path) && $method === 'POST') {
     handleClearFirmwares();
        } elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
