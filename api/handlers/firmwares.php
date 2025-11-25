@@ -890,8 +890,8 @@ function handleCompileFirmware($firmware_id) {
                 flush();
                 
                 // Marquer le firmware comme erreur dans la base de données
+                $errorMsg = 'Fichier .ino introuvable: ' . ($firmware['file_path'] ?? 'N/A') . ' (fichier n\'existe pas sur le serveur et pas stocké en DB)';
                 try {
-                    $errorMsg = 'Fichier .ino introuvable: ' . ($firmware['file_path'] ?? 'N/A') . ' (fichier n\'existe pas sur le serveur)';
                     $pdo->prepare("
                         UPDATE firmware_versions 
                         SET status = 'error', error_message = :error_msg
@@ -903,8 +903,13 @@ function handleCompileFirmware($firmware_id) {
                 } catch(PDOException $dbErr) {
                     error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
                 }
-                sendSSE('error', 'Fichier .ino introuvable. Le fichier n\'existe pas sur le serveur. Ré-uploader le fichier .ino.');
+                
+                // Envoyer le message d'erreur SSE explicite
+                sendSSE('error', $errorMsg);
                 flush();
+                
+                // Attendre un peu pour que le client reçoive tous les messages avant la fermeture
+                sleep(1);
                 return;
             }
             
@@ -1454,13 +1459,43 @@ function handleCompileFirmware($firmware_id) {
             }
         } catch(PDOException $e) {
             // Erreur lors de la vérification du firmware
-            sendSSE('error', 'Erreur base de données: ' . $e->getMessage());
+            $errorMessage = 'Erreur base de données: ' . $e->getMessage();
+            sendSSE('log', 'error', '❌ ' . $errorMessage);
+            sendSSE('error', $errorMessage);
             error_log('[handleCompileFirmware] Erreur DB: ' . $e->getMessage());
             flush();
+            
+            // Marquer le firmware comme erreur si on a l'ID
+            if (isset($firmware_id)) {
+                try {
+                    $pdo->prepare("
+                        UPDATE firmware_versions 
+                        SET status = 'error', error_message = :error
+                        WHERE id = :id
+                    ")->execute([
+                        'error' => $errorMessage,
+                        'id' => $firmware_id
+                    ]);
+                } catch(PDOException $dbErr) {
+                    error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour: ' . $dbErr->getMessage());
+                }
+            }
+            
+            sleep(1);
             return;
         }
         
     } catch(Exception $e) {
+        // Logger l'erreur complète avec stack trace
+        error_log('[handleCompileFirmware] Exception: ' . $e->getMessage());
+        error_log('[handleCompileFirmware] Stack trace: ' . $e->getTraceAsString());
+        
+        // Envoyer un message d'erreur SSE explicite
+        $errorMessage = 'Erreur lors de la compilation: ' . $e->getMessage();
+        sendSSE('log', 'error', '❌ ' . $errorMessage);
+        sendSSE('error', $errorMessage);
+        flush();
+        
         // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
         if (isset($firmware_id)) {
             try {
@@ -1469,16 +1504,15 @@ function handleCompileFirmware($firmware_id) {
                     SET status = 'error', error_message = :error
                     WHERE id = :id
                 ")->execute([
-                    'error' => 'Erreur: ' . $e->getMessage(),
+                    'error' => $errorMessage,
                     'id' => $firmware_id
                 ]);
             } catch(PDOException $dbErr) {
                 error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
             }
         }
-        sendSSE('error', 'Erreur: ' . $e->getMessage());
-        error_log('[handleCompileFirmware] Exception: ' . $e->getMessage());
-        flush();
+        
+        // Attendre un peu pour que le client reçoive le message avant la fermeture
         sleep(1);
     }
     
