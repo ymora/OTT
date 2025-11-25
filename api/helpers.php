@@ -1,3 +1,9 @@
+<?php
+/**
+ * API Helpers - Fonctions utilitaires
+ * Extracted from api.php during refactoring
+ */
+
 // JWT FUNCTIONS
 // ============================================================================
 
