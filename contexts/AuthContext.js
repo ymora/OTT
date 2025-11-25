@@ -20,11 +20,8 @@ const getDefaultApiUrl = () => {
 
 // Priorité: 1) proxy Next.js si localhost, 2) variable d'environnement, 3) défaut Render
 const API_URL = (() => {
-  // Si on est en local, utiliser le proxy Next.js (évite les problèmes CORS)
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return window.location.origin // http://localhost:3000 (proxy Next.js)
-  }
-  // Sinon, utiliser la variable d'environnement ou Render par défaut
+  // Utiliser directement Render.com (le proxy Next.js cause des erreurs 500)
+  // En local, utiliser directement l'API distante pour éviter les problèmes de proxy
   return (process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com')
 })().replace(/\/$/, '')
  const isAbsoluteUrl = url => /^https?:\/\//i.test(url)

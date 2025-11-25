@@ -1,0 +1,230 @@
+
+> function handleLogin() {
+      global $pdo;
+      
+      $input = json_decode(file_get_contents('php://input'), true);
+      $email = $input['email'] ?? '';
+      $password = $input['password'] ?? '';
+      
+      if (empty($email) || empty($password)) {
+          ob_end_clean();
+          http_response_code(400);
+          echo json_encode(['success' => false, 'error' => 'Email and password required']);
+          return;
+      }
+      
+      try {
+          $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE email = :email AND is_active = TRUE");
+          $stmt->execute(['email' => $email]);
+          $user = $stmt->fetch();
+          
+          if (!$user || !password_verify($password, $user['password_hash'])) {
+              auditLog('user.login_failed', 'user', null, null, ['email' => $email]);
+              ob_end_clean();
+              http_response_code(401);
+              echo json_encode(['success' => false, 'error' => 'Invalid credentials']);
+              return;
+          }
+          
+          $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = :id")->execute(['id' => $user['id']]);
+          
+          $token = generateJWT([
+              'user_id' => $user['id'],
+              'email' => $user['email'],
+              'role' => $user['role_name']
+          ]);
+          
+          auditLog('user.login', 'user', $user['id']);
+          
+          unset($user['password_hash']);
+          $user['permissions'] = $user['permissions'] ? explode(',', $user['permissions']) : [];
+          
+          ob_end_clean();
+          echo json_encode(['success' => true, 'token' => $token, 'user' => $user]);
+          
+      } catch(PDOException $e) {
+          error_log('[handleLogin] Database error: ' . $e->getMessage());
+          http_response_code(500);
+          echo json_encode(['success' => false, 'error' => 'Database error']);
+      }
+  }
+  
+> function handleGetMe() {
+      $user = requireAuth();
+      unset($user['password_hash']);
+      echo json_encode(['success' => true, 'user' => $user]);
+  }
+  
+> function handleRefreshToken() {
+      $user = requireAuth();
+      $token = generateJWT(['user_id' => $user['id'], 'email' => $user['email'], 'role' => $user['role_name']]);
+      echo json_encode(['success' => true, 'token' => $token]);
+  }
+  
+  // ============================================================================
+  // HANDLERS - USERS
+  // ============================================================================
+  
+> function handleGetUsers() {
+      global $pdo;
+      requirePermission('users.view');
+      
+      // Pagination
+      $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+      $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+      
+      try {
+          // Compter le total (exclure soft delete)
+          $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL");
+          $countStmt->execute();
+          $total = $countStmt->fetchColumn();
+          
+          // V├®rifier si la colonne phone existe (utilise helper)
+          $hasPhoneColumn = columnExists('users', 'phone');
+          
+          // Requ├¬te unifi├®e : retourner phone si la colonne existe, sinon NULL
+          if ($hasPhoneColumn) {
+              $stmt = $pdo->prepare("
+                  SELECT 
+                      u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
+                      u.is_active, u.last_login, u.created_at,
+                      r.name AS role_name,
+                      r.description AS role_description,
+                      COALESCE(STRING_AGG(p.code, ','), '') AS permissions,
+                      COALESCE(unp.email_enabled, FALSE) as email_enabled,
+                      COALESCE(unp.sms_enabled, FALSE) as sms_enabled,
+                      COALESCE(unp.push_enabled, FALSE) as push_enabled,
+                      COALESCE(unp.notify_battery_low, FALSE) as notify_battery_low,
+                      COALESCE(unp.notify_device_offline, FALSE) as notify_device_offline,
+                      COALESCE(unp.notify_abnormal_flow, FALSE) as notify_abnormal_flow,
+                      COALESCE(unp.notify_new_patient, FALSE) as notify_new_patient
+                  FROM users u
+                  JOIN roles r ON u.role_id = r.id
+                  LEFT JOIN role_permissions rp ON r.id = rp.role_id
+                  LEFT JOIN permissions p ON rp.permission_id = p.id
+                  LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
+                  WHERE u.deleted_at IS NULL
+                  GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
+                           u.is_active, u.last_login, u.created_at, r.name, r.description,
+                           unp.email_enabled, unp.sms_enabled, unp.push_enabled,
+                           unp.notify_battery_low, unp.notify_device_offline, 
+                           unp.notify_abnormal_flow, unp.notify_new_patient
+                  ORDER BY u.created_at DESC
+                  LIMIT :limit OFFSET :offset
+              ");
+          } else {
+              // Version sans colonne phone - retourner NULL AS phone
+              $stmt = $pdo->prepare("
+                  SELECT 
+                      u.id, u.email, u.first_name, u.last_name, NULL AS phone, u.password_hash,
+                      u.is_active, u.last_login, u.created_at,
+                      r.name AS role_name,
+                      r.description AS role_description,
+                      COALESCE(STRING_AGG(p.code, ','), '') AS permissions,
+                      COALESCE(unp.email_enabled, FALSE) as email_enabled,
+                      COALESCE(unp.sms_enabled, FALSE) as sms_enabled,
+                      COALESCE(unp.push_enabled, FALSE) as push_enabled,
+                      COALESCE(unp.notify_battery_low, FALSE) as notify_battery_low,
+                      COALESCE(unp.notify_device_offline, FALSE) as notify_device_offline,
+                      COALESCE(unp.notify_abnormal_flow, FALSE) as notify_abnormal_flow,
+                      COALESCE(unp.notify_new_patient, FALSE) as notify_new_patient
+                  FROM users u
+                  JOIN roles r ON u.role_id = r.id
+                  LEFT JOIN role_permissions rp ON r.id = rp.role_id
+                  LEFT JOIN permissions p ON rp.permission_id = p.id
+                  LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
+                  WHERE u.deleted_at IS NULL
+                  GROUP BY u.id, u.email, u.first_name, u.last_name, u.password_hash,
+                           u.is_active, u.last_login, u.created_at, r.name, r.description,
+                           unp.email_enabled, unp.sms_enabled, unp.push_enabled,
+                           unp.notify_battery_low, unp.notify_device_offline, 
+                           unp.notify_abnormal_flow, unp.notify_new_patient
+                  ORDER BY u.created_at DESC
+                  LIMIT :limit OFFSET :offset
+              ");
+          }
+          
+          $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+          $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+> function handleCreateUser() {
+      global $pdo;
+      requirePermission('users.manage');
+      
+      $input = json_decode(file_get_contents('php://input'), true);
+      
+      if (empty($input['email']) || empty($input['password'])) {
+          http_response_code(400);
+          echo json_encode(['success' => false, 'error' => 'Missing required fields']);
+          return;
+      }
+      
+      // V├®rifier si l'email existe d├®j├á (avant de cr├®er)
+      try {
+          $checkStmt = $pdo->prepare("SELECT id FROM users WHERE email = :email AND deleted_at IS NULL");
+          $checkStmt->execute(['email' => trim($input['email'])]);
+          $existingUser = $checkStmt->fetch();
+          if ($existingUser) {
+              http_response_code(409);
+              echo json_encode([
+                  'success' => false, 
+                  'error' => 'Cet email est d├®j├á utilis├® par un autre utilisateur'
+              ]);
+              return;
+          }
+      } catch(PDOException $e) {
+          // Si la v├®rification ├®choue, continuer quand m├¬me (la contrainte unique le d├®tectera)
+          error_log('[handleCreateUser] Email check failed: ' . $e->getMessage());
+      }
+      
+      try {
+          // V├®rifier si la colonne phone existe (utilise helper)
+          $hasPhoneColumn = columnExists('users', 'phone');
+          
+          // G├®rer is_active comme boolean (PostgreSQL)
+          $isActive = true; // Par d├®faut
+          if (array_key_exists('is_active', $input)) {
+              $value = $input['is_active'];
+              if (is_bool($value)) {
+                  $isActive = $value;
+              } elseif (is_string($value)) {
+                  $trimmed = trim($value);
+                  if ($trimmed === '' || $trimmed === 'false' || $trimmed === '0' || $trimmed === 'off' || $trimmed === 'no') {
+                      $isActive = false;
+                  } else {
+                      $isActive = in_array(strtolower($trimmed), ['true', '1', 'yes', 'on']);
+                  }
+              } elseif (is_numeric($value)) {
+                  $isActive = (int)$value !== 0;
+              }
+          }
+          
+          if ($hasPhoneColumn) {
+              $stmt = $pdo->prepare("
+                  INSERT INTO users (email, password_hash, first_name, last_name, role_id, phone, is_active)
+                  VALUES (:email, :password_hash, :first_name, :last_name, :role_id, :phone, :is_active)
+              ");
+              $stmt->execute([
+                  'email' => $input['email'],
+                  'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
+                  'first_name' => $input['first_name'] ?? '',
+                  'last_name' => $input['last_name'] ?? '',
+                  'role_id' => $input['role_id'] ?? 3, // technicien par d├®faut (viewer supprim├®)
+                  'phone' => !empty($input['phone']) ? trim($input['phone']) : null,
+                  'is_active' => $isActive
+              ]);
+          } else {
+              $stmt = $pdo->prepare("
+                  INSERT INTO users (email, password_hash, first_name, last_name, role_id, is_active)
+                  VALUES (:email, :password_hash, :first_name, :last_name, :role_id, :is_active)
+              ");
+              $stmt->execute([
+                  'email' => $input['email'],
+                  'password_hash' => password_hash($input['password'], PASSWORD_BCRYPT),
+                  'first_name' => $input['first_name'] ?? '',
+                  'last_name' => $input['last_name'] ?? '',
+                  'role_id' => $input['role_id'] ?? 3, // technicien par d├®faut (viewer supprim├®)
+                  'is_active' => $isActive
+              ]);
+          }
+          
+

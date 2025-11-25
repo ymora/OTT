@@ -114,7 +114,7 @@ export default function Login() {
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700 text-center">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Besoin d'un accès de démonstration&nbsp;?
+              Besoin d&apos;un accès de démonstration&nbsp;?
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
               Contactez support@happlyz.com pour obtenir des identifiants temporaires.
