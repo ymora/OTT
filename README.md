@@ -296,7 +296,7 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
    - **Render** : Le script `scripts/hardware/install_arduino_cli.sh` est exécuté automatiquement via `render.yaml` lors du déploiement.
    - **Persistent Disk sur Render (RECOMMANDÉ)** : Pour éviter de retélécharger le core ESP32 (~430MB) à chaque déploiement, configurez un Persistent Disk dans le dashboard Render :
      - Service ott-api → Disks → Add Disk
-     - Mount Path: `/opt/render/project/src/arduino-data`
+    - Mount Path: `/opt/render/project/src/hardware/arduino-data`
      - Size: `1 GB` (minimum recommandé)
      - 📖 **Documentation complète** : `docs/RENDER_PERSISTENT_DISK.md`
    - **Installation manuelle** (si nécessaire) :

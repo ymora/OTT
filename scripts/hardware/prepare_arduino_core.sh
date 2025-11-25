@@ -21,7 +21,7 @@ if ! command -v arduino-cli &> /dev/null; then
     fi
 fi
 
-# Créer le répertoire hardware/arduino-data dans le projet (versionné avec GitHub LFS)
+# Créer le répertoire hardware/arduino-data dans le projet (non versionné, ignoré par Git)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARDUINO_DATA_DIR="$PROJECT_ROOT/hardware/arduino-data"
 
@@ -57,7 +57,7 @@ if arduino-cli core list 2>/dev/null | grep -qE "(esp32:esp32|esp-rv32)"; then
     du -sh "$ARDUINO_DATA_DIR"
     echo ""
     echo "✅ Le core ESP32 est maintenant disponible localement"
-    echo "   Les prochaines compilations utiliseront ce core sans retéléchargement"
+    echo "   Montez un disque persistant (Render) ou conservez ce dossier pour éviter les re-téléchargements"
 else
     echo "❌ ERREUR: Le core ESP32 n'a pas pu être installé"
     exit 1

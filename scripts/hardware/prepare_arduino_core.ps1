@@ -35,7 +35,7 @@ if (-not $arduinoCli) {
     exit 1
 }
 
-# Créer le répertoire hardware/arduino-data dans le projet (versionné avec GitHub LFS)
+# Créer le répertoire hardware/arduino-data dans le projet (non versionné, ignoré par Git)
 $arduinoDataDir = Join-Path $projectRoot "hardware\arduino-data"
 
 Write-Host "📁 Création du répertoire hardware/arduino-data..." -ForegroundColor Cyan
@@ -91,8 +91,7 @@ if ($coreListStr -match "(esp32:esp32|esp-rv32)") {
     Write-Host "📊 Taille du répertoire hardware/arduino-data: $([math]::Round($size, 2)) MB" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "✅ Le core ESP32 est maintenant disponible localement" -ForegroundColor Green
-    Write-Host "   Les prochaines compilations utiliseront ce core sans retéléchargement" -ForegroundColor Green
-    Write-Host "   ⚠️ IMPORTANT: Ajoutez hardware/arduino-data/ à GitHub LFS avant de commit!" -ForegroundColor Yellow
+    Write-Host "   Montez un disque persistant (Render) ou conservez ce dossier pour éviter les re-téléchargements" -ForegroundColor Green
 } else {
     Write-Host "❌ ERREUR: Le core ESP32 n'a pas pu être installé" -ForegroundColor Red
     exit 1

@@ -2,7 +2,7 @@
 # Script de configuration complète : arduino-cli + core ESP32
 # ================================================================================
 # HAPPLYZ MEDICAL SAS
-# Installe arduino-cli et le core ESP32 dans le projet pour GitHub LFS
+# Installe arduino-cli et le core ESP32 en local (cache non versionné)
 # ================================================================================
 
 $ErrorActionPreference = "Stop"
@@ -32,12 +32,10 @@ Write-Host ""
 Write-Host "✅ Configuration terminée !" -ForegroundColor Green
 Write-Host ""
 Write-Host "📝 Prochaines étapes:" -ForegroundColor Cyan
-Write-Host "   1. Vérifiez que .gitattributes contient hardware/arduino-data/**" -ForegroundColor White
-Write-Host "   2. Installez Git LFS: git lfs install" -ForegroundColor White
-Write-Host "   3. Ajoutez les fichiers: git add hardware/arduino-data/" -ForegroundColor White
-Write-Host "   4. Commit: git commit -m 'Add ESP32 core with GitHub LFS'" -ForegroundColor White
-Write-Host "   5. Push: git push origin main" -ForegroundColor White
+Write-Host "   1. Vérifiez que .gitignore contient hardware/arduino-data/" -ForegroundColor White
+Write-Host "   2. Configurez un disque persistant (Render) pointant vers hardware/arduino-data/ pour conserver le cache" -ForegroundColor White
+Write-Host "   3. Sinon, relancez ce script après chaque nettoyage du dossier" -ForegroundColor White
 Write-Host ""
-Write-Host "✅ Le core ESP32 sera maintenant versionné avec le projet" -ForegroundColor Green
-Write-Host "✅ Pas besoin de Persistent Disk Render (gratuit !)" -ForegroundColor Green
+Write-Host "✅ Le core ESP32 est prêt en local" -ForegroundColor Green
+Write-Host "✅ Configurez Render pour réutiliser ce cache (Persistent Disk recommandé)" -ForegroundColor Green
 

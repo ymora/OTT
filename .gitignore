@@ -56,6 +56,6 @@ backup_*.sql
 # Binaires locaux (optionnel - peut être versionné)
 # bin/arduino-cli*
 
-# Données arduino-cli (cores, bibliothèques) - volumineux et chemins trop longs pour Windows
-# arduino-data/ est maintenant versionné avec GitHub LFS
-# hardware/arduino-data/ est versionné (pas ignoré)
+# Données arduino-cli générées localement (cores, bibliothèques)
+# Toujours régénérées via scripts/hardware/prepare_arduino_core.*
+hardware/arduino-data/

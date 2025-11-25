@@ -918,8 +918,8 @@ function handleCompileFirmware($firmware_id) {
                     }
                 }
                 
-                // Utiliser le répertoire hardware/arduino-data du projet (versionné avec GitHub LFS)
-                // Si le core est déjà dans le projet, on l'utilise directement (pas de téléchargement)
+                // Utiliser le répertoire hardware/arduino-data du projet (généré automatiquement ou stocké sur disque persistant)
+                // Si le core est déjà présent localement, on l'utilise directement (pas de téléchargement)
                 $arduinoDataDir = __DIR__ . '/../../hardware/arduino-data';
                 if (!is_dir($arduinoDataDir)) {
                     // Créer le répertoire si nécessaire
@@ -955,19 +955,19 @@ function handleCompileFirmware($firmware_id) {
                 
                 if ($esp32Installed) {
                     sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
-                    sendSSE('log', 'info', '   Source: hardware/arduino-data/ (versionné avec le projet)');
+                    sendSSE('log', 'info', '   Source: hardware/arduino-data/ (cache local ou disque persistant)');
                     sendSSE('progress', 50);
                 } else {
                     // Vérifier si le core existe dans hardware/arduino-data/ mais n'est pas encore indexé
                     $corePath = $arduinoDataDir . '/packages/esp32/hardware/esp32';
                     if (is_dir($corePath)) {
-                        sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (versionné)');
+                        sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (cache local)');
                         sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
                         sendSSE('progress', 50);
                     } else {
                         sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
                         sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
-                        sendSSE('log', 'info', '   ⚠️ Après installation, ajoutez hardware/arduino-data/ à GitHub LFS');
+                        sendSSE('log', 'info', '   ✅ Le core sera stocké dans hardware/arduino-data/ (cache local ou disque persistant)');
                         sendSSE('progress', 42);
                         
                         // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour

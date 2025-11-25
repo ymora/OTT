@@ -10,7 +10,7 @@
 # configurez un Persistent Disk dans le dashboard Render :
 # 1. Allez dans votre service ott-api > Disks
 # 2. Cliquez sur "Add Disk"
-# 3. Mount Path: /opt/render/project/src/arduino-data
+# 3. Mount Path: /opt/render/project/src/hardware/arduino-data
 # 4. Size: 1 GB (minimum recommandé)
 # 5. Enregistrez et déployez
 #
@@ -40,14 +40,16 @@ services:
         exit 1
       fi
       echo "✅ arduino-cli disponible et fonctionnel: $(arduino-cli version)"
-      # Vérifier si le core ESP32 est déjà dans hardware/arduino-data/ (versionné avec GitHub LFS)
+      echo "🔧 Préparation du core ESP32 (cache non versionné)..."
+      if [ ! -d "hardware/arduino-data" ]; then
+        mkdir -p hardware/arduino-data
+      fi
+      export ARDUINO_DIRECTORIES_USER="$(pwd)/hardware/arduino-data"
       if [ -d "hardware/arduino-data/packages/esp32/hardware/esp32" ]; then
-        echo "✅ Core ESP32 trouvé dans hardware/arduino-data/ (versionné avec le projet)"
-        echo "✅ Pas besoin d'installation - le core est déjà dans le repo"
+        echo "✅ Core ESP32 trouvé dans hardware/arduino-data (cache local/persistant)"
       else
-        echo "⚠️ Core ESP32 non trouvé dans hardware/arduino-data/"
-        echo "⚠️ Le core sera téléchargé lors de la première compilation"
-        echo "⚠️ Pour éviter cela, installez le core localement et ajoutez-le à GitHub LFS"
+        echo "⚙️ Core ESP32 absent - installation en cours (une seule fois, ~430MB)..."
+        bash scripts/hardware/prepare_arduino_core.sh
       fi
       echo "✅ La compilation sera RÉELLE, jamais simulée"
     startCommand: |
