@@ -20,15 +20,22 @@ Alternative au Persistent Disk pour les fichiers `.ino` et `.bin` compilés. Les
 
 ## 🔧 Migration
 
-### 1. Appliquer la migration SQL
+### ✅ Migration déjà appliquée
+
+La migration a été appliquée automatiquement via l'endpoint API `/api.php/migrate/firmware-blob`.
+
+Les colonnes `ino_content` et `bin_content` existent maintenant dans la table `firmware_versions`.
+
+### Pour appliquer manuellement (si nécessaire)
 
 ```bash
 psql $DATABASE_URL -f sql/migration_firmware_blob.sql
 ```
 
-Ou depuis PowerShell :
-```powershell
-.\scripts\db\migrate_render.ps1 -DATABASE_URL "postgresql://..." -MigrationFile "migration_firmware_blob.sql"
+Ou via l'endpoint API (admin uniquement) :
+```bash
+POST /api.php/migrate/firmware-blob
+Authorization: Bearer <token_admin>
 ```
 
 ### 2. Vérifier la migration

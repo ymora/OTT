@@ -721,12 +721,13 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 } elseif(preg_match('#/reports/overview$#', $path) && $method === 'GET') {
     handleGetReportsOverview();
 
-// Migration (temporaire - à supprimer après exécution)
+// Migration & Admin (endpoints de maintenance - admin uniquement)
 } elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {
     handleRunMigration();
 } elseif(preg_match('#/migrate/firmware-status$#', $path) && $method === 'POST') {
     handleMigrateFirmwareStatus();
 } elseif(preg_match('#/migrate/firmware-blob$#', $path) && $method === 'POST') {
+    // Migration firmware BYTEA (appliquée - gardé pour migrations futures)
     handleMigrateFirmwareBlob();
 } elseif(preg_match('#/admin/clear-firmwares$#', $path) && $method === 'POST') {
     handleClearFirmwares();

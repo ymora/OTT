@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation Commerciale OTT V3.3 - HAPPLYZ MEDICAL</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+        
+        .nav-menu a, a {
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+        }
+        
+        body::before {
+            content: 'CONFIDENTIEL - HAPPLYZ MEDICAL SAS';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 3rem;
+            color: rgba(0, 0, 0, 0.03);
+            z-index: -1;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        
+        @media print {
+            body { display: none !important; }
+        }
+        
+        .confidential-banner {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 1500;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 3rem 2rem;
+            box-shadow: 0 3px 15px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 3.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header .subtitle {
+            font-size: 1.4rem;
+            opacity: 0.95;
+            margin-top: 0.5rem;
+        }
+        
+        .header .version-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem 1.5rem;
+            border-radius: 25px;
+            margin-top: 1rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+        
+        .nav-menu {
+            position: sticky;
+            top: 0;
+            background: #2c3e50;
+            padding: 1rem 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .nav-menu ul {
+            list-style: none;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        .nav-menu a {
+            color: white;
+            text-decoration: none;
+            padding: 0.6rem 1.2rem;
+            margin: 0.3rem;
+            border-radius: 5px;
+            transition: background 0.3s, transform 0.2s;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+        
+        .nav-menu a:hover {
+            background: #34495e;
+            transform: translateY(-2px);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .section {
+            background: white;
+            margin-bottom: 2rem;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .section h2 {
+            color: #667eea;
+            font-size: 2.2rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 0.8rem;
+        }
+        
+        .section h3 {
+            color: #764ba2;
+            font-size: 1.7rem;
+            margin: 2rem 0 1rem 0;
+        }
+        
+        .section h4 {
+            color: #667eea;
+            font-size: 1.3rem;
+            margin: 1.5rem 0 0.8rem 0;
+        }
+        
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1rem 0;
+            border-left: 4px solid #667eea;
+            font-size: 0.9rem;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e83e8c;
+        }
+        
+        .alert {
+            padding: 1.2rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            border-left: 5px solid;
+        }
+        
+        .alert-success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .alert-warning { background: #fff3cd; border-color: #ffc107; color: #856404; }
+        .alert-danger { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .alert-info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 0.9rem;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        ul, ol { margin-left: 2rem; }
+        li { margin: 0.5rem 0; }
+        
+        .footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 2rem;
+            margin-top: 3rem;
+        }
+        
+    </style>
+</head>
+<body>
+    <script>
+        // Protection contre la copie et les fuites
+        (function() {
+            // Désactiver le clic droit
+            document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                return false;
+            });
+            
+            // Désactiver les raccourcis clavier de copie
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey && (e.key === 'c' || e.key === 'C' || e.key === 'a' || e.key === 'A' || e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P' || e.key === 'u' || e.key === 'U')) || 
+                    e.key === 'F12' || 
+                    (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'))) {
+                    e.preventDefault();
+                    alert('⚠️ Cette documentation est confidentielle et protégée. La copie est interdite.');
+                    return false;
+                }
+            });
+            
+            // Désactiver le glisser-déposer
+            document.addEventListener('dragstart', function(e) {
+                e.preventDefault();
+                return false;
+            });
+            
+            // Avertissement au chargement
+            window.addEventListener('load', function() {
+                console.log('%c⚠️ ATTENTION', 'color: red; font-size: 50px; font-weight: bold;');
+                console.log('%cCette documentation est confidentielle et propriété de HAPPLYZ MEDICAL SAS. Toute reproduction, copie ou diffusion non autorisée est strictement interdite et peut entraîner des poursuites judiciaires.', 'color: red; font-size: 16px;');
+            });
+        })();
+    </script>
+
+<div class="confidential-banner">
+    ⚠️ DOCUMENTATION CONFIDENTIELLE - PROPRIÉTÉ DE HAPPLYZ MEDICAL SAS - TOUTE REPRODUCTION INTERDITE
+</div>
+
+<div class="header">
+    <h1>🏥 OTT - Dispositif Médical IoT</h1>
+    <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
+    <div class="version-badge">Version 3.3 - Documentation Commerciale</div>
+    <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
+</div>
+
+<nav class="nav-menu">
+    <ul>
+        <li><a href="#intro">📖 Introduction</a></li>
+        <li><a href="#market">📊 Marché & Opportunités</a></li>
+        <li><a href="#business">💼 Business Plan</a></li>
+        <li><a href="#roi">💰 ROI & Modèle Économique</a></li>
+        <li><a href="#competitive">🏆 Avantages Concurrentiels</a></li>
+        <li><a href="#interface">📸 Interface Utilisateur</a></li>
+    </ul>
+</nav>
+
+<div class="container">
+
+<section id="intro" class="section">
+    <h2>📖 Introduction</h2>
+    
+    <p style="font-size: 1.15rem; margin-bottom: 1.5rem;">
+        <strong>OTT (Oxygen Therapy Tracker)</strong> est un dispositif médical IoT complet pour le monitoring 
+        en temps réel de l'oxygénothérapie à domicile. Solution 100% cloud, sécurisée et conforme aux normes médicales.
+    </p>
+    
+    <div class="alert alert-info">
+        <strong>ℹ️ Documentation Commerciale</strong><br>
+        Cette documentation présente les enjeux commerciaux, le marché, le business plan et le modèle économique 
+        de la solution OTT développée par HAPPLYZ MEDICAL SAS.
+    </div>
+    
+    <h3>💼 Proposition de Valeur</h3>
+    <ul>
+        <li>✅ <strong>Monitoring en temps réel</strong> de l'oxygénothérapie à domicile</li>
+        <li>✅ <strong>Solution clé en main</strong> : déploiement rapide</li>
+        <li>✅ <strong>Coût infrastructure réduit</strong> : 7€/mois (API Render Starter) + 0€ (PostgreSQL Render Free)</li>
+        <li>✅ <strong>Autonomie optimisée</strong> : 111 jours sur batterie 2000mAh (deep sleep ESP32)</li>
+        <li>✅ <strong>Conformité médicale</strong> : sécurisé avec authentification JWT et permissions granulaires</li>
+    </ul>
+</section>
+
+<section id="market" class="section">
+    <h2>📊 Marché & Opportunités</h2>
+    
+    <h3>🎯 Contexte du Marché</h3>
+    
+    <h4>📊 Marché de l'Oxygénothérapie à Domicile</h4>
+    <ul>
+        <li><strong>Besoin de monitoring</strong> : Observance thérapeutique, prévention des complications respiratoires</li>
+        <li><strong>Télémédecine</strong> : Croissance de la demande pour le suivi à distance des patients</li>
+        <li><strong>Digitalisation</strong> : Adoption croissante des solutions IoT dans le secteur médical</li>
+    </ul>
+    
+    <h4>🌍 Potentiel d'Expansion</h4>
+    <ul>
+        <li><strong>Marché français</strong> : Établissements de santé, services à domicile</li>
+        <li><strong>Marché européen</strong> : Conformité RGPD, normes médicales européennes</li>
+        <li><strong>Réglementation</strong> : Respect des normes de sécurité et de protection des données</li>
+    </ul>
+    
+    <h3>🏥 Secteurs d'Application</h3>
+    
+    <h4>📋 Hôpitaux & Établissements de Santé</h4>
+    <ul>
+        <li>Monitoring des patients en oxygénothérapie</li>
+        <li>Suivi de l'observance thérapeutique</li>
+        <li>Prévention des complications respiratoires</li>
+        <li>Optimisation des ressources médicales</li>
+    </ul>
+    
+    <h4>🏠 Services à Domicile</h4>
+    <ul>
+        <li>Télémédecine et suivi à distance</li>
+        <li>Alertes automatiques en cas d'anomalie</li>
+        <li>Réduction des visites à domicile</li>
+        <li>Amélioration de la qualité de vie des patients</li>
+    </ul>
+    
+    <h4>🧪 Laboratoires Pharmaceutiques</h4>
+    <ul>
+        <li>Essais cliniques et études</li>
+        <li>Collecte de données en temps réel</li>
+        <li>Analyse de l'efficacité des traitements</li>
+        <li>Conformité réglementaire</li>
+    </ul>
+    
+    <h3>💡 Opportunités de Marché</h3>
+    
+    <h4>📈 Tendances</h4>
+    <ul>
+        <li><strong>Télémédecine</strong> : Développement du suivi à distance des patients</li>
+        <li><strong>Vieillissement de la population</strong> : Augmentation des besoins en soins à domicile</li>
+        <li><strong>Digitalisation de la santé</strong> : Adoption croissante des solutions IoT médicales</li>
+        <li><strong>Optimisation des coûts</strong> : Besoin de solutions économiques pour les établissements</li>
+    </ul>
+    
+    <h4>🎯 Cibles Commerciales</h4>
+    <ul>
+        <li><strong>Hôpitaux publics et privés</strong> : Services de pneumologie, réanimation</li>
+        <li><strong>SSIAD (Services de Soins Infirmiers à Domicile)</strong> : Suivi des patients à domicile</li>
+        <li><strong>Distributeurs de matériel médical</strong> : Partenariats de distribution</li>
+        <li><strong>Laboratoires pharmaceutiques</strong> : Essais cliniques et études</li>
+    </ul>
+</section>
+
+<section id="business" class="section">
+    <h2>💼 Business Plan</h2>
+    
+    <h3>🎯 Modèle Économique</h3>
+    
+    <h4>📊 Revenus</h4>
+    <ul>
+        <li><strong>Abonnement mensuel par dispositif</strong> : 29€/mois/dispositif</li>
+        <li><strong>Coût infrastructure</strong> : 7€/mois (API) + 2€/mois/dispositif (SIM 4G) = 9€/mois pour 1 dispositif</li>
+        <li><strong>Marge brute</strong> : 20€/mois/dispositif (69% de marge)</li>
+    </ul>
+    
+    <h4>💰 Projections Financières</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre de Dispositifs</th>
+                <th>Revenus Mensuels</th>
+                <th>Coûts Mensuels</th>
+                <th>Marge Mensuelle</th>
+                <th>Marge Annuelle</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>10</td>
+                <td>290€</td>
+                <td>90€</td>
+                <td>200€</td>
+                <td>2 400€</td>
+            </tr>
+            <tr>
+                <td>50</td>
+                <td>1 450€</td>
+                <td>107€</td>
+                <td>1 343€</td>
+                <td>16 116€</td>
+            </tr>
+            <tr>
+                <td>100</td>
+                <td>2 900€</td>
+                <td>207€</td>
+                <td>2 693€</td>
+                <td>32 316€</td>
+            </tr>
+            <tr>
+                <td>500</td>
+                <td>14 500€</td>
+                <td>1 007€</td>
+                <td>13 493€</td>
+                <td>161 916€</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h3>📈 Croissance Prévisionnelle</h3>
+    <ul>
+        <li><strong>Année 1</strong> : 50 dispositifs → 16 116€ de marge annuelle</li>
+        <li><strong>Année 2</strong> : 200 dispositifs → 64 464€ de marge annuelle</li>
+        <li><strong>Année 3</strong> : 500 dispositifs → 161 916€ de marge annuelle</li>
+    </ul>
+</section>
+
+<section id="roi" class="section">
+    <h2>💰 ROI & Modèle Économique</h2>
+    
+    <h3>💡 Retour sur Investissement</h3>
+    
+    <h4>📊 Investissement Initial</h4>
+    <ul>
+        <li><strong>Développement</strong> : Solution déjà développée (v3.3)</li>
+        <li><strong>Infrastructure</strong> : 7€/mois (API Render Starter)</li>
+        <li><strong>Coût par dispositif</strong> : ~60€ (ESP32 + capteur + batterie)</li>
+    </ul>
+    
+    <h4>⏱️ Temps de Retour</h4>
+    <ul>
+        <li><strong>Coût dispositif</strong> : 60€</li>
+        <li><strong>Marge mensuelle</strong> : 20€/dispositif</li>
+        <li><strong>Temps de retour</strong> : 3 mois</li>
+        <li><strong>ROI après 1 an</strong> : 300% (240€ de marge sur 60€ d'investissement)</li>
+    </ul>
+    
+    <h3>🏆 Avantages de la Solution</h3>
+    <ul>
+        <li>✅ <strong>Coût infrastructure réduit</strong> : 7€/mois (API Render Starter) + 0€ (PostgreSQL Render Free)</li>
+        <li>✅ <strong>Autonomie optimisée</strong> : 111 jours sur batterie 2000mAh grâce au deep sleep ESP32</li>
+        <li>✅ <strong>Déploiement rapide</strong> : Solution clé en main, prête à l'emploi</li>
+        <li>✅ <strong>Solution complète</strong> : Firmware, API, Dashboard, tout inclus</li>
+        <li>✅ <strong>Sécurité renforcée</strong> : Authentification JWT, permissions granulaires, audit complet</li>
+    </ul>
+</section>
+
+<section id="competitive" class="section">
+    <h2>🏆 Avantages Concurrentiels</h2>
+    
+    <h3>💪 Caractéristiques Techniques de la Solution OTT</h3>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Critère</th>
+                <th>Spécification OTT</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Coût mensuel infrastructure</strong></td>
+                <td>7€/mois (API Render Starter) + 0€ (PostgreSQL Render Free)</td>
+            </tr>
+            <tr>
+                <td><strong>Autonomie batterie</strong></td>
+                <td>111 jours sur batterie 2000mAh (deep sleep ESP32, cycle 5 min)</td>
+            </tr>
+            <tr>
+                <td><strong>Communication</strong></td>
+                <td>4G/LTE (SIM7600) avec transmission HTTPS sécurisée</td>
+            </tr>
+            <tr>
+                <td><strong>Solution</strong></td>
+                <td>Clé en main : Firmware ESP32 + API PHP + Dashboard React/Next.js</td>
+            </tr>
+            <tr>
+                <td><strong>Sécurité</strong></td>
+                <td>Authentification JWT, permissions granulaires, audit complet</td>
+            </tr>
+            <tr>
+                <td><strong>Mise à jour</strong></td>
+                <td>OTA (Over-The-Air) pour le firmware, déploiement automatique pour le dashboard</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    
+    <h3>🚀 Stratégie de Commercialisation</h3>
+    
+    <h4>📢 Canaux de Distribution</h4>
+    <ul>
+        <li><strong>Vente directe</strong> : Contact direct avec les établissements de santé</li>
+        <li><strong>Partenariats</strong> : Accords avec distributeurs de matériel médical</li>
+        <li><strong>Réseaux médicaux</strong> : Présentation lors de congrès et salons</li>
+    </ul>
+    
+    <h4>💰 Modèle de Tarification (Exemple)</h4>
+    <ul>
+        <li><strong>Abonnement mensuel par dispositif</strong> : À définir selon la stratégie commerciale</li>
+        <li><strong>Coût infrastructure</strong> : 7€/mois (API) + 2€/mois/dispositif (SIM 4G) = 9€/mois pour 1 dispositif</li>
+        <li><strong>Coût matériel par dispositif</strong> : ~60€ (ESP32 + capteur + batterie)</li>
+    </ul>
+    
+    <div class="alert alert-info">
+        <strong>ℹ️ Note :</strong> Les tarifs d'abonnement et les modèles de pricing sont à définir selon la stratégie commerciale de HAPPLYZ MEDICAL SAS. Les coûts infrastructure et matériel sont basés sur les spécifications techniques actuelles.
+    </div>
+</section>
+
+<section id="interface" class="section">
+    <h2>📸 Interface Utilisateur</h2>
+    
+    <p>Cette section présente les principales vues de l'interface utilisateur de la solution OTT pour illustrer les fonctionnalités disponibles.</p>
+    
+    <h3>🔐 Page de Connexion</h3>
+    <p>L'interface d'authentification sécurisée avec authentification JWT :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/login.png" alt="Page de connexion" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Authentification sécurisée avec gestion des rôles et permissions</p>
+    </div>
+    
+    <h3>🏠 Vue d'Ensemble (Dashboard)</h3>
+    <p>Le tableau de bord principal avec les indicateurs clés de performance et les actions requises :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/dashboard-overview.png" alt="Vue d'ensemble" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Vue d'ensemble avec KPI, graphiques et actions requises</p>
+    </div>
+    
+    <h3>🔌 Gestion des Dispositifs</h3>
+    <p>La liste complète des dispositifs avec leurs statuts et informations de monitoring :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/devices-list.png" alt="Liste des dispositifs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Liste des dispositifs avec recherche, filtres et détails complets</p>
+    </div>
+    
+    <h3>🏥 Gestion des Patients</h3>
+    <p>L'interface de gestion des patients avec assignation de dispositifs :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/patients-list.png" alt="Liste des patients" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Gestion complète des patients avec assignation de dispositifs</p>
+    </div>
+    
+    <h3>📍 Visualisation Géographique</h3>
+    <p>La carte interactive pour visualiser la répartition géographique des dispositifs :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/map.png" alt="Carte interactive" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Carte interactive avec géolocalisation des dispositifs</p>
+    </div>
+    
+    <h3>⚠️ Gestion des Alertes</h3>
+    <p>Le système d'alertes pour le suivi des anomalies et actions requises :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/alerts.png" alt="Page alertes" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Gestion centralisée des alertes avec filtres et actions</p>
+    </div>
+    
+    <h3>👥 Gestion des Utilisateurs</h3>
+    <p>L'interface de gestion des utilisateurs avec contrôle des permissions :</p>
+    <div style="text-align: center; margin: 2rem 0;">
+        <img src="screenshots/users.png" alt="Page utilisateurs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">Gestion des utilisateurs avec rôles et permissions granulaires</p>
+    </div>
+    
+    <div class="alert alert-success">
+        <strong>✅ Interface Moderne et Intuitive</strong><br>
+        L'interface utilisateur de la solution OTT est conçue pour être intuitive et facile à utiliser, 
+        permettant une prise en main rapide par les équipes médicales et techniques.
+    </div>
+</section>
+
+</div>
+
+<div class="footer">
+    <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
+    <p>OTT - Version 3.3 Enterprise | Documentation Commerciale</p>
+    <p style="margin-top: 1rem; font-size: 1rem; font-weight: bold;">
+        📚 Documentation :
+        <a href="DOCUMENTATION_PRESENTATION.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">📸 Présentation</a> | 
+        <a href="DOCUMENTATION_DEVELOPPEURS.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">💻 Développeurs</a> | 
+        <a href="DOCUMENTATION_COMMERCIALE.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">💼 Commerciale</a>
+    </p>
+    <p style="margin-top: 0.5rem; font-size: 0.9rem;">
+        🌐 <a href="https://ymora.github.io/OTT/" style="color: white; text-decoration: underline;">Dashboard Live</a>
+    </p>
+</div>
+
+</body>
+</html>
+
