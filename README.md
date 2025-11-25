@@ -246,7 +246,13 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 - `package.json` - Dépendances Node.js (config via `.env.local`)
 
 ### Backend (PHP)
-- `api.php` - API REST complète (800 lignes)
+- `api.php` - Point d'entrée API REST (routing et CORS)
+- `api/helpers.php` - Fonctions utilitaires partagées (JWT, DB, audit, géolocalisation)
+- `api/handlers/` - Handlers modulaires par domaine :
+  - `auth.php` - Authentification et gestion utilisateurs
+  - `devices.php` - Gestion dispositifs, mesures, commandes, logs
+  - `firmwares.php` - Gestion firmwares, compilation, OTA
+  - `notifications.php` - Notifications et préférences
 - `sql/schema.sql` - Base PostgreSQL (14 tables, données anonymisées)
 - `Dockerfile` - Container pour Render
 
@@ -266,6 +272,62 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
 - `docs/` - Documentation technique complète (voir [INDEX.md](docs/INDEX.md))
 
 ---
+
+## 🏗️ Architecture Modulaire de l'API PHP
+
+### Structure Refactorisée
+
+L'API PHP a été refactorisée en modules pour améliorer la maintenabilité :
+
+```
+api.php                    # Point d'entrée (routing, CORS, erreurs)
+├── api/helpers.php        # Fonctions utilitaires partagées
+│   ├── JWT (génération, validation, refresh)
+│   ├── Database (connexion, requêtes préparées)
+│   ├── Audit (logging des actions)
+│   ├── Géolocalisation (IP → coordonnées)
+│   └── Notifications (queue, envoi)
+└── api/handlers/          # Handlers par domaine fonctionnel
+    ├── auth.php           # Login, utilisateurs, rôles, permissions
+    ├── devices.php        # CRUD dispositifs, mesures, commandes, logs
+    ├── firmwares.php      # Upload, compilation, OTA, versions
+    └── notifications.php  # Préférences, queue, envoi, audit logs
+```
+
+### Principes de Refactoring Appliqués
+
+1. **Séparation des responsabilités** : Chaque handler gère un domaine fonctionnel spécifique
+2. **Pas de duplication** : Fonctions communes dans `helpers.php`, pas de doublons entre handlers
+3. **Chemins relatifs corrects** : Tous les `require_once` utilisent `__DIR__` pour résoudre les chemins
+4. **Tags PHP obligatoires** : Tous les fichiers PHP commencent par `<?php`
+5. **Validation systématique** : Vérification de syntaxe PHP avant commit (`php -l`)
+
+### Lignes Directrices pour Futures Corrections
+
+**✅ À FAIRE :**
+- Vérifier la syntaxe PHP avant commit : `php -l api.php` et `php -l api/**/*.php`
+- Placer les nouvelles fonctions utilitaires dans `api/helpers.php`
+- Créer un nouveau handler dans `api/handlers/` si un nouveau domaine fonctionnel émerge
+- Utiliser `__DIR__` pour les chemins relatifs dans les includes
+- Tester localement avant de pousser sur GitHub
+
+**❌ À ÉVITER :**
+- Dupliquer du code entre handlers (utiliser `helpers.php`)
+- Modifier `api.php` pour ajouter de la logique métier (utiliser les handlers)
+- Oublier le tag `<?php` en début de fichier
+- Utiliser des chemins absolus ou relatifs incorrects
+- Commiter sans vérifier la syntaxe PHP
+
+**🔍 Vérifications Avant Commit :**
+```bash
+# Vérifier syntaxe PHP
+php -l api.php
+php -l api/helpers.php
+php -l api/handlers/*.php
+
+# Vérifier les doublons de fonctions
+grep -r "function " api/ | sort | uniq -d
+```
 
 ## 🔐 Sécurité & Configuration
 

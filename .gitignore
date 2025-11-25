@@ -43,7 +43,7 @@ hardware/firmware/**/*.bin
 hardware/firmware/**/*.ino
 
 # Artefacts volumineux conservés hors du dépôt principal
-docs/
+# docs/  # Documentation technique - doit être versionnée
 external/
 
 # Backup
