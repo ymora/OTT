@@ -1,3 +1,147 @@
+<?php
+/**
+ * API Handlers - Devices
+ * Extracted from api.php during refactoring
+ */
+
+function handleGetDevices() {
+    global $pdo;
+    $user = requireAuth();
+    
+    $stmt = $pdo->query("
+        SELECT d.*, 
+               dc.firmware_version as config_firmware_version,
+               dc.measurement_interval,
+               dc.alert_thresholds,
+               dc.ota_enabled,
+               p.id as patient_id,
+               p.first_name as patient_first_name,
+               p.last_name as patient_last_name
+        FROM devices d
+        LEFT JOIN device_configurations dc ON d.id = dc.device_id
+        LEFT JOIN device_patients dp ON d.id = dp.device_id AND dp.is_active = TRUE
+        LEFT JOIN patients p ON dp.patient_id = p.id
+        ORDER BY d.last_seen DESC
+    ");
+    $devices = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'devices' => $devices]);
+}
+
+function handleCreateDevice() {
+    global $pdo;
+    $user = requireAuth();
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input || !isset($input['sim_iccid'])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'sim_iccid required']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO devices (sim_iccid, device_name, device_serial, firmware_version, status)
+            VALUES (:iccid, :name, :serial, :firmware, 'active')
+        ");
+        $stmt->execute([
+            'iccid' => $input['sim_iccid'],
+            'name' => $input['device_name'] ?? $input['sim_iccid'],
+            'serial' => $input['device_serial'] ?? $input['sim_iccid'],
+            'firmware' => $input['firmware_version'] ?? 'unknown'
+        ]);
+        $device_id = $pdo->lastInsertId();
+        echo json_encode(['success' => true, 'device_id' => $device_id]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleUpdateDevice($device_id) {
+    global $pdo;
+    $user = requireAuth();
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid JSON']);
+        return;
+    }
+    
+    $updateFields = [];
+    $params = ['id' => $device_id];
+    
+    if (isset($input['device_name'])) {
+        $updateFields[] = 'device_name = :name';
+        $params['name'] = $input['device_name'];
+    }
+    if (isset($input['status'])) {
+        $updateFields[] = 'status = :status';
+        $params['status'] = $input['status'];
+    }
+    
+    if (empty($updateFields)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'No fields to update']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("UPDATE devices SET " . implode(', ', $updateFields) . " WHERE id = :id");
+        $stmt->execute($params);
+        echo json_encode(['success' => true]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleDeleteDevice($device_id) {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("DELETE FROM devices WHERE id = :id");
+        $stmt->execute(['id' => $device_id]);
+        echo json_encode(['success' => true]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handlePostMeasurement() {
+    global $pdo;
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid JSON']);
+        return;
+    }
+    
+    // Extraire les données (support format V1 et V2)
+    $iccid = $input['iccid'] ?? $input['sim_iccid'] ?? $input['device_id'] ?? null;
+    $flowrate = floatval($input['flowrate'] ?? $input['flow_rate'] ?? 0);
+    $battery = intval($input['battery'] ?? $input['battery_level'] ?? 100);
+    $rssi = intval($input['rssi'] ?? $input['signal_strength'] ?? 0);
+    $status = $input['status'] ?? $input['device_status'] ?? 'active';
+    $timestamp = $input['timestamp'] ?? null;
+    $firmware_version = $input['firmware_version'] ?? $input['firmware'] ?? 'unknown';
+    
+    if (!$iccid) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'iccid or device_id required']);
+        return;
+    }
+    
+    // Extraire latitude/longitude (support format V1 et V2)
+    $latitude = null;
+    $longitude = null;
+    if (isset($input['latitude']) && is_numeric($input['latitude'])) {
+        $latitude = floatval($input['latitude']);
+    } elseif (isset($input['payload']['latitude']) && is_numeric($input['payload']['latitude'])) {
+        $latitude = floatval($input['payload']['latitude']);
     }
     if (isset($input['longitude']) && is_numeric($input['longitude'])) {
         $longitude = floatval($input['longitude']);

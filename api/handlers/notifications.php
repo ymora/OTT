@@ -1,8 +1,19 @@
-        if (!$hasNotificationsTable) {
-            http_response_code(503);
-            echo json_encode(['success' => false, 'error' => 'Notifications table not available']);
-            return;
-        }
+<?php
+/**
+ * API Handlers - Notifications
+ * Extracted from api.php during refactoring
+ */
+
+function handleGetNotificationPreferences() {
+    global $pdo;
+    $user = requireAuth();
+    
+    $hasNotificationsTable = tableExists('notification_preferences');
+    if (!$hasNotificationsTable) {
+        http_response_code(503);
+        echo json_encode(['success' => false, 'error' => 'Notifications table not available']);
+        return;
+    }
         
         // Vérifier/créer les préférences avec toutes les valeurs par défaut (unifié)
         $checkStmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
