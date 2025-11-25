@@ -312,7 +312,12 @@ function handleDownloadFirmware($firmware_id) {
         
         // NOUVEAU: Priorité 1 - Lire depuis la DB (BYTEA)
         if (!empty($firmware['bin_content'])) {
+            // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées)
+            // Si la chaîne semble échappée (format hexadécimal \x...), décoder avec pg_unescape_bytea
             $bin_content = $firmware['bin_content'];
+            if (is_string($bin_content) && function_exists('pg_unescape_bytea') && substr($bin_content, 0, 2) === '\\x') {
+                $bin_content = pg_unescape_bytea($bin_content);
+            }
             $file_size = strlen($bin_content);
             error_log('[handleDownloadFirmware] ✅ Fichier lu depuis DB (BYTEA), taille: ' . $file_size);
             
@@ -1697,7 +1702,12 @@ function handleGetFirmwareIno($firmware_id) {
         
         // NOUVEAU: Priorité 1 - Lire depuis la DB (BYTEA)
         if (!empty($firmware['ino_content'])) {
+            // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées)
+            // Si la chaîne semble échappée (format hexadécimal \x...), décoder avec pg_unescape_bytea
             $ino_content = $firmware['ino_content'];
+            if (is_string($ino_content) && function_exists('pg_unescape_bytea') && substr($ino_content, 0, 2) === '\\x') {
+                $ino_content = pg_unescape_bytea($ino_content);
+            }
             error_log('[handleGetFirmwareIno] ✅ Fichier lu depuis DB (BYTEA)');
         } else {
             // Fallback: Lire depuis le système de fichiers

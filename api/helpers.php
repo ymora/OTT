@@ -245,7 +245,14 @@ function findFirmwareInoFile($firmware_id, $firmware) {
         $temp_dir = sys_get_temp_dir();
         $temp_file = $temp_dir . '/ott_firmware_' . $firmware_id . '_' . time() . '.ino';
         
-        if (file_put_contents($temp_file, $firmware['ino_content']) !== false) {
+        // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées)
+        // Si la chaîne semble échappée (format hexadécimal \x...), décoder avec pg_unescape_bytea
+        $decoded_content = $firmware['ino_content'];
+        if (is_string($decoded_content) && function_exists('pg_unescape_bytea') && substr($decoded_content, 0, 2) === '\\x') {
+            $decoded_content = pg_unescape_bytea($decoded_content);
+        }
+        
+        if (file_put_contents($temp_file, $decoded_content) !== false) {
             error_log('[findFirmwareInoFile] ✅ Fichier trouvé en DB (BYTEA), créé temporaire: ' . $temp_file);
             return $temp_file;
         } else {
