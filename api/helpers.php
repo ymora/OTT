@@ -221,6 +221,28 @@ function getProjectRoot() {
 }
 
 /**
+ * Encode binary data for PostgreSQL BYTEA column
+ * PDO with PostgreSQL requires BYTEA data to be encoded in hexadecimal format
+ * 
+ * @param string $binaryData Raw binary data
+ * @return string|null Encoded data ready for BYTEA insertion (null if empty)
+ */
+function encodeByteaForPostgres($binaryData) {
+    if (empty($binaryData)) {
+        return null;
+    }
+    
+    // Option 1: Use pg_escape_bytea() if pgsql extension is available
+    if (function_exists('pg_escape_bytea')) {
+        return pg_escape_bytea($binaryData);
+    }
+    
+    // Option 2: Use hexadecimal format \x... (PostgreSQL native format)
+    // This is the most reliable method with PDO
+    return '\\x' . bin2hex($binaryData);
+}
+
+/**
  * Obtient le répertoire de version pour un firmware (ex: "3.0-rebuild" -> "v3.0")
  */
 function getVersionDir($version) {

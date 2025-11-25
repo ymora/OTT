@@ -594,19 +594,20 @@ function handleUploadFirmwareIno() {
         
         error_log('[handleUploadFirmwareIno] Taille contenu à insérer: ' . $content_size . ' bytes');
         
-        // Avec PDO et PostgreSQL, on peut passer directement les données binaires comme chaîne
-        // PDO s'occupe automatiquement de l'encodage BYTEA
-        // Note: PDO::PARAM_LOB est pour les streams, pas pour les chaînes binaires
+        // IMPORTANT: PDO avec PostgreSQL nécessite un encodage spécifique pour BYTEA
+        // Utiliser la fonction helper encodeByteaForPostgres() pour encoder correctement
+        $ino_content_encoded = encodeByteaForPostgres($ino_content_db);
+        
         try {
-            $stmt->execute([
-                'version' => $version,
-                'file_path' => $temp_file_path,
-                'file_size' => $file_size,
-                'checksum' => $checksum,
-                'release_notes' => 'Compilé depuis .ino',
-                'is_stable' => 0,
+        $stmt->execute([
+            'version' => $version,
+            'file_path' => $temp_file_path,
+            'file_size' => $file_size,
+            'checksum' => $checksum,
+            'release_notes' => 'Compilé depuis .ino',
+            'is_stable' => 0,
                 'uploaded_by' => $user['id'],
-                'ino_content' => $ino_content_db  // NOUVEAU: Stockage en DB (BYTEA) - PDO gère automatiquement
+                'ino_content' => $ino_content_encoded  // BYTEA encodé pour PostgreSQL
             ]);
         } catch(PDOException $insertErr) {
             error_log('[handleUploadFirmwareIno] ❌ Erreur lors de l\'insertion: ' . $insertErr->getMessage());
@@ -718,7 +719,7 @@ function handleUploadFirmwareIno() {
         }
         
         // Logger l'erreur complète
-        error_log('[handleUploadFirmwareIno] PDOException: ' . $e->getMessage());
+            error_log('[handleUploadFirmwareIno] PDOException: ' . $e->getMessage());
         error_log('[handleUploadFirmwareIno] Code erreur: ' . $e->getCode());
         error_log('[handleUploadFirmwareIno] Stack trace: ' . $e->getTraceAsString());
         
@@ -1511,6 +1512,9 @@ function handleCompileFirmware($firmware_id) {
                 $bin_content_db = file_get_contents($bin_path);
                 
                 // Mettre à jour la base de données avec le contenu en BYTEA
+                // IMPORTANT: Encoder les données BYTEA pour PostgreSQL
+                $bin_content_encoded = encodeByteaForPostgres($bin_content_db);
+                
                 $version_dir = getVersionDir($firmware['version']);
                 $pdo->prepare("
                     UPDATE firmware_versions 
@@ -1524,7 +1528,7 @@ function handleCompileFirmware($firmware_id) {
                     'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
                     'file_size' => $file_size,
                     'checksum' => $checksum,
-                    'bin_content' => $bin_content_db,  // NOUVEAU: Stockage en DB
+                    'bin_content' => $bin_content_encoded,  // BYTEA encodé pour PostgreSQL
                     'id' => $firmware_id
                 ]);
                 
