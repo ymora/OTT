@@ -1,3 +1,4 @@
+<?php
     if ($user['role_name'] !== 'admin' && $user['role_name'] !== 'technicien') {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'Accès refusé. Admin ou technicien requis.']);
