@@ -244,8 +244,7 @@ function findFirmwareInoFile($firmware_id, $firmware) {
     }
     
     // Chemin absolu standard depuis la racine du projet
-    // __DIR__ dans api/helpers.php pointe vers api/, donc on remonte d'un niveau pour la racine
-    $root_dir = dirname(__DIR__);
+    $root_dir = getProjectRoot();
     $absolute_path = $root_dir . '/' . $firmware['file_path'];
     
     if (file_exists($absolute_path) && is_file($absolute_path) && preg_match('/\.ino$/', $absolute_path)) {
