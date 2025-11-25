@@ -1355,9 +1355,6 @@ function handleCompileFirmware($firmware_id) {
                 error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
             }
         }
-        } catch(PDOException $dbErr) {
-            error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
-        }
         sendSSE('error', 'Erreur: ' . $e->getMessage());
         error_log('[handleCompileFirmware] Exception: ' . $e->getMessage());
         flush();

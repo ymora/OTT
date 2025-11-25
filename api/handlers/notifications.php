@@ -967,4 +967,87 @@ function processNotificationsQueue($pdo, $limit = 50) {
                 CASE nq.priority 
                     WHEN 'critical' THEN 1 
                     WHEN 'high' THEN 2 
-
+                    WHEN 'medium' THEN 3 
+                    WHEN 'low' THEN 4 
+                    ELSE 5 
+                END,
+                nq.created_at ASC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        $notifications = $stmt->fetchAll();
+        $processed = 0;
+        $sent = 0;
+        $failed = 0;
+        
+        foreach ($notifications as $notification) {
+            $processed++;
+            
+            try {
+                $success = false;
+                
+                if ($notification['type'] === 'email') {
+                    $email = $notification['user_email'] ?? $notification['patient_email'];
+                    if ($email) {
+                        $success = sendEmail($email, $notification['subject'], $notification['message']);
+                    }
+                } elseif ($notification['type'] === 'sms') {
+                    $phone = $notification['user_phone'] ?? $notification['patient_phone'];
+                    if ($phone) {
+                        $success = sendSMS($phone, $notification['message']);
+                    }
+                }
+                
+                if ($success) {
+                    $sent++;
+                    $pdo->prepare("
+                        UPDATE notifications_queue 
+                        SET status = 'sent', sent_at = NOW(), attempts = attempts + 1
+                        WHERE id = :id
+                    ")->execute(['id' => $notification['id']]);
+                } else {
+                    $failed++;
+                    $attempts = $notification['attempts'] + 1;
+                    $status = ($attempts >= $notification['max_attempts']) ? 'failed' : 'pending';
+                    $pdo->prepare("
+                        UPDATE notifications_queue 
+                        SET status = :status, attempts = :attempts, error_message = :error
+                        WHERE id = :id
+                    ")->execute([
+                        'status' => $status,
+                        'attempts' => $attempts,
+                        'error' => 'Échec envoi ' . $notification['type'],
+                        'id' => $notification['id']
+                    ]);
+                }
+            } catch(Exception $e) {
+                $failed++;
+                error_log("Erreur processNotificationsQueue: " . $e->getMessage());
+                $pdo->prepare("
+                    UPDATE notifications_queue 
+                    SET attempts = attempts + 1, error_message = :error
+                    WHERE id = :id
+                ")->execute([
+                    'error' => $e->getMessage(),
+                    'id' => $notification['id']
+                ]);
+            }
+        }
+        
+        return [
+            'processed' => $processed,
+            'sent' => $sent,
+            'failed' => $failed
+        ];
+    } catch(PDOException $e) {
+        error_log("Erreur processNotificationsQueue: " . $e->getMessage());
+        return [
+            'processed' => 0,
+            'sent' => 0,
+            'failed' => 0,
+            'error' => $e->getMessage()
+        ];
+    }
+}
