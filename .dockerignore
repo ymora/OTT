@@ -3,7 +3,10 @@
 node_modules
 out
 tmp
-hardware
+hardware/cad
+hardware/docs
+hardware/scripts
+hardware/arduino-data
 external
 app
 components
