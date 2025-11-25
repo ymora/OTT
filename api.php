@@ -309,48 +309,63 @@ function handleClearFirmwares() {
            requireAdmin();
            
            try {
-               // Lire le fichier SQL
-               $migrationFile = __DIR__ . '/sql/migration_firmware_blob.sql';
-               if (!file_exists($migrationFile)) {
-                   http_response_code(404);
-                   echo json_encode(['success' => false, 'error' => 'Fichier migration introuvable']);
-                   return;
-               }
-               
-               $sql = file_get_contents($migrationFile);
-               if ($sql === false) {
-                   http_response_code(500);
-                   echo json_encode(['success' => false, 'error' => 'Impossible de lire le fichier SQL']);
-                   return;
-               }
-               
-               // Diviser le SQL en commandes individuelles
-               $commands = array_filter(
-                   array_map('trim', explode(';', $sql)),
-                   function($cmd) {
-                       return !empty($cmd) && !preg_match('/^\s*--/', $cmd);
-                   }
-               );
-               
                $results = [];
-               foreach ($commands as $command) {
-                   if (empty(trim($command))) continue;
-                   
-                   try {
-                       $pdo->exec($command);
-                       $results[] = ['command' => substr($command, 0, 50) . '...', 'status' => 'success'];
-                   } catch (PDOException $e) {
-                       // Ignorer les erreurs "already exists" pour IF NOT EXISTS
-                       if (strpos($e->getMessage(), 'already exists') !== false || 
-                           strpos($e->getMessage(), 'duplicate') !== false) {
-                           $results[] = ['command' => substr($command, 0, 50) . '...', 'status' => 'already_exists'];
-                       } else {
-                           throw $e;
-                       }
+               
+               // 1. Ajouter la colonne ino_content
+               try {
+                   $pdo->exec("ALTER TABLE firmware_versions ADD COLUMN IF NOT EXISTS ino_content BYTEA");
+                   $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN ino_content', 'status' => 'success'];
+               } catch (PDOException $e) {
+                   if (strpos($e->getMessage(), 'already exists') !== false || strpos($e->getMessage(), 'duplicate') !== false) {
+                       $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN ino_content', 'status' => 'already_exists'];
+                   } else {
+                       throw $e;
                    }
                }
                
-               // Vérifier que les colonnes existent
+               // 2. Ajouter la colonne bin_content
+               try {
+                   $pdo->exec("ALTER TABLE firmware_versions ADD COLUMN IF NOT EXISTS bin_content BYTEA");
+                   $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN bin_content', 'status' => 'success'];
+               } catch (PDOException $e) {
+                   if (strpos($e->getMessage(), 'already exists') !== false || strpos($e->getMessage(), 'duplicate') !== false) {
+                       $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN bin_content', 'status' => 'already_exists'];
+                   } else {
+                       throw $e;
+                   }
+               }
+               
+               // 3. Créer les index (optionnel, ignorer si existe déjà)
+               try {
+                   $pdo->exec("CREATE INDEX IF NOT EXISTS idx_firmware_versions_version ON firmware_versions(version)");
+                   $results[] = ['command' => 'CREATE INDEX idx_firmware_versions_version', 'status' => 'success'];
+               } catch (PDOException $e) {
+                   $results[] = ['command' => 'CREATE INDEX idx_firmware_versions_version', 'status' => 'already_exists'];
+               }
+               
+               try {
+                   $pdo->exec("CREATE INDEX IF NOT EXISTS idx_firmware_versions_status ON firmware_versions(status)");
+                   $results[] = ['command' => 'CREATE INDEX idx_firmware_versions_status', 'status' => 'success'];
+               } catch (PDOException $e) {
+                   $results[] = ['command' => 'CREATE INDEX idx_firmware_versions_status', 'status' => 'already_exists'];
+               }
+               
+               // 4. Ajouter les commentaires (optionnel, ignorer si erreur)
+               try {
+                   $pdo->exec("COMMENT ON COLUMN firmware_versions.ino_content IS 'Contenu du fichier .ino stocké en BYTEA (alternative au système de fichiers)'");
+                   $results[] = ['command' => 'COMMENT ON COLUMN ino_content', 'status' => 'success'];
+               } catch (PDOException $e) {
+                   $results[] = ['command' => 'COMMENT ON COLUMN ino_content', 'status' => 'skipped'];
+               }
+               
+               try {
+                   $pdo->exec("COMMENT ON COLUMN firmware_versions.bin_content IS 'Contenu du fichier .bin compilé stocké en BYTEA (alternative au système de fichiers)'");
+                   $results[] = ['command' => 'COMMENT ON COLUMN bin_content', 'status' => 'success'];
+               } catch (PDOException $e) {
+                   $results[] = ['command' => 'COMMENT ON COLUMN bin_content', 'status' => 'skipped'];
+               }
+               
+               // 5. Vérifier que les colonnes existent
                $checkStmt = $pdo->query("
                    SELECT column_name, data_type 
                    FROM information_schema.columns 
@@ -369,7 +384,14 @@ function handleClearFirmwares() {
                
            } catch(PDOException $e) {
                http_response_code(500);
-               echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+               $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur base de données';
+               error_log('[handleMigrateFirmwareBlob] Erreur: ' . $e->getMessage());
+               echo json_encode(['success' => false, 'error' => $errorMsg, 'details' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : null]);
+           } catch(Exception $e) {
+               http_response_code(500);
+               $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur lors de la migration';
+               error_log('[handleMigrateFirmwareBlob] Exception: ' . $e->getMessage());
+               echo json_encode(['success' => false, 'error' => $errorMsg]);
            }
        }
 
