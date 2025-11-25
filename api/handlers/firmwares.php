@@ -309,13 +309,34 @@ function handleDownloadFirmware($firmware_id) {
             return;
         }
         
-        $file_path = __DIR__ . '/../../' . $firmware['file_path'];
+        // NOUVEAU: Priorité 1 - Lire depuis la DB (BYTEA)
+        if (!empty($firmware['bin_content'])) {
+            $bin_content = $firmware['bin_content'];
+            $file_size = strlen($bin_content);
+            error_log('[handleDownloadFirmware] ✅ Fichier lu depuis DB (BYTEA), taille: ' . $file_size);
+            
+            // Envoyer le fichier depuis la DB
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="fw_ott_v' . $firmware['version'] . '.bin"');
+            header('Content-Length: ' . $file_size);
+            header('Cache-Control: no-cache, must-revalidate');
+            header('Pragma: no-cache');
+            
+            echo $bin_content;
+            exit;
+        }
+        
+        // Fallback: Lire depuis le système de fichiers
+        $root_dir = getProjectRoot();
+        $file_path = $root_dir . '/' . $firmware['file_path'];
         
         if (!file_exists($file_path)) {
             http_response_code(404);
             echo json_encode(['success' => false, 'error' => 'Firmware file not found on server']);
             return;
         }
+        
+        error_log('[handleDownloadFirmware] ✅ Fichier lu depuis système de fichiers');
         
         // Envoyer le fichier
         header('Content-Type: application/octet-stream');
@@ -515,15 +536,20 @@ function handleUploadFirmwareIno() {
         return;
     }
     
-    // Enregistrer dans la base de données (statut: pending_compilation) avec un chemin temporaire
+    // Enregistrer dans la base de données (statut: pending_compilation)
+    // NOUVEAU: Stocker le contenu directement dans PostgreSQL (BYTEA) pour éviter la perte lors des redéploiements
     try {
         $file_size = filesize($temp_path);
         $checksum = hash_file('sha256', $temp_path);
         
+        // Lire le contenu du fichier pour stockage en DB
+        $ino_content_db = file_get_contents($temp_path);
+        
         // Utiliser RETURNING pour PostgreSQL (plus fiable que lastInsertId)
+        // NOUVEAU: Ajouter ino_content pour stockage en DB
         $stmt = $pdo->prepare("
-            INSERT INTO firmware_versions (version, file_path, file_size, checksum, release_notes, is_stable, uploaded_by, status)
-            VALUES (:version, :file_path, :file_size, :checksum, :release_notes, :is_stable, :uploaded_by, 'pending_compilation')
+            INSERT INTO firmware_versions (version, file_path, file_size, checksum, release_notes, is_stable, uploaded_by, status, ino_content)
+            VALUES (:version, :file_path, :file_size, :checksum, :release_notes, :is_stable, :uploaded_by, 'pending_compilation', :ino_content)
             RETURNING id
         ");
         
@@ -537,7 +563,8 @@ function handleUploadFirmwareIno() {
             'checksum' => $checksum,
             'release_notes' => 'Compilé depuis .ino',
             'is_stable' => 0,
-            'uploaded_by' => $user['id']
+            'uploaded_by' => $user['id'],
+            'ino_content' => $ino_content_db  // NOUVEAU: Stockage en DB
         ]);
         
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -1307,19 +1334,24 @@ function handleCompileFirmware($firmware_id) {
                 $checksum = hash_file('sha256', $bin_path);
                 $file_size = filesize($bin_path);
                 
-                // Mettre à jour la base de données
+                // NOUVEAU: Lire le contenu du .bin pour stockage en DB
+                $bin_content_db = file_get_contents($bin_path);
+                
+                // Mettre à jour la base de données avec le contenu en BYTEA
                 $version_dir = getVersionDir($firmware['version']);
                 $pdo->prepare("
                     UPDATE firmware_versions 
                     SET file_path = :file_path, 
                         file_size = :file_size, 
                         checksum = :checksum,
+                        bin_content = :bin_content,
                         status = 'compiled'
                     WHERE id = :id
                 ")->execute([
                     'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
                     'file_size' => $file_size,
                     'checksum' => $checksum,
+                    'bin_content' => $bin_content_db,  // NOUVEAU: Stockage en DB
                     'id' => $firmware_id
                 ]);
                 
@@ -1660,40 +1692,48 @@ function handleGetFirmwareIno($firmware_id) {
             return;
         }
         
-        // Utiliser la fonction helper simplifiée
-        $ino_path = findFirmwareInoFile($firmware_id, $firmware);
-        
-        if (!$ino_path || !file_exists($ino_path)) {
-            // Diagnostic simple - utiliser le même chemin que findFirmwareInoFile() pour cohérence
-            $root_dir = getProjectRoot();
-            $absolute_path = !empty($firmware['file_path']) ? $root_dir . '/' . $firmware['file_path'] : null;
-            $parent_dir = $absolute_path ? dirname($absolute_path) : null;
-            $dir_exists = $parent_dir && is_dir($parent_dir);
+        // NOUVEAU: Priorité 1 - Lire depuis la DB (BYTEA)
+        if (!empty($firmware['ino_content'])) {
+            $ino_content = $firmware['ino_content'];
+            error_log('[handleGetFirmwareIno] ✅ Fichier lu depuis DB (BYTEA)');
+        } else {
+            // Fallback: Lire depuis le système de fichiers
+            $ino_path = findFirmwareInoFile($firmware_id, $firmware);
             
-            error_log('[handleGetFirmwareIno] ❌ Fichier introuvable');
-            error_log('[handleGetFirmwareIno]    file_path DB: ' . ($firmware['file_path'] ?? 'N/A'));
-            error_log('[handleGetFirmwareIno]    Chemin absolu: ' . ($absolute_path ?? 'N/A'));
-            error_log('[handleGetFirmwareIno]    Dossier parent existe: ' . ($dir_exists ? 'OUI' : 'NON'));
-            
-            if ($dir_exists) {
-                $files_in_dir = glob($parent_dir . '/*.ino');
-                error_log('[handleGetFirmwareIno]    Fichiers .ino dans le dossier: ' . count($files_in_dir));
+            if (!$ino_path || !file_exists($ino_path)) {
+                // Diagnostic simple - utiliser le même chemin que findFirmwareInoFile() pour cohérence
+                $root_dir = getProjectRoot();
+                $absolute_path = !empty($firmware['file_path']) ? $root_dir . '/' . $firmware['file_path'] : null;
+                $parent_dir = $absolute_path ? dirname($absolute_path) : null;
+                $dir_exists = $parent_dir && is_dir($parent_dir);
+                
+                error_log('[handleGetFirmwareIno] ❌ Fichier introuvable');
+                error_log('[handleGetFirmwareIno]    file_path DB: ' . ($firmware['file_path'] ?? 'N/A'));
+                error_log('[handleGetFirmwareIno]    Chemin absolu: ' . ($absolute_path ?? 'N/A'));
+                error_log('[handleGetFirmwareIno]    Dossier parent existe: ' . ($dir_exists ? 'OUI' : 'NON'));
+                error_log('[handleGetFirmwareIno]    Stocké en DB: NON');
+                
+                if ($dir_exists) {
+                    $files_in_dir = glob($parent_dir . '/*.ino');
+                    error_log('[handleGetFirmwareIno]    Fichiers .ino dans le dossier: ' . count($files_in_dir));
+                }
+                
+                http_response_code(404);
+                $error_msg = 'Fichier .ino introuvable: ' . ($firmware['file_path'] ?? 'N/A');
+                if (getenv('DEBUG_ERRORS') === 'true') {
+                    $error_msg .= ' (Version: ' . $firmware['version'] . ', ID: ' . $firmware_id . ')';
+                }
+                echo json_encode(['success' => false, 'error' => $error_msg]);
+                return;
             }
             
-            http_response_code(404);
-            $error_msg = 'Fichier .ino introuvable: ' . ($firmware['file_path'] ?? 'N/A');
-            if (getenv('DEBUG_ERRORS') === 'true') {
-                $error_msg .= ' (Version: ' . $firmware['version'] . ', ID: ' . $firmware_id . ')';
+            $ino_content = file_get_contents($ino_path);
+            if ($ino_content === false) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Impossible de lire le fichier .ino']);
+                return;
             }
-            echo json_encode(['success' => false, 'error' => $error_msg]);
-            return;
-        }
-        
-        $ino_content = file_get_contents($ino_path);
-        if ($ino_content === false) {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'error' => 'Impossible de lire le fichier .ino']);
-            return;
+            error_log('[handleGetFirmwareIno] ✅ Fichier lu depuis système de fichiers');
         }
         
         echo json_encode([

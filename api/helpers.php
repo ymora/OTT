@@ -237,7 +237,23 @@ function getVersionDir($version) {
  * @return string|null Chemin absolu du fichier .ino trouvé, ou null si introuvable
  */
 function findFirmwareInoFile($firmware_id, $firmware) {
-    // Le file_path en DB est la source de vérité - pas de recherche complexe
+    global $pdo;
+    
+    // NOUVEAU: Priorité 1 - Vérifier si le fichier est stocké en DB (BYTEA)
+    if (!empty($firmware['ino_content'])) {
+        // Créer un fichier temporaire depuis la DB
+        $temp_dir = sys_get_temp_dir();
+        $temp_file = $temp_dir . '/ott_firmware_' . $firmware_id . '_' . time() . '.ino';
+        
+        if (file_put_contents($temp_file, $firmware['ino_content']) !== false) {
+            error_log('[findFirmwareInoFile] ✅ Fichier trouvé en DB (BYTEA), créé temporaire: ' . $temp_file);
+            return $temp_file;
+        } else {
+            error_log('[findFirmwareInoFile] ⚠️ Impossible de créer fichier temporaire depuis DB');
+        }
+    }
+    
+    // Fallback: Chercher dans le système de fichiers (compatibilité)
     if (empty($firmware['file_path'])) {
         error_log('[findFirmwareInoFile] ❌ file_path vide en DB pour firmware_id=' . $firmware_id);
         return null;
@@ -248,7 +264,7 @@ function findFirmwareInoFile($firmware_id, $firmware) {
     $absolute_path = $root_dir . '/' . $firmware['file_path'];
     
     if (file_exists($absolute_path) && is_file($absolute_path) && preg_match('/\.ino$/', $absolute_path)) {
-        error_log('[findFirmwareInoFile] ✅ Fichier trouvé: ' . $absolute_path);
+        error_log('[findFirmwareInoFile] ✅ Fichier trouvé sur disque: ' . $absolute_path);
         return $absolute_path;
     }
     
@@ -260,6 +276,7 @@ function findFirmwareInoFile($firmware_id, $firmware) {
     error_log('[findFirmwareInoFile] ❌ Fichier introuvable: ' . $firmware['file_path']);
     error_log('[findFirmwareInoFile]    Chemin absolu testé: ' . $absolute_path);
     error_log('[findFirmwareInoFile]    Dossier parent existe: ' . ($dir_exists ? 'OUI' : 'NON'));
+    error_log('[findFirmwareInoFile]    Stocké en DB: ' . (!empty($firmware['ino_content']) ? 'OUI' : 'NON'));
     
     if ($dir_exists) {
         // Lister les fichiers dans le dossier pour diagnostic
