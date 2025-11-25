@@ -14,7 +14,8 @@
 - [Guide Forcer Mise à Jour](./GUIDE_FORCER_MISE_A_JOUR.md) - Mise à jour PWA
 
 ## 🔍 Vérifications & Audits
-- [Audit Complet Projet](./AUDIT_COMPLET_PROJET.md) - Audit complet
+- [Audit Complet Projet 2025](./AUDIT_COMPLET_PROJET_2025.md) - **NOUVEAU** Audit complet 2025
+- [Audit Complet Projet](./AUDIT_COMPLET_PROJET.md) - Audit historique
 - [Rapport Vérification Final](./RAPPORT_VERIFICATION_FINAL.md) - Vérifications finales
 - [Archives Historiques](./archive/) - Rapports et audits archivés
 - [Comparaison Onglets Firmware](./COMPARAISON_ONGLETS_FIRMWARE.md) - Comparaison interfaces
