@@ -757,17 +757,37 @@ function handleUploadFirmwareIno() {
         
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     } catch(Exception $e) {
+        // Nettoyer tous les fichiers temporaires
+        if (isset($temp_path) && file_exists($temp_path)) {
+            @unlink($temp_path);
+        }
         if (isset($ino_path) && file_exists($ino_path)) {
             @unlink($ino_path);
         }
         
-        http_response_code(500);
-        if (!headers_sent() && !isset($GLOBALS['sse_mode'])) {
+        // Logger l'erreur complète
+        error_log('[handleUploadFirmwareIno] Exception: ' . $e->getMessage());
+        error_log('[handleUploadFirmwareIno] Stack trace: ' . $e->getTraceAsString());
+        
+        // Supprimer l'entrée en DB si elle a été créée
+        if (isset($firmware_id)) {
+            try {
+                $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
+            } catch(PDOException $deleteErr) {
+                error_log('[handleUploadFirmwareIno] Erreur lors de la suppression: ' . $deleteErr->getMessage());
+            }
+        }
+        
+        // S'assurer que le Content-Type est JSON
+        if (!headers_sent()) {
             header('Content-Type: application/json; charset=utf-8');
         }
         
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur lors de l\'upload';
-        error_log('[handleUploadFirmwareIno] Exception: ' . $e->getMessage());
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' 
+            ? 'Erreur: ' . $e->getMessage() 
+            : 'Erreur lors de l\'upload';
+        
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
