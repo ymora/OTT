@@ -311,28 +311,42 @@ function handleClearFirmwares() {
            try {
                $results = [];
                
+               // Fonction helper pour vérifier si une colonne existe
+               $columnExists = function($columnName) use ($pdo) {
+                   $stmt = $pdo->query("
+                       SELECT EXISTS (
+                           SELECT 1 FROM information_schema.columns 
+                           WHERE table_schema = 'public' 
+                           AND table_name = 'firmware_versions' 
+                           AND column_name = '$columnName'
+                       )
+                   ");
+                   $exists = $stmt->fetchColumn();
+                   return ($exists === true || $exists === 't' || $exists === 1 || $exists === '1');
+               };
+               
                // 1. Ajouter la colonne ino_content
-               try {
-                   $pdo->exec("ALTER TABLE firmware_versions ADD COLUMN IF NOT EXISTS ino_content BYTEA");
-                   $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN ino_content', 'status' => 'success'];
-               } catch (PDOException $e) {
-                   if (strpos($e->getMessage(), 'already exists') !== false || strpos($e->getMessage(), 'duplicate') !== false) {
-                       $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN ino_content', 'status' => 'already_exists'];
-                   } else {
+               if (!$columnExists('ino_content')) {
+                   try {
+                       $pdo->exec("ALTER TABLE firmware_versions ADD COLUMN ino_content BYTEA");
+                       $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN ino_content', 'status' => 'success'];
+                   } catch (PDOException $e) {
                        throw $e;
                    }
+               } else {
+                   $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN ino_content', 'status' => 'already_exists'];
                }
                
                // 2. Ajouter la colonne bin_content
-               try {
-                   $pdo->exec("ALTER TABLE firmware_versions ADD COLUMN IF NOT EXISTS bin_content BYTEA");
-                   $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN bin_content', 'status' => 'success'];
-               } catch (PDOException $e) {
-                   if (strpos($e->getMessage(), 'already exists') !== false || strpos($e->getMessage(), 'duplicate') !== false) {
-                       $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN bin_content', 'status' => 'already_exists'];
-                   } else {
+               if (!$columnExists('bin_content')) {
+                   try {
+                       $pdo->exec("ALTER TABLE firmware_versions ADD COLUMN bin_content BYTEA");
+                       $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN bin_content', 'status' => 'success'];
+                   } catch (PDOException $e) {
                        throw $e;
                    }
+               } else {
+                   $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN bin_content', 'status' => 'already_exists'];
                }
                
                // 3. Créer les index (optionnel, ignorer si existe déjà)
