@@ -449,18 +449,30 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleGetDevices();
 } elseif(preg_match('#/devices$#', $path) && $method === 'POST') {
     handleCreateDevice();
+} elseif(preg_match('#/devices/measurements$#', $path) && $method === 'POST') {
+    handlePostMeasurement();
 } elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'POST') {
     handleCreateDeviceCommand($m[1]);
 } elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'GET') {
     handleGetDeviceCommands($m[1]);
 } elseif(preg_match('#/devices/([0-9A-Za-z]+)/commands/pending$#', $path, $m) && $method === 'GET') {
     handleGetPendingCommands($m[1]);
+} elseif(preg_match('#/devices/commands/ack$#', $path) && $method === 'POST') {
+    handleAcknowledgeCommand();
+} elseif(preg_match('#/devices/commands$#', $path) && $method === 'GET') {
+    handleListAllCommands();
 } elseif(preg_match('#/device/(\d+)$#', $path, $m) && $method === 'GET') {
     handleGetDeviceHistory($m[1]);
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateDevice($m[1]);
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteDevice($m[1]);
+} elseif(preg_match('#/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'GET') {
+    handleGetDeviceConfig($m[1]);
+} elseif(preg_match('#/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'PUT') {
+    handleUpdateDeviceConfig($m[1]);
+} elseif(preg_match('#/devices/([0-9A-Za-z]+)/ota$#', $path, $m) && $method === 'POST') {
+    handleTriggerOTA($m[1]);
 
 // Firmwares
 // IMPORTANT: Vérifier les routes spécifiques AVANT les routes génériques
@@ -554,3 +566,25 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleInitFirmwareDb();
 
 } else {
+    // Debug: logger le chemin et la méthode pour comprendre pourquoi l'endpoint n'est pas trouvé
+    $debugInfo = [
+        'path' => $path,
+        'method' => $method,
+        'uri' => $_SERVER['REQUEST_URI'] ?? 'N/A',
+        'script_name' => $_SERVER['SCRIPT_NAME'] ?? 'N/A',
+        'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'N/A'
+    ];
+    
+    // Log spécifique pour les routes firmwares/ino qui ne matchent pas
+    if (preg_match('#/firmwares.*ino#', $path)) {
+        error_log("[API Router] Route firmwares/ino non matchée: " . json_encode($debugInfo));
+    }
+    
+    error_log("[API Router] Path not matched: " . json_encode($debugInfo));
+    http_response_code(404);
+    echo json_encode([
+        'success' => false, 
+        'error' => 'Endpoint not found',
+        'debug' => $debugInfo
+    ]);
+}
