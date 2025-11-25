@@ -299,9 +299,10 @@ function handleDownloadFirmware($firmware_id) {
     requireAuth();
     
     try {
-        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        // Inclure ino_content et bin_content pour stockage DB
+        $stmt = $pdo->prepare("SELECT *, ino_content, bin_content FROM firmware_versions WHERE id = :id");
         $stmt->execute(['id' => $firmware_id]);
-        $firmware = $stmt->fetch();
+        $firmware = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$firmware) {
             http_response_code(404);
