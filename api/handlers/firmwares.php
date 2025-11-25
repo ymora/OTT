@@ -750,7 +750,9 @@ function handleCompileFirmware($firmware_id) {
                 flush();
             } else {
                 // Message simple et clair (version simplifiée)
-                $absolute_path = !empty($firmware['file_path']) ? __DIR__ . '/../../' . $firmware['file_path'] : null;
+                // Utiliser le même chemin que findFirmwareInoFile() pour cohérence
+                $root_dir = dirname(dirname(__DIR__));
+                $absolute_path = !empty($firmware['file_path']) ? $root_dir . '/' . $firmware['file_path'] : null;
                 $parent_dir = $absolute_path ? dirname($absolute_path) : null;
                 $dir_exists = $parent_dir && is_dir($parent_dir);
                 
@@ -1662,8 +1664,9 @@ function handleGetFirmwareIno($firmware_id) {
         $ino_path = findFirmwareInoFile($firmware_id, $firmware);
         
         if (!$ino_path || !file_exists($ino_path)) {
-            // Diagnostic simple
-            $absolute_path = !empty($firmware['file_path']) ? __DIR__ . '/../../' . $firmware['file_path'] : null;
+            // Diagnostic simple - utiliser le même chemin que findFirmwareInoFile() pour cohérence
+            $root_dir = dirname(dirname(__DIR__));
+            $absolute_path = !empty($firmware['file_path']) ? $root_dir . '/' . $firmware['file_path'] : null;
             $parent_dir = $absolute_path ? dirname($absolute_path) : null;
             $dir_exists = $parent_dir && is_dir($parent_dir);
             
