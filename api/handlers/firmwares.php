@@ -573,16 +573,52 @@ function handleUploadFirmwareIno() {
         // Chemin temporaire pour l'insertion initiale
         $temp_file_path = 'hardware/firmware/' . $version_dir . '/' . $temp_filename;
         
-        $stmt->execute([
-            'version' => $version,
-            'file_path' => $temp_file_path,
-            'file_size' => $file_size,
-            'checksum' => $checksum,
-            'release_notes' => 'Compilé depuis .ino',
-            'is_stable' => 0,
-            'uploaded_by' => $user['id'],
-            'ino_content' => $ino_content_db  // NOUVEAU: Stockage en DB
-        ]);
+        // Vérifier que le contenu n'est pas vide
+        if (empty($ino_content_db)) {
+            error_log('[handleUploadFirmwareIno] ❌ Contenu du fichier vide');
+            @unlink($temp_path);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Le fichier .ino est vide']);
+            return;
+        }
+        
+        // Vérifier la taille du contenu
+        $content_size = strlen($ino_content_db);
+        if ($content_size === 0) {
+            error_log('[handleUploadFirmwareIno] ❌ Taille du contenu = 0');
+            @unlink($temp_path);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Le contenu du fichier .ino est vide']);
+            return;
+        }
+        
+        error_log('[handleUploadFirmwareIno] Taille contenu à insérer: ' . $content_size . ' bytes');
+        
+        // Avec PDO et PostgreSQL, on peut passer directement les données binaires comme chaîne
+        // PDO s'occupe automatiquement de l'encodage BYTEA
+        // Note: PDO::PARAM_LOB est pour les streams, pas pour les chaînes binaires
+        try {
+            $stmt->execute([
+                'version' => $version,
+                'file_path' => $temp_file_path,
+                'file_size' => $file_size,
+                'checksum' => $checksum,
+                'release_notes' => 'Compilé depuis .ino',
+                'is_stable' => 0,
+                'uploaded_by' => $user['id'],
+                'ino_content' => $ino_content_db  // NOUVEAU: Stockage en DB (BYTEA) - PDO gère automatiquement
+            ]);
+        } catch(PDOException $insertErr) {
+            error_log('[handleUploadFirmwareIno] ❌ Erreur lors de l\'insertion: ' . $insertErr->getMessage());
+            error_log('[handleUploadFirmwareIno] Code: ' . $insertErr->getCode());
+            @unlink($temp_path);
+            http_response_code(500);
+            $errorMsg = getenv('DEBUG_ERRORS') === 'true' 
+                ? 'Erreur insertion DB: ' . $insertErr->getMessage() 
+                : 'Erreur lors de l\'enregistrement en base de données';
+            echo json_encode(['success' => false, 'error' => $errorMsg]);
+            return;
+        }
         
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         $firmware_id = $result['id'] ?? $pdo->lastInsertId();
@@ -673,15 +709,31 @@ function handleUploadFirmwareIno() {
         }
         
     } catch(PDOException $e) {
+        // Nettoyer les fichiers temporaires
+        if (isset($temp_path) && file_exists($temp_path)) {
+            @unlink($temp_path);
+        }
         if (isset($ino_path) && file_exists($ino_path)) {
             @unlink($ino_path);
         }
         
-        $errorMsg = 'Database error';
-        if (getenv('DEBUG_ERRORS') === 'true') {
-            $errorMsg = $e->getMessage();
-            error_log('[handleUploadFirmwareIno] PDOException: ' . $e->getMessage());
+        // Logger l'erreur complète
+        error_log('[handleUploadFirmwareIno] PDOException: ' . $e->getMessage());
+        error_log('[handleUploadFirmwareIno] Code erreur: ' . $e->getCode());
+        error_log('[handleUploadFirmwareIno] Stack trace: ' . $e->getTraceAsString());
+        
+        // Supprimer l'entrée en DB si elle a été créée
+        if (isset($firmware_id)) {
+            try {
+                $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
+            } catch(PDOException $deleteErr) {
+                error_log('[handleUploadFirmwareIno] Erreur lors de la suppression: ' . $deleteErr->getMessage());
+            }
         }
+        
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' 
+            ? 'Erreur base de données: ' . $e->getMessage() 
+            : 'Erreur lors de l\'enregistrement en base de données';
         
         if ($e->getCode() == 23000 || strpos($e->getMessage(), '23505') !== false || strpos($e->getMessage(), 'duplicate key') !== false) {
             http_response_code(409);
