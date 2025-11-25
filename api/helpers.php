@@ -260,11 +260,25 @@ function findFirmwareInoFile($firmware_id, $firmware) {
             return null;
         }
         
+        // Vérifier que le contenu n'est pas vide
+        if (strlen($decoded_content) === 0) {
+            error_log('[findFirmwareInoFile] ❌ ino_content est vide en DB pour firmware_id=' . $firmware_id);
+            return null;
+        }
+        
         if (file_put_contents($temp_file, $decoded_content) !== false) {
-            error_log('[findFirmwareInoFile] ✅ Fichier trouvé en DB (BYTEA), créé temporaire: ' . $temp_file . ' (taille: ' . strlen($decoded_content) . ' bytes)');
-            return $temp_file;
+            // Vérifier que le fichier a bien été créé et n'est pas vide
+            if (file_exists($temp_file) && filesize($temp_file) > 0) {
+                error_log('[findFirmwareInoFile] ✅ Fichier trouvé en DB (BYTEA), créé temporaire: ' . $temp_file . ' (taille: ' . strlen($decoded_content) . ' bytes)');
+                return $temp_file;
+            } else {
+                error_log('[findFirmwareInoFile] ⚠️ Fichier temporaire créé mais vide ou introuvable: ' . $temp_file);
+                @unlink($temp_file); // Nettoyer
+                return null;
+            }
         } else {
-            error_log('[findFirmwareInoFile] ⚠️ Impossible de créer fichier temporaire depuis DB');
+            error_log('[findFirmwareInoFile] ⚠️ Impossible de créer fichier temporaire depuis DB: ' . $temp_file);
+            error_log('[findFirmwareInoFile]    Erreur: ' . error_get_last()['message'] ?? 'Inconnue');
         }
     }
     

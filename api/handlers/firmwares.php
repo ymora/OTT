@@ -785,13 +785,82 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('log', 'info', '🔍 Recherche du fichier .ino...');
             sendSSE('log', 'info', '   file_path DB: ' . ($firmware['file_path'] ?? 'N/A'));
             sendSSE('log', 'info', '   ID firmware: ' . $firmware_id);
+            sendSSE('log', 'info', '   Stocké en DB (BYTEA): ' . (!empty($firmware['ino_content']) ? 'OUI' : 'NON'));
             flush();
             
+            try {
             $ino_path = findFirmwareInoFile($firmware_id, $firmware);
+            } catch(Exception $e) {
+                error_log('[handleCompileFirmware] Erreur dans findFirmwareInoFile: ' . $e->getMessage());
+                sendSSE('log', 'error', '❌ Erreur lors de la recherche du fichier: ' . $e->getMessage());
+                sendSSE('error', 'Erreur lors de la recherche du fichier .ino: ' . $e->getMessage());
+                flush();
+                
+                // Marquer le firmware comme erreur
+                try {
+                    $pdo->prepare("
+                        UPDATE firmware_versions 
+                        SET status = 'error', error_message = :error
+                        WHERE id = :id
+                    ")->execute([
+                        'error' => 'Erreur recherche fichier: ' . $e->getMessage(),
+                        'id' => $firmware_id
+                    ]);
+                } catch(PDOException $dbErr) {
+                    error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                }
+                return;
+            }
             
             if ($ino_path && file_exists($ino_path)) {
                 sendSSE('log', 'info', '✅ Fichier trouvé: ' . basename($ino_path));
                 sendSSE('log', 'info', '   Chemin: ' . $ino_path);
+                
+                // Vérifier que le fichier est lisible
+                if (!is_readable($ino_path)) {
+                    sendSSE('log', 'error', '❌ Fichier trouvé mais non lisible: ' . $ino_path);
+                    sendSSE('error', 'Fichier .ino non lisible. Vérifiez les permissions.');
+                    flush();
+                    
+                    // Marquer le firmware comme erreur
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'Fichier .ino non lisible'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                    }
+                    return;
+                }
+                
+                // Vérifier que le fichier n'est pas vide
+                $file_size = filesize($ino_path);
+                if ($file_size === 0 || $file_size === false) {
+                    sendSSE('log', 'error', '❌ Fichier trouvé mais vide (taille: ' . ($file_size === false ? 'inconnue' : '0') . ')');
+                    sendSSE('error', 'Fichier .ino vide. Ré-uploader le fichier .ino.');
+                    flush();
+                    
+                    // Marquer le firmware comme erreur
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'Fichier .ino vide'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                    }
+                    return;
+                }
+                
+                sendSSE('log', 'info', '   Taille: ' . $file_size . ' bytes');
+                sendSSE('log', 'info', '   Lisible: OUI');
+                flush();
+                
+                // Continuer avec la compilation
+                sendSSE('log', 'info', '✅ Fichier .ino validé, démarrage de la compilation...');
                 flush();
             } else {
                 // Message simple et clair (version simplifiée)
@@ -1618,8 +1687,8 @@ function handleDeleteFirmware($firmware_id) {
         if (!$firmware) {
             http_response_code(404);
             echo json_encode(['success' => false, 'error' => 'Firmware introuvable']);
-            return;
-        }
+                return;
+            }
         
         $firmware_status = $firmware['status'] ?? 'unknown';
         $version_dir = getVersionDir($firmware['version']);
@@ -1727,9 +1796,9 @@ function handleGetFirmwareIno($firmware_id) {
                 error_log('[handleGetFirmwareIno] ❌ ino_content n\'est pas une chaîne (type: ' . gettype($firmware['ino_content']) . ')');
                 http_response_code(500);
                 echo json_encode(['success' => false, 'error' => 'Format de données invalide']);
-                return;
-            }
-            
+            return;
+        }
+        
             error_log('[handleGetFirmwareIno] ✅ Fichier lu depuis DB (BYTEA), taille: ' . strlen($ino_content) . ' bytes');
         } else {
             // Fallback: Lire depuis le système de fichiers
@@ -1755,16 +1824,16 @@ function handleGetFirmwareIno($firmware_id) {
                 
                 http_response_code(404);
                 $error_msg = 'Fichier .ino introuvable: ' . ($firmware['file_path'] ?? 'N/A');
-            if (getenv('DEBUG_ERRORS') === 'true') {
+                if (getenv('DEBUG_ERRORS') === 'true') {
                     $error_msg .= ' (Version: ' . $firmware['version'] . ', ID: ' . $firmware_id . ')';
                 }
                 echo json_encode(['success' => false, 'error' => $error_msg]);
                 return;
-            }
-            
+        }
+        
             $ino_content = file_get_contents($ino_path);
             if ($ino_content === false) {
-                http_response_code(500);
+        http_response_code(500);
                 echo json_encode(['success' => false, 'error' => 'Impossible de lire le fichier .ino']);
                 return;
             }
@@ -1799,7 +1868,7 @@ function handleGetFirmwareIno($firmware_id) {
         
         echo $json_response;
         
-    } catch(PDOException $e) {
+        } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleGetFirmwareIno] PDOException: ' . $e->getMessage());
