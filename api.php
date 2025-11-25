@@ -16,20 +16,13 @@ require_once __DIR__ . '/api/handlers/notifications.php';
 ob_start();
 
 // Headers CORS (DOIT être en tout premier)
-// Origines par défaut (production)
+// Origines par défaut (production + développement local)
 $defaultAllowedOrigins = [
-    'https://ymora.github.io'
+    'https://ymora.github.io',
+    'http://localhost:3000',  // Développement local Next.js
+    'http://localhost:3003',  // Autres ports locaux
+    'http://localhost:5173'   // Vite dev server
 ];
-
-// En local, ajouter localhost
-$isDev = getenv('APP_ENV') !== 'production' && getenv('APP_ENV') !== 'prod';
-if ($isDev) {
-    $defaultAllowedOrigins = array_merge($defaultAllowedOrigins, [
-        'http://localhost:3000',
-        'http://localhost:3003',
-        'http://localhost:5173'
-    ]);
-}
 
 // Origines supplémentaires via variable d'environnement
 $extraOrigins = array_filter(array_map('trim', explode(',', getenv('CORS_ALLOWED_ORIGINS') ?: '')));
