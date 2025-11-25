@@ -586,6 +586,12 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
        } elseif(preg_match('#/audit$#', $path) && $method === 'DELETE') {
            handleClearAuditLogs();
 
+// Logs
+} elseif(preg_match('#/logs$#', $path) && $method === 'GET') {
+    handleGetLogs();
+} elseif(preg_match('#/logs$#', $path) && $method === 'POST') {
+    handlePostLog();
+
 // Alerts (V1 compatible)
 } elseif(preg_match('#/alerts$#', $path) && $method === 'GET') {
     handleGetAlerts();
