@@ -627,10 +627,6 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
        } elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
            handleInitFirmwareDb();
 
-       // Health check
-       } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
-           handleHealthCheck();
-
        } else {
     // Debug: logger le chemin et la méthode pour comprendre pourquoi l'endpoint n'est pas trouvé
     $debugInfo = [

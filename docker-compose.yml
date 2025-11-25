@@ -47,6 +47,7 @@ services:
       - ./api.php:/var/www/html/api.php
       - ./index.php:/var/www/html/index.php
       - ./bootstrap:/var/www/html/bootstrap
+      - ./api:/var/www/html/api
       - ./sql:/var/www/html/sql
       - ./hardware:/var/www/html/hardware
     networks:
