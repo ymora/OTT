@@ -42,10 +42,10 @@ function handleUpdateFirmwareIno($firmware_id) {
             return;
         }
         
-        // Récupérer le firmware existant
-        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        // Récupérer le firmware existant (inclure ino_content et bin_content pour stockage DB)
+        $stmt = $pdo->prepare("SELECT *, ino_content, bin_content FROM firmware_versions WHERE id = :id");
         $stmt->execute(['id' => $firmware_id]);
-        $firmware = $stmt->fetch();
+        $firmware = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$firmware) {
             http_response_code(404);
@@ -743,9 +743,10 @@ function handleCompileFirmware($firmware_id) {
         try {
             sendSSE('log', 'info', 'Connexion établie, vérification du firmware...');
             
-            $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+            // Inclure ino_content et bin_content pour stockage DB
+            $stmt = $pdo->prepare("SELECT *, ino_content, bin_content FROM firmware_versions WHERE id = :id");
             $stmt->execute(['id' => $firmware_id]);
-            $firmware = $stmt->fetch();
+            $firmware = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$firmware) {
                 sendSSE('error', 'Firmware not found');
@@ -1592,10 +1593,10 @@ function handleDeleteFirmware($firmware_id) {
     requirePermission('firmwares.manage');
     
     try {
-        // Récupérer les infos du firmware avant suppression
-        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        // Récupérer les infos du firmware avant suppression (inclure ino_content et bin_content)
+        $stmt = $pdo->prepare("SELECT *, ino_content, bin_content FROM firmware_versions WHERE id = :id");
         $stmt->execute(['id' => $firmware_id]);
-        $firmware = $stmt->fetch();
+        $firmware = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$firmware) {
             http_response_code(404);
@@ -1681,9 +1682,10 @@ function handleGetFirmwareIno($firmware_id) {
     requireAuth();
     
     try {
-        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
+        // Inclure ino_content et bin_content pour stockage DB
+        $stmt = $pdo->prepare("SELECT *, ino_content, bin_content FROM firmware_versions WHERE id = :id");
         $stmt->execute(['id' => $firmware_id]);
-        $firmware = $stmt->fetch();
+        $firmware = $stmt->fetch(PDO::FETCH_ASSOC);
         
         // Stocker firmware_id pour utilisation dans la recherche de fichier
         if (!$firmware) {
@@ -1720,7 +1722,7 @@ function handleGetFirmwareIno($firmware_id) {
                 
                 http_response_code(404);
                 $error_msg = 'Fichier .ino introuvable: ' . ($firmware['file_path'] ?? 'N/A');
-                if (getenv('DEBUG_ERRORS') === 'true') {
+            if (getenv('DEBUG_ERRORS') === 'true') {
                     $error_msg .= ' (Version: ' . $firmware['version'] . ', ID: ' . $firmware_id . ')';
                 }
                 echo json_encode(['success' => false, 'error' => $error_msg]);
