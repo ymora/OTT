@@ -312,71 +312,129 @@ function handleClearFirmwares() {
 }
 
 function handleInitFirmwareDb() {
-    global $pdo;
-    requireAdmin();
-    
-    try {
-        $results = [];
-        
-        // 1. Vérifier si la colonne status existe
-        $checkStmt = $pdo->query("
-            SELECT EXISTS (
-                SELECT FROM information_schema.columns
-                WHERE table_schema = 'public'
-                AND table_name = 'firmware_versions'
-                AND column_name = 'status'
-            )
-        ");
-        $columnExists = $checkStmt->fetchColumn();
-        $columnExists = ($columnExists === true || $columnExists === 't' || $columnExists === 1 || $columnExists === '1');
-        
-        if (!$columnExists) {
-            $pdo->exec("
-                ALTER TABLE firmware_versions 
-                ADD COLUMN status VARCHAR(50) DEFAULT 'compiled' 
-                CHECK (status IN ('pending_compilation', 'compiling', 'compiled', 'error'))
-            ");
-            $results['status_column'] = 'added';
-        } else {
-            $results['status_column'] = 'already_exists';
-        }
-        
-        // 2. Mettre à jour les firmwares existants sans status
-        $updateCount = $pdo->exec("UPDATE firmware_versions SET status = 'compiled' WHERE status IS NULL");
-        $results['updated_count'] = intval($updateCount);
-        
-        // 3. Compter les firmwares
-        $countStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
-        $countBefore = intval($countStmt->fetchColumn());
-        $results['firmwares_before'] = $countBefore;
-        
-        // 4. Supprimer tous les firmwares fictifs
-        if ($countBefore > 0) {
-            $deleteCount = $pdo->exec("DELETE FROM firmware_versions");
-            $results['deleted_count'] = intval($deleteCount);
-            
-            // Vérification finale
-            $finalCountStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
-            $finalCount = intval($finalCountStmt->fetchColumn());
-            $results['firmwares_after'] = $finalCount;
-        } else {
-            $results['deleted_count'] = 0;
-            $results['firmwares_after'] = 0;
-        }
-        
-        auditLog('firmware_db.initialized', 'firmware', null, null, $results);
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Base de données firmware initialisée avec succès',
-            'results' => $results
-        ]);
-        
-    } catch(PDOException $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-    }
-}
+           global $pdo;
+           requireAdmin();
+           
+           try {
+               $results = [];
+               
+               // 1. Vérifier si la colonne status existe
+               $checkStmt = $pdo->query("
+                   SELECT EXISTS (
+                       SELECT FROM information_schema.columns
+                       WHERE table_schema = 'public'
+                       AND table_name = 'firmware_versions'
+                       AND column_name = 'status'
+                   )
+               ");
+               $columnExists = $checkStmt->fetchColumn();
+               $columnExists = ($columnExists === true || $columnExists === 't' || $columnExists === 1 || $columnExists === '1');
+               
+               if (!$columnExists) {
+                   $pdo->exec("
+                       ALTER TABLE firmware_versions 
+                       ADD COLUMN status VARCHAR(50) DEFAULT 'compiled' 
+                       CHECK (status IN ('pending_compilation', 'compiling', 'compiled', 'error'))
+                   ");
+                   $results['status_column'] = 'added';
+               } else {
+                   $results['status_column'] = 'already_exists';
+               }
+               
+               // 2. Mettre à jour les firmwares existants sans status
+               $updateCount = $pdo->exec("UPDATE firmware_versions SET status = 'compiled' WHERE status IS NULL");
+               $results['updated_count'] = intval($updateCount);
+               
+               // 3. Compter les firmwares
+               $countStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
+               $countBefore = intval($countStmt->fetchColumn());
+               $results['firmwares_before'] = $countBefore;
+               
+               // 4. Supprimer tous les firmwares fictifs
+               if ($countBefore > 0) {
+                   $deleteCount = $pdo->exec("DELETE FROM firmware_versions");
+                   $results['deleted_count'] = intval($deleteCount);
+                   
+                   // Vérification finale
+                   $finalCountStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
+                   $finalCount = intval($finalCountStmt->fetchColumn());
+                   $results['firmwares_after'] = $finalCount;
+               } else {
+                   $results['deleted_count'] = 0;
+                   $results['firmwares_after'] = 0;
+               }
+               
+               auditLog('firmware_db.initialized', 'firmware', null, null, $results);
+               
+               echo json_encode([
+                   'success' => true,
+                   'message' => 'Base de données firmware initialisée avec succès',
+                   'results' => $results
+               ]);
+               
+           } catch(PDOException $e) {
+               http_response_code(500);
+               echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+           }
+       }
+
+       function handleHealthCheck() {
+           global $pdo;
+           
+           $health = [
+               'success' => true,
+               'service' => 'OTT API',
+               'version' => '3.3.0',
+               'status' => 'online',
+               'php_version' => PHP_VERSION,
+               'timestamp' => date('c'),
+               'database' => 'unknown',
+               'modules' => []
+           ];
+           
+           // Test connexion BDD
+           try {
+               $dbConfig = ott_database_config();
+               if ($dbConfig === null) {
+                   $health['database'] = 'not_configured';
+               } else {
+                   $health['database'] = 'configured';
+                   // Test connexion
+                   $testPdo = new PDO(
+                       $dbConfig['dsn'],
+                       $dbConfig['user'],
+                       $dbConfig['pass'],
+                       ott_pdo_options($dbConfig['type'])
+                   );
+                   $testPdo->query('SELECT 1');
+                   $health['database'] = 'connected';
+               }
+           } catch(Throwable $e) {
+               $health['database'] = 'error: ' . $e->getMessage();
+               $health['status'] = 'degraded';
+           }
+           
+           // Vérifier modules
+           $modules = [
+               'api/helpers.php',
+               'api/handlers/auth.php',
+               'api/handlers/devices.php',
+               'api/handlers/firmwares.php',
+               'api/handlers/notifications.php'
+           ];
+           
+           foreach ($modules as $module) {
+               $health['modules'][$module] = file_exists(__DIR__ . '/' . $module) ? 'loaded' : 'missing';
+           }
+           
+           // Si modules manquants, status = degraded
+           if (in_array('missing', $health['modules'], true)) {
+               $health['status'] = 'degraded';
+           }
+           
+           http_response_code($health['status'] === 'online' ? 200 : 503);
+           echo json_encode($health, JSON_PRETTY_PRINT);
+       }
 
 // ============================================================================
 // ROUTING
@@ -525,11 +583,15 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
 } elseif(preg_match('#/admin/reset-demo$#', $path) && $method === 'POST') {
     handleResetDemo();
 
-// Audit
-} elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
-    handleGetAuditLogs();
-} elseif(preg_match('#/audit$#', $path) && $method === 'DELETE') {
-    handleClearAuditLogs();
+       // Health check
+       } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
+           handleHealthCheck();
+
+       // Audit
+       } elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
+           handleGetAuditLogs();
+       } elseif(preg_match('#/audit$#', $path) && $method === 'DELETE') {
+           handleClearAuditLogs();
 
 // Alerts (V1 compatible)
 } elseif(preg_match('#/alerts$#', $path) && $method === 'GET') {
@@ -562,10 +624,14 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleMigrateFirmwareStatus();
 } elseif(preg_match('#/admin/clear-firmwares$#', $path) && $method === 'POST') {
     handleClearFirmwares();
-} elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
-    handleInitFirmwareDb();
+       } elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
+           handleInitFirmwareDb();
 
-} else {
+       // Health check
+       } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
+           handleHealthCheck();
+
+       } else {
     // Debug: logger le chemin et la méthode pour comprendre pourquoi l'endpoint n'est pas trouvé
     $debugInfo = [
         'path' => $path,

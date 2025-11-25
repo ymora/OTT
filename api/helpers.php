@@ -175,7 +175,7 @@ function findFirmwareInoFile($firmware_id, $firmware) {
     }
     
     // Chemin absolu standard (le seul qui devrait être nécessaire)
-    $absolute_path = __DIR__ . '/' . $firmware['file_path'];
+    $absolute_path = __DIR__ . '/../' . $firmware['file_path'];
     
     if (file_exists($absolute_path) && is_file($absolute_path) && preg_match('/\.ino$/', $absolute_path)) {
         error_log('[findFirmwareInoFile] ✅ Fichier trouvé: ' . $absolute_path);

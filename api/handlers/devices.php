@@ -266,12 +266,7 @@ function findDeviceByIdentifier($identifier, $forUpdate = false) {
     return false;
 }
 
-/**
- * @deprecated Utiliser findDeviceByIdentifier() à la place
- */
-function getDeviceByIccid($iccid) {
-    return findDeviceByIdentifier($iccid, false);
-}
+// Fonction deprecated supprimée - utiliser findDeviceByIdentifier() directement
 
 function normalizePriority($priority) {
     $allowed = ['low', 'normal', 'high', 'critical'];
@@ -385,7 +380,7 @@ function fetchPendingCommandsForDevice($device_id, $limit = 5) {
                 $firmware_url = $config['firmware_url'] ?: ($base_url . '/' . $firmware['file_path']);
                 
                 // Calculer le MD5 depuis le fichier (le firmware attend MD5, pas SHA256)
-                $firmware_full_path = __DIR__ . '/' . $firmware['file_path'];
+                $firmware_full_path = __DIR__ . '/../../' . $firmware['file_path'];
                 $md5 = file_exists($firmware_full_path) ? hash_file('md5', $firmware_full_path) : '';
                 
                 // Créer le payload OTA_REQUEST avec url, md5, et version
@@ -433,7 +428,7 @@ function fetchPendingCommandsForDevice($device_id, $limit = 5) {
 }
 
 function handleGetPendingCommands($iccid) {
-    $device = getDeviceByIccid($iccid);
+    $device = findDeviceByIdentifier($iccid, false);
     if (!$device) {
         http_response_code(404);
         echo json_encode(['success' => false, 'error' => 'Device not found']);
@@ -449,7 +444,7 @@ function handleCreateDeviceCommand($iccid) {
     global $pdo;
     $user = requireAdmin();
     
-    $device = getDeviceByIccid($iccid);
+    $device = findDeviceByIdentifier($iccid, false);
     if (!$device) {
         http_response_code(404);
         echo json_encode(['success' => false, 'error' => 'Device not found']);
@@ -541,7 +536,7 @@ function handleGetDeviceCommands($iccid) {
     global $pdo;
     requireAdmin();
     
-    $device = getDeviceByIccid($iccid);
+    $device = findDeviceByIdentifier($iccid, false);
     if (!$device) {
         http_response_code(404);
         echo json_encode(['success' => false, 'error' => 'Device not found']);
@@ -1680,37 +1675,37 @@ function handleGetFirmwares() {
                 // Si compilé, chercher le .bin
                 $file_type = 'bin';
                 $bin_filename = 'fw_ott_v' . $firmware_version . '.bin';
-                $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+                $bin_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
                 $bin_path = $bin_dir . $bin_filename;
                 
                 $test_paths = [
                     $bin_path,
                     'hardware/firmware/' . $version_dir . '/' . $bin_filename,
-                    __DIR__ . '/hardware/firmware/' . $version_dir . '/' . $bin_filename,
+                    __DIR__ . '/../../hardware/firmware/' . $version_dir . '/' . $bin_filename,
                 ];
                 
                 // Aussi vérifier le file_path en DB s'il pointe vers un .bin
                 if (!empty($firmware['file_path']) && preg_match('/\.bin$/', $firmware['file_path'])) {
                     $test_paths[] = $firmware['file_path'];
-                    $test_paths[] = __DIR__ . '/' . $firmware['file_path'];
+                    $test_paths[] = __DIR__ . '/../../' . $firmware['file_path'];
                 }
             } else {
                 // Si pas compilé, chercher le .ino avec l'ID
                 $file_type = 'ino';
                 $ino_filename = 'fw_ott_v' . $firmware_version . '_id' . $firmware_id . '.ino';
-                $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+                $ino_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
                 $ino_path = $ino_dir . $ino_filename;
                 
                 $test_paths = [
                     $ino_path,
                     'hardware/firmware/' . $version_dir . '/' . $ino_filename,
-                    __DIR__ . '/hardware/firmware/' . $version_dir . '/' . $ino_filename,
+                    __DIR__ . '/../../hardware/firmware/' . $version_dir . '/' . $ino_filename,
                 ];
                 
                 // Aussi vérifier le file_path en DB s'il pointe vers un .ino
                 if (!empty($firmware['file_path']) && preg_match('/\.ino$/', $firmware['file_path'])) {
                     $test_paths[] = $firmware['file_path'];
-                    $test_paths[] = __DIR__ . '/' . $firmware['file_path'];
+                    $test_paths[] = __DIR__ . '/../../' . $firmware['file_path'];
                 }
             }
             
@@ -1836,7 +1831,7 @@ function handleDeleteFirmware($firmware_id) {
             // Si compilé, supprimer le .bin mais GARDER le .ino et l'entrée DB
             // Cela permet de recompiler plus tard
             $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
-            $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+            $bin_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
             $bin_path = $bin_dir . $bin_filename;
             
             if (file_exists($bin_path)) {
@@ -1863,7 +1858,7 @@ function handleDeleteFirmware($firmware_id) {
             ]);
         } else {
             // Si pas compilé, supprimer le .ino ET l'entrée DB (suppression complète)
-        $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+        $ino_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
         if (is_dir($ino_dir)) {
                 // Supprimer UNIQUEMENT le fichier avec l'ID (format obligatoire)
                 $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
@@ -1922,7 +1917,7 @@ function handleGetFirmwareIno($firmware_id) {
         
         if (!$ino_path || !file_exists($ino_path)) {
             // Diagnostic simple
-            $absolute_path = !empty($firmware['file_path']) ? __DIR__ . '/' . $firmware['file_path'] : null;
+            $absolute_path = !empty($firmware['file_path']) ? __DIR__ . '/../../' . $firmware['file_path'] : null;
             $parent_dir = $absolute_path ? dirname($absolute_path) : null;
             $dir_exists = $parent_dir && is_dir($parent_dir);
             

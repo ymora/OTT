@@ -64,7 +64,7 @@
         if (!empty($firmware['file_path']) && preg_match('/\.ino$/', $firmware['file_path'])) {
             $test_path = $firmware['file_path'];
             if (!file_exists($test_path)) {
-                $test_path = __DIR__ . '/' . $firmware['file_path'];
+                $test_path = __DIR__ . '/../../' . $firmware['file_path'];
             }
             if (file_exists($test_path) && preg_match('/\.ino$/', $test_path)) {
                 $ino_path = $test_path;
@@ -74,7 +74,7 @@
         // Si pas trouvé, chercher dans le dossier de l'ancienne version avec l'ID
         if (!$ino_path) {
             $old_version_dir = getVersionDir($firmware['version']);
-            $old_ino_dir = __DIR__ . '/hardware/firmware/' . $old_version_dir . '/';
+            $old_ino_dir = __DIR__ . '/../../hardware/firmware/' . $old_version_dir . '/';
             if (is_dir($old_ino_dir)) {
                 // Chercher UNIQUEMENT avec l'ID (format obligatoire)
                 $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
@@ -88,7 +88,7 @@
         
         // Si la version a changé ou si pas de fichier trouvé, créer/utiliser le dossier de la nouvelle version
         $version_dir = getVersionDir($target_version);
-        $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+        $ino_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
         
         if (!is_dir($ino_dir)) {
             mkdir($ino_dir, 0755, true);
@@ -123,7 +123,7 @@
         $checksum = hash_file('sha256', $ino_path);
         
         // Calculer le chemin relatif
-        $relative_path = str_replace(__DIR__ . '/', '', $ino_path);
+        $relative_path = str_replace(__DIR__ . '/../../', '', $ino_path);
         // Normaliser les séparateurs pour la base de données
         $relative_path = str_replace('\\', '/', $relative_path);
         
@@ -228,11 +228,11 @@ function handleUploadFirmware() {
     }
     
     $version_dir = getVersionDir($version);
-    $upload_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+    $upload_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
     if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
     
     $file_path = 'hardware/firmware/' . $version_dir . '/fw_ott_v' . $version . '.bin';
-    $full_path = __DIR__ . '/' . $file_path;
+    $full_path = __DIR__ . '/../../' . $file_path;
     
     if (!move_uploaded_file($tmp_path, $full_path)) {
         http_response_code(500);
@@ -297,7 +297,7 @@ function handleDownloadFirmware($firmware_id) {
             return;
         }
         
-        $file_path = __DIR__ . '/' . $firmware['file_path'];
+        $file_path = __DIR__ . '/../../' . $firmware['file_path'];
         
         if (!file_exists($file_path)) {
             http_response_code(404);
@@ -477,7 +477,7 @@ function handleUploadFirmwareIno() {
     
     // Créer le dossier pour les fichiers .ino uploadés (par version) - APRÈS extraction de la version
     $version_dir = getVersionDir($version);
-    $ino_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+    $ino_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
     if (!is_dir($ino_dir)) {
         if (!mkdir($ino_dir, 0755, true)) {
             http_response_code(500);
@@ -738,7 +738,7 @@ function handleCompileFirmware($firmware_id) {
                 flush();
             } else {
                 // Message simple et clair (version simplifiée)
-                $absolute_path = !empty($firmware['file_path']) ? __DIR__ . '/' . $firmware['file_path'] : null;
+                $absolute_path = !empty($firmware['file_path']) ? __DIR__ . '/../../' . $firmware['file_path'] : null;
                 $parent_dir = $absolute_path ? dirname($absolute_path) : null;
                 $dir_exists = $parent_dir && is_dir($parent_dir);
                 
@@ -790,8 +790,8 @@ function handleCompileFirmware($firmware_id) {
             $arduinoCli = null;
             
             // 1. Chercher dans bin/ du projet (priorité absolue)
-            $localArduinoCli = __DIR__ . '/bin/arduino-cli' . ($isWindows ? '.exe' : '');
-            $localArduinoCliAlt = __DIR__ . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'arduino-cli' . ($isWindows ? '.exe' : '');
+            $localArduinoCli = __DIR__ . '/../../bin/arduino-cli' . ($isWindows ? '.exe' : '');
+            $localArduinoCliAlt = __DIR__ . '/../../' . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'arduino-cli' . ($isWindows ? '.exe' : '');
             
             // Essayer les deux formats de chemin (normalisé et avec séparateurs)
             foreach ([$localArduinoCli, $localArduinoCliAlt] as $testPath) {
@@ -868,7 +868,7 @@ function handleCompileFirmware($firmware_id) {
                 // Arduino-cli cherche les librairies dans plusieurs emplacements :
                 // 1. Le dossier 'libraries' à côté du sketch (pour cette compilation)
                 // 2. Le dossier 'libraries' dans ARDUINO_DIRECTORIES_USER (persistant)
-                $hardware_lib_dir = __DIR__ . '/hardware/lib';
+                $hardware_lib_dir = __DIR__ . '/../../hardware/lib';
                 if (is_dir($hardware_lib_dir)) {
                     $lib_dirs = glob($hardware_lib_dir . '/TinyGSM*', GLOB_ONLYDIR);
                     if (!empty($lib_dirs)) {
@@ -878,8 +878,8 @@ function handleCompileFirmware($firmware_id) {
                             mkdir($libraries_dir, 0755, true);
                         }
                         
-                        // 2. Copier aussi dans arduino-data/libraries (persistant, réutilisable)
-                        $arduinoDataLibrariesDir = __DIR__ . '/arduino-data/libraries';
+                        // 2. Copier aussi dans hardware/arduino-data/libraries (persistant, réutilisable)
+                        $arduinoDataLibrariesDir = __DIR__ . '/../../hardware/arduino-data/libraries';
                         if (!is_dir($arduinoDataLibrariesDir)) {
                             mkdir($arduinoDataLibrariesDir, 0755, true);
                         }
@@ -920,13 +920,10 @@ function handleCompileFirmware($firmware_id) {
                 
                 // Utiliser le répertoire hardware/arduino-data du projet (versionné avec GitHub LFS)
                 // Si le core est déjà dans le projet, on l'utilise directement (pas de téléchargement)
-                $arduinoDataDir = __DIR__ . '/hardware/arduino-data';
+                $arduinoDataDir = __DIR__ . '/../../hardware/arduino-data';
                 if (!is_dir($arduinoDataDir)) {
-                    // Fallback: créer arduino-data/ à la racine si hardware/arduino-data/ n'existe pas
-                    $arduinoDataDir = __DIR__ . '/arduino-data';
-                    if (!is_dir($arduinoDataDir)) {
-                        mkdir($arduinoDataDir, 0755, true);
-                    }
+                    // Créer le répertoire si nécessaire
+                    mkdir($arduinoDataDir, 0755, true);
                 }
                 
                 // Définir HOME et ARDUINO_DIRECTORIES_USER pour arduino-cli
@@ -1267,7 +1264,7 @@ function handleCompileFirmware($firmware_id) {
                 
                 $compiled_bin = $bin_files[0];
                 $version_dir = getVersionDir($firmware['version']);
-                $bin_dir = __DIR__ . '/hardware/firmware/' . $version_dir . '/';
+                $bin_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
                 if (!is_dir($bin_dir)) mkdir($bin_dir, 0755, true);
                 $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
                 $bin_path = $bin_dir . $bin_filename;
