@@ -245,15 +245,23 @@ function findFirmwareInoFile($firmware_id, $firmware) {
         $temp_dir = sys_get_temp_dir();
         $temp_file = $temp_dir . '/ott_firmware_' . $firmware_id . '_' . time() . '.ino';
         
-        // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées)
-        // Si la chaîne semble échappée (format hexadécimal \x...), décoder avec pg_unescape_bytea
+        // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées automatiquement)
+        // Pas besoin de pg_unescape_bytea() avec PDO
         $decoded_content = $firmware['ino_content'];
-        if (is_string($decoded_content) && function_exists('pg_unescape_bytea') && substr($decoded_content, 0, 2) === '\\x') {
-            $decoded_content = pg_unescape_bytea($decoded_content);
+        
+        // Convertir en chaîne si c'est une ressource (stream)
+        if (is_resource($decoded_content)) {
+            $decoded_content = stream_get_contents($decoded_content);
+        }
+        
+        // Vérifier que le contenu est valide
+        if (!is_string($decoded_content)) {
+            error_log('[findFirmwareInoFile] ❌ ino_content n\'est pas une chaîne (type: ' . gettype($firmware['ino_content']) . ')');
+            return null;
         }
         
         if (file_put_contents($temp_file, $decoded_content) !== false) {
-            error_log('[findFirmwareInoFile] ✅ Fichier trouvé en DB (BYTEA), créé temporaire: ' . $temp_file);
+            error_log('[findFirmwareInoFile] ✅ Fichier trouvé en DB (BYTEA), créé temporaire: ' . $temp_file . ' (taille: ' . strlen($decoded_content) . ' bytes)');
             return $temp_file;
         } else {
             error_log('[findFirmwareInoFile] ⚠️ Impossible de créer fichier temporaire depuis DB');

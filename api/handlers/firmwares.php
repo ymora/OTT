@@ -312,12 +312,23 @@ function handleDownloadFirmware($firmware_id) {
         
         // NOUVEAU: Priorité 1 - Lire depuis la DB (BYTEA)
         if (!empty($firmware['bin_content'])) {
-            // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées)
-            // Si la chaîne semble échappée (format hexadécimal \x...), décoder avec pg_unescape_bytea
+            // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées automatiquement)
+            // Pas besoin de pg_unescape_bytea() avec PDO
             $bin_content = $firmware['bin_content'];
-            if (is_string($bin_content) && function_exists('pg_unescape_bytea') && substr($bin_content, 0, 2) === '\\x') {
-                $bin_content = pg_unescape_bytea($bin_content);
+            
+            // Convertir en chaîne si c'est une ressource (stream)
+            if (is_resource($bin_content)) {
+                $bin_content = stream_get_contents($bin_content);
             }
+            
+            // Vérifier que le contenu est valide
+            if (!is_string($bin_content)) {
+                error_log('[handleDownloadFirmware] ❌ bin_content n\'est pas une chaîne (type: ' . gettype($firmware['bin_content']) . ')');
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Format de données invalide']);
+                return;
+            }
+            
             $file_size = strlen($bin_content);
             error_log('[handleDownloadFirmware] ✅ Fichier lu depuis DB (BYTEA), taille: ' . $file_size);
             
@@ -1702,13 +1713,24 @@ function handleGetFirmwareIno($firmware_id) {
         
         // NOUVEAU: Priorité 1 - Lire depuis la DB (BYTEA)
         if (!empty($firmware['ino_content'])) {
-            // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées)
-            // Si la chaîne semble échappée (format hexadécimal \x...), décoder avec pg_unescape_bytea
+            // PDO retourne les BYTEA comme chaînes binaires brutes (déjà décodées automatiquement)
+            // Pas besoin de pg_unescape_bytea() avec PDO
             $ino_content = $firmware['ino_content'];
-            if (is_string($ino_content) && function_exists('pg_unescape_bytea') && substr($ino_content, 0, 2) === '\\x') {
-                $ino_content = pg_unescape_bytea($ino_content);
+            
+            // Convertir en chaîne si c'est une ressource (stream)
+            if (is_resource($ino_content)) {
+                $ino_content = stream_get_contents($ino_content);
             }
-            error_log('[handleGetFirmwareIno] ✅ Fichier lu depuis DB (BYTEA)');
+            
+            // Vérifier que le contenu est valide
+            if (!is_string($ino_content)) {
+                error_log('[handleGetFirmwareIno] ❌ ino_content n\'est pas une chaîne (type: ' . gettype($firmware['ino_content']) . ')');
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Format de données invalide']);
+                return;
+            }
+            
+            error_log('[handleGetFirmwareIno] ✅ Fichier lu depuis DB (BYTEA), taille: ' . strlen($ino_content) . ' bytes');
         } else {
             // Fallback: Lire depuis le système de fichiers
             $ino_path = findFirmwareInoFile($firmware_id, $firmware);
@@ -1749,18 +1771,43 @@ function handleGetFirmwareIno($firmware_id) {
             error_log('[handleGetFirmwareIno] ✅ Fichier lu depuis système de fichiers');
         }
         
-        echo json_encode([
+        // Vérifier que le contenu est valide avant l'encodage JSON
+        if (!isset($ino_content) || !is_string($ino_content)) {
+            error_log('[handleGetFirmwareIno] ❌ Contenu invalide (type: ' . (isset($ino_content) ? gettype($ino_content) : 'non défini') . ')');
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Contenu du fichier invalide']);
+            return;
+        }
+        
+        // Encoder la réponse JSON
+        $response = [
             'success' => true,
             'content' => $ino_content,
             'version' => $firmware['version'],
             'file_path' => $firmware['file_path'],
             'status' => $firmware['status']
-        ]);
+        ];
+        
+        $json_response = json_encode($response);
+        if ($json_response === false) {
+            $json_error = json_last_error_msg();
+            error_log('[handleGetFirmwareIno] ❌ Erreur encodage JSON: ' . $json_error);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Erreur lors de l\'encodage de la réponse: ' . $json_error]);
+            return;
+        }
+        
+        echo $json_response;
         
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        error_log('[handleGetFirmwareIno] Error: ' . $e->getMessage());
+        error_log('[handleGetFirmwareIno] PDOException: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    } catch(Exception $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur serveur';
+        error_log('[handleGetFirmwareIno] Exception: ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
