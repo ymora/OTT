@@ -304,110 +304,6 @@ function handleClearFirmwares() {
     }
 }
 
-       function handleMigrateFirmwareBlob() {
-           global $pdo;
-           requireAdmin();
-           
-           try {
-               $results = [];
-               
-               // Fonction helper pour vérifier si une colonne existe
-               $columnExists = function($columnName) use ($pdo) {
-                   $stmt = $pdo->query("
-                       SELECT EXISTS (
-                           SELECT 1 FROM information_schema.columns 
-                           WHERE table_schema = 'public' 
-                           AND table_name = 'firmware_versions' 
-                           AND column_name = '$columnName'
-                       )
-                   ");
-                   $exists = $stmt->fetchColumn();
-                   return ($exists === true || $exists === 't' || $exists === 1 || $exists === '1');
-               };
-               
-               // 1. Ajouter la colonne ino_content
-               if (!$columnExists('ino_content')) {
-                   try {
-                       $pdo->exec("ALTER TABLE firmware_versions ADD COLUMN ino_content BYTEA");
-                       $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN ino_content', 'status' => 'success'];
-                   } catch (PDOException $e) {
-                       throw $e;
-                   }
-               } else {
-                   $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN ino_content', 'status' => 'already_exists'];
-               }
-               
-               // 2. Ajouter la colonne bin_content
-               if (!$columnExists('bin_content')) {
-                   try {
-                       $pdo->exec("ALTER TABLE firmware_versions ADD COLUMN bin_content BYTEA");
-                       $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN bin_content', 'status' => 'success'];
-                   } catch (PDOException $e) {
-                       throw $e;
-                   }
-               } else {
-                   $results[] = ['command' => 'ALTER TABLE ... ADD COLUMN bin_content', 'status' => 'already_exists'];
-               }
-               
-               // 3. Créer les index (optionnel, ignorer si existe déjà)
-               try {
-                   $pdo->exec("CREATE INDEX IF NOT EXISTS idx_firmware_versions_version ON firmware_versions(version)");
-                   $results[] = ['command' => 'CREATE INDEX idx_firmware_versions_version', 'status' => 'success'];
-               } catch (PDOException $e) {
-                   $results[] = ['command' => 'CREATE INDEX idx_firmware_versions_version', 'status' => 'already_exists'];
-               }
-               
-               try {
-                   $pdo->exec("CREATE INDEX IF NOT EXISTS idx_firmware_versions_status ON firmware_versions(status)");
-                   $results[] = ['command' => 'CREATE INDEX idx_firmware_versions_status', 'status' => 'success'];
-               } catch (PDOException $e) {
-                   $results[] = ['command' => 'CREATE INDEX idx_firmware_versions_status', 'status' => 'already_exists'];
-               }
-               
-               // 4. Ajouter les commentaires (optionnel, ignorer si erreur)
-               try {
-                   $pdo->exec("COMMENT ON COLUMN firmware_versions.ino_content IS 'Contenu du fichier .ino stocké en BYTEA (alternative au système de fichiers)'");
-                   $results[] = ['command' => 'COMMENT ON COLUMN ino_content', 'status' => 'success'];
-               } catch (PDOException $e) {
-                   $results[] = ['command' => 'COMMENT ON COLUMN ino_content', 'status' => 'skipped'];
-               }
-               
-               try {
-                   $pdo->exec("COMMENT ON COLUMN firmware_versions.bin_content IS 'Contenu du fichier .bin compilé stocké en BYTEA (alternative au système de fichiers)'");
-                   $results[] = ['command' => 'COMMENT ON COLUMN bin_content', 'status' => 'success'];
-               } catch (PDOException $e) {
-                   $results[] = ['command' => 'COMMENT ON COLUMN bin_content', 'status' => 'skipped'];
-               }
-               
-               // 5. Vérifier que les colonnes existent
-               $checkStmt = $pdo->query("
-                   SELECT column_name, data_type 
-                   FROM information_schema.columns 
-                   WHERE table_name = 'firmware_versions' 
-                   AND column_name IN ('ino_content', 'bin_content')
-                   ORDER BY column_name
-               ");
-               $columns = $checkStmt->fetchAll(PDO::FETCH_ASSOC);
-               
-               echo json_encode([
-                   'success' => true,
-                   'message' => 'Migration firmware_blob appliquée avec succès',
-                   'results' => $results,
-                   'columns' => $columns
-               ]);
-               
-           } catch(PDOException $e) {
-               http_response_code(500);
-               $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur base de données';
-               error_log('[handleMigrateFirmwareBlob] Erreur: ' . $e->getMessage());
-               echo json_encode(['success' => false, 'error' => $errorMsg, 'details' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : null]);
-           } catch(Exception $e) {
-               http_response_code(500);
-               $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur lors de la migration';
-               error_log('[handleMigrateFirmwareBlob] Exception: ' . $e->getMessage());
-               echo json_encode(['success' => false, 'error' => $errorMsg]);
-           }
-       }
 
        function handleInitFirmwareDb() {
            global $pdo;
@@ -726,9 +622,6 @@ if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleRunMigration();
 } elseif(preg_match('#/migrate/firmware-status$#', $path) && $method === 'POST') {
     handleMigrateFirmwareStatus();
-} elseif(preg_match('#/migrate/firmware-blob$#', $path) && $method === 'POST') {
-    // Migration firmware BYTEA (appliquée - gardé pour migrations futures)
-    handleMigrateFirmwareBlob();
 } elseif(preg_match('#/admin/clear-firmwares$#', $path) && $method === 'POST') {
     handleClearFirmwares();
        } elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
