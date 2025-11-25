@@ -731,9 +731,18 @@ function handleUploadFirmwareIno() {
             }
         }
         
+        // S'assurer que le Content-Type est JSON
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' 
             ? 'Erreur base de données: ' . $e->getMessage() 
             : 'Erreur lors de l\'enregistrement en base de données';
+        
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        return;
         
         if ($e->getCode() == 23000 || strpos($e->getMessage(), '23505') !== false || strpos($e->getMessage(), 'duplicate key') !== false) {
             http_response_code(409);
