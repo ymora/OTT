@@ -211,6 +211,16 @@ function requireAdmin() {
 // ============================================================================
 
 /**
+ * Obtient le répertoire racine du projet
+ * @return string Chemin absolu vers la racine du projet
+ */
+function getProjectRoot() {
+    // __DIR__ dans api/helpers.php est api/
+    // On remonte d'un niveau pour obtenir la racine du projet
+    return dirname(__DIR__);
+}
+
+/**
  * Obtient le répertoire de version pour un firmware (ex: "3.0-rebuild" -> "v3.0")
  */
 function getVersionDir($version) {
