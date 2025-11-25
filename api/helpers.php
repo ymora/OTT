@@ -4,6 +4,69 @@
  * Extracted from api.php during refactoring
  */
 
+// ============================================================================
+// HELPERS - IP & Geolocation
+// ============================================================================
+
+/**
+ * Fonction helper pour obtenir la position depuis l'IP du client (pour dispositifs USB)
+ */
+function getLocationFromIp($ip) {
+    // Ignorer les IPs locales/privées
+    if (empty($ip) || $ip === '127.0.0.1' || $ip === '::1' || 
+        strpos($ip, '192.168.') === 0 || strpos($ip, '10.') === 0 || 
+        strpos($ip, '172.') === 0 || strpos($ip, 'localhost') !== false) {
+        return null;
+    }
+    
+    try {
+        // Utiliser ip-api.com (gratuit, sans clé API, limite 45 req/min)
+        $url = "http://ip-api.com/json/$ip?fields=status,lat,lon";
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => 2,
+                'method' => 'GET'
+            ]
+        ]);
+        $response = @file_get_contents($url, false, $context);
+        
+        if ($response) {
+            $data = json_decode($response, true);
+            if ($data && $data['status'] === 'success' && isset($data['lat']) && isset($data['lon'])) {
+                return [
+                    'latitude' => floatval($data['lat']),
+                    'longitude' => floatval($data['lon'])
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        // Ignorer les erreurs de géolocalisation IP (non critique)
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[getLocationFromIp] Erreur: ' . $e->getMessage());
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Fonction helper pour obtenir l'IP réelle du client
+ */
+function getClientIp() {
+    $ipKeys = ['HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
+    foreach ($ipKeys as $key) {
+        if (!empty($_SERVER[$key])) {
+            $ip = $_SERVER[$key];
+            // Si X-Forwarded-For contient plusieurs IPs, prendre la première
+            if (strpos($ip, ',') !== false) {
+                $ip = trim(explode(',', $ip)[0]);
+            }
+            return $ip;
+        }
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? null;
+}
+
 // JWT FUNCTIONS
 // ============================================================================
 

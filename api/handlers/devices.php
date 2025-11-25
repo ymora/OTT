@@ -6,90 +6,191 @@
 
 function handleGetDevices() {
     global $pdo;
-    $user = requireAuth();
     
-    $stmt = $pdo->query("
-        SELECT d.*, 
-               dc.firmware_version as config_firmware_version,
-               dc.measurement_interval,
-               dc.alert_thresholds,
-               dc.ota_enabled,
-               p.id as patient_id,
-               p.first_name as patient_first_name,
-               p.last_name as patient_last_name
-        FROM devices d
-        LEFT JOIN device_configurations dc ON d.id = dc.device_id
-        LEFT JOIN device_patients dp ON d.id = dp.device_id AND dp.is_active = TRUE
-        LEFT JOIN patients p ON dp.patient_id = p.id
-        ORDER BY d.last_seen DESC
-    ");
-    $devices = $stmt->fetchAll();
-    echo json_encode(['success' => true, 'devices' => $devices]);
+    // Permettre accès sans auth pour dispositifs IoT (rétrocompatibilité)
+    // OU avec auth JWT pour dashboard
+    $user = getCurrentUser();
+    
+    try {
+        // Requête simplifiée et robuste - éviter duplication firmware_version
+        $stmt = $pdo->prepare("
+            SELECT 
+                d.id,
+                d.sim_iccid,
+                d.device_serial,
+                d.device_name,
+                d.status,
+                d.patient_id,
+                d.installation_date,
+                d.first_use_date,
+                d.last_seen,
+                d.last_battery,
+                d.latitude,
+                d.longitude,
+                d.created_at,
+                d.updated_at,
+                p.first_name, 
+                p.last_name,
+                COALESCE(dc.firmware_version, d.firmware_version) as firmware_version,
+                COALESCE(dc.ota_pending, FALSE) as ota_pending
+            FROM devices d
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            LEFT JOIN device_configurations dc ON d.id = dc.device_id
+            WHERE d.deleted_at IS NULL
+            ORDER BY d.last_seen DESC NULLS LAST, d.created_at DESC
+        ");
+        $stmt->execute();
+        $devices = $stmt->fetchAll();
+        echo json_encode(['success' => true, 'devices' => $devices]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleGetDevices] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
 }
 
 function handleCreateDevice() {
     global $pdo;
-    $user = requireAuth();
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input || !isset($input['sim_iccid'])) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'sim_iccid required']);
+    requirePermission('devices.edit');
+
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    $sim_iccid = trim($input['sim_iccid'] ?? '');
+    $device_name = trim($input['device_name'] ?? '');
+    $device_serial = trim($input['device_serial'] ?? '');
+    $patient_id = $input['patient_id'] ?? null;
+
+    // Validation ICCID : soit vide/null (dispositif USB non flashé), soit valide (min 10 caractères)
+    if ($sim_iccid !== '' && $sim_iccid !== null && strlen($sim_iccid) < 10) {
+        http_response_code(422);
+        echo json_encode(['success' => false, 'error' => 'SIM ICCID invalide (minimum 10 caractères)']);
         return;
     }
     
+    // Si pas d'ICCID, générer un identifiant temporaire unique pour permettre la création
+    if (empty($sim_iccid) || $sim_iccid === null) {
+        // Générer un ICCID temporaire basé sur le device_serial ou device_name
+        $tempIdentifier = $device_serial ? substr($device_serial, -8) : 
+                        ($device_name ? preg_replace('/[^0-9A-Za-z]/', '', substr($device_name, -8)) : '');
+        $sim_iccid = 'TEMP-' . str_pad($tempIdentifier ?: uniqid(), 15, '0', STR_PAD_LEFT);
+    }
+
+    $patientParam = null;
+    if ($patient_id !== null && $patient_id !== '') {
+        $patientParam = (int)$patient_id;
+        $stmt = $pdo->prepare("SELECT id FROM patients WHERE id = :id");
+        $stmt->execute(['id' => $patientParam]);
+        if (!$stmt->fetch()) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'error' => 'Patient inexistant']);
+            return;
+        }
+    }
+
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO devices (sim_iccid, device_name, device_serial, firmware_version, status)
-            VALUES (:iccid, :name, :serial, :firmware, 'active')
+            INSERT INTO devices (sim_iccid, device_serial, device_name, patient_id, status, installation_date, first_use_date)
+            VALUES (:sim_iccid, :device_serial, :device_name, :patient_id, :status, :installation_date, :first_use_date)
+            RETURNING *
         ");
         $stmt->execute([
-            'iccid' => $input['sim_iccid'],
-            'name' => $input['device_name'] ?? $input['sim_iccid'],
-            'serial' => $input['device_serial'] ?? $input['sim_iccid'],
-            'firmware' => $input['firmware_version'] ?? 'unknown'
+            'sim_iccid' => $sim_iccid,
+            'device_serial' => $device_serial ?: null,
+            'device_name' => $device_name ?: null,
+            'patient_id' => $patientParam,
+            'status' => $input['status'] ?? 'inactive',
+            'installation_date' => $input['installation_date'] ?? null,
+            'first_use_date' => $input['first_use_date'] ?? null,
         ]);
-        $device_id = $pdo->lastInsertId();
-        echo json_encode(['success' => true, 'device_id' => $device_id]);
+        $device = $stmt->fetch();
+
+        $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id)")
+            ->execute(['device_id' => $device['id']]);
+
+        auditLog('device.created', 'device', $device['id'], null, $device);
+        echo json_encode(['success' => true, 'device' => $device]);
     } catch(PDOException $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        if ($e->getCode() === '23505') {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'error' => 'SIM ICCID déjà utilisé']);
+        } else {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Database error']);
+        }
     }
 }
 
 function handleUpdateDevice($device_id) {
     global $pdo;
-    $user = requireAuth();
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Invalid JSON']);
-        return;
-    }
-    
-    $updateFields = [];
-    $params = ['id' => $device_id];
-    
-    if (isset($input['device_name'])) {
-        $updateFields[] = 'device_name = :name';
-        $params['name'] = $input['device_name'];
-    }
-    if (isset($input['status'])) {
-        $updateFields[] = 'status = :status';
-        $params['status'] = $input['status'];
-    }
-    
-    if (empty($updateFields)) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'No fields to update']);
-        return;
-    }
-    
+    requirePermission('devices.edit');
+
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+
     try {
-        $stmt = $pdo->prepare("UPDATE devices SET " . implode(', ', $updateFields) . " WHERE id = :id");
+        $stmt = $pdo->prepare("SELECT * FROM devices WHERE id = :id");
+        $stmt->execute(['id' => $device_id]);
+        $device = $stmt->fetch();
+
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Device not found']);
+            return;
+        }
+
+        $fields = ['device_name', 'status', 'installation_date', 'first_use_date', 'latitude', 'longitude', 'firmware_version'];
+        $updates = [];
+        $params = ['id' => $device_id];
+        
+        // Permettre la mise à jour de last_seen via PUT (pour reconnaissance USB)
+        if (array_key_exists('last_seen', $input) && $input['last_seen']) {
+            $updates[] = "last_seen = :last_seen";
+            $params['last_seen'] = $input['last_seen'];
+        }
+
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $input)) {
+                $updates[] = "$field = :$field";
+                $params[$field] = $input[$field];
+            }
+        }
+
+        if (array_key_exists('patient_id', $input)) {
+            if ($input['patient_id'] === null || $input['patient_id'] === '') {
+                $updates[] = "patient_id = NULL";
+            } else {
+                $patientId = (int)$input['patient_id'];
+                $patientCheck = $pdo->prepare("SELECT id FROM patients WHERE id = :id");
+                $patientCheck->execute(['id' => $patientId]);
+                if (!$patientCheck->fetch()) {
+                    http_response_code(422);
+                    echo json_encode(['success' => false, 'error' => 'Patient not found']);
+                    return;
+                }
+                $updates[] = "patient_id = :patient_id";
+                $params['patient_id'] = $patientId;
+            }
+        }
+
+        if (empty($updates)) {
+            echo json_encode(['success' => true, 'device' => $device]);
+            return;
+        }
+
+        $sql = "UPDATE devices SET " . implode(', ', $updates) . ", updated_at = NOW() WHERE id = :id";
+        $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
-        echo json_encode(['success' => true]);
+
+        $stmt = $pdo->prepare("
+            SELECT d.*, p.first_name, p.last_name
+            FROM devices d
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            WHERE d.id = :id AND d.deleted_at IS NULL
+        ");
+        $stmt->execute(['id' => $device_id]);
+        $updated = $stmt->fetch();
+
+        auditLog('device.updated', 'device', $device_id, $device, $updated);
+        echo json_encode(['success' => true, 'device' => $updated]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
@@ -98,15 +199,46 @@ function handleUpdateDevice($device_id) {
 
 function handleDeleteDevice($device_id) {
     global $pdo;
-    $user = requireAuth();
+    requirePermission('devices.delete');
     
     try {
-        $stmt = $pdo->prepare("DELETE FROM devices WHERE id = :id");
+        // Vérifier que le dispositif existe
+        $stmt = $pdo->prepare("SELECT * FROM devices WHERE id = :id AND deleted_at IS NULL");
         $stmt->execute(['id' => $device_id]);
-        echo json_encode(['success' => true]);
+        $device = $stmt->fetch();
+        
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Dispositif introuvable']);
+            return;
+        }
+        
+        // Vérifier si le dispositif est assigné à un patient
+        if ($device['patient_id']) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false, 
+                'error' => 'Impossible de supprimer un dispositif assigné à un patient. Désassignez d\'abord le dispositif.'
+            ]);
+            return;
+        }
+        
+        // Soft delete : mettre deleted_at à NOW()
+        $pdo->prepare("UPDATE devices SET deleted_at = NOW() WHERE id = :id")
+            ->execute(['id' => $device_id]);
+        
+        // Enregistrer dans l'audit
+        auditLog('device.deleted', 'device', $device_id, $device, null);
+        
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Dispositif supprimé avec succès'
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleDeleteDevice] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -1783,333 +1915,4 @@ function handleTriggerOTA($device_id) {
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
-
-function handleGetFirmwares() {
-    global $pdo;
-    requireAdmin();
-    
-    try {
-        $stmt = $pdo->prepare("
-            SELECT fv.*, u.email as uploaded_by_email, u.first_name, u.last_name
-            FROM firmware_versions fv
-            LEFT JOIN users u ON fv.uploaded_by = u.id AND u.deleted_at IS NULL
-            ORDER BY fv.created_at DESC
-        ");
-        $stmt->execute();
-        $firmwares = $stmt->fetchAll();
-        
-        // Vérifier que chaque fichier existe vraiment sur le disque
-        // Pour chaque firmware, on doit vérifier :
-        // - Si compilé (status = 'compiled') : chercher le .bin
-        // - Sinon : chercher le .ino
-        $verifiedFirmwares = [];
-        foreach ($firmwares as $firmware) {
-            $file_exists = false;
-            $file_path_absolute = null;
-            $file_size_actual = null;
-            $file_type = null; // 'ino' ou 'bin'
-            
-            $firmware_id = $firmware['id'];
-            $firmware_version = $firmware['version'];
-            $firmware_status = $firmware['status'] ?? 'unknown';
-            $version_dir = getVersionDir($firmware_version);
-            
-            // Déterminer quel type de fichier chercher selon le statut
-            if ($firmware_status === 'compiled') {
-                // Si compilé, chercher le .bin
-                $file_type = 'bin';
-                $bin_filename = 'fw_ott_v' . $firmware_version . '.bin';
-                $bin_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
-                $bin_path = $bin_dir . $bin_filename;
-                
-                $test_paths = [
-                    $bin_path,
-                    'hardware/firmware/' . $version_dir . '/' . $bin_filename,
-                    __DIR__ . '/../../hardware/firmware/' . $version_dir . '/' . $bin_filename,
-                ];
-                
-                // Aussi vérifier le file_path en DB s'il pointe vers un .bin
-                if (!empty($firmware['file_path']) && preg_match('/\.bin$/', $firmware['file_path'])) {
-                    $test_paths[] = $firmware['file_path'];
-                    $test_paths[] = __DIR__ . '/../../' . $firmware['file_path'];
-                }
-            } else {
-                // Si pas compilé, chercher le .ino avec l'ID
-                $file_type = 'ino';
-                $ino_filename = 'fw_ott_v' . $firmware_version . '_id' . $firmware_id . '.ino';
-                $ino_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
-                $ino_path = $ino_dir . $ino_filename;
-                
-                $test_paths = [
-                    $ino_path,
-                    'hardware/firmware/' . $version_dir . '/' . $ino_filename,
-                    __DIR__ . '/../../hardware/firmware/' . $version_dir . '/' . $ino_filename,
-                ];
-                
-                // Aussi vérifier le file_path en DB s'il pointe vers un .ino
-                if (!empty($firmware['file_path']) && preg_match('/\.ino$/', $firmware['file_path'])) {
-                    $test_paths[] = $firmware['file_path'];
-                    $test_paths[] = __DIR__ . '/../../' . $firmware['file_path'];
-                }
-            }
-            
-            // Tester chaque chemin
-            foreach ($test_paths as $test_path) {
-                if (file_exists($test_path) && is_file($test_path)) {
-                    $file_exists = true;
-                    $file_path_absolute = $test_path;
-                    $file_size_actual = filesize($test_path);
-                    
-                    // Log pour diagnostic
-                    if (getenv('DEBUG_ERRORS') === 'true') {
-                        error_log('[handleGetFirmwares] ✅ Fichier ' . $file_type . ' trouvé: ' . $test_path . ' (size: ' . $file_size_actual . ')');
-                    }
-                    break;
-                }
-            }
-            
-            if (!$file_exists) {
-                // Log pour diagnostic
-                if (getenv('DEBUG_ERRORS') === 'true') {
-                    error_log('[handleGetFirmwares] ❌ Fichier ' . $file_type . ' NON trouvé pour firmware ID ' . $firmware_id);
-                    error_log('[handleGetFirmwares]   Statut: ' . $firmware_status);
-                    error_log('[handleGetFirmwares]   Chemins testés: ' . json_encode($test_paths));
-                }
-            }
-            
-            // Ajouter les informations de vérification au firmware
-            $firmware['file_exists'] = $file_exists;
-            $firmware['file_path_absolute'] = $file_path_absolute;
-            $firmware['file_type'] = $file_type; // 'ino' ou 'bin'
-            $file_size_actual = $file_size_actual ?? null;
-            if ($file_size_actual !== null) {
-                $firmware['file_size_actual'] = $file_size_actual;
-                // Vérifier si la taille correspond à celle en base
-                if ($firmware['file_size'] != $file_size_actual) {
-                    $firmware['file_size_mismatch'] = true;
-                    if (getenv('DEBUG_ERRORS') === 'true') {
-                        error_log('[handleGetFirmwares] ⚠️ Taille fichier différente: DB=' . $firmware['file_size'] . ', FS=' . $file_size_actual);
-                    }
-                }
-            }
-            
-            $verifiedFirmwares[] = $firmware;
-        }
-        
-        // Log récapitulatif
-        $total = count($verifiedFirmwares);
-        $existing = count(array_filter($verifiedFirmwares, fn($f) => $f['file_exists']));
-        $missing = $total - $existing;
-        
-        if (getenv('DEBUG_ERRORS') === 'true') {
-            error_log('[handleGetFirmwares] 📊 Récapitulatif: ' . $total . ' firmwares, ' . $existing . ' fichiers existants, ' . $missing . ' fichiers manquants');
-        }
-        
-        echo json_encode([
-            'success' => true, 
-            'firmwares' => $verifiedFirmwares,
-            'stats' => [
-                'total' => $total,
-                'files_existing' => $existing,
-                'files_missing' => $missing
-            ]
-        ]);
-    } catch(PDOException $e) {
-        error_log('[handleGetFirmwares] ❌ Erreur DB: ' . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
-    }
-}
-
-function handleCheckFirmwareVersion($version) {
-    global $pdo;
-    requireAuth();
-    
-    // Décoder la version (au cas où elle serait encodée)
-    $version = urldecode($version);
-    
-    try {
-        $stmt = $pdo->prepare("SELECT id, version, file_path, created_at, status FROM firmware_versions WHERE version = :version");
-        $stmt->execute(['version' => $version]);
-        $existing = $stmt->fetch();
-        
-        if ($existing) {
-            echo json_encode([
-                'success' => true,
-                'exists' => true,
-                'firmware' => $existing
-            ]);
-        } else {
-            echo json_encode([
-                'success' => true,
-                'exists' => false
-            ]);
-        }
-    } catch(PDOException $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
-    }
-}
-
-function handleDeleteFirmware($firmware_id) {
-    global $pdo;
-    requirePermission('firmwares.manage');
-    
-    try {
-        // Récupérer les infos du firmware avant suppression
-        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
-        $stmt->execute(['id' => $firmware_id]);
-        $firmware = $stmt->fetch();
-        
-        if (!$firmware) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Firmware introuvable']);
-            return;
-        }
-        
-        $firmware_status = $firmware['status'] ?? 'unknown';
-        $version_dir = getVersionDir($firmware['version']);
-        
-        // Supprimer les fichiers selon le statut
-        if ($firmware_status === 'compiled') {
-            // Si compilé, supprimer le .bin mais GARDER le .ino et l'entrée DB
-            // Cela permet de recompiler plus tard
-            $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
-            $bin_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
-            $bin_path = $bin_dir . $bin_filename;
-            
-            if (file_exists($bin_path)) {
-                @unlink($bin_path);
-                error_log('[handleDeleteFirmware] ✅ Fichier .bin supprimé: ' . basename($bin_path));
-            }
-            
-            // Remettre le statut à 'pending_compilation' pour permettre la recompilation
-            $pdo->prepare("
-                UPDATE firmware_versions 
-                SET status = 'pending_compilation', 
-                    file_path = NULL,
-                    file_size = NULL,
-                    checksum = NULL
-                WHERE id = :id
-            ")->execute(['id' => $firmware_id]);
-            
-            auditLog('firmware.bin.deleted', 'firmware', $firmware_id, $firmware, ['action' => 'bin_deleted_kept_ino']);
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'Fichier .bin supprimé. Le firmware .ino est conservé et peut être recompilé.',
-                'deleted_version' => $firmware['version']
-            ]);
-        } else {
-            // Si pas compilé, supprimer le .ino ET l'entrée DB (suppression complète)
-        $ino_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
-        if (is_dir($ino_dir)) {
-                // Supprimer UNIQUEMENT le fichier avec l'ID (format obligatoire)
-                $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
-                $ino_file_with_id = $ino_dir . $pattern_with_id;
-                if (file_exists($ino_file_with_id)) {
-                    @unlink($ino_file_with_id);
-                    error_log('[handleDeleteFirmware] ✅ Fichier .ino supprimé: ' . basename($ino_file_with_id));
-            }
-        }
-        
-        // Supprimer de la base de données
-        $deleteStmt = $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id");
-        $deleteStmt->execute(['id' => $firmware_id]);
-        
-        auditLog('firmware.deleted', 'firmware', $firmware_id, $firmware, null);
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Firmware supprimé avec succès',
-            'deleted_version' => $firmware['version']
-        ]);
-        }
-        
-    } catch(PDOException $e) {
-        http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        error_log('[handleDeleteFirmware] Error: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
-    }
-}
-
-function handleGetFirmwareIno($firmware_id) {
-    global $pdo;
-    
-    // Log de debug
-    if (getenv('DEBUG_ERRORS') === 'true') {
-        error_log('[handleGetFirmwareIno] Appelé avec firmware_id: ' . $firmware_id);
-    }
-    
-    requireAuth();
-    
-    try {
-        $stmt = $pdo->prepare("SELECT * FROM firmware_versions WHERE id = :id");
-        $stmt->execute(['id' => $firmware_id]);
-        $firmware = $stmt->fetch();
-        
-        // Stocker firmware_id pour utilisation dans la recherche de fichier
-        if (!$firmware) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Firmware introuvable']);
-            return;
-        }
-        
-        // Utiliser la fonction helper simplifiée
-        $ino_path = findFirmwareInoFile($firmware_id, $firmware);
-        
-        if (!$ino_path || !file_exists($ino_path)) {
-            // Diagnostic simple
-            $absolute_path = !empty($firmware['file_path']) ? __DIR__ . '/../../' . $firmware['file_path'] : null;
-            $parent_dir = $absolute_path ? dirname($absolute_path) : null;
-            $dir_exists = $parent_dir && is_dir($parent_dir);
-            
-            error_log('[handleGetFirmwareIno] ❌ Fichier introuvable');
-            error_log('[handleGetFirmwareIno]    file_path DB: ' . ($firmware['file_path'] ?? 'N/A'));
-            error_log('[handleGetFirmwareIno]    Chemin absolu: ' . ($absolute_path ?? 'N/A'));
-            error_log('[handleGetFirmwareIno]    Dossier parent existe: ' . ($dir_exists ? 'OUI' : 'NON'));
-            
-            if ($dir_exists) {
-                $files_in_dir = glob($parent_dir . '/*.ino');
-                error_log('[handleGetFirmwareIno]    Fichiers .ino dans le dossier: ' . count($files_in_dir));
-            }
-            
-            http_response_code(404);
-            $error_msg = 'Fichier .ino introuvable: ' . ($firmware['file_path'] ?? 'N/A');
-            if (getenv('DEBUG_ERRORS') === 'true') {
-                $error_msg .= ' (Version: ' . $firmware['version'] . ', ID: ' . $firmware_id . ')';
-            }
-            echo json_encode(['success' => false, 'error' => $error_msg]);
-            return;
-        }
-        
-        $ino_content = file_get_contents($ino_path);
-        if ($ino_content === false) {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'error' => 'Impossible de lire le fichier .ino']);
-            return;
-        }
-        
-        echo json_encode([
-            'success' => true,
-            'content' => $ino_content,
-            'version' => $firmware['version'],
-            'file_path' => $firmware['file_path'],
-            'status' => $firmware['status']
-        ]);
-        
-    } catch(PDOException $e) {
-        http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        error_log('[handleGetFirmwareIno] Error: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
-    }
-}
-
-function handleUpdateFirmwareIno($firmware_id) {
-    global $pdo;
-    
-    // Vérifier que l'utilisateur est admin ou technicien
-    $user = requireAuth();
 
