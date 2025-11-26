@@ -260,27 +260,74 @@ export function UsbProvider({ children }) {
     try {
       setUsbStreamError(null)
       setUsbStreamStatus('connecting')
-      await ensurePortReady()
+      
+      logger.log('📡 [USB] Démarrage du streaming USB...')
+      
+      // S'assurer que le port est prêt et connecté
+      const readyPort = await ensurePortReady()
+      if (!readyPort) {
+        throw new Error('Port non disponible après ensurePortReady')
+      }
+      
+      logger.log('✅ [USB] Port prêt, connexion établie')
 
+      // Arrêter l'ancien streaming s'il existe
       if (usbStreamStopRef.current) {
+        logger.log('🛑 [USB] Arrêt de l\'ancien streaming')
         usbStreamStopRef.current()
         usbStreamStopRef.current = null
+        // Attendre un peu pour que l'ancien streaming se termine
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
 
+      // Réinitialiser les buffers et états
       usbStreamBufferRef.current = ''
       setUsbStreamMeasurements([])
       setUsbStreamLogs([])
       setUsbStreamLastMeasurement(null)
       setUsbStreamLastUpdate(null)
+      
+      logger.log('📖 [USB] Démarrage de la lecture...')
 
+      // Démarrer la lecture
       const stop = await startReading(handleUsbStreamChunk)
+      if (!stop || typeof stop !== 'function') {
+        throw new Error('startReading n\'a pas retourné de fonction stop valide')
+      }
+      
       usbStreamStopRef.current = stop
       setUsbStreamStatus('waiting')
+      
+      logger.log('✅ [USB] Streaming démarré, en attente de données...')
+      
+      // Ajouter un log initial pour confirmer que le streaming est actif
+      appendUsbStreamLog('📡 Streaming USB démarré - En attente de données du dispositif...')
+      
+      // Envoyer la commande "usb" au dispositif pour activer le streaming continu
+      // Le firmware attend cette commande dans les 3 secondes après le boot
+      try {
+        logger.log('📤 [USB] Envoi de la commande "usb" au dispositif...')
+        const commandSent = await write('usb\n')
+        if (commandSent) {
+          logger.log('✅ [USB] Commande "usb" envoyée avec succès')
+          appendUsbStreamLog('📤 Commande "usb" envoyée au dispositif pour activer le streaming...')
+        } else {
+          logger.warn('⚠️ [USB] Échec de l\'envoi de la commande "usb"')
+          appendUsbStreamLog('⚠️ Échec de l\'envoi de la commande "usb" - Le streaming peut ne pas démarrer')
+        }
+      } catch (writeErr) {
+        logger.error('❌ [USB] Erreur lors de l\'envoi de la commande "usb":', writeErr)
+        appendUsbStreamLog(`❌ Erreur envoi commande: ${writeErr.message || writeErr}`)
+        // Ne pas arrêter le streaming, continuer quand même
+      }
     } catch (err) {
-      setUsbStreamError(err.message || 'Impossible de démarrer le streaming USB')
+      logger.error('❌ [USB] Erreur démarrage streaming:', err)
+      const errorMsg = err.message || 'Impossible de démarrer le streaming USB'
+      setUsbStreamError(errorMsg)
       setUsbStreamStatus('idle')
+      appendUsbStreamLog(`❌ Erreur: ${errorMsg}`)
     }
-  }, [ensurePortReady, handleUsbStreamChunk, startReading])
+  }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger])
 
   // Arrêter le streaming USB
   const stopUsbStreaming = useCallback(() => {

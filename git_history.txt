@@ -1,0 +1,356 @@
+2025-11-26 21:21:25 +0100|ymora|docs: mettre à jour les 3 documents principaux avec changements récents
+2025-11-26 21:17:15 +0100|ymora|fix: améliorer gestion erreur SSE côté client
+2025-11-26 21:16:30 +0100|ymora|fix: améliorer robustesse SSE pendant installation core ESP32
+2025-11-26 21:14:38 +0100|ymora|fix: ne pas afficher heartbeat pendant téléchargement core ESP32
+2025-11-26 21:10:48 +0100|ymora|docs: améliorer logs diagnostic core ESP32 et rappel Persistent Disk
+2025-11-26 21:08:20 +0100|ymora|fix: ajouter import useRouter manquant dans app/page.js
+2025-11-26 21:07:21 +0100|ymora|fix: corriger redirection après login pour GitHub Pages
+2025-11-26 21:04:10 +0100|ymora|fix: résoudre conflit de nommage dynamic dans devices/page.js
+2025-11-26 20:56:24 +0100|ymora|docs: ajouter rapport de vérification du refactoring firmwares
+2025-11-26 20:54:05 +0100|ymora|refactor: supprimer firmwares.php.old - fonctions extraites dans compile.php
+2025-11-26 20:16:42 +0100|ymora|chore: forcer redéploiement - nettoyage firmwares.php.old
+2025-11-26 20:12:25 +0100|ymora|refactor: nettoyer firmwares.php.old - ne garder que handleCompileFirmware et sendSSE
+2025-11-26 19:58:15 +0100|ymora|refactor: finaliser structure modulaire firmwares
+2025-11-26 19:57:42 +0100|ymora|refactor: extraire fonctions upload et download, corriger chemins
+2025-11-26 19:33:10 +0100|ymora|fix: remplacer exec() par popen() pour fallback core list (non-bloquant SSE)
+2025-11-26 19:22:03 +0100|ymora|refactor: diviser firmwares.php (2258 lignes) en modules modulaires
+2025-11-26 18:19:04 +0100|ymora|fix: améliorer gestion erreurs 500 avec getProjectRoot() et catch Exception
+2025-11-26 18:11:10 +0100|ymora|feat: améliorer gestion erreurs compilation avec messages détaillés
+2025-11-26 18:08:27 +0100|ymora|fix: sécuriser proc_open core list avec vérifications pipes et fallback robuste
+2025-11-26 18:05:54 +0100|ymora|fix: définir descriptorspec avant utilisation pour core list
+2025-11-26 17:56:30 +0100|ymora|fix: désactiver pré-rendu statique pour pages dashboard (useContext)
+2025-11-26 08:43:54 +0100|ymora|fix: sécuriser vérif core ESP32 pour compilation
+2025-11-26 08:27:12 +0100|ymora|feat: ajouter bouton Detecter USB dans l'onglet streaming
+2025-11-26 08:23:36 +0100|ymora|fix: ajouter helper is_windows pour compilation
+2025-11-26 07:47:52 +0100|ymora|feat: améliorer messages détection USB automatique et streaming
+2025-11-26 07:45:40 +0100|ymora|fix: ajouter keep-alive pendant copie librairies et vérification core ESP32 pour maintenir connexion SSE
+2025-11-26 07:24:55 +0100|ymora|fix: utiliser stream_select pour vérification core ESP32 pour éviter blocage
+2025-11-26 07:24:16 +0100|ymora|fix: utiliser stream_select au lieu de fgets pour éviter blocage SSE lors compilation
+2025-11-26 07:18:45 +0100|ymora|fix: retirer colonne error_message inexistante de handleGetFirmwares
+2025-11-26 07:16:16 +0100|ymora|fix: mise à jour ino_content en DB lors de handleUpdateFirmwareIno + script test upload/édition
+2025-11-26 07:10:32 +0100|ymora|fix: amélioration gestion erreur JSON dans handleGetFirmwares
+2025-11-26 07:10:06 +0100|ymora|fix: exclure colonnes BYTEA volumineuses de handleGetFirmwares pour éviter erreur JSON
+2025-11-26 07:03:59 +0100|ymora|debug: ajout logs console pour diagnostiquer upload fichier .ino
+2025-11-25 23:18:33 +0100|ymora|fix: encodage BYTEA correct pour PostgreSQL avec PDO - résout erreur invalid input syntax for type bytea
+2025-11-25 23:13:14 +0100|ymora|docs: mise à jour index documentation avec audit 2025
+2025-11-25 23:12:53 +0100|ymora|chore: nettoyage fichiers temporaires et ajout rapport audit complet
+2025-11-25 23:12:20 +0100|ymora|docs: ajout rapport audit complet projet 2025
+2025-11-25 23:03:12 +0100|ymora|fix: ajout fonction getProjectRoot manquante, suppression doublon handleInitFirmwareDb
+2025-11-25 23:00:18 +0100|ymora|fix: amélioration catch Exception général upload firmware - nettoyage complet, logs détaillés
+2025-11-25 22:59:50 +0100|ymora|fix: amélioration gestion erreur PDOException upload firmware - JSON valide, Content-Type
+2025-11-25 22:44:51 +0100|ymora|fix: amélioration gestion erreurs upload firmware .ino - validation contenu, logs détaillés
+2025-11-25 22:28:24 +0100|ymora|fix: amélioration messages erreur SSE compilation - délai avant fermeture, messages explicites
+2025-11-25 22:04:45 +0100|ymora|fix: amélioration gestion erreurs compilation firmware - validation fichier .ino, logs détaillés
+2025-11-25 21:53:47 +0100|ymora|fix: simplification traitement BYTEA - PDO retourne déjà décodé, gestion erreurs robuste
+2025-11-25 21:32:57 +0100|ymora|fix: correction décodage BYTEA pour lecture firmware depuis DB (ino_content/bin_content)
+2025-11-25 21:24:17 +0100|ymora|chore: suppression fonction migration firmware BYTEA (migration appliquée, nettoyage final)
+2025-11-25 21:23:20 +0100|ymora|chore: nettoyage fichiers temporaires migration firmware BYTEA (migration appliquée)
+2025-11-25 21:19:39 +0100|ymora|fix: migration firmware BYTEA - vérification existence colonnes avant ajout
+2025-11-25 21:16:08 +0100|ymora|fix: amélioration gestion erreurs migration firmware BYTEA
+2025-11-25 21:11:07 +0100|ymora|docs: guide détaillé pour obtenir token JWT depuis navigateur
+2025-11-25 21:00:09 +0100|ymora|feat: script automatique migration firmware BYTEA avec attente déploiement
+2025-11-25 20:58:04 +0100|ymora|docs: guide complet pour appliquer migration firmware BYTEA
+2025-11-25 20:56:33 +0100|ymora|feat: script PowerShell pour appliquer migration via API
+2025-11-25 20:56:14 +0100|ymora|feat: endpoint API /migrate/firmware-blob pour exécuter la migration
+2025-11-25 20:48:53 +0100|ymora|feat: script PowerShell pour appliquer migration firmware BYTEA
+2025-11-25 20:44:43 +0100|ymora|fix: dernière requête handleDownloadFirmware corrigée
+2025-11-25 20:44:16 +0100|ymora|fix: inclure explicitement ino_content et bin_content dans toutes les requêtes SELECT firmware
+2025-11-25 20:42:44 +0100|ymora|feat: stockage firmwares .ino et .bin dans PostgreSQL (BYTEA) - alternative au Persistent Disk
+2025-11-25 20:39:21 +0100|ymora|refactor: ajout fonction getProjectRoot() pour cohérence des chemins
+2025-11-25 20:37:43 +0100|ymora|fix: correction chemins relatifs pour fichiers .ino (cohérence entre helpers et handlers)
+2025-11-25 20:33:20 +0100|ymora|fix: ajout endpoint /api.php/logs manquant dans le routing
+2025-11-25 20:24:28 +0100|ymora|docs: ajout lignes directrices refactoring et architecture modulaire API
+2025-11-25 20:17:02 +0100|ymora|fix: correction erreurs syntaxe PHP (firmwares.php, notifications.php)
+2025-11-25 20:15:41 +0100|ymora|refactor: nettoyage doublons et réorganisation handlers
+2025-11-25 19:32:18 +0100|ymora|fix: ajouter balises PHP manquantes dans devices.php et notifications.php
+2025-11-25 19:27:05 +0100|ymora|fix: ajouter balise PHP manquante dans api/helpers.php
+2025-11-25 18:41:23 +0100|ymora|fix: forcer exécution PHP pour api.php dans Apache
+2025-11-25 18:13:20 +0100|ymora|fix: autoriser hardware/lib et hardware/firmware dans Docker (nécessaires pour compilation)
+2025-11-25 08:43:22 +0100|ymora|fix: copier api et hardware dans l'image Docker
+2025-11-25 08:36:44 +0100|ymora|fix: restaurer l'ouverture PHP de handlers/firmwares
+2025-11-25 08:17:50 +0100|ymora|chore: externaliser le cache arduino et préparer Render
+2025-11-25 08:12:38 +0100|ymora|🔧 Refactor: Suppression du fichier RESET_EDGE.md et ajout de la gestion des utilisateurs dans temp_complete_auth.txt
+2025-11-25 07:29:41 +0100|ymora|Fix: Ajouter localhost:3000 dans origines CORS par défaut (production + dev)
+2025-11-25 07:24:21 +0100|ymora|Fix: Correction AuthContext.js pour utiliser directement Render.com + correction apostrophe Login.js
+2025-11-25 07:06:29 +0100|ymora|🔧 Fix: Réparation api/handlers/auth.php - ajout fonctions manquantes (handleLogin, handleGetMe, handleRefreshToken, handleGetUsers, handleCreateUser) + suppression route /health dupliquée + mise à jour docker-compose.yml pour monter api/
+2025-11-25 06:49:25 +0100|ymora|Docs: Archivage MD historiques + organisation documentation
+2025-11-25 06:38:29 +0100|ymora|Fix: Corrections chemins + endpoint /health + proxy Next.js
+2025-11-25 06:06:43 +0100|ymora|🔧 Fix: amélioration de la gestion des erreurs et vérification des fichiers firmware
+2025-11-24 23:26:31 +0100|ymora|Refactor: Suppression handlers dupliqués de api.php - refactorisation complète terminée
+2025-11-24 23:24:14 +0100|ymora|Refactor: Refactorisation complète api.php - extraction vers modules
+2025-11-24 23:22:10 +0100|ymora|Refactor: Extraction helpers vers api/helpers.php - début refactorisation
+2025-11-24 23:20:16 +0100|ymora|Fix: Correction structure try-catch handleCompileFirmware - vérification firmware_id
+2025-11-24 23:05:13 +0100|ymora|Fix: Suppression commentaires dupliqués lignes 791-794
+2025-11-24 23:00:03 +0100|ymora|Fix: Suppression accolade en trop avant catch ligne 5117
+2025-11-24 22:29:48 +0100|ymora|Fix: Ajout accolade fermante manquante pour try interne ligne 4495 - correction structure complète
+2025-11-24 22:24:57 +0100|ymora|Fix: Suppression accolade en trop avant catch ligne 5117
+2025-11-24 22:23:39 +0100|ymora|Fix: Ajout accolade fermante manquante pour try interne ligne 4495
+2025-11-24 22:21:42 +0100|ymora|Fix: Correction structure blocs try-catch handleCompileFirmware
+2025-11-24 22:20:33 +0100|ymora|Fix: Ajout accolade fermante manquante pour bloc else ligne 5115
+2025-11-24 22:19:34 +0100|ymora|Fix: Correction indentation complète lignes 4927-5114 dans handleCompileFirmware
+2025-11-24 22:15:00 +0100|ymora|Fix: Ajout catch manquant pour try interne ligne 4495
+2025-11-24 22:14:07 +0100|ymora|Fix: Correction indentation bloc else ligne 4530-4576
+2025-11-24 22:12:21 +0100|ymora|Fix: Correction indentation complète - toutes les lignes dans bloc try
+2025-11-24 22:11:39 +0100|ymora|Fix: Correction indentation complète bloc try dans handleCompileFirmware
+2025-11-24 22:04:04 +0100|ymora|Fix: Correction indentation complète dans handleCompileFirmware - erreur syntaxe ligne 5108
+2025-11-24 21:58:15 +0100|ymora|Fix: Correction erreur syntaxe PHP ligne 5108 + améliorations UI connexion
+2025-11-24 07:34:32 +0100|ymora|WIP on test-yesterday-morning: b67b78db 🔧 Fix: output buffering + nettoyage complet buffer erreurs
+2025-11-24 07:34:32 +0100|ymora|index on test-yesterday-morning: b67b78db 🔧 Fix: output buffering + nettoyage complet buffer erreurs
+2025-11-24 06:57:01 +0100|ymora|🔧 Fix: output buffering + nettoyage complet buffer erreurs
+2025-11-24 06:55:27 +0100|ymora|🔧 Fix: Content-Type JSON forcé dans handleLogin()
+2025-11-24 06:54:48 +0100|ymora|🔧 Fix: erreur JSON - toutes erreurs PHP converties en JSON
+2025-11-24 06:47:00 +0100|ymora|🚨 URGENT: Page connexion ultra-simplifiée - arrêt boucles
+2025-11-24 06:45:00 +0100|ymora|👁️ Panneau de monitoring visible sur la page
+2025-11-24 06:42:54 +0100|ymora|🔍 Monitoring automatique des redémarrages en boucle
+2025-11-24 06:35:48 +0100|ymora|✨ Simplification page de connexion + script analyse logs
+2025-11-24 06:31:56 +0100|ymora|🔧 Fix: protection contre boucles de cache Service Worker
+2025-11-24 06:27:40 +0100|ymora|🔧 Fix: boucle infinie redirection page connexion
+2025-11-23 22:31:27 +0100|ymora|🔧 Fix: Service Worker boucle infinie - nettoyage uniquement manuel
+2025-11-23 22:29:28 +0100|ymora|🔧 Fix: correction boucle infinie nettoyage cache
+2025-11-23 22:08:21 +0100|ymora|📝 Docs: mise à jour README après nettoyage fichiers statiques
+2025-11-23 22:05:54 +0100|ymora|🧹 Nettoyage: suppression fichiers optionnels non utilisés
+2025-11-23 22:01:09 +0100|ymora|🔧 Fix: router amélioré pour fichiers statiques dans public/
+2025-11-23 21:59:13 +0100|ymora|🔧 Fix: router pour éviter documentation pendant déploiement Render
+2025-11-23 21:55:40 +0100|ymora|🔧 Fix: amélioration gestion erreur JSON dans login
+2025-11-23 21:51:05 +0100|ymora|🔧 Fix: bouton vidage cache sur page login + gestion erreur JSON
+2025-11-23 21:20:17 +0100|ymora|📦 Add ESP32 core to hardware/arduino-data/ with GitHub LFS
+2025-11-23 21:08:22 +0100|ymora|📦 Add ESP32 core with GitHub LFS
+2025-11-23 20:54:50 +0100|ymora|🎯 Solution complète: Core ESP32 dans le projet avec GitHub LFS
+2025-11-23 20:44:58 +0100|ymora|🔧 Fix: amélioration gestion CORS pour origines non autorisées
+2025-11-23 20:32:49 +0100|ymora|🔧 Fix: simplification messages erreur compilation (vraie version)
+2025-11-23 20:14:54 +0100|ymora|🎯 Simplification drastique: recherche fichier .ino
+2025-11-23 19:38:18 +0100|ymora|🔧 Fix: recherche fichier .ino améliorée avec 4 méthodes + diagnostic
+2025-11-23 19:36:22 +0100|ymora|🔧 Fix: amélioration recherche fichier .ino et suppression doublons logs
+2025-11-23 19:22:04 +0100|ymora|🛡️ Protection: empêcher conflit routing avec fichiers HTML
+2025-11-23 19:17:15 +0100|ymora|🐛 Fix: déplacer docs HTML dans sous-dossier pour éviter conflit routing
+2025-11-23 18:46:02 +0100|ymora|🧹 Optimisation complète: organisation code et documentation
+2025-11-23 18:14:29 +0100|ymora|Amélioration recherche fichier .ino et ajout bouton copier logs
+2025-11-23 12:55:52 +0100|ymora|Amélioration logs recherche fichier par ID unique
+2025-11-23 12:45:31 +0100|ymora|Suppression onglet Compile INO et amélioration recherche fichier par ID
+2025-11-23 12:40:22 +0100|ymora|Ajout icône compilation et console de logs dans Upload INO
+2025-11-23 12:33:06 +0100|ymora|Simplification interface Upload INO et correction recherche fichier par ID unique
+2025-11-23 10:30:15 +0100|ymora|feat: Améliorations UX onglets firmware et auto-fermeture messages
+2025-11-23 09:52:09 +0100|ymora|debug: ajout logs pour vérifier affichage bouton compilation
+2025-11-23 09:48:21 +0100|ymora|fix: désactivation lancement automatique compilation
+2025-11-23 09:44:35 +0100|ymora|feat: solution simple pour vider le cache
+2025-11-23 09:41:16 +0100|ymora|feat: garantie identifiant unique pour fichiers .ino
+2025-11-23 09:28:08 +0100|ymora|fix: déclaration manquante readyStateHistory
+2025-11-23 09:25:13 +0100|ymora|feat: ajout monitoring readyState et vérification préalable endpoint
+2025-11-23 09:17:52 +0100|ymora|feat: vérification existence fichiers .ino avant affichage
+2025-11-23 09:16:10 +0100|ymora|feat: ajout finally block avec logs durée totale handleCompile
+2025-11-23 09:14:58 +0100|ymora|feat: complétion logs ultra-détaillés onmessage et onerror
+2025-11-23 09:13:58 +0100|ymora|feat: ajout logs ultra-détaillés pour diagnostic compilation
+2025-11-23 09:11:47 +0100|ymora|feat: ajout logs détaillés pour diagnostic compilation firmware
+2025-11-23 09:10:15 +0100|ymora|feat: ajout script PowerShell pour tester API compilation firmware
+2025-11-23 09:05:54 +0100|ymora|fix: vérification token expiré et meilleure capture messages SSE
+2025-11-23 09:01:28 +0100|ymora|fix: correction délais vérification connexion SSE basée sur tests
+2025-11-23 09:00:49 +0100|ymora|feat: ajout script de test automatisé API compilation
+2025-11-23 08:56:27 +0100|ymora|feat: ajout script de test API compilation firmware
+2025-11-23 08:55:07 +0100|ymora|fix: affichage logs dans interface + incrément SW v3.0.5
+2025-11-23 08:51:39 +0100|ymora|feat: amélioration logs console pour compilation firmware
+2025-11-23 08:49:07 +0100|ymora|fix: amélioration gestion connexion SSE compilation firmware
+2025-11-23 08:47:33 +0100|ymora|fix: incrément version service worker v3.0.4 pour forcer mise à jour cache
+2025-11-23 08:34:03 +0100|ymora|fix: correction syntaxe JavaScript service worker avec IIFE
+2025-11-23 08:27:52 +0100|ymora|fix: correction erreur syntaxe JavaScript dans layout et réinstallation Tailwind
+2025-11-23 08:13:25 +0100|ymora|feat: nettoyage automatique du cache et détection des mises à jour
+2025-11-23 08:05:22 +0100|ymora|fix: correction export bash et service worker
+2025-11-23 08:01:05 +0100|ymora|fix: ajout script PowerShell pour export Windows
+2025-11-23 08:00:12 +0100|ymora|fix: résolution conflit Tailwind CSS v3/v4 et nettoyage builds
+2025-11-23 07:51:02 +0100|ymora|Add: Scripts et guide pour forcer la mise à jour du cache
+2025-11-23 07:49:49 +0100|ymora|Fix: Service worker amélioré - ignore extensions + auto-update
+2025-11-23 07:44:47 +0100|ymora|Fix: Version service worker v3.0.2
+2025-11-23 07:44:08 +0100|ymora|Fix: Service worker ignore extensions Chrome + logs débogage dashboard
+2025-11-23 07:39:05 +0100|ymora|refactor: amélioration de la gestion des onglets et des connexions SSE dans OutilsPage et CompileInoTab
+2025-11-23 07:37:08 +0100|ymora|Fix: Corrections configuration API, service worker et scripts de diagnostic
+2025-11-23 07:10:02 +0100|ymora|Fix: Restauration comportement SSE b03325b - headers SSE avant auth, erreur via SSE si auth échoue
+2025-11-23 07:05:26 +0100|ymora|Fix: Restauration ordre original handleCompileFirmware pour SSE - requireAuth avant headers SSE
+2025-11-23 06:18:25 +0100|ymora|Refactor: Remplacement de l'onglet de téléchargement de firmware par un éditeur INO et un onglet de compilation, avec gestion des versions existantes et amélioration de l'interface utilisateur.
+2025-11-22 23:06:20 +0100|ymora|fix: restauration upload automatique pour fichiers .ino
+2025-11-22 23:03:39 +0100|ymora|feat: système d'identification unique pour fichiers .ino
+2025-11-22 22:52:12 +0100|ymora|feat: amélioration UX de l'éditeur INO
+2025-11-22 22:39:56 +0100|ymora|fix: amélioration compilation Arduino et copie librairies TinyGSM
+2025-11-22 22:33:04 +0100|ymora|docs: ajout documentation Persistent Disk Render
+2025-11-22 22:32:24 +0100|ymora|refactor: renommage Configuration en Outils et optimisations compilation Arduino
+2025-11-22 21:57:07 +0100|ymora|Feat: Scripts pour préparer le core ESP32 localement (évite retéléchargements)
+2025-11-22 21:38:43 +0100|ymora|Fix: Vérification existence fichier .ino après upload
+2025-11-22 21:38:01 +0100|ymora|Fix: Amélioration recherche fichier .ino avec plusieurs chemins de fallback
+2025-11-22 21:34:13 +0100|ymora|Fix: Correction structure code - fermeture correcte du bloc else pour installation core ESP32
+2025-11-22 21:32:43 +0100|ymora|Fix: Correction structure code - installation core ESP32 dans bloc else
+2025-11-22 21:31:42 +0100|ymora|Optimisation: Répertoire persistant pour arduino-cli et vérification core ESP32 avant installation
+2025-11-22 21:30:10 +0100|ymora|Feat: Fenêtre de compilation minimisable avec historique des compilations
+2025-11-22 21:24:52 +0100|ymora|Amélioration: Gestion erreurs EventSource avec vérification état connexion et rafraîchissement auto
+2025-11-22 21:22:38 +0100|ymora|Amélioration: Meilleure gestion erreurs EventSource et heartbeat pour maintenir connexion SSE
+2025-11-22 21:21:12 +0100|ymora|Amélioration: Logs en temps réel pour installation core ESP32 avec timeout de sécurité
+2025-11-22 21:19:43 +0100|ymora|Fix: Définir HOME pour arduino-cli pour éviter les avertissements C:\Users\ymora is not defined
+2025-11-22 21:14:17 +0100|ymora|Fix: Correction CORS pour OPTIONS et Content-Type SSE - headers définis avant OPTIONS check
+2025-11-22 21:09:49 +0100|ymora|Fix: Correction CORS et Content-Type SSE - ajout Cache-Control et Accept dans headers autorisés
+2025-11-22 21:08:04 +0100|ymora|Fix: Simplification Dockerfile - arduino-cli toujours téléchargé dans Docker
+2025-11-22 21:07:11 +0100|ymora|Fix: Correction syntaxe Dockerfile - suppression COPY bin/ problématique
+2025-11-22 21:01:50 +0100|ymora|Refactor: Amélioration de la gestion des erreurs et optimisation des messages d'alerte
+2025-11-22 21:01:08 +0100|ymora|Fix: Configuration PATH pour arduino-cli dans render.yaml
+2025-11-22 21:00:25 +0100|ymora|Fix: Amélioration détection arduino-cli pour Render (~/.local/bin/)
+2025-11-22 20:51:01 +0100|ymora|Nettoyage final: suppression dossier vide, fichiers .rej et mise à jour .gitignore
+2025-11-22 20:47:09 +0100|ymora|Audit et optimisation: suppression code dupliqué, nettoyage fichiers redondants, corrections SQL
+2025-11-22 20:36:11 +0100|ymora|Refactor: Amélioration de la gestion de la compilation des firmwares
+2025-11-22 20:25:58 +0100|ymora|Feat: Intégration d'arduino-cli pour compilation réelle des firmwares
+2025-11-22 19:43:33 +0100|ymora|Fix: Chaîne complète mise à jour version firmware pour dispositifs USB
+2025-11-22 19:39:05 +0100|ymora|Docs: Mise à jour header firmware v3.1-gps
+2025-11-22 19:38:03 +0100|ymora|Feat: Firmware v3.1-gps avec géolocalisation GPS/réseau cellulaire
+2025-11-22 19:36:47 +0100|ymora|Fix: Ajout bouton fermeture (croix) au composant Modal
+2025-11-22 17:45:28 +0100|ymora|Feat: Gestion position dispositifs USB (via IP) et OTA (via GPS/réseau cellulaire)
+2025-11-22 17:41:59 +0100|ymora|Fix: Amélioration visibilité bouton fermeture modal Flash
+2025-11-22 17:41:00 +0100|ymora|Rename: Menu 'Dispositifs' renommé en 'Dispositifs OTT'
+2025-11-22 17:39:04 +0100|ymora|Feat: Ajout onglet Configuration dans Outils pour configurer les dispositifs
+2025-11-22 17:36:36 +0100|ymora|Refactor: Suppression onglet Streaming USB du modal dispositifs et renommage Configuration en Outils
+2025-11-22 17:35:32 +0100|ymora|Fix: Amélioration priorité USB et gestion erreur 409 OTA
+2025-11-22 17:33:24 +0100|ymora|Fix: Correction ordre déclaration flashDevice avant handleFlashSingle
+2025-11-22 17:32:07 +0100|ymora|Refactor: Simplification interface flash - icône unique et barre progression visible
+2025-11-22 17:24:23 +0100|ymora|Feat: Flash multiple avec barres de progression et console par dispositif
+2025-11-22 14:42:04 +0100|ymora|Fix: Suppression import logger dupliqué dans UsbContext
+2025-11-22 14:40:13 +0100|ymora|Fix: Amélioration recherche dispositif par USB ID et TEMP ICCID
+2025-11-22 14:39:05 +0100|ymora|Fix: Ajout import logger manquant dans UsbContext
+2025-11-22 14:38:24 +0100|ymora|Fix: Amélioration reconnaissance dispositif après flash USB
+2025-11-22 14:34:36 +0100|ymora|Rename: Onglet 'Flash USB' renommé en 'Flash' (gère USB et OTA)
+2025-11-22 14:33:50 +0100|ymora|Feat: Modal unifié pour flash USB et OTA avec progression, logs et stats
+2025-11-22 14:31:29 +0100|ymora|Fix: Ajout fonction refreshDevices manquante dans FlashUSBModal
+2025-11-22 14:31:03 +0100|ymora|Fix: Mise à jour automatique version firmware après flash USB
+2025-11-22 14:30:07 +0100|ymora|Fix: Nettoyage code configuration - icônes doublées et imports inutilisés
+2025-11-22 14:26:58 +0100|ymora|Refactor: Redirection firmware-upload vers configuration pour compatibilité
+2025-11-22 14:26:25 +0100|ymora|Refactor: Page Configuration avec 3 onglets (Upload, Flash, Streaming USB)
+2025-11-22 14:04:11 +0100|ymora|Fix: Amélioration gestion erreur port déjà utilisé dans handleConnect
+2025-11-22 14:03:49 +0100|ymora|Fix: Déconnexion automatique du streaming USB avant flash
+2025-11-22 14:02:27 +0100|ymora|Simplification: Modal flash USB avec barre de progression et console
+2025-11-22 13:59:41 +0100|ymora|Fix: Import manquant useUsbAutoDetection dans firmware-upload/page.js
+2025-11-22 13:58:39 +0100|ymora|Refactor: Hook partagé pour la détection USB automatique
+2025-11-22 13:57:41 +0100|ymora|Fix: Activation de la détection USB automatique dans la page firmware
+2025-11-22 13:55:02 +0100|ymora|Amélioration: Mise à jour automatique de last_seen lors de la reconnaissance USB
+2025-11-22 13:53:23 +0100|ymora|Amélioration: Validation OTT et correspondance ICCID priorisée
+2025-11-22 13:50:56 +0100|ymora|Fix: Réactivation automatique de la détection USB après déconnexion
+2025-11-22 13:48:08 +0100|ymora|Fix: Conversion minutes en heures/jours pour affichage 'Vu il y a'
+2025-11-22 13:47:43 +0100|ymora|feat: enhance firmware management with version checking and deletion functionality
+2025-11-22 13:46:19 +0100|ymora|Fix: Amélioration gestion firmware upload et suppression
+2025-11-22 10:55:40 +0100|ymora|Cleanup: Suppression des fichiers de test et documentation temporaire
+2025-11-22 10:49:08 +0100|ymora|Fix: Ajout colonne status firmware + endpoint init-firmware-db + correction Dockerfile
+2025-11-22 09:16:18 +0100|ymora|refactor: enhance API request handling and improve error logging
+2025-11-22 09:16:14 +0100|ymora|refactor: improve request path parsing in API
+2025-11-22 00:07:04 +0100|ymora|chore: add .htaccess file to Docker configuration
+2025-11-21 23:53:15 +0100|ymora|refactor: streamline API route matching and update Docker configuration
+2025-11-21 23:38:40 +0100|ymora|fix: improve firmware upload endpoint matching and enhance debug logging
+2025-11-21 22:48:05 +0100|ymora|feat: integrate TinyGSM library and enhance firmware management features
+2025-11-21 20:16:37 +0100|ymora|feat: restrict firmware upload access to admin and technician roles in Sidebar
+2025-11-21 20:16:33 +0100|ymora|feat: add project structure documentation and firmware management updates
+2025-11-21 17:51:49 +0100|ymora|feat: add firmware upload and compilation features in dashboard
+2025-11-21 17:17:24 +0100|ymora|feat: enhance device information handling and firmware updates in USB context and dashboard
+2025-11-21 17:17:10 +0100|ymora|feat: enhance device management and measurement handling in API and dashboard
+2025-11-21 07:55:00 +0100|ymora|feat: enhance DevicesPage and USB context for improved measurement handling
+2025-11-21 07:31:14 +0100|ymora|feat: enhance Sidebar with documentation dropdown and update confidential banner
+2025-11-21 07:30:45 +0100|ymora|feat: enhance dashboard and documentation features in version 3.3
+2025-11-21 06:15:50 +0100|ymora|feat: introduce performance optimizations and testing framework in version 3.3
+2025-11-20 17:52:45 +0100|ymora|chore: update documentation and improve USB streaming features in version 3.3
+2025-11-20 06:42:54 +0100|ymora|refactor: integrate UsbContext for improved USB handling and streamline DevicesPage
+2025-11-20 06:42:37 +0100|ymora|fix: update output configuration in next.config.js
+2025-11-19 20:12:52 +0100|ymora|Fix: Suppression route proxy API, correction apostrophes ESLint, export statique GitHub Pages fonctionnel
+2025-11-19 09:50:39 +0100|ymora|refactor: clean up API proxy target configuration
+2025-11-19 09:08:23 +0100|ymora|refactor: update .gitignore and enhance API device handling
+2025-11-19 09:03:39 +0100|ymora|refactor: reorganize device command and configuration handling in API
+2025-11-19 07:49:05 +0100|ymora|refactor: update device and patient modals for improved user experience
+2025-11-19 07:27:40 +0100|ymora|feat: implement device deletion and automatic data refresh
+2025-11-19 07:12:51 +0100|ymora|feat: enhance OTA handling and device management
+2025-11-18 22:40:46 +0100|ymora|feat: add phone column migration and update related scripts
+2025-11-18 22:20:34 +0100|ymora|fais tout
+2025-11-18 21:14:08 +0100|ymora|fix: enhance user creation and notification handling
+2025-11-18 20:33:26 +0100|ymora|fix: enhance patient notifications handling and database initialization
+2025-11-18 20:33:00 +0100|ymora|fix: implement soft delete for users and patients
+2025-11-18 19:41:59 +0100|ymora|fix: unify patient notifications with user notifications
+2025-11-18 19:40:19 +0100|ymora|fix: ensure patient notifications are saved and table updates correctly
+2025-11-18 19:34:12 +0100|ymora|docs: add complete database schema documentation
+2025-11-18 19:26:18 +0100|ymora|docs: add complete data flow documentation
+2025-11-18 19:22:56 +0100|ymora|fix: preserve phone_number type in loadNotificationPrefs
+2025-11-18 19:20:37 +0100|ymora|fix: handle null/undefined phone_number in UserPatientModal
+2025-11-18 18:20:12 +0100|ymora|docs: add unification guide for users/patients handlers
+2025-11-18 18:19:53 +0100|ymora|refactor: complete unification of user and patient handlers
+2025-11-18 18:14:07 +0100|ymora|refactor: unify handleGetUserNotifications with handleGetPatientNotifications
+2025-11-18 18:04:33 +0100|ymora|fix: handle missing patient_notifications_preferences table gracefully
+2025-11-18 18:02:17 +0100|ymora|feat: add warning when notification channel enabled but no alert type
+2025-11-18 18:00:29 +0100|ymora|refactor: simplify device names (remove city names)
+2025-11-18 17:58:25 +0100|ymora|feat: auto-disable notifications when email/phone becomes invalid
+2025-11-18 17:56:19 +0100|ymora|feat: disable email/SMS notifications until valid email/phone entered
+2025-11-18 17:52:31 +0100|ymora|feat: add database verification script
+2025-11-18 17:50:10 +0100|ymora|docs: remove all references to local Docker database
+2025-11-18 17:46:32 +0100|ymora|refactor: unify to single production database (Render)
+2025-11-18 17:42:13 +0100|ymora|fix: handle missing phone column in handleUpdateUser and notification queries
+2025-11-18 17:36:22 +0100|ymora|chore: unify database migration into single schema.sql + cleanup
+2025-11-18 05:47:38 +0100|ymora|Refactor: Consolidate user and patient management into a reusable modal component
+2025-11-17 23:32:20 +0100|ymora|Enhance API functionality and UI components
+2025-11-17 19:16:24 +0100|ymora|Docs: Ajout vérification compatibilité firmware/API
+2025-11-17 19:13:04 +0100|ymora|Refactor: Code propre et professionnel - utilisation correcte de Next.js
+2025-11-17 19:10:08 +0100|ymora|Fix: Correction URLs avec doubles slashes et paramètres vides
+2025-11-17 19:05:59 +0100|ymora|Fix: Page de connexion unique, redirection dashboard après login
+2025-11-17 18:41:31 +0100|ymora|Nettoyage: suppression endpoint temporaire et scripts, code propre et sécurisé
+2025-11-17 18:25:56 +0100|ymora|Fix CORS: ajout localhost:3003 et utilisation du proxy pour le login
+2025-11-17 17:22:25 +0100|ymora|Ajout endpoint temporaire pour réinitialiser le mot de passe de ymora@free.fr
+2025-11-17 17:18:52 +0100|ymora|✨ Update proxy request handling: Modified header sanitization to retain 'accept-encoding' for compression support and adjusted response handling to return decompressed content. Enhanced header management by excluding 'content-encoding' and 'content-length' from the response headers for improved API reliability.
+2025-11-17 17:14:34 +0100|ymora|✨ Refactor DevicesPage and AuthContext: Removed unused tab management and search parameters from DevicesPage for cleaner UI. Enhanced API URL handling in AuthContext with absolute URL construction and proxy support, improving API request reliability. Updated fetch calls to utilize the new URL building functions for better consistency.
+2025-11-17 07:52:16 +0100|ymora|✨ Enhance API and UI functionality: Improved the handlePostMeasurement and handlePostLog functions to support multiple input formats for device identifiers and event data. Added comprehensive validation for ICCID and event fields, ensuring robust error handling. Enhanced the dashboard with new firmware upload capabilities, including version extraction from binary files and improved user feedback during uploads. Updated CSS styles for better visual consistency across components and refined the command management interface for devices.
+2025-11-17 07:51:50 +0100|ymora|✨ Enhance API and UI functionality: Improved the handlePostMeasurement and handlePostLog functions to support multiple input formats for device identifiers and event data. Added comprehensive validation for ICCID and event fields, ensuring robust error handling. Enhanced the dashboard with new firmware upload capabilities, including version extraction from binary files and improved user feedback during uploads. Updated CSS styles for better visual consistency across components and refined the command management interface for devices.
+2025-11-17 06:59:16 +0100|ymora|✨ Enhance user form validation and error handling: Added comprehensive validation for user input fields including first name, last name, email, phone, role, and password. Implemented dynamic error messaging to improve user feedback during form submission. Updated the user modal interface for better accessibility and user experience, ensuring trimmed input values for consistency.
+2025-11-17 06:59:12 +0100|ymora|✨ Enhance user form validation and error handling: Introduced comprehensive validation for user input fields, including first name, last name, email, phone, role, and password. Added state management for form errors to provide real-time feedback. Improved user experience with updated modal styles and error messages, ensuring a more intuitive interface for user creation and editing.
+2025-11-16 22:43:53 +0100|ymora|✨ Enhance user and device management: Updated API functions to handle optional phone number fields during user creation and updates, ensuring compatibility with existing database structures. Improved the Devices page by adding alert management features and refining the modal interface for better user experience. Added device unassignment functionality in the Patients page, allowing for easier device management. Enhanced error handling and user feedback across various components.
+2025-11-16 22:43:35 +0100|ymora|✨ Update Next.js configuration for GitHub Pages: Adjusted basePath and assetPrefix settings for static exports to ensure proper asset loading. Added trailingSlash option for improved routing consistency.
+2025-11-16 18:33:21 +0100|ymora|✨ Enhance API functionality and UI improvements: Added DELETE endpoints for patients and users, including validation checks to prevent self-deletion and ensure associated devices are unassigned. Improved error handling and user feedback in the deletion process. Updated dashboard components for better alert management and filtering, and refined CSS for dark mode compatibility across various UI elements.
+2025-11-16 17:45:34 +0100|ymora|✨ Update LeafletMap component: Added useState import to manage component state, enhancing functionality for future features.
+2025-11-16 16:33:45 +0100|ymora|✨ Update user handling and authentication requirements: Enhanced the handleGetUsers function to check for the existence of the phone column in the database, adjusting the query accordingly. Updated the authentication logic to ensure that authentication is always required, removing the deprecated NEXT_PUBLIC_REQUIRE_AUTH variable from the environment configuration and documentation. Improved UI elements in the dashboard for better user experience.
+2025-11-16 12:30:06 +0100|ymora|✨ Implement pagination and filtering in API endpoints: Added pagination support to the handleGetUsers, handleGetAlerts, and handleGetPatients functions, including total count and pagination details in the JSON response. Updated the README and documentation to reflect the new version and role changes, and refined the user interface for admin actions in the dashboard.
+2025-11-16 12:23:43 +0100|ymora|✨ Enhance API error handling and improve CSS for Leaflet: Updated the role retrieval query to use STRING_AGG for better permission handling, added dynamic tab navigation in the Devices page, and implemented user filtering and detail viewing in the Users page. Enhanced CSS for Leaflet components to ensure proper z-index layering.
+2025-11-16 12:20:35 +0100|ymora|✨ Enhance Audit Functionality and UI: Added DELETE endpoint for clearing audit logs, improved error handling in role retrieval, and updated the Audit page to allow admins to reset logs. Enhanced CSS for better UI elements and refined the OTA page for improved firmware management and device selection.
+2025-11-16 11:09:56 +0100|ymora|✨ Add cache clearing instructions and refactor diagnostics page: Introduced a new CACHE_FIX.md file with detailed steps for clearing browser cache. Refactored the diagnostics page structure, moving it to a new path and updating the sidebar menu for improved navigation.
+2025-11-16 10:51:54 +0100|ymora|✨ Update deployment scripts and environment configuration: Added new environment variables for production deployment in GitHub Actions, ensured the creation of .nojekyll file for static export, and cleaned up obsolete scripts to streamline the development process.
+2025-11-16 10:28:48 +0100|ymora|✨ Update Sidebar Menu Structure: Changed permission for the Diagnostics menu item to 'settings.edit' to enhance access control and improve user experience.
+2025-11-16 10:27:43 +0100|ymora|✨ Refactor Dashboard and LeafletMap Components: Improved recent alerts section to exclude critical alerts already displayed, enhancing user experience. Enhanced coordinate validation in LeafletMap for better device positioning and added robust checks for valid latitude and longitude values.
+2025-11-16 09:42:45 +0100|ymora|✨ Refactor Dashboard and Devices Pages: Removed unused measurements and report data from the dashboard for a cleaner interface. Enhanced battery badge logic with robust type checking to ensure accurate display of battery percentages. Updated recent alerts section for improved visibility and streamlined user experience.
+2025-11-16 09:30:51 +0100|ymora|✨ Refactor dashboard data handling: Improved number parsing for measurements and flow rates, ensuring accurate display of statistics. Enhanced low battery and top device lists with robust type checking and formatting for better user experience.
+2025-11-16 09:24:52 +0100|ymora|✨ Enhance dashboard functionality: Integrated report overview data into the dashboard, added new statistics cards for 24-hour measurements and average flow rate, and improved layout for better data visualization. Removed the deprecated reports page and updated sidebar menu structure to reflect these changes.
+2025-11-16 08:56:57 +0100|ymora|✨ Update project structure and enhance functionality: Added 'docs/' to .gitignore, included env_loader in api.php and index.php for environment configuration, removed unused DeviceCard import in dashboard, and corrected alert label formatting in Patients and Users pages.
+2025-11-16 08:50:41 +0100|ymora|✨ Update project structure: Added 'docs/' to .gitignore, included 'env_loader.php' in api.php and index.php for environment configuration, and removed unused import in dashboard page.js to streamline code.
+2025-11-16 08:41:18 +0100|ymora|✨ Add user and patient notification management: Implemented endpoints for retrieving and updating user and patient notification preferences. Enhanced database queries to support default preference creation and improved error handling for better user experience.
+2025-11-16 08:38:29 +0100|ymora|✨ Enhance Patients and Users Pages: Added email and phone number columns to patient and user tables for improved information display. Updated sidebar menu structure for better navigation and added descriptions for menu items. Improved user interface with refined action buttons and enhanced user experience in detail views.
+2025-11-16 08:38:27 +0100|ymora|✨ Enhance Patients and Users Pages: Added email and phone number columns to patient and user tables for improved information display. Updated sidebar menu structure for better navigation and added descriptions for menu items. Refactored sidebar links for enhanced accessibility and user experience.
+2025-11-16 08:23:33 +0100|ymora|✨ Update to Version 3.1: Enhanced user interface with a reorganized menu and optimized overview section. Introduced complete user management with CRUD functionality and improved device assignment features. Added detailed patient information modals and an interactive map with dynamic status indicators. Updated documentation to reflect new features and improvements.
+2025-11-16 08:08:00 +0100|ymora|✨ Refactor handleGetUsers function: Updated SQL query to retrieve user data with roles and permissions, improving data structure and error handling. Enhanced error logging for better debugging.
+2025-11-16 08:06:12 +0100|ymora|✨ Revamp Dashboard and Patients Page: Enhanced dashboard statistics with low battery alerts and critical item notifications. Improved patient details modal with device and alert information, including recent measurements. Updated sidebar structure for better navigation and permissions handling.
+2025-11-16 07:50:51 +0100|ymora|✨ Enhance dashboard functionality: Added patient assignment details to device commands, improved alert filtering with search functionality, and enriched reports with patient-device associations. Updated UI components for better clarity and user experience.
+2025-11-16 00:27:53 +0100|ymora|✨ Refactor DevicesPage and MapPage components: Removed the disabled button from DevicesPage, enhanced MapPage to manage selected devices and display detailed information, and updated LeafletMap to support device selection. Improved loading and error handling in the map view.
+2025-11-16 00:23:30 +0100|ymora|✨ Add device creation and update functionality: Implemented endpoints for creating and updating devices in the API. Enhanced the dashboard to support patient assignment and filtering of devices based on assignment status. Improved user experience with modals for device assignment and error handling.
+2025-11-16 00:23:24 +0100|ymora|✨ Enhance LeafletMap component: Added connection status and battery information for devices, improving user interface with status badges and last seen timestamps. Updated popup display for better clarity and user experience.
+2025-11-15 23:27:35 +0100|ymora|feat: enrich dashboard data and reports
+2025-11-15 23:02:36 +0100|ymora|expose password_hash in users_with_roles
+2025-11-15 22:51:57 +0100|ymora|fix postgres boolean filters
+2025-11-15 22:47:02 +0100|ymora|log login db error
+2025-11-15 21:55:26 +0100|ymora|🔧 Update deployment configuration: Changed `NEXT_PUBLIC_API_URL` to point to the new API endpoint, added `NEXT_PUBLIC_REQUIRE_AUTH` and `NEXT_PUBLIC_ENABLE_DEMO_RESET` environment variables for enhanced deployment settings.
+2025-11-15 20:54:44 +0100|ymora|MAJ static export pour GitHub Pages
+2025-11-15 20:41:58 +0100|ymora|🔧 Update Next.js configuration: Added `assetPrefix` to `next.config.js` to support asset loading based on the `basePath`, enhancing deployment flexibility. This change allows for better handling of static assets in different environments.
+2025-11-15 19:44:45 +0100|ymora|✨ Implement demo reset functionality: Added a new admin endpoint `/admin/reset-demo` to truncate key tables and reload demo data from SQL files. Introduced `ENABLE_DEMO_RESET` configuration to control this feature. Updated README with instructions for enabling and using the demo reset. Enhanced database migration script to include base seed data. Updated sidebar to include an administration link.
+2025-11-15 17:53:28 +0100|ymora|🔧 Refactor database connection handling: Introduced a new `bootstrap/database.php` file to centralize database configuration and connection logic. Updated `api.php` and `index.php` to utilize the new configuration functions, improving maintainability and error handling. Revised README to reflect changes in database configuration requirements.
+2025-11-15 15:58:59 +0100|ymora|✨ Add diagnostics page and panel: Introduced a new `/diagnostics` page in the dashboard to test API connectivity and display service status, PostgreSQL connection, and exposed frontend variables. Updated README and documentation to reflect this new feature.
+2025-11-15 11:26:06 +0100|ymora|🔧 Update export command and documentation: Removed the 'true' flag from the export command in package.json, updated README and HTML documentation to clarify the automatic handling of the NEXT_STATIC_EXPORT variable during the export process.
+2025-11-15 11:12:07 +0100|ymora|🔧 Enhance command handling and error management: Added new commands for updating configuration, recalibrating sensors, and triggering OTA updates in the dashboard. Introduced a dedicated error boundary component for improved UI error handling. Updated README and documentation to reflect new command functionalities and API changes.
+2025-11-15 10:55:23 +0100|ymora|📦 Move firmware libraries to private repository: Updated .gitignore to exclude the 'external/' directory, reflecting the relocation of firmware libraries to the private 'ott-hardware' repository. Revised README to clarify the new location of the external libraries and updated documentation regarding local PostgreSQL setup. Removed outdated TinyGSM submodules and deleted temporary files.
+2025-11-15 10:34:25 +0100|ymora|🔧 Update Docker configuration and API settings: Enhanced .dockerignore to exclude unnecessary files, modified Dockerfile to copy only essential backend files, and updated database connection settings in api.php to support PostgreSQL. Updated version numbers in package files and documentation to reflect the new version 3.0.0. Removed unused hooks and adjusted SQL schema for device firmware updates.
+2025-11-15 09:48:01 +0100|ymora|🔧 Enhance CORS handling in API: Implemented dynamic origin validation for CORS requests, allowing additional origins via environment variable. Updated OPTIONS response code to 204 and documented new environment variable in README.
+2025-11-15 09:47:36 +0100|ymora|📖 Update README and documentation: Revised SQL file references throughout the documentation, added a new script for creating a demo user, and clarified the process for applying database migrations. Enhanced descriptions of device command functionalities and remote configuration updates.
+2025-11-15 09:16:47 +0100|ymora|✨ Add initial database schema and password update script: Introduced a comprehensive PostgreSQL schema for a multi-tenant application, including tables for users, roles, permissions, devices, and notifications. Added a script for updating user passwords in the Render environment, with detailed instructions for execution.
+2025-11-15 08:48:23 +0100|ymora|📖 Update README and documentation: Expanded environment configuration details for frontend and backend, clarified API setup instructions, and added comprehensive guidelines for database initialization and seeding. Enhanced security notes regarding sensitive information and user roles.
+2025-11-15 07:43:00 +0100|ymora|🔄 Refactor database schema: Transitioned to PostgreSQL with new multi-tenant structure, added user roles and permissions, implemented triggers for automatic timestamp updates, and updated initial seed data for users, devices, and configurations. Enhanced views for device statistics and user roles.
+2025-11-15 01:18:02 +0100|ymora|📚 Update README and documentation: Revised API URL references, enhanced architecture diagrams, and added detailed data flow descriptions. Updated documentation to reflect changes in data handling and authentication processes.
+2025-11-15 01:17:44 +0100|ymora|🔧 Update API URL references: Changed all instances of the API URL from 'https://ott-api.onrender.com' to 'https://ott-jbln.onrender.com' across multiple files, including Login.js, AuthContext.js, and documentation files.
+2025-11-15 00:45:45 +0100|ymora|✨ API enhancements: Added debug mode for error reporting, implemented device command management with new endpoints for creating, retrieving, and acknowledging commands, and improved command handling logic. Updated permission checks to require admin access for certain operations.
+2025-11-15 00:30:17 +0100|ymora|je fais
+2025-11-14 21:33:19 +0100|ymora|✨ Enhance API routing: Added support for accessing routes via /api.php/ and improved fallback handling for direct /api.php URLs. Updated Next.js configuration to conditionally set output based on static export environment variable.
+2025-11-14 21:09:19 +0100|ymora|🔒 Mise à jour de la sécurité : ajout d'un dossier hardware ignoré, mise à jour des identifiants de démo, et ajustements de l'authentification dans l'API et le frontend.
+2025-11-14 20:13:28 +0100|ymora|oui
+2025-11-14 19:47:56 +0100|ymora|Update Next.js configuration for production and adjust cross-env dependency version
+2025-11-14 18:57:41 +0100|ymora|CI: utiliser npm run export pour GitHub Pages
+2025-11-14 18:44:30 +0100|ymora|Stabilisation V3 (PWA, API, export)
+2025-11-14 17:28:19 +0100|ymora|✨ Logs système démo : filtres + données fictives
+2025-11-14 17:21:13 +0100|ymora|✨ Mode démo enrichi : données fictives + carte Leaflet interactive
+2025-11-14 08:51:39 +0100|ymora|🔒 Repository sans firmware - Version 3.0 Clean

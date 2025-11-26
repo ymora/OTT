@@ -186,36 +186,87 @@ export function useSerialPort() {
 
   // Démarrer la lecture en continu
   const startReading = useCallback(async (onData) => {
-    if (!readerRef.current || !isConnected) {
+    if (!isConnected) {
+      console.error('[SerialPortManager] startReading: Port non connecté')
+      return () => {}
+    }
+
+    if (!readerRef.current) {
+      console.error('[SerialPortManager] startReading: Reader non disponible')
+      setError('Reader non disponible. Le port doit être connecté avant de démarrer la lecture.')
       return () => {}
     }
 
     let reading = true
+    let readLoopActive = true
+    
     const readLoop = async () => {
       try {
-        while (reading && readerRef.current && isConnected) {
-          const { value, done } = await readerRef.current.read()
-          if (done) break
-          if (value && onData) {
-            // Convertir Uint8Array en string
-            const text = new TextDecoder().decode(value)
-            onData(text)
+        console.log('[SerialPortManager] Démarrage de la boucle de lecture...')
+        while (reading && readLoopActive) {
+          // Vérifier que le reader existe toujours
+          if (!readerRef.current) {
+            console.warn('[SerialPortManager] Reader perdu, arrêt de la lecture')
+            break
+          }
+
+          try {
+            const { value, done } = await readerRef.current.read()
+            
+            if (done) {
+              console.log('[SerialPortManager] Stream terminé (done=true)')
+              break
+            }
+            
+            if (value && onData) {
+              // Convertir Uint8Array en string
+              const text = new TextDecoder().decode(value)
+              if (text && text.length > 0) {
+                console.log(`[SerialPortManager] Données reçues: ${text.length} caractères`)
+                onData(text)
+              }
+            }
+          } catch (readErr) {
+            // Erreur lors de la lecture d'un chunk
+            if (readErr.name === 'NetworkError') {
+              // Erreur réseau normale (déconnexion)
+              console.log('[SerialPortManager] Erreur réseau (déconnexion probable)')
+              break
+            } else if (readErr.name === 'TypeError' && readErr.message.includes('cancel')) {
+              // Lecture annulée explicitement
+              console.log('[SerialPortManager] Lecture annulée')
+              break
+            } else {
+              console.error('[SerialPortManager] Erreur lors de la lecture:', readErr)
+              // Continuer la lecture malgré l'erreur
+            }
           }
         }
+        console.log('[SerialPortManager] Boucle de lecture terminée')
       } catch (err) {
+        console.error('[SerialPortManager] Erreur dans la boucle de lecture:', err)
         if (err.name !== 'NetworkError' && reading) {
           setError(`Erreur de lecture: ${err.message}`)
         }
+      } finally {
+        readLoopActive = false
       }
     }
 
-    readLoop()
+    // Démarrer la boucle de lecture (ne pas await pour ne pas bloquer)
+    readLoop().catch(err => {
+      console.error('[SerialPortManager] Erreur non gérée dans readLoop:', err)
+      readLoopActive = false
+    })
     
     // Retourner une fonction pour arrêter la lecture
     return () => {
+      console.log('[SerialPortManager] Arrêt de la lecture demandé')
       reading = false
+      readLoopActive = false
+      // Ne pas annuler le reader ici car il peut être utilisé ailleurs
     }
-  }, [isConnected])
+  }, [isConnected, setError])
 
   // Écrire des données
   const write = useCallback(async (data) => {
