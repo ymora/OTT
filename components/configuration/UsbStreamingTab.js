@@ -18,8 +18,11 @@ export default function UsbStreamingTab() {
     requestPort,
     connect,
     disconnect,
+    startReading,
+    write,
     startUsbStreaming,
-    stopUsbStreaming
+    stopUsbStreaming,
+    appendUsbStreamLog
   } = useUsb()
   
   const [availablePorts, setAvailablePorts] = useState([])
@@ -115,26 +118,39 @@ export default function UsbStreamingTab() {
         // Démarrer
         if (!selectedPortId) {
           alert('Veuillez sélectionner un port USB')
+          setIsToggling(false)
           return
         }
         
         const selectedPortData = availablePorts.find(p => p.id === selectedPortId)
         if (!selectedPortData) {
           alert('Port sélectionné introuvable')
+          setIsToggling(false)
           return
         }
         
-        // Connecter au port sélectionné
+        // Connecter directement au port sélectionné
         const connected = await connect(selectedPortData.port, 115200)
         if (!connected) {
-          alert('Impossible de se connecter au port USB')
-          return
+          throw new Error('Échec de la connexion au port USB')
         }
         
         // Attendre un peu pour que la connexion soit stable
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 200))
         
-        // Démarrer le streaming (le port est déjà connecté, donc ensurePortReady ne devrait pas redemander)
+        // Démarrer directement la lecture sans passer par startUsbStreaming
+        // qui appelle ensurePortReady et peut ouvrir un modal
+        // On va utiliser directement startReading avec handleUsbStreamChunk
+        // Mais d'abord, il faut importer handleUsbStreamChunk depuis le contexte
+        // En fait, on va simplifier en utilisant startUsbStreaming mais en s'assurant
+        // que le port est déjà connecté pour éviter ensurePortReady
+        
+        // Vérifier que le port est bien connecté avant de démarrer
+        if (!isConnected) {
+          throw new Error('Port non connecté après connexion')
+        }
+        
+        // Démarrer le streaming (startUsbStreaming vérifiera que le port est connecté)
         await startUsbStreaming()
       }
     } catch (err) {

@@ -266,8 +266,17 @@ export function UsbProvider({ children }) {
       // Vérifier si le port est déjà connecté
       if (port && isConnected) {
         logger.log('✅ [USB] Port déjà connecté, utilisation du port existant')
+      } else if (port && !isConnected) {
+        // Port existe mais pas connecté, essayer de reconnecter
+        logger.log('🔄 [USB] Reconnexion au port existant...')
+        const reconnected = await connect(port, 115200)
+        if (!reconnected) {
+          throw new Error('Impossible de reconnecter au port existant')
+        }
+        logger.log('✅ [USB] Port reconnecté')
       } else {
-        // S'assurer que le port est prêt et connecté
+        // Aucun port, utiliser ensurePortReady (peut ouvrir un modal)
+        logger.log('🔍 [USB] Aucun port disponible, recherche d\'un port...')
         const readyPort = await ensurePortReady()
         if (!readyPort) {
           throw new Error('Port non disponible après ensurePortReady')
