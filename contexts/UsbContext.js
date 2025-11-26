@@ -313,22 +313,26 @@ export function UsbProvider({ children }) {
       // Ajouter un log initial pour confirmer que le streaming est actif
       appendUsbStreamLog('📡 Streaming USB démarré - En attente de données du dispositif...')
       
-      // Envoyer la commande "usb" au dispositif pour activer le streaming continu
+      // IMPORTANT: Envoyer la commande "usb" au dispositif pour activer le streaming continu
       // Le firmware attend cette commande dans les 3 secondes après le boot
+      // Sans cette commande, le firmware n'enverra que les logs de boot, pas le streaming continu
+      // Attendre un peu pour que la lecture soit bien démarrée avant d'envoyer la commande
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
       try {
-        logger.log('📤 [USB] Envoi de la commande "usb" au dispositif...')
+        logger.log('📤 [USB] Envoi de la commande "usb" au dispositif pour activer le streaming continu...')
         const commandSent = await write('usb\n')
         if (commandSent) {
-          logger.log('✅ [USB] Commande "usb" envoyée avec succès')
-          appendUsbStreamLog('📤 Commande "usb" envoyée au dispositif pour activer le streaming...')
+          logger.log('✅ [USB] Commande "usb" envoyée avec succès - Le firmware devrait maintenant envoyer des données en continu')
+          appendUsbStreamLog('📤 Commande "usb" envoyée au dispositif pour activer le streaming continu...')
         } else {
-          logger.warn('⚠️ [USB] Échec de l\'envoi de la commande "usb"')
-          appendUsbStreamLog('⚠️ Échec de l\'envoi de la commande "usb" - Le streaming peut ne pas démarrer')
+          logger.warn('⚠️ [USB] Échec de l\'envoi de la commande "usb" - Le streaming continu ne démarrera pas')
+          appendUsbStreamLog('⚠️ Échec de l\'envoi de la commande "usb" - Le streaming continu ne démarrera pas')
         }
       } catch (writeErr) {
         logger.error('❌ [USB] Erreur lors de l\'envoi de la commande "usb":', writeErr)
         appendUsbStreamLog(`❌ Erreur envoi commande: ${writeErr.message || writeErr}`)
-        // Ne pas arrêter le streaming, continuer quand même
+        // Ne pas arrêter le streaming, continuer quand même (peut-être que le firmware envoie déjà des données)
       }
     } catch (err) {
       logger.error('❌ [USB] Erreur démarrage streaming:', err)
