@@ -125,6 +125,10 @@ NODE_ENV=production
 - Pas de routes dynamiques
 - Toutes les pages doivent être statiques
 
+**Redirection après login :**
+- Utilisation de `router.push('/dashboard')` au lieu de `window.location.href` pour gérer automatiquement le `basePath='/OTT'`
+- Fonctionne correctement sur `https://ymora.github.io/OTT/dashboard` après authentification
+
 ---
 
 ## 🔄 Comment le Code S'adapte Automatiquement
@@ -426,6 +430,12 @@ git diff
 - Vérifier les logs Render : Dashboard → Service → Logs
 - Tester l'endpoint `/health` : `https://ott-jbln.onrender.com/api.php/health`
 - Vérifier les variables d'environnement dans le dashboard Render
+
+**Gestion SSE (Server-Sent Events) :**
+- **Keep-alive automatique** : toutes les 2 secondes pendant les opérations longues (compilation firmware)
+- **Récupération automatique** : en cas d'interruption de connexion SSE, le client vérifie automatiquement le statut du firmware après 5 secondes
+- **Processus continu** : le processus PHP continue en arrière-plan grâce à `ignore_user_abort(true)` même si la connexion se ferme
+- **Messages informatifs** : affichage de messages d'avertissement au lieu d'erreurs fatales lors d'interruptions SSE
 
 ### Déploiement
 

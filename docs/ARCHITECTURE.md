@@ -119,11 +119,19 @@ PostgreSQL (Render)
 ### 3. Compilation Firmware
 ```
 Dashboard (InoEditorTab)
-  ↓ (EventSource SSE)
+  ↓ (EventSource SSE avec keep-alive)
 /api.php/firmwares/compile/{id}
-  ↓ (arduino-cli)
+  ↓ (arduino-cli + core ESP32)
 hardware/firmware/vX.X/*.bin
+  ↓ (stockage DB BYTEA)
+PostgreSQL (firmware_versions.bin_content)
 ```
+
+**Fonctionnalités SSE :**
+- Keep-alive toutes les 2 secondes pendant l'installation du core
+- Heartbeat conditionnel (uniquement pendant l'installation, pas pendant le téléchargement)
+- Gestion robuste des interruptions : le processus PHP continue même si la connexion SSE se ferme
+- Vérification automatique du statut du firmware côté client après interruption
 
 ## 🗄️ Base de Données
 
@@ -216,13 +224,17 @@ api/handlers/             # Handlers par domaine (~1000-2000 lignes chacun)
 │   ├── handleGetLogs / handleGetDeviceHistory
 │   ├── handleGetLatestMeasurements
 │   └── handleGetDeviceConfig / handleUpdateDeviceConfig / handleTriggerOTA
-├── firmwares.php         # Firmwares & Compilation
-│   ├── handleGetFirmwares / handleCheckFirmwareVersion / handleDeleteFirmware
-│   ├── handleGetFirmwareIno / handleUpdateFirmwareIno
-│   ├── handleUploadFirmware / handleDownloadFirmware
-│   ├── handleUploadFirmwareIno
-│   ├── handleCompileFirmware (avec SSE)
-│   └── sendSSE
+├── firmwares.php         # Firmwares & Compilation (index modulaire)
+│   └── firmwares/        # Sous-modules refactorisés
+│       ├── helpers.php   # Fonctions utilitaires (extractVersionFromBin)
+│       ├── crud.php      # CRUD firmwares (handleGetFirmwares, handleCheckFirmwareVersion, handleDeleteFirmware)
+│       ├── upload.php    # Upload & Update (handleUploadFirmware, handleUploadFirmwareIno, handleUpdateFirmwareIno)
+│       ├── download.php  # Téléchargement (handleDownloadFirmware, handleGetFirmwareIno)
+│       └── compile.php   # Compilation avec SSE (handleCompileFirmware, sendSSE)
+│           - Keep-alive toutes les 2s pendant l'installation
+│           - Heartbeat conditionnel (pas pendant téléchargement)
+│           - Gestion robuste des interruptions SSE
+│           - Le processus continue même si la connexion se ferme (ignore_user_abort)
 └── notifications.php     # Notifications & Audit
     ├── handleGetNotificationPreferences / handleUpdateNotificationPreferences
     ├── handleTestNotification

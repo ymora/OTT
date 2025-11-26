@@ -356,11 +356,12 @@ grep -r "function " api/ | sort | uniq -d
    - **⚠️ IMPORTANT** : La compilation des firmwares est toujours réelle, jamais simulée. Si `arduino-cli` n'est pas disponible, la compilation est refusée avec une erreur explicite.
    - **Docker** : `arduino-cli` est automatiquement installé dans le `Dockerfile` lors du build.
    - **Render** : Le script `scripts/hardware/install_arduino_cli.sh` est exécuté automatiquement via `render.yaml` lors du déploiement.
-   - **Persistent Disk sur Render (RECOMMANDÉ)** : Pour éviter de retélécharger le core ESP32 (~430MB) à chaque déploiement, configurez un Persistent Disk dans le dashboard Render :
+   - **Persistent Disk sur Render (RECOMMANDÉ)** : Pour éviter de retélécharger le core ESP32 (~568MB) à chaque déploiement, configurez un Persistent Disk dans le dashboard Render :
      - Service ott-api → Disks → Add Disk
-    - Mount Path: `/opt/render/project/src/hardware/arduino-data`
+     - Mount Path: `/opt/render/project/src/hardware/arduino-data`
      - Size: `1 GB` (minimum recommandé)
      - 📖 **Documentation complète** : `docs/RENDER_PERSISTENT_DISK.md`
+   - **Compilation avec SSE robuste** : La compilation utilise Server-Sent Events (SSE) avec keep-alive toutes les 2 secondes pendant l'installation du core. En cas d'interruption de connexion, le processus PHP continue en arrière-plan et le client vérifie automatiquement le statut du firmware.
    - **Installation manuelle** (si nécessaire) :
      ```bash
      curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
