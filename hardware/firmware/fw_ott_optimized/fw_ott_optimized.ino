@@ -759,8 +759,25 @@ bool connectData(uint32_t timeoutMs)
 
 float measureBattery()
 {
-  float pct = (analogRead(BATTERY_ADC_PIN) / 4095.0f) * 100.0f;
-  Serial.printf("[SENSOR] Batterie brute=%.1f%%\n", pct);
+  // Lecture brute de l'ADC (0-4095 pour 0-3.3V sur ESP32)
+  int raw = analogRead(BATTERY_ADC_PIN);
+  float voltage = (raw / 4095.0f) * 3.3f;
+  
+  // ⚠️ AMÉLIORATION NÉCESSAIRE : Cette formule est simpliste
+  // Pour une batterie LiPo typique (1 cellule = 3.0V à 4.2V) :
+  // - 3.0V = 0% (décharge complète)
+  // - 4.2V = 100% (charge complète)
+  // Mais il faut tenir compte du diviseur de tension si présent sur le PCB
+  // 
+  // Formule actuelle (temporaire) : suppose 0-3.3V = 0-100%
+  // TODO: Calibrer avec un voltmètre réel et ajuster selon le diviseur de tension
+  float pct = (voltage / 3.3f) * 100.0f;
+  
+  // Limiter à 0-100%
+  if (pct < 0.0f) pct = 0.0f;
+  if (pct > 100.0f) pct = 100.0f;
+  
+  Serial.printf("[SENSOR] Batterie ADC=%d (%.3fV) = %.1f%%\n", raw, voltage, pct);
   return pct;
 }
 

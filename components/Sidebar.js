@@ -66,6 +66,7 @@ export default function Sidebar() {
     { name: 'Présentation', icon: '📸', doc: 'presentation' },
     { name: 'Développeurs', icon: '💻', doc: 'developpeurs' },
     { name: 'Commerciale', icon: '💼', doc: 'commerciale' },
+    { name: 'Suivi Temps', icon: '⏱️', doc: 'suivi-temps' },
   ]
 
   return (

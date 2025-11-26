@@ -392,16 +392,60 @@ $path = parseRequestPath();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 // Définir Content-Type selon le type de route
-// ATTENTION: Pour SSE, les headers sont définis dans handleCompileFirmware() APRÈS l'authentification
+// ATTENTION: Pour SSE et /docs/, les headers sont définis dans les handlers
 if ($method !== 'OPTIONS') {
     $isSSERoute = preg_match('#/firmwares/compile/(\d+)$#', $path) && $method === 'GET';
-    if (!$isSSERoute) {
+    $isDocsRoute = preg_match('#^/docs/#', $path) && $method === 'GET';
+    if (!$isSSERoute && !$isDocsRoute) {
         header('Content-Type: application/json; charset=utf-8');
     }
 }
 
+// Documentation / Markdown files (doit être en premier pour éviter les conflits)
+if(preg_match('#^/docs/([^/]+\.md)$#', $path, $m) && $method === 'GET') {
+    $fileName = $m[1];
+    $filePath = __DIR__ . '/' . $fileName;
+    
+    // Debug
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[ROUTER] Route /docs/ matchée - Path: ' . $path . ' File: ' . $fileName . ' FilePath: ' . $filePath);
+    }
+    
+    // Si le fichier n'existe pas, essayer de le générer (pour SUIVI_TEMPS_FACTURATION.md)
+    if (!file_exists($filePath) && $fileName === 'SUIVI_TEMPS_FACTURATION.md') {
+        $scriptPath = __DIR__ . '/scripts/generate_time_tracking.ps1';
+        if (file_exists($scriptPath)) {
+            // Essayer de générer le fichier (si PowerShell est disponible)
+            // Note: Sur Render/Linux, on pourrait utiliser une version bash du script
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[ROUTER] Tentative de génération du fichier ' . $fileName);
+            }
+        }
+    }
+    
+    // Sécurité : vérifier que le fichier existe et est dans le répertoire autorisé
+    if (file_exists($filePath) && is_readable($filePath)) {
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Access-Control-Allow-Origin: *');
+        readfile($filePath);
+        exit;
+    } else {
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[ROUTER] Fichier non trouvé - Path: ' . $filePath . ' Exists: ' . (file_exists($filePath) ? 'yes' : 'no'));
+        }
+        http_response_code(404);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false, 
+            'error' => 'File not found. Please commit and push SUIVI_TEMPS_FACTURATION.md to the repository.',
+            'path' => $filePath, 
+            'fileName' => $fileName
+        ]);
+        exit;
+    }
+
 // Auth
-if(preg_match('#/auth/login$#', $path) && $method === 'POST') {
+} elseif(preg_match('#/auth/login$#', $path) && $method === 'POST') {
     handleLogin();
 } elseif(preg_match('#/auth/me$#', $path) && $method === 'GET') {
     handleGetMe();

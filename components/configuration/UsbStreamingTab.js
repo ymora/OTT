@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
+import logger from '@/lib/logger'
 
 export default function UsbStreamingTab() {
   const {
@@ -64,7 +65,7 @@ export default function UsbStreamingTab() {
         }
       }
     } catch (err) {
-      console.error('[UsbStreamingTab] Erreur chargement ports:', err)
+      logger.error('[UsbStreamingTab] Erreur chargement ports:', err)
     } finally {
       setLoadingPorts(false)
     }
@@ -95,7 +96,7 @@ export default function UsbStreamingTab() {
           }
         }
       } catch (err) {
-        console.error('[UsbStreamingTab] Erreur demande nouveau port:', err)
+        logger.error('[UsbStreamingTab] Erreur demande nouveau port:', err)
       }
     } else {
       setSelectedPortId(portId)
@@ -110,18 +111,18 @@ export default function UsbStreamingTab() {
     try {
       if (usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting') {
         // Arrêter
-        console.log('[UsbStreamingTab] Arrêt du streaming...')
+        logger.debug('[UsbStreamingTab] Arrêt du streaming...')
         stopUsbStreaming()
         // Attendre un peu pour que le streaming s'arrête complètement
         await new Promise(resolve => setTimeout(resolve, 500))
         if (isConnected || port) {
-          console.log('[UsbStreamingTab] Déconnexion du port...')
+          logger.debug('[UsbStreamingTab] Déconnexion du port...')
           await disconnect()
           // Attendre plus longtemps pour que le port soit complètement libéré
           // Les locks peuvent prendre du temps à se libérer
           await new Promise(resolve => setTimeout(resolve, 800))
         }
-        console.log('[UsbStreamingTab] Streaming arrêté et port déconnecté')
+        logger.debug('[UsbStreamingTab] Streaming arrêté et port déconnecté')
       } else {
         // Démarrer
         if (!selectedPortId) {
@@ -159,7 +160,7 @@ export default function UsbStreamingTab() {
         await startUsbStreaming(selectedPortData.port)
       }
     } catch (err) {
-      console.error('[UsbStreamingTab] Erreur toggle streaming:', err)
+      logger.error('[UsbStreamingTab] Erreur toggle streaming:', err)
       alert(`Erreur: ${err.message || err}`)
     } finally {
       setIsToggling(false)
@@ -254,6 +255,34 @@ export default function UsbStreamingTab() {
           </div>
         )}
 
+        {/* Mesures en temps réel - Au-dessus de la console */}
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">Débit</p>
+            <p className="text-2xl font-bold text-primary">
+              {usbStreamLastMeasurement?.flowrate !== null && usbStreamLastMeasurement?.flowrate !== undefined
+                ? `${usbStreamLastMeasurement.flowrate.toFixed(2)} L/min`
+                : '0.00 L/min'}
+            </p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">Batterie</p>
+            <p className="text-2xl font-bold text-primary">
+              {usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
+                ? `${usbStreamLastMeasurement.battery.toFixed(0)}%`
+                : '0%'}
+            </p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">RSSI</p>
+            <p className="text-2xl font-bold text-primary">
+              {usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined
+                ? `${usbStreamLastMeasurement.rssi} dBm`
+                : '-999 dBm'}
+            </p>
+          </div>
+        </div>
+
         {/* Console de logs */}
         <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 text-green-400 p-4 shadow-inner overflow-y-auto" style={{ minHeight: '500px', maxHeight: '600px' }}>
           {usbStreamLogs.length === 0 ? (
@@ -273,35 +302,6 @@ export default function UsbStreamingTab() {
           )}
         </div>
 
-        {/* Mesures en temps réel */}
-        {usbStreamLastMeasurement && (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">Débit</p>
-              <p className="text-2xl font-bold text-primary">
-                {usbStreamLastMeasurement.flowrate !== null && usbStreamLastMeasurement.flowrate !== undefined
-                  ? `${usbStreamLastMeasurement.flowrate.toFixed(2)} L/min`
-                  : 'N/A'}
-              </p>
-            </div>
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">Batterie</p>
-              <p className="text-2xl font-bold text-primary">
-                {usbStreamLastMeasurement.battery !== null && usbStreamLastMeasurement.battery !== undefined
-                  ? `${usbStreamLastMeasurement.battery.toFixed(0)}%`
-                  : 'N/A'}
-              </p>
-            </div>
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">RSSI</p>
-              <p className="text-2xl font-bold text-primary">
-                {usbStreamLastMeasurement.rssi !== null && usbStreamLastMeasurement.rssi !== undefined
-                  ? `${usbStreamLastMeasurement.rssi} dBm`
-                  : 'N/A'}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
