@@ -372,11 +372,24 @@ export function UsbProvider({ children }) {
 
   // Arrêter le streaming USB
   const stopUsbStreaming = useCallback(() => {
+    logger.log('🛑 [USB] Arrêt du streaming demandé')
     if (usbStreamStopRef.current) {
-      usbStreamStopRef.current()
+      try {
+        logger.log('🛑 [USB] Appel de la fonction stop du streaming')
+        usbStreamStopRef.current()
+        logger.log('✅ [USB] Fonction stop exécutée')
+      } catch (stopErr) {
+        logger.warn('⚠️ [USB] Erreur lors de l\'arrêt du streaming:', stopErr)
+      }
       usbStreamStopRef.current = null
+    } else {
+      logger.log('ℹ️ [USB] Aucun streaming actif à arrêter')
     }
+    // Réinitialiser le buffer
+    usbStreamBufferRef.current = ''
     setUsbStreamStatus('idle')
+    setUsbStreamError(null)
+    logger.log('✅ [USB] Streaming arrêté, état réinitialisé')
   }, [])
 
   // Détecter un dispositif USB (fonction simplifiée - à compléter avec la logique de détection)
