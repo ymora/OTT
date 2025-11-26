@@ -76,6 +76,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
       return
     }
 
+    console.log('[InoEditorTab] 📤 Démarrage upload firmware:', fileToUpload?.name || 'contenu édité')
     logger.log('📤 Démarrage upload firmware:', fileToUpload?.name || 'contenu édité')
     setUploading(true)
     setCurrentStep('upload')
@@ -87,20 +88,25 @@ export default function InoEditorTab({ onUploadSuccess }) {
       const formData = new FormData()
       
       if (fileToUpload) {
+        console.log('[InoEditorTab] Ajout fichier au FormData:', fileToUpload.name, fileToUpload.size, 'bytes')
         formData.append('firmware_ino', fileToUpload)
       } else if (contentToUpload) {
         // Créer un blob à partir du contenu édité
+        console.log('[InoEditorTab] Création blob depuis contenu, taille:', contentToUpload.length)
         const blob = new Blob([contentToUpload], { type: 'text/plain' })
         const filename = 'firmware_' + Date.now() + '.ino'
         formData.append('firmware_ino', blob, filename)
       }
       
       formData.append('type', 'ino')
+      console.log('[InoEditorTab] FormData créé, envoi vers:', `${API_URL}/api.php/firmwares/upload-ino`)
 
       if (!token) {
+        console.error('[InoEditorTab] Token manquant!')
         throw new Error('Token manquant. Veuillez vous reconnecter.')
       }
 
+      console.log('[InoEditorTab] Token présent, création XMLHttpRequest...')
       const xhr = new XMLHttpRequest()
       xhr.timeout = 30 * 1000
 
@@ -202,7 +208,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
       xhr.open('POST', `${API_URL}/api.php/firmwares/upload-ino`)
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      console.log('[InoEditorTab] Envoi requête XHR...')
       xhr.send(formData)
+      console.log('[InoEditorTab] Requête XHR envoyée, attente réponse...')
 
     } catch (err) {
       logger.error('❌ Exception lors de l\'upload:', err)
@@ -267,15 +275,23 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
   // Gérer la sélection de fichier
   const handleFileSelect = useCallback(async (e) => {
+    console.log('[InoEditorTab] handleFileSelect appelé', e.target.files)
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file) {
+      console.log('[InoEditorTab] Aucun fichier sélectionné')
+      return
+    }
+
+    console.log('[InoEditorTab] Fichier sélectionné:', file.name, file.size, 'bytes')
 
     if (!file.name.endsWith('.ino')) {
+      console.error('[InoEditorTab] Fichier non .ino:', file.name)
       setError('Seuls les fichiers .ino sont acceptés')
       setSelectedFile(null)
       return
     }
 
+    console.log('[InoEditorTab] Fichier .ino valide, lecture du contenu...')
     setSelectedFile(file)
     setError(null)
     setSuccess(null)
@@ -284,14 +300,18 @@ export default function InoEditorTab({ onUploadSuccess }) {
       // Lire le contenu du fichier
       const reader = new FileReader()
       reader.onload = async (e) => {
+        console.log('[InoEditorTab] Fichier lu avec succès, taille:', e.target.result?.length)
         const content = e.target.result
         setInoContent(content)
         setOriginalContent(content)
         setIsEdited(false)
         // Ne pas ouvrir l'éditeur automatiquement, seulement via le crayon
 
+        console.log('[InoEditorTab] Extraction de la version depuis le contenu...')
         const version = extractVersionFromContent(content)
+        console.log('[InoEditorTab] Version extraite:', version)
         if (!version) {
+          console.error('[InoEditorTab] Version non trouvée dans le fichier')
           setError('Version non trouvée dans le fichier .ino. Assurez-vous que FIRMWARE_VERSION_STR est défini.')
           setSelectedFile(null)
           setInoContent('')
@@ -300,13 +320,16 @@ export default function InoEditorTab({ onUploadSuccess }) {
         }
 
         // Vérifier si la version existe déjà
+        console.log('[InoEditorTab] Vérification si la version existe déjà:', version)
         let existingFirmware = null
         let versionExists = false
         try {
           existingFirmware = await checkVersionExists(version)
+          console.log('[InoEditorTab] Résultat vérification version:', existingFirmware ? 'existe déjà' : 'n\'existe pas')
           
           if (existingFirmware) {
             // Version existe déjà - afficher le modal
+            console.log('[InoEditorTab] Version existe déjà, affichage du modal')
             versionExists = true
             setExistingFirmware(existingFirmware)
             setPendingFile(file)
@@ -317,6 +340,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
             return
           }
         } catch (err) {
+          console.error('[InoEditorTab] Erreur lors de la vérification version:', err)
           // En cas d'erreur, on vérifie aussi dans la liste locale des firmwares
           logger.warn('Erreur lors de la vérification version via API:', err)
           
@@ -344,16 +368,22 @@ export default function InoEditorTab({ onUploadSuccess }) {
         
         // Si la version n'existe pas, lancer automatiquement l'upload
         if (!versionExists && !existingFirmware) {
+          console.log('[InoEditorTab] Version n\'existe pas, lancement automatique de l\'upload...')
           // Attendre un court instant pour s'assurer que les états sont bien mis à jour
           setTimeout(() => {
+            console.log('[InoEditorTab] Appel handleUpload avec file et content')
             handleUpload(file, content)
           }, 100)
+        } else {
+          console.log('[InoEditorTab] Upload non lancé (versionExists:', versionExists, ', existingFirmware:', !!existingFirmware, ')')
         }
       }
-      reader.onerror = () => {
+      reader.onerror = (err) => {
+        console.error('[InoEditorTab] Erreur FileReader:', err)
         setError('Erreur lors de la lecture du fichier')
         setSelectedFile(null)
       }
+      console.log('[InoEditorTab] Démarrage lecture fichier avec FileReader...')
       reader.readAsText(file)
     } catch (err) {
       logger.error('Erreur lors de la lecture du fichier:', err)
