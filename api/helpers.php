@@ -353,6 +353,13 @@ function findFirmwareInoFile($firmware_id, $firmware) {
 }
 
 /**
+ * Détecte si le serveur tourne sous Windows
+ */
+function is_windows() {
+    return strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+}
+
+/**
  * Copie récursivement un répertoire et son contenu
  */
 function copyRecursive($src, $dst) {
