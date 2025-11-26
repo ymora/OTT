@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
+import { getUsbDeviceLabel } from '@/lib/usbDevices'
 
 export default function UsbStreamingTab() {
   const {
     usbConnectedDevice,
     usbVirtualDevice,
-    usbPortInfo,
     isSupported,
     isConnected,
     port,
@@ -17,64 +17,127 @@ export default function UsbStreamingTab() {
     usbStreamLastMeasurement,
     requestPort,
     connect,
+    disconnect,
     startUsbStreaming,
     stopUsbStreaming
   } = useUsb()
-  const [isRequestingPort, setIsRequestingPort] = useState(false)
-  const [requestStatus, setRequestStatus] = useState('')
-  const autoConnectAttemptedRef = useRef(false)
+  
+  const [availablePorts, setAvailablePorts] = useState([])
+  const [selectedPortId, setSelectedPortId] = useState('')
+  const [loadingPorts, setLoadingPorts] = useState(false)
+  const [isToggling, setIsToggling] = useState(false)
 
-  // Détection et connexion automatique au chargement de l'onglet
-  useEffect(() => {
-    // Ne faire qu'une seule tentative de connexion automatique
-    if (autoConnectAttemptedRef.current) return
+  // Charger les ports disponibles au montage et périodiquement
+  const loadAvailablePorts = async () => {
     if (!isSupported) return
-    if (usbStreamStatus === 'running' || usbStreamStatus === 'connecting') return
     
-    autoConnectAttemptedRef.current = true
-    
-    const autoConnect = async () => {
+    setLoadingPorts(true)
+    try {
+      const ports = await navigator.serial.getPorts()
+      const portsList = ports.map((p, index) => {
+        const info = p.getInfo?.()
+        const label = getUsbDeviceLabel(info) || 
+          (info ? `VID ${info.usbVendorId?.toString(16).padStart(4, '0')} · PID ${info.usbProductId?.toString(16).padStart(4, '0')}` : `Port ${index + 1}`)
+        return {
+          port: p,
+          id: `port-${index}`,
+          label,
+          info
+        }
+      })
+      
+      setAvailablePorts(portsList)
+      
+      // Si un port est sélectionné mais n'existe plus, réinitialiser
+      if (selectedPortId && !portsList.find(p => p.id === selectedPortId)) {
+        setSelectedPortId('')
+      }
+      
+      // Si aucun port sélectionné mais qu'on est connecté, sélectionner le port actuel
+      if (!selectedPortId && port && portsList.length > 0) {
+        const currentPortIndex = ports.findIndex(p => p === port)
+        if (currentPortIndex >= 0) {
+          setSelectedPortId(portsList[currentPortIndex].id)
+        }
+      }
+    } catch (err) {
+      console.error('[UsbStreamingTab] Erreur chargement ports:', err)
+    } finally {
+      setLoadingPorts(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAvailablePorts()
+    // Recharger périodiquement (toutes les 5 secondes)
+    const interval = setInterval(loadAvailablePorts, 5000)
+    return () => clearInterval(interval)
+  }, [isSupported])
+
+  // Gérer la sélection d'un port
+  const handlePortSelect = async (portId) => {
+    if (portId === 'new') {
+      // Demander un nouveau port
       try {
-        // Vérifier les ports déjà autorisés
-        const authorizedPorts = await navigator.serial.getPorts()
-        
-        if (authorizedPorts.length > 0) {
-          // Utiliser le premier port autorisé
-          const firstPort = authorizedPorts[0]
-          const info = firstPort.getInfo?.()
-          const label = info
-            ? `VID ${info.usbVendorId?.toString(16).padStart(4, '0')} · PID ${info.usbProductId?.toString(16).padStart(4, '0')}`
-            : 'Port autorisé'
-          
-          setRequestStatus(`🔍 Port USB déjà autorisé détecté (${label}). Connexion automatique...`)
-          
-          // Se connecter automatiquement
-          const connected = await connect(firstPort, 115200)
-          if (connected) {
-            setRequestStatus(`✅ Port USB connecté (${label}). Démarrage automatique du streaming...`)
-            // Démarrer le streaming automatiquement
-            await startUsbStreaming()
-            setRequestStatus(`✅ Streaming USB démarré automatiquement (${label})`)
-            // Effacer le message après 3 secondes
-            setTimeout(() => setRequestStatus(''), 3000)
-          } else {
-            setRequestStatus(`⚠️ Port détecté mais connexion échouée. Cliquez sur "🔍 Détecter USB" pour réessayer.`)
+        const newPort = await requestPort()
+        if (newPort) {
+          await loadAvailablePorts()
+          // Sélectionner le nouveau port
+          const ports = await navigator.serial.getPorts()
+          const newPortIndex = ports.findIndex(p => p === newPort)
+          if (newPortIndex >= 0) {
+            setSelectedPortId(`port-${newPortIndex}`)
           }
-        } else {
-          // Aucun port autorisé, afficher un message informatif
-          setRequestStatus('ℹ️ Aucun port USB autorisé. Cliquez sur "🔍 Détecter USB" pour autoriser un port.')
         }
       } catch (err) {
-        console.error('[UsbStreamingTab] Erreur connexion automatique:', err)
-        setRequestStatus(`⚠️ Erreur lors de la détection automatique: ${err.message || err}`)
+        console.error('[UsbStreamingTab] Erreur demande nouveau port:', err)
       }
+    } else {
+      setSelectedPortId(portId)
     }
+  }
+
+  // Toggle lecture/arrêt
+  const handleToggleStreaming = async () => {
+    if (isToggling) return
     
-    // Attendre un peu pour que le composant soit complètement monté
-    const timeout = setTimeout(autoConnect, 500)
-    
-    return () => clearTimeout(timeout)
-  }, [isSupported, usbStreamStatus, connect, startUsbStreaming])
+    setIsToggling(true)
+    try {
+      if (usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting') {
+        // Arrêter
+        stopUsbStreaming()
+        if (isConnected) {
+          await disconnect()
+        }
+      } else {
+        // Démarrer
+        if (!selectedPortId) {
+          alert('Veuillez sélectionner un port USB')
+          return
+        }
+        
+        const selectedPortData = availablePorts.find(p => p.id === selectedPortId)
+        if (!selectedPortData) {
+          alert('Port sélectionné introuvable')
+          return
+        }
+        
+        // Connecter au port sélectionné
+        const connected = await connect(selectedPortData.port, 115200)
+        if (connected) {
+          // Démarrer le streaming
+          await startUsbStreaming()
+        } else {
+          alert('Impossible de se connecter au port USB')
+        }
+      }
+    } catch (err) {
+      console.error('[UsbStreamingTab] Erreur toggle streaming:', err)
+      alert(`Erreur: ${err.message || err}`)
+    } finally {
+      setIsToggling(false)
+    }
+  }
 
   const isStreaming = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
   const canToggle = isSupported && !isToggling && (selectedPortId || isStreaming)
@@ -178,9 +241,6 @@ export default function UsbStreamingTab() {
             <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-gray-500">
               <span className="text-4xl">📡</span>
               <p className="font-medium">En attente de logs USB...</p>
-              <p className="text-xs text-gray-400">
-                Dès que le firmware envoie le flux USB, les journaux apparaissent ici automatiquement.
-              </p>
             </div>
           ) : (
             <div className="space-y-1 font-mono text-sm tracking-tight">
@@ -227,4 +287,3 @@ export default function UsbStreamingTab() {
     </div>
   )
 }
-
