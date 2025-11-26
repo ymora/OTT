@@ -135,20 +135,19 @@ export default function UsbStreamingTab() {
           throw new Error('Échec de la connexion au port USB')
         }
         
-        // Attendre un peu pour que la connexion soit stable et que isConnected soit mis à jour
-        // Le state isConnected peut prendre un peu de temps à se mettre à jour
-        let retries = 0
-        while (!isConnected && retries < 10) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-          retries++
+        // Attendre un peu pour que la connexion soit stable
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        // Vérifier directement si le port est ouvert plutôt que de compter sur isConnected
+        // qui peut ne pas être mis à jour immédiatement
+        const portIsOpen = selectedPortData.port.readable && selectedPortData.port.writable
+        
+        if (!portIsOpen) {
+          throw new Error('Port non ouvert après connect() - vérifiez que le port est bien connecté')
         }
         
-        if (!isConnected) {
-          throw new Error('Connexion non établie après connect() - le port n\'est pas connecté')
-        }
-        
-        // Maintenant démarrer le streaming - startUsbStreaming devrait voir que port && isConnected
-        // et ne devrait pas appeler ensurePortReady
+        // Maintenant démarrer le streaming - startUsbStreaming devrait voir que port existe
+        // et vérifier isConnected, mais on a déjà vérifié que le port est ouvert
         await startUsbStreaming()
       }
     } catch (err) {
