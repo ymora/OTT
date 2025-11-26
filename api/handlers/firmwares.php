@@ -1885,41 +1885,42 @@ function handleGetFirmwares() {
             $version_dir = getVersionDir($firmware_version);
             
             // Déterminer quel type de fichier chercher selon le statut
+            $root_dir = getProjectRoot();
             if ($firmware_status === 'compiled') {
                 // Si compilé, chercher le .bin
                 $file_type = 'bin';
                 $bin_filename = 'fw_ott_v' . $firmware_version . '.bin';
-                $bin_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
+                $bin_dir = $root_dir . '/hardware/firmware/' . $version_dir . '/';
                 $bin_path = $bin_dir . $bin_filename;
                 
                 $test_paths = [
                     $bin_path,
                     'hardware/firmware/' . $version_dir . '/' . $bin_filename,
-                    __DIR__ . '/../../hardware/firmware/' . $version_dir . '/' . $bin_filename,
+                    $root_dir . '/hardware/firmware/' . $version_dir . '/' . $bin_filename,
                 ];
                 
                 // Aussi vérifier le file_path en DB s'il pointe vers un .bin
                 if (!empty($firmware['file_path']) && preg_match('/\.bin$/', $firmware['file_path'])) {
                     $test_paths[] = $firmware['file_path'];
-                    $test_paths[] = __DIR__ . '/../../' . $firmware['file_path'];
+                    $test_paths[] = $root_dir . '/' . $firmware['file_path'];
                 }
             } else {
                 // Si pas compilé, chercher le .ino avec l'ID
                 $file_type = 'ino';
                 $ino_filename = 'fw_ott_v' . $firmware_version . '_id' . $firmware_id . '.ino';
-                $ino_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
+                $ino_dir = $root_dir . '/hardware/firmware/' . $version_dir . '/';
                 $ino_path = $ino_dir . $ino_filename;
                 
                 $test_paths = [
                     $ino_path,
                     'hardware/firmware/' . $version_dir . '/' . $ino_filename,
-                    __DIR__ . '/../../hardware/firmware/' . $version_dir . '/' . $ino_filename,
+                    $root_dir . '/hardware/firmware/' . $version_dir . '/' . $ino_filename,
                 ];
                 
                 // Aussi vérifier le file_path en DB s'il pointe vers un .ino
                 if (!empty($firmware['file_path']) && preg_match('/\.ino$/', $firmware['file_path'])) {
                     $test_paths[] = $firmware['file_path'];
-                    $test_paths[] = __DIR__ . '/../../' . $firmware['file_path'];
+                    $test_paths[] = $root_dir . '/' . $firmware['file_path'];
                 }
             }
             
@@ -2005,8 +2006,16 @@ function handleGetFirmwares() {
         echo $json;
     } catch(PDOException $e) {
         error_log('[handleGetFirmwares] ❌ Erreur DB: ' . $e->getMessage());
+        error_log('[handleGetFirmwares] Stack trace: ' . $e->getTraceAsString());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    } catch(Exception $e) {
+        error_log('[handleGetFirmwares] ❌ Erreur inattendue: ' . $e->getMessage());
+        error_log('[handleGetFirmwares] Stack trace: ' . $e->getTraceAsString());
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal server error';
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 

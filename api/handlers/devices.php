@@ -45,7 +45,14 @@ function handleGetDevices() {
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        error_log('[handleGetDevices] ' . $e->getMessage());
+        error_log('[handleGetDevices] ❌ Erreur DB: ' . $e->getMessage());
+        error_log('[handleGetDevices] Stack trace: ' . $e->getTraceAsString());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    } catch(Exception $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal server error';
+        error_log('[handleGetDevices] ❌ Erreur inattendue: ' . $e->getMessage());
+        error_log('[handleGetDevices] Stack trace: ' . $e->getTraceAsString());
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
