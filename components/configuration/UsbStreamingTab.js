@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 
 export default function UsbStreamingTab() {
@@ -9,6 +9,8 @@ export default function UsbStreamingTab() {
     usbVirtualDevice,
     usbPortInfo,
     isSupported,
+    isConnected,
+    port,
     usbStreamStatus,
     usbStreamLogs,
     usbStreamError,
@@ -20,6 +22,59 @@ export default function UsbStreamingTab() {
   } = useUsb()
   const [isRequestingPort, setIsRequestingPort] = useState(false)
   const [requestStatus, setRequestStatus] = useState('')
+  const autoConnectAttemptedRef = useRef(false)
+
+  // Détection et connexion automatique au chargement de l'onglet
+  useEffect(() => {
+    // Ne faire qu'une seule tentative de connexion automatique
+    if (autoConnectAttemptedRef.current) return
+    if (!isSupported) return
+    if (usbStreamStatus === 'running' || usbStreamStatus === 'connecting') return
+    
+    autoConnectAttemptedRef.current = true
+    
+    const autoConnect = async () => {
+      try {
+        // Vérifier les ports déjà autorisés
+        const authorizedPorts = await navigator.serial.getPorts()
+        
+        if (authorizedPorts.length > 0) {
+          // Utiliser le premier port autorisé
+          const firstPort = authorizedPorts[0]
+          const info = firstPort.getInfo?.()
+          const label = info
+            ? `VID ${info.usbVendorId?.toString(16).padStart(4, '0')} · PID ${info.usbProductId?.toString(16).padStart(4, '0')}`
+            : 'Port autorisé'
+          
+          setRequestStatus(`🔍 Port USB déjà autorisé détecté (${label}). Connexion automatique...`)
+          
+          // Se connecter automatiquement
+          const connected = await connect(firstPort, 115200)
+          if (connected) {
+            setRequestStatus(`✅ Port USB connecté (${label}). Démarrage automatique du streaming...`)
+            // Démarrer le streaming automatiquement
+            await startUsbStreaming()
+            setRequestStatus(`✅ Streaming USB démarré automatiquement (${label})`)
+            // Effacer le message après 3 secondes
+            setTimeout(() => setRequestStatus(''), 3000)
+          } else {
+            setRequestStatus(`⚠️ Port détecté mais connexion échouée. Cliquez sur "🔍 Détecter USB" pour réessayer.`)
+          }
+        } else {
+          // Aucun port autorisé, afficher un message informatif
+          setRequestStatus('ℹ️ Aucun port USB autorisé. Cliquez sur "🔍 Détecter USB" pour autoriser un port.')
+        }
+      } catch (err) {
+        console.error('[UsbStreamingTab] Erreur connexion automatique:', err)
+        setRequestStatus(`⚠️ Erreur lors de la détection automatique: ${err.message || err}`)
+      }
+    }
+    
+    // Attendre un peu pour que le composant soit complètement monté
+    const timeout = setTimeout(autoConnect, 500)
+    
+    return () => clearTimeout(timeout)
+  }, [isSupported, usbStreamStatus, connect, startUsbStreaming])
 
   const getUsbStreamStatusBadge = () => {
     switch (usbStreamStatus) {
@@ -141,9 +196,9 @@ export default function UsbStreamingTab() {
           </div>
         )}
 
-        {isSupported && !usbConnectedDevice && !usbVirtualDevice && (
+        {isSupported && !isConnected && !usbConnectedDevice && !usbVirtualDevice && usbStreamStatus === 'idle' && (
           <div className="alert alert-info text-sm mb-4">
-            Connectez un dispositif USB et autorisez-le dans la popup du navigateur. Le streaming démarrera automatiquement.
+            💡 <strong>Astuce :</strong> Si vous avez déjà autorisé un port USB précédemment, la connexion se fait automatiquement. Sinon, cliquez sur "🔍 Détecter USB" pour autoriser un nouveau port.
           </div>
         )}
 
