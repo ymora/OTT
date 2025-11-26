@@ -719,6 +719,7 @@ function handleCompileFirmware($firmware_id) {
                             $lastOutputTime = $startTime;
                             $lastHeartbeatTime = $startTime;
                             $lastKeepAliveTime = $startTime;
+                            $lastLine = ''; // Dernière ligne de sortie pour détecter la phase (téléchargement vs installation)
                             
                             while (true) {
                                 $currentTime = time();
@@ -748,6 +749,7 @@ function handleCompileFirmware($firmware_id) {
                                         sendSSE('log', 'info', $line);
                                         flush();
                                         $lastOutputTime = $currentTime;
+                                        $lastLine = $line; // Garder la dernière ligne pour détecter la phase
                                     }
                                 }
                                         }
@@ -787,8 +789,15 @@ function handleCompileFirmware($firmware_id) {
                                     flush();
                                 }
                                 
-                                // Envoyer un heartbeat avec message toutes les 5 secondes pour montrer que le système est vivant
-                                if ($currentTime - $lastHeartbeatTime >= 5) {
+                                // Détecter si on est en phase de téléchargement (ligne contient un pourcentage) ou installation
+                                // Pattern de téléchargement: "esp32:xxx@yyy X MiB / Y MiB Z%"
+                                $isDownloading = preg_match('/\d+\.\d+ MiB \/ \d+\.\d+ MiB \d+\.\d+%/', $lastLine) || 
+                                                 preg_match('/\d+ B \/ \d+\.\d+ MiB \d+\.\d+%/', $lastLine) ||
+                                                 preg_match('/downloaded$/', $lastLine);
+                                
+                                // Envoyer un heartbeat avec message toutes les 5 secondes UNIQUEMENT si on n'est PAS en phase de téléchargement
+                                // (Pendant le téléchargement, on voit déjà la progression, pas besoin du heartbeat)
+                                if (!$isDownloading && $currentTime - $lastHeartbeatTime >= 5) {
                                     // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
                                     $lastHeartbeatTime = $currentTime;
                                     $elapsedSeconds = $currentTime - $startTime;
