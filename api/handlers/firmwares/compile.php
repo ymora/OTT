@@ -638,6 +638,16 @@ function handleCompileFirmware($firmware_id) {
                 }
                 
                 $coreListStr = implode("\n", $coreListOutput);
+                
+                // Log de diagnostic pour comprendre pourquoi le core n'est pas détecté
+                if (getenv('DEBUG_ERRORS') === 'true') {
+                    sendSSE('log', 'info', '🔍 Diagnostic core ESP32:');
+                    sendSSE('log', 'info', '   ARDUINO_DIRECTORIES_USER: ' . $arduinoDataDir);
+                    sendSSE('log', 'info', '   Dossier existe: ' . (is_dir($arduinoDataDir) ? 'OUI' : 'NON'));
+                    sendSSE('log', 'info', '   Sortie core list (premiers 500 chars): ' . substr($coreListStr, 0, 500));
+                    flush();
+                }
+                
                 // Vérifier si le core ESP32 apparaît dans la liste (format: esp32:esp32 ou esp-rv32)
                 $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || strpos($coreListStr, 'esp-rv32') !== false;
                 
@@ -651,11 +661,15 @@ function handleCompileFirmware($firmware_id) {
                     if (is_dir($corePath)) {
                         sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (cache local)');
                         sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
+                        sendSSE('log', 'info', '   ⚠️ Note: Le core existe mais n\'est pas indexé par arduino-cli');
+                        sendSSE('log', 'info', '   Le core sera utilisé directement sans re-téléchargement');
                         sendSSE('progress', 50);
                     } else {
                         sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
-                        sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~430MB, une seule fois)...');
-                        sendSSE('log', 'info', '   ✅ Le core sera stocké dans hardware/arduino-data/ (cache local ou disque persistant)');
+                        sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~568MB, une seule fois)...');
+                        sendSSE('log', 'info', '   ✅ Le core sera stocké dans hardware/arduino-data/');
+                        sendSSE('log', 'info', '   💡 Pour éviter de retélécharger à chaque déploiement, configurez un Persistent Disk sur Render.com');
+                        sendSSE('log', 'info', '   📖 Voir: docs/RENDER_PERSISTENT_DISK.md');
                         sendSSE('progress', 42);
                         
                         // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
