@@ -136,21 +136,15 @@ export default function UsbStreamingTab() {
         }
         
         // Attendre un peu pour que la connexion soit stable
-        await new Promise(resolve => setTimeout(resolve, 200))
+        await new Promise(resolve => setTimeout(resolve, 300))
         
-        // Démarrer directement la lecture sans passer par startUsbStreaming
-        // qui appelle ensurePortReady et peut ouvrir un modal
-        // On va utiliser directement startReading avec handleUsbStreamChunk
-        // Mais d'abord, il faut importer handleUsbStreamChunk depuis le contexte
-        // En fait, on va simplifier en utilisant startUsbStreaming mais en s'assurant
-        // que le port est déjà connecté pour éviter ensurePortReady
-        
-        // Vérifier que le port est bien connecté avant de démarrer
+        // Vérifier que la connexion est bien établie
         if (!isConnected) {
-          throw new Error('Port non connecté après connexion')
+          throw new Error('Connexion non établie après connect()')
         }
         
-        // Démarrer le streaming (startUsbStreaming vérifiera que le port est connecté)
+        // Démarrer le streaming - startUsbStreaming vérifiera que le port est connecté
+        // et ne devrait pas appeler ensurePortReady si port && isConnected
         await startUsbStreaming()
       }
     } catch (err) {
