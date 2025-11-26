@@ -1308,26 +1308,87 @@ function handleCompileFirmware($firmware_id) {
                     $coreListProcess = false; // Forcer le fallback
                 }
                 
-                // Fallback sur exec si proc_open échoue ou si les pipes sont invalides
+                // Fallback sur popen() avec stream_select() si proc_open échoue (non-bloquant)
                 if (!is_resource($coreListProcess) || empty($coreListOutput)) {
-                    sendSSE('log', 'warning', '⚠️ proc_open indisponible ou échoué pour core list, fallback sur exec');
+                    sendSSE('log', 'warning', '⚠️ proc_open indisponible ou échoué pour core list, fallback sur popen()');
                     flush();
-                    // Envoyer un keep-alive pendant exec pour maintenir la connexion
-                    echo ": keep-alive\n\n";
-                    flush();
-                    try {
-                        exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
-                        if (empty($coreListOutput)) {
-                            sendSSE('log', 'warning', '⚠️ exec core list n\'a retourné aucune sortie');
-                        }
-                    } catch(Exception $execErr) {
-                        error_log('[handleCompileFirmware] Erreur exec core list: ' . $execErr->getMessage());
-                        sendSSE('log', 'error', '❌ Erreur lors de exec core list: ' . $execErr->getMessage());
+                    
+                    // Utiliser popen() au lieu de exec() pour permettre des keep-alive pendant l'exécution
+                    $popenHandle = @popen($envStr . $arduinoCli . ' core list 2>&1', 'r');
+                    
+                    if ($popenHandle === false || !is_resource($popenHandle)) {
+                        error_log('[handleCompileFirmware] popen() a échoué pour core list');
+                        sendSSE('log', 'error', '❌ popen() a échoué pour core list');
                         $coreListReturn = 1;
+                    } else {
+                        // Lire la sortie de manière non-bloquante avec keep-alive
+                        stream_set_blocking($popenHandle, false);
+                        $popenStartTime = time();
+                        $popenLastKeepAlive = $popenStartTime;
+                        $popenOutput = '';
+                        $popenLastReadTime = $popenStartTime;
+                        
+                        while (true) {
+                            $currentTime = time();
+                            
+                            // Lire les données disponibles
+                            $read = [$popenHandle];
+                            $write = null;
+                            $except = null;
+                            $num_changed = stream_select($read, $write, $except, 1);
+                            
+                            if ($num_changed > 0 && in_array($popenHandle, $read)) {
+                                $chunk = fread($popenHandle, 8192);
+                                if ($chunk !== false && $chunk !== '') {
+                                    $popenOutput .= $chunk;
+                                    $coreListOutput[] = $chunk;
+                                    $popenLastReadTime = $currentTime;
+                                }
+                            }
+                            
+                            // Vérifier si le processus est terminé (feof() après un délai)
+                            if (feof($popenHandle)) {
+                                break;
+                            }
+                            
+                            // Envoyer un keep-alive toutes les 2 secondes
+                            if ($currentTime - $popenLastKeepAlive >= 2) {
+                                echo ": keep-alive\n\n";
+                                flush();
+                                $popenLastKeepAlive = $currentTime;
+                            }
+                            
+                            // Timeout de sécurité : 30 secondes maximum
+                            if ($currentTime - $popenStartTime > 30) {
+                                error_log('[handleCompileFirmware] Timeout popen() core list (>30s)');
+                                sendSSE('log', 'warning', '⚠️ Timeout lors de la vérification du core (30s)');
+                                break;
+                            }
+                            
+                            // Si pas de données depuis 5 secondes, considérer comme terminé
+                            if ($currentTime - $popenLastReadTime > 5 && empty($popenOutput)) {
+                                break;
+                            }
+                            
+                            usleep(100000); // 100ms
+                        }
+                        
+                        $coreListReturn = pclose($popenHandle);
+                        
+                        if (empty($coreListOutput) && !empty($popenOutput)) {
+                            $coreListOutput = [trim($popenOutput)];
+                        }
+                        
+                        if (empty($coreListOutput)) {
+                            sendSSE('log', 'warning', '⚠️ popen() core list n\'a retourné aucune sortie');
+                        } else {
+                            sendSSE('log', 'info', '✅ Sortie reçue de popen() core list (' . count($coreListOutput) . ' lignes)');
+                        }
+                        
+                        // Envoyer un keep-alive final
+                        echo ": keep-alive\n\n";
+                        flush();
                     }
-                    // Envoyer un autre keep-alive après exec
-                    echo ": keep-alive\n\n";
-                    flush();
                 }
                 
                 if ($coreListReturn !== 0) {
