@@ -68,11 +68,13 @@ export default function UsbStreamingTab() {
   }
 
   useEffect(() => {
+    if (!isSupported) return
     loadAvailablePorts()
     // Recharger périodiquement (toutes les 5 secondes)
     const interval = setInterval(loadAvailablePorts, 5000)
     return () => clearInterval(interval)
-  }, [isSupported])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSupported, selectedPortId, port])
 
   // Gérer la sélection d'un port
   const handlePortSelect = async (portId) => {
