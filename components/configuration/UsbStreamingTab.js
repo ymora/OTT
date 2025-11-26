@@ -14,6 +14,7 @@ export default function UsbStreamingTab() {
     usbStreamError,
     usbStreamLastMeasurement,
     requestPort,
+    connect,
     startUsbStreaming,
     stopUsbStreaming
   } = useUsb()
@@ -60,7 +61,22 @@ export default function UsbStreamingTab() {
                     const label = info
                       ? `VID ${info.usbVendorId ?? '??'} · PID ${info.usbProductId ?? '??'}`
                       : 'Port autorisé'
-                    setRequestStatus(`✅ Port USB autorisé (${label}). Le streaming démarrera automatiquement.`)
+                    setRequestStatus(`✅ Port USB autorisé (${label}). Connexion en cours...`)
+                    
+                    // Connecter le port et démarrer le streaming automatiquement
+                    try {
+                      const connected = await connect(port, 115200)
+                      if (connected) {
+                        setRequestStatus(`✅ Port USB connecté (${label}). Démarrage du streaming...`)
+                        // Démarrer le streaming automatiquement
+                        await startUsbStreaming()
+                        setRequestStatus(`✅ Streaming USB démarré (${label})`)
+                      } else {
+                        setRequestStatus(`⚠️ Port autorisé mais connexion échouée. Cliquez sur "▶️ Démarrer" pour réessayer.`)
+                      }
+                    } catch (connectErr) {
+                      setRequestStatus(`⚠️ Port autorisé mais erreur de connexion: ${connectErr.message || connectErr}. Cliquez sur "▶️ Démarrer" pour réessayer.`)
+                    }
                   } else {
                     setRequestStatus('ℹ️ Aucune autorisation accordée (popup annulée).')
                   }
