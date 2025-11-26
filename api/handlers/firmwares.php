@@ -1757,7 +1757,13 @@ function handleGetFirmwares() {
             error_log('[handleGetFirmwares] 📊 Récapitulatif: ' . $total . ' firmwares, ' . $existing . ' fichiers existants, ' . $missing . ' fichiers manquants');
         }
         
-        echo json_encode([
+        // IMPORTANT: S'assurer que le Content-Type est JSON avant d'encoder
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        // Encoder en JSON avec gestion d'erreur
+        $json = json_encode([
             'success' => true, 
             'firmwares' => $verifiedFirmwares,
             'stats' => [
@@ -1765,7 +1771,20 @@ function handleGetFirmwares() {
                 'files_existing' => $existing,
                 'files_missing' => $missing
             ]
-        ]);
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
+        if ($json === false) {
+            $error = json_last_error_msg();
+            error_log('[handleGetFirmwares] ❌ Erreur encodage JSON: ' . $error);
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Erreur lors de l\'encodage de la réponse JSON: ' . $error
+            ]);
+            return;
+        }
+        
+        echo $json;
     } catch(PDOException $e) {
         error_log('[handleGetFirmwares] ❌ Erreur DB: ' . $e->getMessage());
         http_response_code(500);
