@@ -791,17 +791,18 @@ function handleCompileFirmware($firmware_id) {
                                 }
                                 
                                 // Détecter si on est en phase de téléchargement (ligne contient un pourcentage) ou installation
-                                // Pattern de téléchargement: "esp32:xxx@yyy X MiB / Y MiB Z%" (avec ou sans temps à la fin)
-                                // Pattern d'installation: "Installing esp32:xxx@yyy..." (sans pourcentage)
+                                // Pattern de téléchargement: "esp32:xxx@yyy X MiB / Y MiB Z%" (avec ou sans temps à la fin comme "00m02s")
+                                // Les lignes de téléchargement contiennent toujours un pourcentage et "MiB /"
                                 $isDownloading = preg_match('/\d+\.\d+ MiB \/ \d+\.\d+ MiB \d+\.\d+%/', $lastLine) || 
                                                  preg_match('/\d+ B \/ \d+\.\d+ MiB \d+\.\d+%/', $lastLine) ||
                                                  preg_match('/downloaded$/', $lastLine) ||
                                                  preg_match('/Downloading packages\.\.\./', $lastLine);
                                 
-                                // Si on voit "Installing", on est en phase d'installation (pas de téléchargement)
+                                // Si on voit "Installing" ou "Skipping", on est en phase d'installation (pas de téléchargement)
+                                // Ces lignes n'ont PAS de pourcentage de téléchargement
                                 $isInstalling = preg_match('/^Installing /', $lastLine) || 
                                                 preg_match('/Skipping tool configuration/', $lastLine) ||
-                                                preg_match('/installed$/', $lastLine);
+                                                (preg_match('/installed$/', $lastLine) && !$isDownloading);
                                 
                                 // Si on est en installation, ne pas considérer comme téléchargement
                                 if ($isInstalling) {
