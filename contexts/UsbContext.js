@@ -331,7 +331,7 @@ export function UsbProvider({ children }) {
       setUsbStreamStatus('idle')
       appendUsbStreamLog(`❌ Erreur: ${errorMsg}`)
     }
-  }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger])
+  }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger, port, isConnected, write])
 
   // Arrêter le streaming USB
   const stopUsbStreaming = useCallback(() => {
