@@ -1631,14 +1631,24 @@ function handleGetFirmwares() {
     requireAdmin();
     
     try {
+        // IMPORTANT: Exclure ino_content et bin_content (BYTEA) de la liste car :
+        // 1. Elles sont très volumineuses (peuvent être plusieurs MB)
+        // 2. Elles ne sont pas nécessaires pour l'affichage de la liste
+        // 3. Elles peuvent causer des erreurs JSON (Unexpected end of JSON input)
+        // Ces colonnes sont récupérées uniquement via handleGetFirmwareIno() et handleDownloadFirmware()
         $stmt = $pdo->prepare("
-            SELECT fv.*, u.email as uploaded_by_email, u.first_name, u.last_name
+            SELECT 
+                fv.id, fv.version, fv.file_path, fv.file_size, fv.checksum, 
+                fv.release_notes, fv.is_stable, fv.min_battery_pct, 
+                fv.uploaded_by, fv.status, fv.error_message,
+                fv.created_at, fv.updated_at,
+                u.email as uploaded_by_email, u.first_name, u.last_name
             FROM firmware_versions fv
             LEFT JOIN users u ON fv.uploaded_by = u.id AND u.deleted_at IS NULL
             ORDER BY fv.created_at DESC
         ");
         $stmt->execute();
-        $firmwares = $stmt->fetchAll();
+        $firmwares = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         // Vérifier que chaque fichier existe vraiment sur le disque
         // Pour chaque firmware, on doit vérifier :
