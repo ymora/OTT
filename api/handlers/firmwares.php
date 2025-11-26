@@ -1110,8 +1110,17 @@ function handleCompileFirmware($firmware_id) {
                             // Copier dans arduino-data/libraries (persistant, pour réutilisation) - une seule fois
                             $target_lib_dir_persistent = $arduinoDataLibrariesDir . '/' . $lib_name;
                             if (!is_dir($target_lib_dir_persistent)) {
-                                copyRecursive($lib_dir, $target_lib_dir_persistent);
-                                sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' installée dans arduino-data/libraries');
+                                sendSSE('log', 'info', '📚 Installation de la librairie ' . $lib_name . '...');
+                                flush();
+                                
+                                // Copier avec keep-alive pour maintenir la connexion SSE
+                                copyRecursiveWithKeepAlive($lib_dir, $target_lib_dir_persistent, function() {
+                                    echo ": keep-alive\n\n";
+                                    flush();
+                                });
+                                
+                                sendSSE('log', 'info', '✅ Librairie ' . $lib_name . ' installée dans arduino-data/libraries');
+                                flush();
                             }
                             
                             // Créer un lien symbolique depuis le build vers la librairie persistante (plus rapide que copier)
@@ -1122,15 +1131,28 @@ function handleCompileFirmware($firmware_id) {
                                 if (!is_windows()) {
                                     if (symlink($target_lib_dir_persistent, $target_lib_dir_build)) {
                                         sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' liée dans le build');
+                                        flush();
                                     } else {
                                         // Fallback: copie si le lien symbolique échoue
-                                        copyRecursive($lib_dir, $target_lib_dir_build);
-                                        sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
+                                        sendSSE('log', 'info', '📚 Copie de la librairie ' . $lib_name . ' dans le build...');
+                                        flush();
+                                        copyRecursiveWithKeepAlive($lib_dir, $target_lib_dir_build, function() {
+                                            echo ": keep-alive\n\n";
+                                            flush();
+                                        });
+                                        sendSSE('log', 'info', '✅ Librairie ' . $lib_name . ' copiée dans le build');
+                                        flush();
                                     }
                                 } else {
                                     // Windows: copier directement (pas de liens symboliques fiables)
-                                    copyRecursive($lib_dir, $target_lib_dir_build);
-                                    sendSSE('log', 'info', '📚 Librairie ' . $lib_name . ' copiée dans le build');
+                                    sendSSE('log', 'info', '📚 Copie de la librairie ' . $lib_name . ' dans le build...');
+                                    flush();
+                                    copyRecursiveWithKeepAlive($lib_dir, $target_lib_dir_build, function() {
+                                        echo ": keep-alive\n\n";
+                                        flush();
+                                    });
+                                    sendSSE('log', 'info', '✅ Librairie ' . $lib_name . ' copiée dans le build');
+                                    flush();
                                 }
                             }
                         }
@@ -1180,7 +1202,11 @@ function handleCompileFirmware($firmware_id) {
                     stream_set_blocking($coreListStdout, false);
                     stream_set_blocking($coreListStderr, false);
                     
+                    $coreListStartTime = time();
+                    $coreListLastKeepAlive = $coreListStartTime;
+                    
                     while (true) {
+                        $currentTime = time();
                         $read = [$coreListStdout, $coreListStderr];
                         $write = null;
                         $except = null;
@@ -1193,6 +1219,13 @@ function handleCompileFirmware($firmware_id) {
                                     $coreListOutput[] = $output;
                                 }
                             }
+                        }
+                        
+                        // Envoyer un keep-alive toutes les 2 secondes pendant la vérification
+                        if ($currentTime - $coreListLastKeepAlive >= 2) {
+                            echo ": keep-alive\n\n";
+                            flush();
+                            $coreListLastKeepAlive = $currentTime;
                         }
                         
                         $status = proc_get_status($coreListProcess);

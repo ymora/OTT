@@ -384,6 +384,51 @@ function copyRecursive($src, $dst) {
     return true;
 }
 
+/**
+ * Copie récursivement un répertoire avec keep-alive pour maintenir la connexion SSE
+ * @param string $src Chemin source
+ * @param string $dst Chemin destination
+ * @param callable $keepAliveCallback Fonction à appeler périodiquement pour maintenir la connexion
+ */
+function copyRecursiveWithKeepAlive($src, $dst, $keepAliveCallback = null) {
+    $dir = opendir($src);
+    if (!$dir) {
+        return false;
+    }
+    
+    if (!is_dir($dst)) {
+        mkdir($dst, 0755, true);
+    }
+    
+    $fileCount = 0;
+    $lastKeepAlive = time();
+    
+    while (($file = readdir($dir)) !== false) {
+        if ($file === '.' || $file === '..') {
+            continue;
+        }
+        
+        $srcPath = $src . '/' . $file;
+        $dstPath = $dst . '/' . $file;
+        
+        if (is_dir($srcPath)) {
+            copyRecursiveWithKeepAlive($srcPath, $dstPath, $keepAliveCallback);
+        } else {
+            copy($srcPath, $dstPath);
+            $fileCount++;
+            
+            // Envoyer un keep-alive toutes les 2 secondes pendant la copie
+            if ($keepAliveCallback && (time() - $lastKeepAlive) >= 2) {
+                $keepAliveCallback();
+                $lastKeepAlive = time();
+            }
+        }
+    }
+    
+    closedir($dir);
+    return true;
+}
+
 // ============================================================================
 // HELPERS - Database
 // ============================================================================
