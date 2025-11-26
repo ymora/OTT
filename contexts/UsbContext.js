@@ -275,13 +275,10 @@ export function UsbProvider({ children }) {
         }
         logger.log('✅ [USB] Port reconnecté')
       } else {
-        // Aucun port, utiliser ensurePortReady (peut ouvrir un modal)
-        logger.log('🔍 [USB] Aucun port disponible, recherche d\'un port...')
-        const readyPort = await ensurePortReady()
-        if (!readyPort) {
-          throw new Error('Port non disponible après ensurePortReady')
-        }
-        logger.log('✅ [USB] Port prêt, connexion établie')
+        // Aucun port disponible - ne pas appeler ensurePortReady ici
+        // car cela ouvrirait un modal. Le composant doit gérer la connexion avant
+        logger.error('❌ [USB] Aucun port USB connecté')
+        throw new Error('Aucun port USB connecté. Veuillez sélectionner et connecter un port d\'abord.')
       }
 
       // Arrêter l'ancien streaming s'il existe
