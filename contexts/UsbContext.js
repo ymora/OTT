@@ -256,22 +256,33 @@ export function UsbProvider({ children }) {
   }, [processUsbStreamLine, usbStreamStatus])
 
   // Démarrer le streaming USB
-  const startUsbStreaming = useCallback(async () => {
+  const startUsbStreaming = useCallback(async (explicitPort = null) => {
     try {
       setUsbStreamError(null)
       setUsbStreamStatus('connecting')
       
       logger.log('📡 [USB] Démarrage du streaming USB...')
       
-      // Vérifier si le port est déjà connecté
-      if (port && isConnected) {
-        logger.log('✅ [USB] Port déjà connecté, utilisation du port existant')
-      } else if (port && !isConnected) {
-        // Port existe mais pas connecté, essayer de reconnecter
-        logger.log('🔄 [USB] Reconnexion au port existant...')
-        const reconnected = await connect(port, 115200)
+      // Utiliser le port explicite si fourni, sinon utiliser le port du contexte
+      const portToUse = explicitPort || port
+      
+      // Vérifier si le port est disponible et ouvert
+      const portIsOpen = portToUse && portToUse.readable && portToUse.writable
+      const portIsConnected = portToUse && isConnected
+      
+      if (portIsOpen || portIsConnected) {
+        logger.log('✅ [USB] Port disponible, démarrage de la lecture')
+        // Si le port est ouvert mais pas dans le contexte, mettre à jour le contexte
+        if (portToUse && portToUse !== port) {
+          logger.log('🔄 [USB] Mise à jour du port dans le contexte...')
+          // Le port sera mis à jour automatiquement par SerialPortManager
+        }
+      } else if (portToUse && !portIsOpen && !portIsConnected) {
+        // Port existe mais pas ouvert, essayer de reconnecter
+        logger.log('🔄 [USB] Port existe mais non ouvert, reconnexion...')
+        const reconnected = await connect(portToUse, 115200)
         if (!reconnected) {
-          throw new Error('Impossible de reconnecter au port existant')
+          throw new Error('Impossible de reconnecter au port')
         }
         logger.log('✅ [USB] Port reconnecté')
       } else {

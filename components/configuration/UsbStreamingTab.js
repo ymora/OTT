@@ -135,8 +135,8 @@ export default function UsbStreamingTab() {
           throw new Error('Échec de la connexion au port USB')
         }
         
-        // Attendre un peu pour que la connexion soit stable
-        await new Promise(resolve => setTimeout(resolve, 300))
+        // Attendre un peu pour que la connexion soit stable et que le state soit mis à jour
+        await new Promise(resolve => setTimeout(resolve, 500))
         
         // Vérifier directement si le port est ouvert plutôt que de compter sur isConnected
         // qui peut ne pas être mis à jour immédiatement
@@ -146,9 +146,9 @@ export default function UsbStreamingTab() {
           throw new Error('Port non ouvert après connect() - vérifiez que le port est bien connecté')
         }
         
-        // Maintenant démarrer le streaming - startUsbStreaming devrait voir que port existe
-        // et vérifier isConnected, mais on a déjà vérifié que le port est ouvert
-        await startUsbStreaming()
+        // Passer explicitement le port à startUsbStreaming pour éviter les problèmes
+        // de state React qui n'est pas encore mis à jour
+        await startUsbStreaming(selectedPortData.port)
       }
     } catch (err) {
       console.error('[UsbStreamingTab] Erreur toggle streaming:', err)
