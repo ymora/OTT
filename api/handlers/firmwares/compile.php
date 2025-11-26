@@ -4,7 +4,9 @@
  * Compile firmware and send SSE messages
  */
 
-// Temporarily include functions from old file - will be extracted progressively
-// The old file now has the fix for exec() -> popen() fallback
+// Include functions from old file (temporary during refactoring)
+// The old file has been corrected with:
+// - popen() fallback instead of exec() for non-blocking SSE
+// - getProjectRoot() instead of __DIR__ for path resolution
 require_once __DIR__ . '/../firmwares.php.old';
 
