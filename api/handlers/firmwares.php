@@ -1212,6 +1212,13 @@ function handleCompileFirmware($firmware_id) {
                         $except = null;
                         $num_changed = stream_select($read, $write, $except, 1);
                         
+                        if ($num_changed === false) {
+                            error_log('[handleCompileFirmware] stream_select a échoué pendant core list');
+                            sendSSE('log', 'error', '❌ Erreur interne pendant la vérification du core ESP32 (stream_select)');
+                            $coreListReturn = 1;
+                            break;
+                        }
+                        
                         if ($num_changed > 0) {
                             foreach ($read as $stream) {
                                 $output = stream_get_contents($stream, 8192);
@@ -1229,7 +1236,14 @@ function handleCompileFirmware($firmware_id) {
                         }
                         
                         $status = proc_get_status($coreListProcess);
-                        if (!$status || $status['running'] === false) {
+                        if ($status === false) {
+                            error_log('[handleCompileFirmware] proc_get_status a échoué pendant core list');
+                            sendSSE('log', 'error', '❌ Erreur interne pendant la vérification du core ESP32 (proc_get_status)');
+                            $coreListReturn = 1;
+                            break;
+                        }
+                        
+                        if ($status['running'] === false) {
                             $coreListReturn = $status['exitcode'] ?? 0;
                             break;
                         }
@@ -1241,7 +1255,26 @@ function handleCompileFirmware($firmware_id) {
                     proc_close($coreListProcess);
                 } else {
                     // Fallback sur exec si proc_open échoue
+                    sendSSE('log', 'warning', '⚠️ proc_open indisponible pour core list, fallback sur exec');
                     exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
+                }
+                
+                if ($coreListReturn !== 0) {
+                    $coreListError = substr(implode("\n", $coreListOutput), 0, 4000);
+                    sendSSE('log', 'error', '❌ arduino-cli core list a échoué (code ' . $coreListReturn . ')');
+                    sendSSE('log', 'error', '   Sortie: ' . $coreListError);
+                    sendSSE('error', 'Échec de la vérification du core ESP32 (arduino-cli core list). Consultez les logs.');
+                    flush();
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'core list failed'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB update status core list: ' . $dbErr->getMessage());
+                    }
+                    return;
                 }
                 
                 $coreListStr = implode("\n", $coreListOutput);
