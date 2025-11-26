@@ -138,10 +138,18 @@ export function UsbProvider({ children }) {
 
   // Traitement des lignes de streaming USB
   const processUsbStreamLine = useCallback((line) => {
-    if (!line) return
+    if (!line) {
+      logger.debug('processUsbStreamLine: ligne vide')
+      return
+    }
     const trimmed = line.trim()
-    if (!trimmed) return
+    if (!trimmed) {
+      logger.debug('processUsbStreamLine: ligne vide après trim')
+      return
+    }
 
+    logger.debug('processUsbStreamLine:', trimmed.substring(0, Math.min(100, trimmed.length)))
+    
     // Toujours ajouter les logs
     appendUsbStreamLog(trimmed)
 
@@ -236,21 +244,29 @@ export function UsbProvider({ children }) {
 
   // Gestion des chunks de streaming
   const handleUsbStreamChunk = useCallback((chunk) => {
-    if (!chunk) return
+    if (!chunk) {
+      logger.debug('📥 Chunk vide reçu')
+      return
+    }
     
-    logger.debug('📥 Chunk reçu:', chunk.length, 'caractères')
+    logger.log('📥 Chunk reçu:', chunk.length, 'caractères')
+    logger.debug('📥 Contenu chunk:', chunk.substring(0, Math.min(100, chunk.length)))
     
     usbStreamBufferRef.current += chunk
     const parts = usbStreamBufferRef.current.split(/\r?\n/)
     usbStreamBufferRef.current = parts.pop() ?? ''
     
-    parts.forEach(line => {
+    logger.debug('📥 Lignes extraites:', parts.length)
+    
+    parts.forEach((line, index) => {
       if (line || line === '') {
+        logger.debug(`📥 Traitement ligne ${index + 1}/${parts.length}:`, line.substring(0, Math.min(50, line.length)))
         processUsbStreamLine(line)
       }
     })
     
     if (usbStreamStatus === 'waiting') {
+      logger.log('✅ Premier chunk reçu, passage à running')
       setUsbStreamStatus('running')
     }
   }, [processUsbStreamLine, usbStreamStatus])
