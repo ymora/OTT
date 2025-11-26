@@ -1,5 +1,8 @@
 'use client'
 
+// Désactiver le pré-rendu statique
+export const dynamic = 'force-dynamic'
+
 import DiagnosticsPanel from '@/components/DiagnosticsPanel';
 
 export default function DiagnosticsPage() {

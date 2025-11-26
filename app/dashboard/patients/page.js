@@ -1,5 +1,8 @@
 'use client'
 
+// Désactiver le pré-rendu statique
+export const dynamic = 'force-dynamic'
+
 import { useMemo, useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'

@@ -1,5 +1,8 @@
 'use client'
 
+// Désactiver le pré-rendu statique
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { withBasePath } from '@/lib/utils'

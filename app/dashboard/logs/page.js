@@ -1,5 +1,8 @@
 'use client'
 
+// Désactiver le pré-rendu statique
+export const dynamic = 'force-dynamic'
+
 import { useApiData, useFilter } from '@/hooks'
 import { formatDateTime } from '@/lib/utils'
 import LoadingSpinner from '@/components/LoadingSpinner'

@@ -1,13 +1,16 @@
 'use client'
 
-import dynamic from 'next/dynamic'
+import dynamicImport from 'next/dynamic'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 
-const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
+const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr: false })
+
+// Désactiver le pré-rendu statique pour cette page
+export const dynamic = 'force-dynamic'
 
 export default function MapPage() {
   const [selectedDevice, setSelectedDevice] = useState(null)

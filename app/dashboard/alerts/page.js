@@ -1,5 +1,8 @@
 'use client'
 
+// Désactiver le pré-rendu statique
+export const dynamic = 'force-dynamic'
+
 import { useMemo } from 'react'
 import AlertCard from '@/components/AlertCard'
 import { useApiData, useFilter } from '@/hooks'

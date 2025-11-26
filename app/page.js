@@ -1,5 +1,8 @@
 'use client'
 
+// Désactiver le pré-rendu statique pour cette page
+export const dynamic = 'force-dynamic'
+
 import { useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import Login from '@/components/Login'
