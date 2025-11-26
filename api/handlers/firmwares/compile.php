@@ -781,9 +781,10 @@ function handleCompileFirmware($firmware_id) {
                                     break;
                                 }
                                 
-                                // Envoyer un keep-alive SSE toutes les 3 secondes pour maintenir la connexion active
+                                // Envoyer un keep-alive SSE toutes les 2 secondes pendant l'installation pour maintenir la connexion active
                                 // (Les commentaires SSE `: keep-alive` maintiennent la connexion ouverte)
-                                if ($currentTime - $lastKeepAliveTime >= 3) {
+                                // Réduire l'intervalle pendant l'installation pour éviter les timeouts
+                                if ($currentTime - $lastKeepAliveTime >= 2) {
                                     $lastKeepAliveTime = $currentTime;
                                     echo ": keep-alive\n\n";
                                     flush();
