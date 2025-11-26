@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useRouter } from 'next/navigation'
-import dynamic from 'next/dynamic'
+import dynamicImport from 'next/dynamic'
 import AlertCard from '@/components/AlertCard'
 import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -20,8 +20,8 @@ import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 
 // Lazy load des composants lourds pour accélérer Fast Refresh
-const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
-const Chart = dynamic(() => import('@/components/Chart'), { ssr: false })
+const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr: false })
+const Chart = dynamicImport(() => import('@/components/Chart'), { ssr: false })
 
 // Constantes pour les commandes
 const commandOptions = [
