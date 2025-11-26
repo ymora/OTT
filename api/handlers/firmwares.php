@@ -1188,6 +1188,13 @@ function handleCompileFirmware($firmware_id) {
                 sendSSE('progress', 40);
                 flush();
                 
+                // Définir descriptorspec pour proc_open (nécessaire pour core list)
+                $descriptorspec = [
+                    0 => ["pipe", "r"],  // stdin
+                    1 => ["pipe", "w"],  // stdout
+                    2 => ["pipe", "w"]   // stderr
+                ];
+                
                 // Vérifier si le core ESP32 est déjà installé via arduino-cli core list
                 // C'est la méthode la plus fiable car elle vérifie la base de données d'arduino-cli
                 // La commande 'core list' retourne les cores installés, pas seulement téléchargés
