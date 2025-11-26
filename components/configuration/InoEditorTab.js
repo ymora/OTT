@@ -709,15 +709,65 @@ export default function InoEditorTab({ onUploadSuccess }) {
       }
 
       eventSource.onerror = (err) => {
+        // Ne pas fermer immédiatement - la connexion peut se rétablir
+        // Le processus PHP continue grâce à ignore_user_abort(true)
+        const errorMsg = err.message || 'Connexion interrompue'
         setCompileLogs(prev => [...prev, {
           timestamp: new Date().toLocaleTimeString('fr-FR'),
-          message: `❌ Erreur de connexion SSE: ${err.message || 'Inconnue'}`,
-          level: 'error'
+          message: `⚠️ Connexion SSE interrompue: ${errorMsg}`,
+          level: 'warning'
         }])
-        setError('Erreur de connexion SSE. Vérifiez les logs pour plus de détails.')
-        resetCompilationState()
-        eventSource.close()
-        refetch() // Rafraîchir la liste des firmwares
+        setCompileLogs(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: 'ℹ️ La compilation continue en arrière-plan. Vérification du statut...',
+          level: 'info'
+        }])
+        
+        // Ne pas fermer immédiatement - attendre un peu pour voir si la connexion se rétablit
+        // EventSource essaie automatiquement de se reconnecter
+        setTimeout(() => {
+          // Si la connexion est fermée (readyState === 2), vérifier le statut du firmware
+          if (eventSource.readyState === EventSource.CLOSED) {
+            // Vérifier le statut du firmware après 5 secondes
+            setTimeout(async () => {
+              try {
+                const response = await fetchWithAuth(`/api.php/firmwares`)
+                const data = await response.json()
+                if (data.success && data.firmwares) {
+                  const firmware = data.firmwares.find(f => f.id === firmwareId)
+                  if (firmware) {
+                    if (firmware.status === 'compiled') {
+                      setSuccess(`✅ Compilation réussie ! Firmware v${firmware.version} disponible`)
+                      setCompileLogs(prev => [...prev, {
+                        timestamp: new Date().toLocaleTimeString('fr-FR'),
+                        message: '✅ Compilation terminée avec succès (vérifiée après reconnexion)',
+                        level: 'info'
+                      }])
+                      resetCompilationState()
+                      refetch()
+                    } else if (firmware.status === 'compiling') {
+                      setCompileLogs(prev => [...prev, {
+                        timestamp: new Date().toLocaleTimeString('fr-FR'),
+                        message: '⏳ La compilation est toujours en cours. Réessayez dans quelques instants.',
+                        level: 'info'
+                      }])
+                    } else if (firmware.status === 'error') {
+                      setError(`Erreur de compilation: ${firmware.error_message || 'Erreur inconnue'}`)
+                      resetCompilationState()
+                      refetch()
+                    }
+                  }
+                }
+              } catch (checkErr) {
+                setCompileLogs(prev => [...prev, {
+                  timestamp: new Date().toLocaleTimeString('fr-FR'),
+                  message: '⚠️ Impossible de vérifier le statut. La compilation peut continuer en arrière-plan.',
+                  level: 'warning'
+                }])
+              }
+            }, 5000)
+          }
+        }, 3000)
       }
 
     } catch (err) {
