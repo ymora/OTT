@@ -76,106 +76,22 @@ export default function UsbStreamingTab() {
     return () => clearTimeout(timeout)
   }, [isSupported, usbStreamStatus, connect, startUsbStreaming])
 
-  const getUsbStreamStatusBadge = () => {
-    switch (usbStreamStatus) {
-      case 'running':
-        return { label: '🟢 En cours', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' }
-      case 'waiting':
-        return { label: '🟡 En attente', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' }
-      case 'connecting':
-        return { label: '🔵 Connexion...', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' }
-      case 'idle':
-      default:
-        return { label: '⚪ Arrêté', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' }
-    }
-  }
+  const isStreaming = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
+  const canToggle = isSupported && !isToggling && (selectedPortId || isStreaming)
 
   return (
     <div className="space-y-6">
       <div className="card">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-          <div>
-            <h2 className="text-xl font-semibold">📡 Streaming USB</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Visualisation en temps réel des logs USB du dispositif connecté
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getUsbStreamStatusBadge().color}`}>
-              {getUsbStreamStatusBadge().label}
-            </span>
-            <button
-              onClick={async () => {
-                if (!isSupported || isRequestingPort) return
-                setIsRequestingPort(true)
-                setRequestStatus('🕑 Demande d’autorisation du port USB en cours...')
-                try {
-                  const port = await requestPort()
-                  if (port) {
-                    const info = port.getInfo?.()
-                    const label = info
-                      ? `VID ${info.usbVendorId ?? '??'} · PID ${info.usbProductId ?? '??'}`
-                      : 'Port autorisé'
-                    setRequestStatus(`✅ Port USB autorisé (${label}). Connexion en cours...`)
-                    
-                    // Connecter le port et démarrer le streaming automatiquement
-                    try {
-                      const connected = await connect(port, 115200)
-                      if (connected) {
-                        setRequestStatus(`✅ Port USB connecté (${label}). Démarrage du streaming...`)
-                        // Démarrer le streaming automatiquement
-                        await startUsbStreaming()
-                        setRequestStatus(`✅ Streaming USB démarré (${label})`)
-                      } else {
-                        setRequestStatus(`⚠️ Port autorisé mais connexion échouée. Cliquez sur "▶️ Démarrer" pour réessayer.`)
-                      }
-                    } catch (connectErr) {
-                      setRequestStatus(`⚠️ Port autorisé mais erreur de connexion: ${connectErr.message || connectErr}. Cliquez sur "▶️ Démarrer" pour réessayer.`)
-                    }
-                  } else {
-                    setRequestStatus('ℹ️ Aucune autorisation accordée (popup annulée).')
-                  }
-                } catch (err) {
-                  setRequestStatus(`❌ Erreur autorisation USB: ${err.message || err}`)
-                } finally {
-                  setIsRequestingPort(false)
-                }
-              }}
-              disabled={!isSupported || isRequestingPort}
-              className={`btn-secondary text-sm ${(!isSupported || isRequestingPort) ? 'opacity-60 cursor-not-allowed' : ''}`}
-            >
-              🔍 Détecter USB
-            </button>
-            {(usbStreamStatus === 'running' || usbStreamStatus === 'waiting') && (
-              <button
-                onClick={stopUsbStreaming}
-                disabled={!isSupported}
-                className="btn-secondary text-sm"
-              >
-                ⏹️ Arrêter
-              </button>
-            )}
-            {usbStreamStatus === 'idle' && (usbConnectedDevice || usbVirtualDevice) && (
-              <button
-                onClick={startUsbStreaming}
-                disabled={!isSupported || usbStreamStatus === 'connecting'}
-                className={`btn-primary text-sm ${(!isSupported || usbStreamStatus === 'connecting') ? 'opacity-60 cursor-not-allowed' : ''}`}
-              >
-                ▶️ Démarrer
-              </button>
-            )}
-          </div>
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold mb-2">📡 Streaming USB</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Visualisation en temps réel des logs USB du dispositif connecté
+          </p>
         </div>
-
-        {requestStatus && (
-          <div className="alert alert-info mb-4 text-sm">
-            {requestStatus}
-          </div>
-        )}
 
         {!isSupported && (
           <div className="alert alert-warning mb-4">
-            Le navigateur utilisé ne supporte pas l&apos;API Web Serial. Utilisez Chrome ou Edge (desktop) pour accéder au streaming USB.
+            Le navigateur utilisé ne supporte pas l&apos;API Web Serial. Utilisez Chrome ou Edge (desktop).
           </div>
         )}
 
@@ -185,36 +101,72 @@ export default function UsbStreamingTab() {
           </div>
         )}
 
-        {usbPortInfo && (
-          <div className="mb-4 rounded-xl border border-gray-200/80 dark:border-slate-700/60 bg-white/60 dark:bg-slate-900/40 px-4 py-3 text-sm text-gray-700 dark:text-slate-200">
-            <p className="font-semibold text-primary-600 dark:text-primary-300">
-              Port USB détecté : {usbPortInfo.friendlyName || `USB ${usbPortInfo.vendorHex}:${usbPortInfo.productHex}`}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-slate-400">
-              VID {usbPortInfo.vendorHex} · PID {usbPortInfo.productHex}
+        {isSupported && (
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            {/* Menu déroulant pour sélectionner le port */}
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Port USB
+              </label>
+              <select
+                value={selectedPortId}
+                onChange={(e) => handlePortSelect(e.target.value)}
+                disabled={isStreaming || loadingPorts}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {loadingPorts ? 'Chargement...' : availablePorts.length === 0 ? 'Aucun port autorisé' : 'Sélectionner un port'}
+                </option>
+                {availablePorts.map((portData) => (
+                  <option key={portData.id} value={portData.id}>
+                    {portData.label}
+                  </option>
+                ))}
+                <option value="new">➕ Autoriser un nouveau port...</option>
+              </select>
+            </div>
+
+            {/* Bouton toggle Démarrer/Arrêter */}
+            <div className="flex items-end">
+              <button
+                onClick={handleToggleStreaming}
+                disabled={!canToggle}
+                className={`px-6 py-2 rounded-lg font-semibold text-sm transition-colors ${
+                  isStreaming
+                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    : 'bg-primary-500 hover:bg-primary-600 text-white'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isToggling ? (
+                  '⏳...'
+                ) : isStreaming ? (
+                  '⏹️ Arrêter'
+                ) : (
+                  '▶️ Démarrer'
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Statut de connexion */}
+        {isStreaming && (
+          <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+            <p className="text-sm font-medium text-green-800 dark:text-green-300">
+              🟢 Streaming actif
             </p>
           </div>
         )}
 
-        {isSupported && !isConnected && !usbConnectedDevice && !usbVirtualDevice && usbStreamStatus === 'idle' && (
-          <div className="alert alert-info text-sm mb-4">
-            💡 <strong>Astuce :</strong> Si vous avez déjà autorisé un port USB précédemment, la connexion se fait automatiquement. Sinon, cliquez sur "🔍 Détecter USB" pour autoriser un nouveau port.
-          </div>
-        )}
-
+        {/* Info dispositif */}
         {(usbVirtualDevice || usbConnectedDevice) && (
-          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <p className="font-semibold text-blue-800 dark:text-blue-300">
+          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
               Dispositif : {usbConnectedDevice?.device_name || usbVirtualDevice?.device_name || 'Inconnu'}
             </p>
             {usbConnectedDevice?.sim_iccid && (
-              <p className="text-sm text-blue-600 dark:text-blue-400 font-mono">
+              <p className="text-xs text-blue-600 dark:text-blue-400 font-mono mt-1">
                 ICCID: {usbConnectedDevice.sim_iccid}
-              </p>
-            )}
-            {usbVirtualDevice?.isVirtual && (
-              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                ⚠️ Dispositif virtuel (non enregistré en base)
               </p>
             )}
           </div>
