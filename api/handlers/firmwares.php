@@ -1164,11 +1164,53 @@ function handleCompileFirmware($firmware_id) {
                 
                 sendSSE('log', 'info', 'Vérification du core ESP32...');
                 sendSSE('progress', 40);
+                flush();
                 
                 // Vérifier si le core ESP32 est déjà installé via arduino-cli core list
                 // C'est la méthode la plus fiable car elle vérifie la base de données d'arduino-cli
                 // La commande 'core list' retourne les cores installés, pas seulement téléchargés
-                exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
+                // Utiliser proc_open avec stream_select pour éviter les blocages
+                $coreListProcess = proc_open($envStr . $arduinoCli . ' core list 2>&1', $descriptorspec, $coreListPipes);
+                $coreListOutput = [];
+                $coreListReturn = 0;
+                
+                if (is_resource($coreListProcess)) {
+                    $coreListStdout = $coreListPipes[1];
+                    $coreListStderr = $coreListPipes[2];
+                    stream_set_blocking($coreListStdout, false);
+                    stream_set_blocking($coreListStderr, false);
+                    
+                    while (true) {
+                        $read = [$coreListStdout, $coreListStderr];
+                        $write = null;
+                        $except = null;
+                        $num_changed = stream_select($read, $write, $except, 1);
+                        
+                        if ($num_changed > 0) {
+                            foreach ($read as $stream) {
+                                $output = stream_get_contents($stream, 8192);
+                                if (!empty($output)) {
+                                    $coreListOutput[] = $output;
+                                }
+                            }
+                        }
+                        
+                        $status = proc_get_status($coreListProcess);
+                        if (!$status || $status['running'] === false) {
+                            $coreListReturn = $status['exitcode'] ?? 0;
+                            break;
+                        }
+                    }
+                    
+                    fclose($coreListPipes[0]);
+                    fclose($coreListPipes[1]);
+                    fclose($coreListPipes[2]);
+                    proc_close($coreListProcess);
+                } else {
+                    // Fallback sur exec si proc_open échoue
+                    exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
+                }
+                
                 $coreListStr = implode("\n", $coreListOutput);
                 // Vérifier si le core ESP32 apparaît dans la liste (format: esp32:esp32 ou esp-rv32)
                 $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || strpos($coreListStr, 'esp-rv32') !== false;
