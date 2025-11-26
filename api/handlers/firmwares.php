@@ -139,12 +139,16 @@ function handleUpdateFirmwareIno($firmware_id) {
         // Normaliser les séparateurs pour la base de données
         $relative_path = str_replace('\\', '/', $relative_path);
         
+        // IMPORTANT: Encoder le contenu pour BYTEA avant la mise à jour
+        $ino_content_encoded = encodeByteaForPostgres($ino_content);
+        
         $updateStmt = $pdo->prepare("
             UPDATE firmware_versions 
             SET version = :version,
                 file_path = :file_path,
                 file_size = :file_size,
                 checksum = :checksum,
+                ino_content = :ino_content,
                 status = 'pending_compilation'
             WHERE id = :id
         ");
@@ -153,6 +157,7 @@ function handleUpdateFirmwareIno($firmware_id) {
             'file_path' => $relative_path,
             'file_size' => $file_size,
             'checksum' => $checksum,
+            'ino_content' => $ino_content_encoded,  // NOUVEAU: Mise à jour BYTEA
             'id' => $firmware_id
         ]);
         
