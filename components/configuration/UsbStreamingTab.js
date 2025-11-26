@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 
 export default function UsbStreamingTab() {
@@ -12,9 +13,12 @@ export default function UsbStreamingTab() {
     usbStreamLogs,
     usbStreamError,
     usbStreamLastMeasurement,
+    requestPort,
     startUsbStreaming,
     stopUsbStreaming
   } = useUsb()
+  const [isRequestingPort, setIsRequestingPort] = useState(false)
+  const [requestStatus, setRequestStatus] = useState('')
 
   const getUsbStreamStatusBadge = () => {
     switch (usbStreamStatus) {
@@ -44,6 +48,33 @@ export default function UsbStreamingTab() {
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getUsbStreamStatusBadge().color}`}>
               {getUsbStreamStatusBadge().label}
             </span>
+            <button
+              onClick={async () => {
+                if (!isSupported || isRequestingPort) return
+                setIsRequestingPort(true)
+                setRequestStatus('🕑 Demande d’autorisation du port USB en cours...')
+                try {
+                  const port = await requestPort()
+                  if (port) {
+                    const info = port.getInfo?.()
+                    const label = info
+                      ? `VID ${info.usbVendorId ?? '??'} · PID ${info.usbProductId ?? '??'}`
+                      : 'Port autorisé'
+                    setRequestStatus(`✅ Port USB autorisé (${label}). Le streaming démarrera automatiquement.`)
+                  } else {
+                    setRequestStatus('ℹ️ Aucune autorisation accordée (popup annulée).')
+                  }
+                } catch (err) {
+                  setRequestStatus(`❌ Erreur autorisation USB: ${err.message || err}`)
+                } finally {
+                  setIsRequestingPort(false)
+                }
+              }}
+              disabled={!isSupported || isRequestingPort}
+              className={`btn-secondary text-sm ${(!isSupported || isRequestingPort) ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              🔍 Détecter USB
+            </button>
             {(usbStreamStatus === 'running' || usbStreamStatus === 'waiting') && (
               <button
                 onClick={stopUsbStreaming}
@@ -64,6 +95,12 @@ export default function UsbStreamingTab() {
             )}
           </div>
         </div>
+
+        {requestStatus && (
+          <div className="alert alert-info mb-4 text-sm">
+            {requestStatus}
+          </div>
+        )}
 
         {!isSupported && (
           <div className="alert alert-warning mb-4">
