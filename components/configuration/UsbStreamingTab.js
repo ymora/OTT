@@ -110,10 +110,17 @@ export default function UsbStreamingTab() {
     try {
       if (usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting') {
         // Arrêter
+        console.log('[UsbStreamingTab] Arrêt du streaming...')
         stopUsbStreaming()
+        // Attendre un peu pour que le streaming s'arrête complètement
+        await new Promise(resolve => setTimeout(resolve, 300))
         if (isConnected) {
+          console.log('[UsbStreamingTab] Déconnexion du port...')
           await disconnect()
+          // Attendre un peu pour que la déconnexion soit complète
+          await new Promise(resolve => setTimeout(resolve, 200))
         }
+        console.log('[UsbStreamingTab] Streaming arrêté et port déconnecté')
       } else {
         // Démarrer
         if (!selectedPortId) {

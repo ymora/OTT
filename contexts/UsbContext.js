@@ -295,10 +295,14 @@ export function UsbProvider({ children }) {
       // Arrêter l'ancien streaming s'il existe
       if (usbStreamStopRef.current) {
         logger.log('🛑 [USB] Arrêt de l\'ancien streaming')
-        usbStreamStopRef.current()
+        try {
+          usbStreamStopRef.current()
+        } catch (stopErr) {
+          logger.warn('⚠️ [USB] Erreur lors de l\'arrêt de l\'ancien streaming:', stopErr)
+        }
         usbStreamStopRef.current = null
-        // Attendre un peu pour que l'ancien streaming se termine
-        await new Promise(resolve => setTimeout(resolve, 100))
+        // Attendre un peu pour que l'ancien streaming se termine complètement
+        await new Promise(resolve => setTimeout(resolve, 300))
       }
 
       // Réinitialiser les buffers et états

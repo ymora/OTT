@@ -160,26 +160,54 @@ export function useSerialPort() {
 
   // Déconnecter
   const disconnect = useCallback(async () => {
+    console.log('[SerialPortManager] disconnect: début')
     try {
+      // Arrêter le reader d'abord
       if (readerRef.current) {
-        await readerRef.current.cancel()
-        await readerRef.current.release()
+        console.log('[SerialPortManager] disconnect: arrêt du reader...')
+        try {
+          await readerRef.current.cancel()
+        } catch (cancelErr) {
+          console.warn('[SerialPortManager] disconnect: erreur cancel reader:', cancelErr)
+        }
+        try {
+          await readerRef.current.release()
+        } catch (releaseErr) {
+          console.warn('[SerialPortManager] disconnect: erreur release reader:', releaseErr)
+        }
         readerRef.current = null
+        console.log('[SerialPortManager] disconnect: reader libéré')
       }
 
+      // Libérer le writer
       if (writerRef.current) {
-        await writerRef.current.release()
+        console.log('[SerialPortManager] disconnect: libération du writer...')
+        try {
+          await writerRef.current.release()
+        } catch (releaseErr) {
+          console.warn('[SerialPortManager] disconnect: erreur release writer:', releaseErr)
+        }
         writerRef.current = null
+        console.log('[SerialPortManager] disconnect: writer libéré')
       }
 
+      // Fermer le port
       if (port) {
-        await port.close()
+        console.log('[SerialPortManager] disconnect: fermeture du port...')
+        try {
+          await port.close()
+          console.log('[SerialPortManager] disconnect: port fermé')
+        } catch (closeErr) {
+          console.warn('[SerialPortManager] disconnect: erreur fermeture port:', closeErr)
+        }
       }
 
       setIsConnected(false)
       setPort(null)
       setError(null)
+      console.log('[SerialPortManager] disconnect: ✅ déconnexion complète')
     } catch (err) {
+      console.error('[SerialPortManager] disconnect: ❌ erreur:', err)
       setError(`Erreur de déconnexion: ${err.message}`)
     }
   }, [port])
