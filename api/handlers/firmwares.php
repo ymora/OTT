@@ -1199,15 +1199,21 @@ function handleCompileFirmware($firmware_id) {
                 // C'est la méthode la plus fiable car elle vérifie la base de données d'arduino-cli
                 // La commande 'core list' retourne les cores installés, pas seulement téléchargés
                 // Utiliser proc_open avec stream_select pour éviter les blocages
-                $coreListProcess = proc_open($envStr . $arduinoCli . ' core list 2>&1', $descriptorspec, $coreListPipes);
+                $coreListProcess = @proc_open($envStr . $arduinoCli . ' core list 2>&1', $descriptorspec, $coreListPipes);
                 $coreListOutput = [];
                 $coreListReturn = 0;
                 
-                if (is_resource($coreListProcess)) {
+                if (is_resource($coreListProcess) && isset($coreListPipes) && is_array($coreListPipes) && count($coreListPipes) >= 3) {
                     $coreListStdout = $coreListPipes[1];
                     $coreListStderr = $coreListPipes[2];
-                    stream_set_blocking($coreListStdout, false);
-                    stream_set_blocking($coreListStderr, false);
+                    
+                    if (!is_resource($coreListStdout) || !is_resource($coreListStderr)) {
+                        error_log('[handleCompileFirmware] Pipes invalides après proc_open pour core list');
+                        sendSSE('log', 'error', '❌ Erreur: pipes invalides pour core list');
+                        $coreListProcess = false; // Forcer le fallback
+                    } else {
+                        stream_set_blocking($coreListStdout, false);
+                        stream_set_blocking($coreListStderr, false);
                     
                     $coreListStartTime = time();
                     $coreListLastKeepAlive = $coreListStartTime;
@@ -1256,14 +1262,34 @@ function handleCompileFirmware($firmware_id) {
                         }
                     }
                     
-                    fclose($coreListPipes[0]);
-                    fclose($coreListPipes[1]);
-                    fclose($coreListPipes[2]);
-                    proc_close($coreListProcess);
-                } else {
-                    // Fallback sur exec si proc_open échoue
-                    sendSSE('log', 'warning', '⚠️ proc_open indisponible pour core list, fallback sur exec');
+                    // Fermer les pipes seulement s'ils existent et sont valides
+                    if (isset($coreListPipes) && is_array($coreListPipes)) {
+                        if (isset($coreListPipes[0]) && is_resource($coreListPipes[0])) {
+                            fclose($coreListPipes[0]);
+                        }
+                        if (isset($coreListPipes[1]) && is_resource($coreListPipes[1])) {
+                            fclose($coreListPipes[1]);
+                        }
+                        if (isset($coreListPipes[2]) && is_resource($coreListPipes[2])) {
+                            fclose($coreListPipes[2]);
+                        }
+                    }
+                    if (is_resource($coreListProcess)) {
+                        proc_close($coreListProcess);
+                    }
+                }
+                
+                // Fallback sur exec si proc_open échoue ou si les pipes sont invalides
+                if (!is_resource($coreListProcess) || empty($coreListOutput)) {
+                    sendSSE('log', 'warning', '⚠️ proc_open indisponible ou échoué pour core list, fallback sur exec');
+                    flush();
+                    // Envoyer un keep-alive pendant exec pour maintenir la connexion
+                    echo ": keep-alive\n\n";
+                    flush();
                     exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
+                    // Envoyer un autre keep-alive après exec
+                    echo ": keep-alive\n\n";
+                    flush();
                 }
                 
                 if ($coreListReturn !== 0) {
