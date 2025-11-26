@@ -1199,21 +1199,31 @@ function handleCompileFirmware($firmware_id) {
                 // C'est la méthode la plus fiable car elle vérifie la base de données d'arduino-cli
                 // La commande 'core list' retourne les cores installés, pas seulement téléchargés
                 // Utiliser proc_open avec stream_select pour éviter les blocages
-                $coreListProcess = @proc_open($envStr . $arduinoCli . ' core list 2>&1', $descriptorspec, $coreListPipes);
+                $coreListProcess = false;
+                $coreListPipes = null;
                 $coreListOutput = [];
                 $coreListReturn = 0;
                 
-                if (is_resource($coreListProcess) && isset($coreListPipes) && is_array($coreListPipes) && count($coreListPipes) >= 3) {
+                try {
+                    $coreListProcess = @proc_open($envStr . $arduinoCli . ' core list 2>&1', $descriptorspec, $coreListPipes);
+                    
+                    if ($coreListProcess === false) {
+                        throw new Exception('proc_open a retourné false - fonction désactivée ou erreur système');
+                    }
+                    
+                    if (!isset($coreListPipes) || !is_array($coreListPipes) || count($coreListPipes) < 3) {
+                        throw new Exception('Pipes non créés par proc_open (count: ' . (isset($coreListPipes) ? count($coreListPipes) : 'null') . ')');
+                    }
+                    
                     $coreListStdout = $coreListPipes[1];
                     $coreListStderr = $coreListPipes[2];
                     
                     if (!is_resource($coreListStdout) || !is_resource($coreListStderr)) {
-                        error_log('[handleCompileFirmware] Pipes invalides après proc_open pour core list');
-                        sendSSE('log', 'error', '❌ Erreur: pipes invalides pour core list');
-                        $coreListProcess = false; // Forcer le fallback
-                    } else {
-                        stream_set_blocking($coreListStdout, false);
-                        stream_set_blocking($coreListStderr, false);
+                        throw new Exception('Pipes invalides après proc_open (stdout: ' . (is_resource($coreListStdout) ? 'OK' : 'INVALIDE') . ', stderr: ' . (is_resource($coreListStderr) ? 'OK' : 'INVALIDE') . ')');
+                    }
+                    
+                    stream_set_blocking($coreListStdout, false);
+                    stream_set_blocking($coreListStderr, false);
                     
                     $coreListStartTime = time();
                     $coreListLastKeepAlive = $coreListStartTime;
@@ -1226,8 +1236,11 @@ function handleCompileFirmware($firmware_id) {
                         $num_changed = stream_select($read, $write, $except, 1);
                         
                         if ($num_changed === false) {
-                            error_log('[handleCompileFirmware] stream_select a échoué pendant core list');
-                            sendSSE('log', 'error', '❌ Erreur interne pendant la vérification du core ESP32 (stream_select)');
+                            $lastError = error_get_last();
+                            $errorMsg = 'stream_select a échoué: ' . ($lastError ? $lastError['message'] : 'erreur inconnue');
+                            error_log('[handleCompileFirmware] ' . $errorMsg);
+                            sendSSE('log', 'error', '❌ Erreur stream_select pendant core list');
+                            sendSSE('log', 'error', '   Détails: ' . $errorMsg);
                             $coreListReturn = 1;
                             break;
                         }
@@ -1250,8 +1263,11 @@ function handleCompileFirmware($firmware_id) {
                         
                         $status = proc_get_status($coreListProcess);
                         if ($status === false) {
-                            error_log('[handleCompileFirmware] proc_get_status a échoué pendant core list');
-                            sendSSE('log', 'error', '❌ Erreur interne pendant la vérification du core ESP32 (proc_get_status)');
+                            $lastError = error_get_last();
+                            $errorMsg = 'proc_get_status a retourné false: ' . ($lastError ? $lastError['message'] : 'processus invalide');
+                            error_log('[handleCompileFirmware] ' . $errorMsg);
+                            sendSSE('log', 'error', '❌ Erreur proc_get_status pendant core list');
+                            sendSSE('log', 'error', '   Détails: ' . $errorMsg);
                             $coreListReturn = 1;
                             break;
                         }
@@ -1277,6 +1293,19 @@ function handleCompileFirmware($firmware_id) {
                     if (is_resource($coreListProcess)) {
                         proc_close($coreListProcess);
                     }
+                } catch(Exception $procErr) {
+                    // Erreur lors de proc_open ou de la gestion des pipes
+                    $errorDetails = [
+                        'message' => $procErr->getMessage(),
+                        'type' => get_class($procErr),
+                        'arduino_cli' => $arduinoCli,
+                        'env_str' => substr($envStr, 0, 100)
+                    ];
+                    error_log('[handleCompileFirmware] Erreur proc_open core list: ' . json_encode($errorDetails, JSON_UNESCAPED_UNICODE));
+                    sendSSE('log', 'error', '❌ Erreur lors de l\'exécution de arduino-cli core list');
+                    sendSSE('log', 'error', '   Type: ' . get_class($procErr));
+                    sendSSE('log', 'error', '   Message: ' . $procErr->getMessage());
+                    $coreListProcess = false; // Forcer le fallback
                 }
                 
                 // Fallback sur exec si proc_open échoue ou si les pipes sont invalides
@@ -1286,7 +1315,16 @@ function handleCompileFirmware($firmware_id) {
                     // Envoyer un keep-alive pendant exec pour maintenir la connexion
                     echo ": keep-alive\n\n";
                     flush();
-                    exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
+                    try {
+                        exec($envStr . $arduinoCli . ' core list 2>&1', $coreListOutput, $coreListReturn);
+                        if (empty($coreListOutput)) {
+                            sendSSE('log', 'warning', '⚠️ exec core list n\'a retourné aucune sortie');
+                        }
+                    } catch(Exception $execErr) {
+                        error_log('[handleCompileFirmware] Erreur exec core list: ' . $execErr->getMessage());
+                        sendSSE('log', 'error', '❌ Erreur lors de exec core list: ' . $execErr->getMessage());
+                        $coreListReturn = 1;
+                    }
                     // Envoyer un autre keep-alive après exec
                     echo ": keep-alive\n\n";
                     flush();
