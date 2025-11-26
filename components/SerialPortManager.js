@@ -277,13 +277,43 @@ export function useSerialPort() {
 
   // Démarrer la lecture en continu
   const startReading = useCallback(async (onData) => {
-    if (!isConnected) {
-      console.error('[SerialPortManager] startReading: Port non connecté')
+    // Vérifier directement le port au lieu de compter sur isConnected qui peut avoir un délai
+    const portIsAvailable = port && port.readable && port.writable
+    const readerIsAvailable = readerRef.current
+    
+    console.log('[SerialPortManager] startReading: vérifications...')
+    console.log('[SerialPortManager] startReading: isConnected =', isConnected)
+    console.log('[SerialPortManager] startReading: port existe =', !!port)
+    console.log('[SerialPortManager] startReading: port.readable =', !!port?.readable)
+    console.log('[SerialPortManager] startReading: port.writable =', !!port?.writable)
+    console.log('[SerialPortManager] startReading: readerRef.current =', !!readerRef.current)
+    
+    if (!portIsAvailable && !readerIsAvailable) {
+      console.error('[SerialPortManager] startReading: Port non disponible (port:', !!port, 'readable:', !!port?.readable, 'writable:', !!port?.writable, 'reader:', !!readerRef.current, ')')
+      setError('Port non disponible. Le port doit être connecté avant de démarrer la lecture.')
       return () => {}
     }
 
+    // Si le reader n'existe pas mais le port est disponible, créer le reader
+    if (!readerRef.current && portIsAvailable) {
+      console.log('[SerialPortManager] startReading: création du reader...')
+      try {
+        if (port.readable.locked) {
+          console.error('[SerialPortManager] startReading: readable est verrouillé')
+          setError('Port readable verrouillé. Déconnectez et reconnectez.')
+          return () => {}
+        }
+        readerRef.current = port.readable.getReader()
+        console.log('[SerialPortManager] startReading: reader créé')
+      } catch (err) {
+        console.error('[SerialPortManager] startReading: erreur création reader:', err)
+        setError(`Erreur création reader: ${err.message}`)
+        return () => {}
+      }
+    }
+    
     if (!readerRef.current) {
-      console.error('[SerialPortManager] startReading: Reader non disponible')
+      console.error('[SerialPortManager] startReading: Reader non disponible après tentative de création')
       setError('Reader non disponible. Le port doit être connecté avant de démarrer la lecture.')
       return () => {}
     }
