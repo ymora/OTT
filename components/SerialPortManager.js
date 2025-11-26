@@ -79,84 +79,117 @@ export function useSerialPort() {
       // Vérifier si le port est déjà ouvert
       // Si readable et writable existent, le port est déjà ouvert
       if (portToUse.readable && portToUse.writable) {
-        console.log('[SerialPortManager] connect: port déjà ouvert, réutilisation...')
-        // Port déjà ouvert, vérifier si les streams sont verrouillés
-        try {
-          // Vérifier si writable est locked (a déjà un writer)
-          if (portToUse.writable.locked) {
-            console.warn('[SerialPortManager] connect: writable est verrouillé, libération...')
-            // Essayer de libérer l'ancien writer s'il existe
+        console.log('[SerialPortManager] connect: port déjà ouvert, vérification des locks...')
+        console.log('[SerialPortManager] connect: writable.locked =', portToUse.writable.locked)
+        console.log('[SerialPortManager] connect: readable.locked =', portToUse.readable.locked)
+        
+        // Si les streams sont verrouillés, on ne peut pas les réutiliser
+        // Il faut fermer complètement le port et le rouvrir
+        if (portToUse.writable.locked || portToUse.readable.locked) {
+          console.warn('[SerialPortManager] connect: port verrouillé, fermeture complète nécessaire...')
+          try {
+            // Libérer les refs d'abord
             if (writerRef.current) {
               try {
                 await writerRef.current.release()
               } catch (e) {
-                console.warn('[SerialPortManager] connect: erreur release writer existant:', e)
+                console.warn('[SerialPortManager] connect: erreur release writer:', e)
               }
               writerRef.current = null
             }
-            // Attendre un peu pour que le lock soit libéré
-            await new Promise(resolve => setTimeout(resolve, 200))
-          }
-          
-          // Vérifier si readable est locked (a déjà un reader)
-          if (portToUse.readable.locked) {
-            console.warn('[SerialPortManager] connect: readable est verrouillé, libération...')
-            // Essayer de libérer l'ancien reader s'il existe
+            
             if (readerRef.current) {
               try {
                 await readerRef.current.cancel()
                 await readerRef.current.release()
               } catch (e) {
-                console.warn('[SerialPortManager] connect: erreur release reader existant:', e)
+                console.warn('[SerialPortManager] connect: erreur release reader:', e)
               }
               readerRef.current = null
             }
-            // Attendre un peu pour que le lock soit libéré
-            await new Promise(resolve => setTimeout(resolve, 200))
-          }
-          
-          // Vérifier à nouveau si les streams sont toujours verrouillés
-          if (portToUse.writable.locked || portToUse.readable.locked) {
-            setError('Port toujours verrouillé après libération, réessayez dans quelques instants')
-            console.error('[SerialPortManager] connect: port toujours verrouillé')
+            
+            // Fermer complètement le port
+            console.log('[SerialPortManager] connect: fermeture du port pour le rouvrir...')
+            try {
+              await portToUse.close()
+              console.log('[SerialPortManager] connect: port fermé, attente 500ms...')
+              // Attendre que le port soit complètement fermé
+              await new Promise(resolve => setTimeout(resolve, 500))
+            } catch (closeErr) {
+              console.warn('[SerialPortManager] connect: erreur fermeture port:', closeErr)
+              // Continuer quand même, peut-être que le port est déjà fermé
+            }
+            
+            // Maintenant rouvrir le port (on va continuer après le if)
+            console.log('[SerialPortManager] connect: port sera rouvert après la fermeture')
+          } catch (cleanupErr) {
+            console.error('[SerialPortManager] connect: erreur nettoyage:', cleanupErr)
+            setError(`Erreur lors du nettoyage du port: ${cleanupErr.message}`)
             return false
           }
-          
-          // Créer le writer (streams non verrouillés)
-          console.log('[SerialPortManager] connect: création du writer...')
-          const writer = portToUse.writable.getWriter()
-          writerRef.current = writer
+        } else {
+          // Port ouvert et non verrouillé, on peut réutiliser
+          console.log('[SerialPortManager] connect: port non verrouillé, réutilisation...')
+          try {
+            // Créer le writer (streams non verrouillés)
+            console.log('[SerialPortManager] connect: création du writer...')
+            const writer = portToUse.writable.getWriter()
+            writerRef.current = writer
 
-          // Créer le reader
-          console.log('[SerialPortManager] connect: création du reader...')
-          const reader = portToUse.readable.getReader()
-          readerRef.current = reader
+            // Créer le reader
+            console.log('[SerialPortManager] connect: création du reader...')
+            const reader = portToUse.readable.getReader()
+            readerRef.current = reader
 
-          setIsConnected(true)
-          setPort(portToUse)
-          console.log('[SerialPortManager] connect: ✅ port réutilisé avec succès')
-          return true
-        } catch (err) {
-          console.error('[SerialPortManager] connect: erreur réutilisation port:', err)
-          setError(`Erreur lors de la réutilisation du port: ${err.message}`)
-          setIsConnected(false)
-          return false
+            setIsConnected(true)
+            setPort(portToUse)
+            console.log('[SerialPortManager] connect: ✅ port réutilisé avec succès')
+            return true
+          } catch (err) {
+            console.error('[SerialPortManager] connect: erreur réutilisation port:', err)
+            setError(`Erreur lors de la réutilisation du port: ${err.message}`)
+            setIsConnected(false)
+            return false
+          }
         }
       }
       
-      // Ouvrir le port
-      await portToUse.open({ baudRate })
+      // Ouvrir le port (soit nouveau, soit après fermeture complète)
+      console.log('[SerialPortManager] connect: ouverture du port...')
+      try {
+        await portToUse.open({ baudRate })
+        console.log('[SerialPortManager] connect: port ouvert')
+      } catch (openErr) {
+        // Si le port est déjà ouvert, essayer de réutiliser
+        if (openErr.name === 'InvalidStateError' && portToUse.readable && portToUse.writable) {
+          console.log('[SerialPortManager] connect: port déjà ouvert (InvalidStateError), réutilisation...')
+          // Vérifier si les streams sont verrouillés
+          if (portToUse.writable.locked || portToUse.readable.locked) {
+            setError('Port toujours verrouillé après nettoyage. Attendez quelques secondes et réessayez.')
+            console.error('[SerialPortManager] connect: port toujours verrouillé après nettoyage')
+            setIsConnected(false)
+            return false
+          }
+        } else {
+          throw openErr
+        }
+      }
 
       // Créer le writer
+      console.log('[SerialPortManager] connect: création du writer...')
       const writer = portToUse.writable.getWriter()
       writerRef.current = writer
+      console.log('[SerialPortManager] connect: writer créé')
 
       // Créer le reader
+      console.log('[SerialPortManager] connect: création du reader...')
       const reader = portToUse.readable.getReader()
       readerRef.current = reader
+      console.log('[SerialPortManager] connect: reader créé')
 
       setIsConnected(true)
       setPort(portToUse)
+      console.log('[SerialPortManager] connect: ✅ connexion réussie')
       return true
     } catch (err) {
       // Si le port est déjà ouvert, essayer de réutiliser

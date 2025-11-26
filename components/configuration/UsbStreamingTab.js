@@ -113,12 +113,13 @@ export default function UsbStreamingTab() {
         console.log('[UsbStreamingTab] Arrêt du streaming...')
         stopUsbStreaming()
         // Attendre un peu pour que le streaming s'arrête complètement
-        await new Promise(resolve => setTimeout(resolve, 300))
-        if (isConnected) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+        if (isConnected || port) {
           console.log('[UsbStreamingTab] Déconnexion du port...')
           await disconnect()
-          // Attendre un peu pour que la déconnexion soit complète
-          await new Promise(resolve => setTimeout(resolve, 200))
+          // Attendre plus longtemps pour que le port soit complètement libéré
+          // Les locks peuvent prendre du temps à se libérer
+          await new Promise(resolve => setTimeout(resolve, 800))
         }
         console.log('[UsbStreamingTab] Streaming arrêté et port déconnecté')
       } else {
