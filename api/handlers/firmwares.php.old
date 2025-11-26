@@ -1006,12 +1006,13 @@ function handleCompileFirmware($firmware_id) {
             
             // Vérifier si arduino-cli est disponible
             // ⚠️ CRITIQUE: La compilation ne doit JAMAIS être simulée - soit OK, soit ÉCHEC
+            $root_dir = getProjectRoot();
             $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
             $arduinoCli = null;
             
             // 1. Chercher dans bin/ du projet (priorité absolue)
-            $localArduinoCli = __DIR__ . '/../../bin/arduino-cli' . ($isWindows ? '.exe' : '');
-            $localArduinoCliAlt = __DIR__ . '/../../' . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'arduino-cli' . ($isWindows ? '.exe' : '');
+            $localArduinoCli = $root_dir . '/bin/arduino-cli' . ($isWindows ? '.exe' : '');
+            $localArduinoCliAlt = $root_dir . '/' . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'arduino-cli' . ($isWindows ? '.exe' : '');
             
             // Essayer les deux formats de chemin (normalisé et avec séparateurs)
             foreach ([$localArduinoCli, $localArduinoCliAlt] as $testPath) {
@@ -1088,7 +1089,7 @@ function handleCompileFirmware($firmware_id) {
                 // Arduino-cli cherche les librairies dans plusieurs emplacements :
                 // 1. Le dossier 'libraries' à côté du sketch (pour cette compilation)
                 // 2. Le dossier 'libraries' dans ARDUINO_DIRECTORIES_USER (persistant)
-                $hardware_lib_dir = __DIR__ . '/../../hardware/lib';
+                $hardware_lib_dir = $root_dir . '/hardware/lib';
                 if (is_dir($hardware_lib_dir)) {
                     $lib_dirs = glob($hardware_lib_dir . '/TinyGSM*', GLOB_ONLYDIR);
                     if (!empty($lib_dirs)) {
@@ -1099,7 +1100,7 @@ function handleCompileFirmware($firmware_id) {
                         }
                         
                         // 2. Copier aussi dans hardware/arduino-data/libraries (persistant, réutilisable)
-                        $arduinoDataLibrariesDir = __DIR__ . '/../../hardware/arduino-data/libraries';
+                        $arduinoDataLibrariesDir = $root_dir . '/hardware/arduino-data/libraries';
                         if (!is_dir($arduinoDataLibrariesDir)) {
                             mkdir($arduinoDataLibrariesDir, 0755, true);
                         }
@@ -1162,7 +1163,7 @@ function handleCompileFirmware($firmware_id) {
                 
                 // Utiliser le répertoire hardware/arduino-data du projet (généré automatiquement ou stocké sur disque persistant)
                 // Si le core est déjà présent localement, on l'utilise directement (pas de téléchargement)
-                $arduinoDataDir = __DIR__ . '/../../hardware/arduino-data';
+                $arduinoDataDir = $root_dir . '/hardware/arduino-data';
                 if (!is_dir($arduinoDataDir)) {
                     // Créer le répertoire si nécessaire
                         mkdir($arduinoDataDir, 0755, true);
@@ -1758,7 +1759,7 @@ function handleCompileFirmware($firmware_id) {
                 
                 $compiled_bin = $bin_files[0];
                 $version_dir = getVersionDir($firmware['version']);
-                $bin_dir = __DIR__ . '/../../hardware/firmware/' . $version_dir . '/';
+                $bin_dir = $root_dir . '/hardware/firmware/' . $version_dir . '/';
                 if (!is_dir($bin_dir)) mkdir($bin_dir, 0755, true);
                 $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
                 $bin_path = $bin_dir . $bin_filename;
