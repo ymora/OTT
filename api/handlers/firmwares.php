@@ -1645,7 +1645,7 @@ function handleGetFirmwares() {
             SELECT 
                 fv.id, fv.version, fv.file_path, fv.file_size, fv.checksum, 
                 fv.release_notes, fv.is_stable, fv.min_battery_pct, 
-                fv.uploaded_by, fv.status, fv.error_message,
+                fv.uploaded_by, fv.status,
                 fv.created_at, fv.updated_at,
                 u.email as uploaded_by_email, u.first_name, u.last_name
             FROM firmware_versions fv
