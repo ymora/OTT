@@ -270,21 +270,40 @@ export function useSerialPort() {
 
   // Écrire des données
   const write = useCallback(async (data) => {
-    if (!writerRef.current || !isConnected) {
-      setError('Port non connecté')
-      return false
+    // Vérifier que le writer existe (plus fiable que isConnected qui peut avoir un délai)
+    if (!writerRef.current) {
+      // Vérifier aussi si le port est ouvert directement
+      if (!port || !port.writable) {
+        setError('Port non connecté ou writer non disponible')
+        console.error('[SerialPortManager] write: writerRef.current est null, port.writable:', port?.writable)
+        return false
+      }
+      // Si le port est ouvert mais pas de writer, essayer d'en créer un
+      try {
+        if (port.writable && !port.writable.locked) {
+          writerRef.current = port.writable.getWriter()
+        } else {
+          setError('Port writable verrouillé ou non disponible')
+          return false
+        }
+      } catch (err) {
+        setError(`Erreur création writer: ${err.message}`)
+        return false
+      }
     }
 
     try {
       const encoder = new TextEncoder()
       const dataArray = encoder.encode(data)
       await writerRef.current.write(dataArray)
+      console.log('[SerialPortManager] write: données envoyées:', data.length, 'bytes')
       return true
     } catch (err) {
       setError(`Erreur d'écriture: ${err.message}`)
+      console.error('[SerialPortManager] write: erreur:', err)
       return false
     }
-  }, [isConnected])
+  }, [port])
 
   // Nettoyer à la déconnexion
   useEffect(() => {

@@ -231,14 +231,6 @@ export default function UsbStreamingTab() {
           </div>
         )}
 
-        {/* Statut de connexion */}
-        {isStreaming && (
-          <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-            <p className="text-sm font-medium text-green-800 dark:text-green-300">
-              🟢 Streaming actif
-            </p>
-          </div>
-        )}
 
         {/* Info dispositif */}
         {(usbVirtualDevice || usbConnectedDevice) && (

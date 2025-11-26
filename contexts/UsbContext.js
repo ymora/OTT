@@ -327,21 +327,33 @@ export function UsbProvider({ children }) {
       // IMPORTANT: Envoyer la commande "usb" au dispositif pour activer le streaming continu
       // Le firmware attend cette commande dans les 3 secondes après le boot
       // Sans cette commande, le firmware n'enverra que les logs de boot, pas le streaming continu
-      // Attendre un peu pour que la lecture soit bien démarrée avant d'envoyer la commande
-      await new Promise(resolve => setTimeout(resolve, 200))
+      // Attendre un peu pour que la lecture soit bien démarrée et que le writer soit prêt
+      await new Promise(resolve => setTimeout(resolve, 500))
       
       try {
         logger.log('📤 [USB] Envoi de la commande "usb" au dispositif pour activer le streaming continu...')
+        logger.log('📤 [USB] Vérification writer avant envoi...')
+        
+        // Vérifier que le port est bien ouvert et que le writer existe
+        const portForWrite = explicitPort || port
+        if (!portForWrite || !portForWrite.writable) {
+          throw new Error('Port writable non disponible pour l\'envoi de la commande')
+        }
+        
+        logger.log('📤 [USB] Port writable OK, envoi de la commande...')
         const commandSent = await write('usb\n')
+        
         if (commandSent) {
           logger.log('✅ [USB] Commande "usb" envoyée avec succès - Le firmware devrait maintenant envoyer des données en continu')
           appendUsbStreamLog('📤 Commande "usb" envoyée au dispositif pour activer le streaming continu...')
         } else {
           logger.warn('⚠️ [USB] Échec de l\'envoi de la commande "usb" - Le streaming continu ne démarrera pas')
+          logger.warn('⚠️ [USB] Vérifiez que le port est bien connecté et que le writer est disponible')
           appendUsbStreamLog('⚠️ Échec de l\'envoi de la commande "usb" - Le streaming continu ne démarrera pas')
         }
       } catch (writeErr) {
         logger.error('❌ [USB] Erreur lors de l\'envoi de la commande "usb":', writeErr)
+        logger.error('❌ [USB] Détails:', writeErr.message || writeErr)
         appendUsbStreamLog(`❌ Erreur envoi commande: ${writeErr.message || writeErr}`)
         // Ne pas arrêter le streaming, continuer quand même (peut-être que le firmware envoie déjà des données)
       }
