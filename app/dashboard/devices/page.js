@@ -1041,11 +1041,24 @@ export default function DevicesPage() {
         logger.log(`📡 Ports trouvés: ${ports.length}`)
         
         if (ports.length === 0) {
-          logger.log('💡 Aucun port USB autorisé. Cliquez sur "🔍 Détecter USB" pour autoriser un port.')
-          logger.log('   Ou connectez votre dispositif et autorisez-le dans la popup du navigateur')
+          // Pas de ports autorisés - on ne peut pas automatiquement autoriser (limitation sécurité navigateur)
+          // Mais on peut améliorer le message pour guider l'utilisateur
+          if (!detectionRef.current.noPortsWarningShown) {
+            logger.log('💡 Aucun port USB autorisé.')
+            logger.log('   🔌 Connectez votre dispositif USB, puis cliquez sur "🔍 Détecter USB" pour autoriser le port.')
+            logger.log('   📱 Une fois autorisé, la détection et le streaming seront automatiques.')
+            detectionRef.current.noPortsWarningShown = true
+            // Réessayer après 5 secondes au cas où l'utilisateur connecte le dispositif
+            setTimeout(() => {
+              detectionRef.current.noPortsWarningShown = false
+            }, 5000)
+          }
           detectionRef.current.inProgress = false
           return
         }
+        
+        // Réinitialiser le flag d'avertissement si des ports sont trouvés
+        detectionRef.current.noPortsWarningShown = false
 
         // Essayer tous les ports USB connectés
         for (const p of ports) {
@@ -1058,7 +1071,8 @@ export default function DevicesPage() {
               logger.log('📱 Tentative de détection sur port USB...')
               const device = await detectDeviceOnPort(p)
               if (device) {
-                logger.log('✅ Dispositif détecté:', device.device_name || device.sim_iccid)
+                logger.log('✅ Dispositif détecté automatiquement:', device.device_name || device.sim_iccid)
+                logger.log('🚀 Le streaming USB démarrera automatiquement dans quelques secondes...')
                 setAutoDetecting(false)
                 detectionRef.current.inProgress = false
                 return // Arrêter au premier dispositif trouvé
@@ -1081,6 +1095,7 @@ export default function DevicesPage() {
             const device = await detectDeviceOnPort(firstPort)
             if (device) {
               logger.log('✅ Dispositif détecté sur port série:', device.device_name || device.sim_iccid)
+              logger.log('🚀 Le streaming USB démarrera automatiquement dans quelques secondes...')
               setAutoDetecting(false)
               detectionRef.current.inProgress = false
               return
@@ -1089,6 +1104,7 @@ export default function DevicesPage() {
         }
         
         logger.log('⚠️ Aucun dispositif détecté sur les ports disponibles')
+        logger.log('   💡 Assurez-vous que le firmware est actif et envoie des données via USB')
       } catch (err) {
         logger.error('Erreur détection automatique USB:', err)
       } finally {
