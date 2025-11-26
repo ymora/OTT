@@ -126,12 +126,16 @@ export default function UsbStreamingTab() {
         
         // Connecter au port sélectionné
         const connected = await connect(selectedPortData.port, 115200)
-        if (connected) {
-          // Démarrer le streaming
-          await startUsbStreaming()
-        } else {
+        if (!connected) {
           alert('Impossible de se connecter au port USB')
+          return
         }
+        
+        // Attendre un peu pour que la connexion soit stable
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Démarrer le streaming (le port est déjà connecté, donc ensurePortReady ne devrait pas redemander)
+        await startUsbStreaming()
       }
     } catch (err) {
       console.error('[UsbStreamingTab] Erreur toggle streaming:', err)

@@ -263,13 +263,17 @@ export function UsbProvider({ children }) {
       
       logger.log('📡 [USB] Démarrage du streaming USB...')
       
-      // S'assurer que le port est prêt et connecté
-      const readyPort = await ensurePortReady()
-      if (!readyPort) {
-        throw new Error('Port non disponible après ensurePortReady')
+      // Vérifier si le port est déjà connecté
+      if (port && isConnected) {
+        logger.log('✅ [USB] Port déjà connecté, utilisation du port existant')
+      } else {
+        // S'assurer que le port est prêt et connecté
+        const readyPort = await ensurePortReady()
+        if (!readyPort) {
+          throw new Error('Port non disponible après ensurePortReady')
+        }
+        logger.log('✅ [USB] Port prêt, connexion établie')
       }
-      
-      logger.log('✅ [USB] Port prêt, connexion établie')
 
       // Arrêter l'ancien streaming s'il existe
       if (usbStreamStopRef.current) {
