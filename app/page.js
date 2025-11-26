@@ -4,14 +4,15 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Login from '@/components/Login'
 
 export default function HomePage() {
   const { user, loading } = useAuth()
+  const router = useRouter()
 
   // Redirection simple et unique si utilisateur déjà connecté
-  const router = useRouter()
   useEffect(() => {
     if (!loading && user && typeof window !== 'undefined') {
       // Une seule redirection, pas de boucle
