@@ -333,3 +333,69 @@ function handleLogin() {
 4. **Évolutivité** : Ajout de nouveaux domaines sans modifier `api.php`
 5. **Débogage** : Erreurs localisées plus facilement dans le handler concerné
 
+## 📡 Architecture USB Streaming
+
+### Structure des Fichiers Frontend
+
+L'architecture USB suit une séparation en 3 couches (SoC - Separation of Concerns) :
+
+```
+components/SerialPortManager.js    # Couche bas niveau (284 lignes)
+├── Gestion Web Serial API
+├── Connexion/déconnexion port série
+├── Lecture/écriture données brutes
+└── Réutilisable (flash, configuration, etc.)
+
+contexts/UsbContext.js             # Couche métier (429 lignes)
+├── Parsing données JSON firmware
+├── Gestion streaming continu
+├── Envoi mesures à l'API
+├── Détection automatique dispositifs
+└── Spécifique au streaming USB
+
+components/configuration/UsbStreamingTab.js  # Couche présentation (309 lignes)
+├── Sélection port USB
+├── Affichage logs temps réel
+└── Affichage mesures
+```
+
+### Flux de Streaming USB
+
+```
+1. Connexion au port USB (connect())
+   ↓
+2. Démarrage de la lecture (startReading())
+   ↓
+3. Envoi commande "usb\n" au firmware (write('usb\n'))
+   ↓
+4. Firmware envoie données JSON en continu
+   ↓
+5. Parsing et envoi à l'API (processUsbStreamLine)
+```
+
+### Commande "usb" au Firmware
+
+**Important** : Le firmware ESP32 attend la commande `"usb\n"` dans les **3 secondes après le boot** pour activer le streaming continu.
+
+**Séquence d'activation** (dans `startUsbStreaming()`) :
+1. Vérifier que le port est connecté
+2. Arrêter l'ancien streaming s'il existe
+3. Démarrer la lecture (`startReading()`)
+4. Attendre 200ms pour que la lecture soit prête
+5. **Envoyer la commande "usb"** (`write('usb\n')`)
+6. Le firmware commence à envoyer des données en continu
+
+**Sans cette commande** : Le firmware n'envoie que les logs de boot, pas le streaming continu.
+
+### Décision : Fichiers Séparés ✅
+
+**Raison** : Séparation des responsabilités
+- `SerialPortManager` = couche bas niveau (réutilisable)
+- `UsbContext` = couche métier (spécifique au streaming)
+- `UsbStreamingTab` = couche présentation (UI)
+
+**Avantages** :
+- Réutilisabilité : `SerialPortManager` peut être utilisé pour le flash, la configuration, etc.
+- Maintenabilité : Chaque fichier a une responsabilité claire
+- Testabilité : Plus facile de tester chaque couche séparément
+
