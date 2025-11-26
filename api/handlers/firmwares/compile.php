@@ -791,10 +791,22 @@ function handleCompileFirmware($firmware_id) {
                                 }
                                 
                                 // Détecter si on est en phase de téléchargement (ligne contient un pourcentage) ou installation
-                                // Pattern de téléchargement: "esp32:xxx@yyy X MiB / Y MiB Z%"
+                                // Pattern de téléchargement: "esp32:xxx@yyy X MiB / Y MiB Z%" (avec ou sans temps à la fin)
+                                // Pattern d'installation: "Installing esp32:xxx@yyy..." (sans pourcentage)
                                 $isDownloading = preg_match('/\d+\.\d+ MiB \/ \d+\.\d+ MiB \d+\.\d+%/', $lastLine) || 
                                                  preg_match('/\d+ B \/ \d+\.\d+ MiB \d+\.\d+%/', $lastLine) ||
-                                                 preg_match('/downloaded$/', $lastLine);
+                                                 preg_match('/downloaded$/', $lastLine) ||
+                                                 preg_match('/Downloading packages\.\.\./', $lastLine);
+                                
+                                // Si on voit "Installing", on est en phase d'installation (pas de téléchargement)
+                                $isInstalling = preg_match('/^Installing /', $lastLine) || 
+                                                preg_match('/Skipping tool configuration/', $lastLine) ||
+                                                preg_match('/installed$/', $lastLine);
+                                
+                                // Si on est en installation, ne pas considérer comme téléchargement
+                                if ($isInstalling) {
+                                    $isDownloading = false;
+                                }
                                 
                                 // Envoyer un heartbeat avec message toutes les 5 secondes UNIQUEMENT si on n'est PAS en phase de téléchargement
                                 // (Pendant le téléchargement, on voit déjà la progression, pas besoin du heartbeat)
