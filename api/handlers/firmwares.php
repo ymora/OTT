@@ -1239,12 +1239,27 @@ function handleCompileFirmware($firmware_id) {
                             $lastKeepAliveTime = $startTime;
                             
                             while (true) {
-                                $status = proc_get_status($process);
                                 $currentTime = time();
                                 
-                                // Lire stdout
-                                $line = fgets($stdout);
-                                if ($line !== false) {
+                                // Utiliser stream_select pour vérifier si des données sont disponibles (non-bloquant)
+                                $read = [$stdout, $stderr];
+                                $write = null;
+                                $except = null;
+                                $timeout = 1; // Attendre 1 seconde maximum
+                                
+                                $num_changed_streams = stream_select($read, $write, $except, $timeout);
+                                
+                                if ($num_changed_streams === false) {
+                                    // Erreur stream_select
+                                    error_log('[handleCompileFirmware] Erreur stream_select lors de l\'installation du core');
+                                    break;
+                                } elseif ($num_changed_streams > 0) {
+                                    // Des données sont disponibles, les lire
+                                    foreach ($read as $stream) {
+                                        $output = stream_get_contents($stream, 8192); // Lire par chunks de 8KB
+                                        if (!empty($output)) {
+                                            $lines = explode("\n", $output);
+                                            foreach ($lines as $line) {
                                     $line = trim($line);
                                     if (!empty($line)) {
                                         $installOutput[] = $line;
@@ -1253,21 +1268,13 @@ function handleCompileFirmware($firmware_id) {
                                         $lastOutputTime = $currentTime;
                                     }
                                 }
-                                
-                                // Lire stderr
-                                $errLine = fgets($stderr);
-                                if ($errLine !== false) {
-                                    $errLine = trim($errLine);
-                                    if (!empty($errLine)) {
-                                        $installOutput[] = $errLine;
-                                        sendSSE('log', 'info', $errLine);
-                                        flush();
-                                        $lastOutputTime = $currentTime;
+                                        }
                                     }
                                 }
                                 
                                 // Vérifier si le processus est terminé
-                                if ($status['running'] === false) {
+                                $status = proc_get_status($process);
+                                if (!$status || $status['running'] === false) {
                                     break;
                                 }
                                 
@@ -1377,48 +1384,75 @@ function handleCompileFirmware($firmware_id) {
                     
                     $compile_start_time = time();
                     $compile_last_heartbeat = $compile_start_time;
+                    $compile_last_keepalive = $compile_start_time;
+                    $compile_last_output_time = $compile_start_time;
                     $compile_output_lines = [];
                     
                     while (true) {
-                        $compile_status = proc_get_status($compile_process);
+                        $current_time = time();
                         
-                        // Lire stdout
-                        $line = fgets($compile_stdout);
-                        if ($line !== false) {
+                        // Utiliser stream_select pour vérifier si des données sont disponibles (non-bloquant)
+                        $read = [$compile_stdout, $compile_stderr];
+                        $write = null;
+                        $except = null;
+                        $timeout = 1; // Attendre 1 seconde maximum
+                        
+                        $num_changed_streams = stream_select($read, $write, $except, $timeout);
+                        
+                        if ($num_changed_streams === false) {
+                            // Erreur stream_select
+                            error_log('[handleCompileFirmware] Erreur stream_select lors de la compilation');
+                            break;
+                        } elseif ($num_changed_streams > 0) {
+                            // Des données sont disponibles, les lire
+                            foreach ($read as $stream) {
+                                $output = stream_get_contents($stream, 8192); // Lire par chunks de 8KB
+                                if (!empty($output)) {
+                                    $lines = explode("\n", $output);
+                                    foreach ($lines as $line) {
                             $line = trim($line);
                             if (!empty($line)) {
                                 $compile_output_lines[] = $line;
                                 sendSSE('log', 'info', $line);
                                 flush();
-                            }
-                        }
-                        
-                        // Lire stderr
-                        $errLine = fgets($compile_stderr);
-                        if ($errLine !== false) {
-                            $errLine = trim($errLine);
-                            if (!empty($errLine)) {
-                                $compile_output_lines[] = $errLine;
-                                sendSSE('log', 'info', $errLine);
-                                flush();
+                                            $compile_last_output_time = $current_time;
+                                        }
+                                    }
+                                }
                             }
                         }
                         
                         // Vérifier si le processus est terminé
-                        if ($compile_status['running'] === false) {
+                        $compile_status = proc_get_status($compile_process);
+                        if (!$compile_status || $compile_status['running'] === false) {
                             break;
                         }
                         
-                        // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion SSE
-                        $current_time = time();
-                        if ($current_time - $compile_last_heartbeat >= 10) {
-                            $compile_last_heartbeat = $current_time;
-                            sendSSE('log', 'info', '⏳ Compilation en cours...');
+                        // Timeout de sécurité : si pas de sortie depuis 10 minutes
+                        if ($current_time - $compile_last_output_time > 600) {
+                            sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, la compilation semble bloquée');
+                            sendSSE('error', 'Timeout: La compilation a pris trop de temps');
+                            proc_terminate($compile_process);
+                            break;
+                        }
+                        
+                        // Envoyer un keep-alive SSE toutes les 3 secondes
+                        if ($current_time - $compile_last_keepalive >= 3) {
+                            $compile_last_keepalive = $current_time;
+                            echo ": keep-alive\n\n";
                             flush();
                         }
                         
-                        // Attendre un peu avant de relire
-                        usleep(100000); // 100ms
+                        // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion SSE
+                        if ($current_time - $compile_last_heartbeat >= 10) {
+                            $compile_last_heartbeat = $current_time;
+                            $elapsed = $current_time - $compile_start_time;
+                            $minutes = floor($elapsed / 60);
+                            $seconds = $elapsed % 60;
+                            $timeStr = $minutes > 0 ? sprintf('%dm %ds', $minutes, $seconds) : sprintf('%ds', $seconds);
+                            sendSSE('log', 'info', '⏳ Compilation en cours... (temps écoulé: ' . $timeStr . ')');
+                            flush();
+                        }
                     }
                     
                     // Fermer les pipes
