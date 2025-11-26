@@ -22,9 +22,9 @@ export default function Login() {
 
     try {
       await login(email, password)
-      // Redirection manuelle uniquement après succès
+      // Redirection avec Next.js router pour gérer automatiquement le basePath
       setTimeout(() => {
-        window.location.href = '/dashboard'
+        router.push('/dashboard')
       }, 100)
     } catch (err) {
       setError(err.message || 'Erreur de connexion')

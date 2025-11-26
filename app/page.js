@@ -11,15 +11,17 @@ export default function HomePage() {
   const { user, loading } = useAuth()
 
   // Redirection simple et unique si utilisateur déjà connecté
+  const router = useRouter()
   useEffect(() => {
     if (!loading && user && typeof window !== 'undefined') {
       // Une seule redirection, pas de boucle
+      // Utiliser router.push pour gérer automatiquement le basePath
       const timer = setTimeout(() => {
-        window.location.href = '/dashboard'
+        router.push('/dashboard')
       }, 500)
       return () => clearTimeout(timer)
     }
-  }, [user, loading])
+  }, [user, loading, router])
 
   if (loading) {
     return (
