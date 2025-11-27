@@ -336,22 +336,56 @@
         }
         
     </style>
+    <script>
+        // Détecter le thème AVANT le rendu pour éviter le flash
+        (function() {
+            try {
+                // Essayer de détecter le thème du parent immédiatement
+                if (window.parent && window.parent !== window) {
+                    try {
+                        const parentDoc = window.parent.document
+                        if (parentDoc && parentDoc.documentElement) {
+                            const isDark = parentDoc.documentElement.classList.contains('dark')
+                            if (isDark) {
+                                // Appliquer immédiatement avant le rendu
+                                document.documentElement.classList.add('dark')
+                                document.body.classList.add('dark')
+                            }
+                        }
+                    } catch (e) {
+                        // Cross-origin, on ne peut pas accéder au parent
+                    }
+                }
+                
+                // Détecter aussi le thème système
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.classList.add('dark')
+                    document.body.classList.add('dark')
+                }
+            } catch (e) {
+                // Erreur silencieuse
+            }
+        })();
+    </script>
 </head>
 <body>
     <script>
-        // Détecter le thème depuis le parent
+        // Détecter le thème depuis le parent (pour les mises à jour en temps réel)
         window.addEventListener('message', function(event) {
             if (event.data && event.data.type === 'theme') {
                 if (event.data.isDark) {
+                    document.documentElement.classList.add('dark')
                     document.body.classList.add('dark')
                 } else {
+                    document.documentElement.classList.remove('dark')
                     document.body.classList.remove('dark')
                 }
             }
         })
         
-        // Détecter aussi le thème système au chargement
+        // Détecter aussi le thème système au chargement (fallback)
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark')
             document.body.classList.add('dark')
         }
         
