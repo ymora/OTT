@@ -66,24 +66,25 @@ export default function DocumentationPage() {
     document.title = titles[docType] || titles.presentation
   }, [docType])
 
-  // Si c'est un fichier markdown, on affiche un composant spécial
-  if (docType === 'suivi-temps') {
-    return <MarkdownViewer fileName="SUIVI_TEMPS_FACTURATION.md" />
-  }
+  const isMarkdownDoc = docType === 'suivi-temps'
 
   // Référence à l'iframe pour envoyer le thème
   const iframeRef = useRef(null)
 
   // Fonction pour envoyer le thème à l'iframe
   const sendThemeToIframe = useCallback(() => {
-    if (iframeRef.current?.contentWindow) {
+    if (isMarkdownDoc || !iframeRef.current?.contentWindow) {
+      return
+    }
       const isDarkMode = document.documentElement.classList.contains('dark')
       iframeRef.current.contentWindow.postMessage({ type: 'theme', isDark: isDarkMode }, '*')
-    }
-  }, [])
+  }, [isMarkdownDoc])
 
   // Détecter le thème actuel et observer les changements
   useEffect(() => {
+    if (isMarkdownDoc) {
+      return
+    }
     // Envoyer le thème immédiatement
     sendThemeToIframe()
 
@@ -95,7 +96,12 @@ export default function DocumentationPage() {
     })
 
     return () => observer.disconnect()
-  }, [sendThemeToIframe])
+  }, [sendThemeToIframe, isMarkdownDoc])
+
+  // Si c'est un fichier markdown, on affiche un composant spécial
+  if (isMarkdownDoc) {
+    return <MarkdownViewer fileName="SUIVI_TEMPS_FACTURATION.md" />
+  }
 
   return (
     <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 -m-6 overflow-y-auto docs-scrollbar">
