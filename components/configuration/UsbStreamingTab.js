@@ -351,8 +351,41 @@ export default function UsbStreamingTab() {
               </p>
             )}
           </div>
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">RSSI</p>
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 relative group">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">RSSI</p>
+              <div className="relative">
+                <button 
+                  type="button"
+                  className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 cursor-help transition-colors"
+                  title="Cliquez pour plus d'infos"
+                >
+                  ℹ️
+                </button>
+                <div className="absolute left-0 bottom-full mb-2 w-72 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-20 pointer-events-none">
+                  <div className="absolute bottom-0 left-4 transform translate-y-full">
+                    <div className="border-4 border-transparent border-t-blue-200 dark:border-t-blue-800"></div>
+                  </div>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-1">
+                    <span>📡</span>
+                    <span>RSSI (Received Signal Strength Indicator)</span>
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">
+                    Mesure la <strong>force du signal réseau cellulaire</strong> entre le dispositif et l&apos;antenne la plus proche.
+                  </p>
+                  <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
+                    <p className="font-semibold mb-1">Valeurs typiques :</p>
+                    <div className="space-y-0.5">
+                      <div>• <strong className="text-green-600 dark:text-green-400">-50 à -70 dBm</strong> : Excellent signal ⭐⭐⭐</div>
+                      <div>• <strong className="text-blue-600 dark:text-blue-400">-70 à -90 dBm</strong> : Bon signal ⭐⭐</div>
+                      <div>• <strong className="text-yellow-600 dark:text-yellow-400">-90 à -110 dBm</strong> : Signal faible ⭐</div>
+                      <div>• <strong className="text-red-600 dark:text-red-400">-110 à -150 dBm</strong> : Signal très faible ⚠️</div>
+                      <div>• <strong className="text-gray-600 dark:text-gray-400">-999 dBm</strong> : Pas de signal ou erreur</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <p className="text-2xl font-bold text-primary">
               {usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined
                 ? `${usbStreamLastMeasurement.rssi} dBm`
