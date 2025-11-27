@@ -76,8 +76,12 @@ export default function DocumentationPage() {
     if (isMarkdownDoc || !iframeRef.current?.contentWindow) {
       return
     }
+    try {
       const isDarkMode = document.documentElement.classList.contains('dark')
       iframeRef.current.contentWindow.postMessage({ type: 'theme', isDark: isDarkMode }, '*')
+    } catch (error) {
+      logger.error('Erreur envoi thème à iframe:', error)
+    }
   }, [isMarkdownDoc])
 
   // Détecter le thème actuel et observer les changements
@@ -85,6 +89,15 @@ export default function DocumentationPage() {
     if (isMarkdownDoc) {
       return
     }
+    
+    // Écouter les demandes de thème depuis l'iframe
+    const handleMessage = (event) => {
+      if (event.data && event.data.type === 'request-theme') {
+        sendThemeToIframe()
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    
     // Envoyer le thème immédiatement
     sendThemeToIframe()
 
@@ -95,7 +108,10 @@ export default function DocumentationPage() {
       attributeFilter: ['class']
     })
 
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('message', handleMessage)
+    }
   }, [sendThemeToIframe, isMarkdownDoc])
 
   // Si c'est un fichier markdown, on affiche un composant spécial
@@ -111,7 +127,18 @@ export default function DocumentationPage() {
         className="w-full h-full border-0"
         title="Documentation OTT"
         allow="fullscreen"
-        onLoad={sendThemeToIframe}
+        onLoad={() => {
+          // Envoyer le thème immédiatement
+          sendThemeToIframe()
+          // Réessayer après un court délai pour s'assurer que le script est prêt
+          setTimeout(() => {
+            sendThemeToIframe()
+          }, 100)
+          // Encore une fois après un délai plus long
+          setTimeout(() => {
+            sendThemeToIframe()
+          }, 500)
+        }}
       />
     </div>
   )

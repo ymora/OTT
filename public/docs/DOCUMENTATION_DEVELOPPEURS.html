@@ -427,20 +427,42 @@
 </head>
 <body>
     <script>
+        // Fonction pour appliquer le thème
+        function applyTheme(isDark) {
+            if (isDark) {
+                document.documentElement.classList.add('dark')
+            } else {
+                document.documentElement.classList.remove('dark')
+            }
+        }
+        
         // Détecter le thème depuis le parent (pour les mises à jour en temps réel)
         window.addEventListener('message', function(event) {
+            // Accepter les messages de n'importe quelle origine pour le thème
             if (event.data && event.data.type === 'theme') {
-                if (event.data.isDark) {
-                    document.documentElement.classList.add('dark')
-                } else {
-                    document.documentElement.classList.remove('dark')
-                }
+                applyTheme(event.data.isDark)
             }
         })
         
+        // Demander le thème au parent au chargement
+        if (window.parent && window.parent !== window) {
+            try {
+                window.parent.postMessage({ type: 'request-theme' }, '*')
+            } catch (e) {
+                // Cross-origin, on ne peut pas envoyer de message
+            }
+        }
+        
         // Détecter aussi le thème système au chargement (fallback)
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.classList.add('dark')
+        if (window.matchMedia) {
+            const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+            if (darkModeQuery.matches) {
+                applyTheme(true)
+            }
+            // Écouter les changements de préférence système
+            darkModeQuery.addEventListener('change', (e) => {
+                applyTheme(e.matches)
+            })
         }
         
         // Protection contre la copie et les fuites
