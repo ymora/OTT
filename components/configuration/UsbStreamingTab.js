@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
@@ -291,7 +291,16 @@ export default function UsbStreamingTab() {
         </div>
 
         {/* Console de logs */}
-        <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 text-green-400 p-4 shadow-inner overflow-y-auto" style={{ minHeight: '500px', maxHeight: '600px' }}>
+        <div 
+          ref={(el) => {
+            if (el && usbStreamLogs.length > 0) {
+              // Scroller vers le haut pour voir les nouveaux logs
+              el.scrollTop = 0
+            }
+          }}
+          className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 text-green-400 p-4 shadow-inner overflow-y-auto flex flex-col-reverse" 
+          style={{ minHeight: '500px', maxHeight: '600px' }}
+        >
           {usbStreamLogs.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-gray-500">
               <span className="text-4xl">📡</span>
@@ -299,7 +308,7 @@ export default function UsbStreamingTab() {
             </div>
           ) : (
             <div className="space-y-1 font-mono text-sm tracking-tight">
-              {usbStreamLogs.map((log) => (
+              {[...usbStreamLogs].reverse().map((log) => (
                 <div key={log.id} className="whitespace-pre-wrap">
                   <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
                   <span className="text-green-300">{log.line}</span>
