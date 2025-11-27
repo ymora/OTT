@@ -106,7 +106,7 @@ export default function CommandsPage() {
       return
     }
 
-    const payload = {}
+    let payload = {}
     if (form.command === 'SET_SLEEP_SECONDS') {
       payload.seconds = Number(form.sleepSeconds) || 300
     } else if (form.command === 'PING') {
