@@ -3,7 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { withBasePath } from '@/lib/utils'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
@@ -72,30 +72,29 @@ export default function DocumentationPage() {
 
   // Référence à l'iframe pour envoyer le thème
   const iframeRef = useRef(null)
-  const [isDark, setIsDark] = useState(false)
 
-  // Détecter le thème actuel
-  useEffect(() => {
-    const checkTheme = () => {
+  // Fonction pour envoyer le thème à l'iframe
+  const sendThemeToIframe = useCallback(() => {
+    if (iframeRef.current?.contentWindow) {
       const isDarkMode = document.documentElement.classList.contains('dark')
-      setIsDark(isDarkMode)
-      // Envoyer le thème à l'iframe
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage({ type: 'theme', isDark: isDarkMode }, '*')
-      }
+      iframeRef.current.contentWindow.postMessage({ type: 'theme', isDark: isDarkMode }, '*')
     }
+  }, [])
 
-    checkTheme()
+  // Détecter le thème actuel et observer les changements
+  useEffect(() => {
+    // Envoyer le thème immédiatement
+    sendThemeToIframe()
 
     // Observer les changements de thème
-    const observer = new MutationObserver(checkTheme)
+    const observer = new MutationObserver(sendThemeToIframe)
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class']
     })
 
     return () => observer.disconnect()
-  }, [])
+  }, [sendThemeToIframe])
 
   return (
     <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 -m-6 overflow-y-auto docs-scrollbar">
@@ -105,13 +104,7 @@ export default function DocumentationPage() {
         className="w-full h-full border-0"
         title="Documentation OTT"
         allow="fullscreen"
-        onLoad={() => {
-          // Envoyer le thème dès que l'iframe est chargée
-          if (iframeRef.current?.contentWindow) {
-            const isDarkMode = document.documentElement.classList.contains('dark')
-            iframeRef.current.contentWindow.postMessage({ type: 'theme', isDark: isDarkMode }, '*')
-          }
-        }}
+        onLoad={sendThemeToIframe}
       />
     </div>
   )

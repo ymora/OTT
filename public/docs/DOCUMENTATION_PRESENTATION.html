@@ -384,9 +384,8 @@
                         if (parentDoc && parentDoc.documentElement) {
                             const isDark = parentDoc.documentElement.classList.contains('dark')
                             if (isDark) {
-                                // Appliquer immédiatement avant le rendu
+                                // Appliquer immédiatement avant le rendu (seulement sur documentElement)
                                 document.documentElement.classList.add('dark')
-                                document.body.classList.add('dark')
                             }
                         }
                     } catch (e) {
@@ -587,7 +586,7 @@
     <h3>🔐 Page de Connexion</h3>
     <p>La page d'authentification avec formulaire de connexion sécurisé :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/login.png" alt="Page de connexion" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <img src="screenshots/login.png" alt="Page de connexion" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" class="dark-mode-image" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" />
         <div style="display: none; background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%); min-height: 300px; align-items: center; justify-content: center; border: 2px dashed #ccc; border-radius: 8px; color: #999; font-style: italic; flex-direction: column; margin: 1rem 0;">
             📸 Page de connexion<br>
             <small style="display: block; margin-top: 0.5rem; font-size: 0.9rem;">Capture d'écran non disponible</small>

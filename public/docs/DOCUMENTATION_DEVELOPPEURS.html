@@ -393,7 +393,7 @@
                         if (parentDoc && parentDoc.documentElement) {
                             const isDark = parentDoc.documentElement.classList.contains('dark')
                             if (isDark) {
-                                // Appliquer immédiatement avant le rendu
+                                // Appliquer immédiatement avant le rendu (seulement sur documentElement)
                                 document.documentElement.classList.add('dark')
                             }
                         }
