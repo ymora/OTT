@@ -133,31 +133,30 @@ export default function DeviceConfigurationTab() {
         { requiresAuth: true }
       )
 
-      // 2. Créer automatiquement une commande OTA pour appliquer la configuration
-      const commandPayload = {}
+      // 2. Créer automatiquement des commandes OTA pour appliquer la configuration
+      const configPayload = {}
+      let hasConfigPayload = false
       
       // Mapper les paramètres vers le format attendu par UPDATE_CONFIG
       if (config.sleep_minutes !== null && config.sleep_minutes !== '') {
-        commandPayload.sleep_minutes_default = parseInt(config.sleep_minutes)
+        configPayload.sleep_minutes_default = parseInt(config.sleep_minutes)
+        hasConfigPayload = true
       }
       if (config.measurement_duration_ms !== null && config.measurement_duration_ms !== '') {
-        commandPayload.measurement_duration_ms = parseInt(config.measurement_duration_ms)
+        configPayload.measurement_duration_ms = parseInt(config.measurement_duration_ms)
+        hasConfigPayload = true
       }
       if (config.send_every_n_wakeups !== null && config.send_every_n_wakeups !== '') {
-        commandPayload.send_every_n_wakeups = parseInt(config.send_every_n_wakeups)
-      }
-      if (config.calibration_coefficients && Array.isArray(config.calibration_coefficients)) {
-        commandPayload.calA0 = parseFloat(config.calibration_coefficients[0]) || 0
-        commandPayload.calA1 = parseFloat(config.calibration_coefficients[1]) || 1
-        commandPayload.calA2 = parseFloat(config.calibration_coefficients[2]) || 0
+        configPayload.send_every_n_wakeups = parseInt(config.send_every_n_wakeups)
+        hasConfigPayload = true
       }
 
-      // Créer la commande OTA seulement si au moins un paramètre est défini
-      if (Object.keys(commandPayload).length > 0) {
+      // Créer la commande UPDATE_CONFIG si nécessaire
+      if (hasConfigPayload) {
         try {
           const commandBody = {
             command: 'UPDATE_CONFIG',
-            payload: commandPayload,
+            payload: configPayload,
             priority: 'normal',
             expires_in_seconds: 7 * 24 * 60 * 60 // 7 jours
           }
@@ -175,8 +174,44 @@ export default function DeviceConfigurationTab() {
           logger.debug('Commande OTA UPDATE_CONFIG créée avec succès')
         } catch (cmdErr) {
           // Ne pas bloquer la sauvegarde si la création de commande échoue
-          logger.error('Erreur création commande OTA:', cmdErr)
-          // On continue quand même, la DB est déjà mise à jour
+          logger.error('Erreur création commande OTA UPDATE_CONFIG:', cmdErr)
+        }
+      }
+
+      // Créer une commande UPDATE_CALIBRATION séparée pour les coefficients
+      if (config.calibration_coefficients && Array.isArray(config.calibration_coefficients)) {
+        const calA0 = parseFloat(config.calibration_coefficients[0])
+        const calA1 = parseFloat(config.calibration_coefficients[1])
+        const calA2 = parseFloat(config.calibration_coefficients[2])
+        
+        // Vérifier que les valeurs sont valides
+        if (!isNaN(calA0) && !isNaN(calA1) && !isNaN(calA2)) {
+          try {
+            const calibrationBody = {
+              command: 'UPDATE_CALIBRATION',
+              payload: {
+                a0: calA0,
+                a1: calA1,
+                a2: calA2
+              },
+              priority: 'normal',
+              expires_in_seconds: 7 * 24 * 60 * 60 // 7 jours
+            }
+
+            await fetchJson(
+              fetchWithAuth,
+              API_URL,
+              `/api.php/devices/${selectedDevice.sim_iccid}/commands`,
+              {
+                method: 'POST',
+                body: JSON.stringify(calibrationBody)
+              },
+              { requiresAuth: true }
+            )
+            logger.debug('Commande OTA UPDATE_CALIBRATION créée avec succès')
+          } catch (cmdErr) {
+            logger.error('Erreur création commande OTA UPDATE_CALIBRATION:', cmdErr)
+          }
         }
       }
 
