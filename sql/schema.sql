@@ -91,6 +91,14 @@ CREATE TABLE IF NOT EXISTS devices (
   last_battery NUMERIC(5,2),
   latitude NUMERIC(10,8),
   longitude NUMERIC(11,8),
+  -- Min/Max values (mises à jour automatiquement par trigger)
+  min_flowrate NUMERIC(5,2),
+  max_flowrate NUMERIC(5,2),
+  min_battery NUMERIC(5,2),
+  max_battery NUMERIC(5,2),
+  min_rssi INT,
+  max_rssi INT,
+  min_max_updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -108,6 +116,56 @@ CREATE TABLE IF NOT EXISTS measurements (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_measurements_device_time ON measurements(device_id, timestamp DESC);
+
+-- Fonction pour mettre à jour automatiquement les min/max des dispositifs
+CREATE OR REPLACE FUNCTION update_device_min_max()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Mettre à jour les min/max uniquement si les valeurs ne sont pas NULL
+  UPDATE devices SET
+    min_flowrate = CASE 
+      WHEN NEW.flowrate IS NOT NULL THEN
+        LEAST(COALESCE(min_flowrate, NEW.flowrate), NEW.flowrate)
+      ELSE min_flowrate
+    END,
+    max_flowrate = CASE 
+      WHEN NEW.flowrate IS NOT NULL THEN
+        GREATEST(COALESCE(max_flowrate, NEW.flowrate), NEW.flowrate)
+      ELSE max_flowrate
+    END,
+    min_battery = CASE 
+      WHEN NEW.battery IS NOT NULL THEN
+        LEAST(COALESCE(min_battery, NEW.battery), NEW.battery)
+      ELSE min_battery
+    END,
+    max_battery = CASE 
+      WHEN NEW.battery IS NOT NULL THEN
+        GREATEST(COALESCE(max_battery, NEW.battery), NEW.battery)
+      ELSE max_battery
+    END,
+    min_rssi = CASE 
+      WHEN NEW.signal_strength IS NOT NULL THEN
+        LEAST(COALESCE(min_rssi, NEW.signal_strength), NEW.signal_strength)
+      ELSE min_rssi
+    END,
+    max_rssi = CASE 
+      WHEN NEW.signal_strength IS NOT NULL THEN
+        GREATEST(COALESCE(max_rssi, NEW.signal_strength), NEW.signal_strength)
+      ELSE max_rssi
+    END,
+    min_max_updated_at = NOW()
+  WHERE id = NEW.device_id;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger pour mettre à jour automatiquement les min/max à chaque nouvelle mesure
+CREATE TRIGGER trg_update_device_min_max
+AFTER INSERT ON measurements
+FOR EACH ROW
+WHEN (NEW.flowrate IS NOT NULL OR NEW.battery IS NOT NULL OR NEW.signal_strength IS NOT NULL)
+EXECUTE FUNCTION update_device_min_max();
 
 CREATE TABLE IF NOT EXISTS alerts (
   id VARCHAR(50) PRIMARY KEY,
