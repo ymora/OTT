@@ -454,10 +454,9 @@ void emitUsbDeviceInfo()
   String serialToSend = DEVICE_SERIAL;
   
   // Si l'ICCID est la valeur par défaut, essayer de le lire depuis la SIM
+  // Note: Le modem est déjà initialisé dans setup(), on teste juste s'il répond
   if (iccidToSend == OTT_DEFAULT_ICCID || iccidToSend.isEmpty()) {
-    // Initialiser le modem juste pour lire l'ICCID
-    initModem();
-    delay(1000);
+    // Tester si le modem répond déjà (sans le réinitialiser)
     if (modem.testAT(2000)) {
       String realIccid = modem.getSimCCID();
       if (realIccid.length() > 0 && realIccid.length() <= 20) {
@@ -474,7 +473,16 @@ void emitUsbDeviceInfo()
   infoDoc["iccid"] = iccidToSend;
   infoDoc["serial"] = serialToSend;
   infoDoc["firmware_version"] = FIRMWARE_VERSION;
-  infoDoc["device_name"] = String("OTT-") + (iccidToSend.length() >= 4 ? iccidToSend.substring(iccidToSend.length() - 4) : serialToSend.length() >= 4 ? serialToSend.substring(serialToSend.length() - 4) : "XXXX");
+  // Construire le nom du dispositif de manière optimisée
+  String deviceName = "OTT-";
+  if (iccidToSend.length() >= 4) {
+    deviceName += iccidToSend.substring(iccidToSend.length() - 4);
+  } else if (serialToSend.length() >= 4) {
+    deviceName += serialToSend.substring(serialToSend.length() - 4);
+  } else {
+    deviceName += "XXXX";
+  }
+  infoDoc["device_name"] = deviceName;
   
   serializeJson(infoDoc, Serial);
   Serial.println();
@@ -592,20 +600,29 @@ void usbStreamingLoop()
           continue;
         }
 
+        // Log de réception de commande pour débogage
+        Serial.printf("[USB] 📥 Commande reçue: '%s'\n", command.c_str());
+
         String lowered = command;
         lowered.toLowerCase();
 
+        // Confirmation de réception et traitement de chaque commande
         if (lowered == "exit" || lowered == "sleep" || lowered == "usb_stream_off") {
+          Serial.println(F("[USB] ✅ Commande 'exit' reçue et acceptée"));
           Serial.println(F("[USB] Sortie du streaming sur demande utilisateur."));
           return;
         }
 
         if (lowered == "help") {
+          Serial.println(F("[USB] ✅ Commande 'help' reçue et acceptée"));
           printUsbStreamHelp(intervalMs);
+          Serial.println(F("[USB] ✅ Aide affichée"));
           continue;
         }
 
         if (lowered == "once") {
+          Serial.println(F("[USB] ✅ Commande 'once' reçue et acceptée"));
+          Serial.println(F("[USB] 📊 Capture d'une mesure immédiate..."));
           Measurement snapshot = captureSensorSnapshot();
           
           // Essayer d'obtenir la position GPS si le modem est disponible
@@ -617,14 +634,17 @@ void usbStreamingLoop()
           
           emitUsbMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
           lastSend = millis();
+          Serial.println(F("[USB] ✅ Mesure immédiate envoyée"));
           continue;
         }
 
         // Démarrer le modem pour tester l'enregistrement réseau et GPS
         if (lowered == "modem_on" || lowered == "start_modem") {
+          Serial.println(F("[USB] ✅ Commande 'modem_on' reçue et acceptée"));
           if (modemReady) {
-            Serial.println(F("[USB] Modem déjà démarré"));
+            Serial.println(F("[USB] ℹ️  Réponse: Modem déjà démarré"));
           } else {
+            Serial.println(F("[USB] 📡 Traitement: Démarrage du modem en cours..."));
             Serial.println(F("[USB] ========================================"));
             Serial.println(F("[USB] Démarrage du modem..."));
             Serial.println(F("[USB] ========================================"));
@@ -634,7 +654,7 @@ void usbStreamingLoop()
             if (startModem()) {
               Serial.println();
               Serial.println(F("[USB] ========================================"));
-              Serial.println(F("[USB] ✅ Modem démarré avec succès"));
+              Serial.println(F("[USB] ✅ Réponse: Modem démarré avec succès"));
               Serial.println(F("[USB] ========================================"));
               Serial.println(F("[USB] Le modem est maintenant prêt pour:"));
               Serial.println(F("[USB]   - Tester le réseau: 'test_network'"));
@@ -643,7 +663,7 @@ void usbStreamingLoop()
             } else {
               Serial.println();
               Serial.println(F("[USB] ========================================"));
-              Serial.println(F("[USB] ❌ Échec démarrage modem"));
+              Serial.println(F("[USB] ❌ Réponse: Échec démarrage modem"));
               Serial.println(F("[USB] ========================================"));
               Serial.println(F("[USB] Vérifiez les logs ci-dessus pour plus de détails"));
             }
@@ -653,32 +673,36 @@ void usbStreamingLoop()
 
         // Arrêter le modem
         if (lowered == "modem_off" || lowered == "stop_modem") {
+          Serial.println(F("[USB] ✅ Commande 'modem_off' reçue et acceptée"));
           if (!modemReady) {
-            Serial.println(F("[USB] Modem déjà arrêté"));
+            Serial.println(F("[USB] ℹ️  Réponse: Modem déjà arrêté"));
           } else {
+            Serial.println(F("[USB] 📡 Traitement: Arrêt du modem en cours..."));
             Serial.println(F("[USB] Arrêt du modem..."));
             stopModem();
-            Serial.println(F("[USB] ✅ Modem arrêté"));
+            Serial.println(F("[USB] ✅ Réponse: Modem arrêté avec succès"));
           }
           continue;
         }
 
         // Tester l'enregistrement réseau (nécessite modem démarré)
         if (lowered == "test_network" || lowered == "network") {
+          Serial.println(F("[USB] ✅ Commande 'test_network' reçue et acceptée"));
           if (!modemReady) {
-            Serial.println(F("[USB] ⚠️  Modem non démarré. Tapez 'modem_on' d'abord."));
+            Serial.println(F("[USB] ⚠️  Réponse: Modem non démarré. Tapez 'modem_on' d'abord."));
           } else {
+            Serial.println(F("[USB] 📶 Traitement: Test enregistrement réseau en cours..."));
             Serial.println(F("[USB] Test enregistrement réseau..."));
             logRadioSnapshot("test:start");
             if (modem.isNetworkConnected()) {
-              Serial.println(F("[USB] ✅ Réseau déjà attaché"));
+              Serial.println(F("[USB] ✅ Réponse: Réseau déjà attaché"));
             } else {
               Serial.println(F("[USB] Tentative d'attache au réseau..."));
               if (attachNetwork(networkAttachTimeoutMs)) {
-                Serial.println(F("[USB] ✅ Réseau attaché avec succès"));
+                Serial.println(F("[USB] ✅ Réponse: Réseau attaché avec succès"));
                 logRadioSnapshot("test:success");
               } else {
-                Serial.println(F("[USB] ❌ Échec attache réseau"));
+                Serial.println(F("[USB] ❌ Réponse: Échec attache réseau"));
                 logRadioSnapshot("test:failed");
               }
             }
@@ -690,10 +714,12 @@ void usbStreamingLoop()
         // IMPORTANT: Le GPS est intégré au modem SIM7600, donc il nécessite le modem
         // On ne peut pas utiliser le GPS sans démarrer le modem car c'est le même composant
         if (lowered == "gps" || lowered == "location" || lowered == "test_gps") {
+          Serial.println(F("[USB] ✅ Commande 'gps' reçue et acceptée"));
           if (!modemReady) {
-            Serial.println(F("[USB] ⚠️  Modem non démarré. Tapez 'modem_on' d'abord."));
+            Serial.println(F("[USB] ⚠️  Réponse: Modem non démarré. Tapez 'modem_on' d'abord."));
             Serial.println(F("[USB] Note: Le GPS est intégré au modem SIM7600, il nécessite le modem."));
           } else {
+            Serial.println(F("[USB] 📍 Traitement: Test GPS en cours..."));
             Serial.println(F("[USB] ========================================"));
             Serial.println(F("[USB] Test GPS en cours..."));
             Serial.println(F("[USB] Le GPS est intégré au modem SIM7600"));
@@ -702,11 +728,11 @@ void usbStreamingLoop()
             float lat = 0.0, lon = 0.0;
             if (getDeviceLocation(&lat, &lon)) {
               Serial.println(F("[USB] ========================================"));
-              Serial.printf("[USB] ✅ Position obtenue: %.6f, %.6f\n", lat, lon);
+              Serial.printf("[USB] ✅ Réponse: Position obtenue: %.6f, %.6f\n", lat, lon);
               Serial.println(F("[USB] ========================================"));
             } else {
               Serial.println(F("[USB] ========================================"));
-              Serial.println(F("[USB] ❌ Échec obtention position GPS"));
+              Serial.println(F("[USB] ❌ Réponse: Échec obtention position GPS"));
               Serial.println(F("[USB] Vérifiez les logs ci-dessus pour plus de détails"));
               Serial.println(F("[USB] ========================================"));
             }
@@ -715,22 +741,25 @@ void usbStreamingLoop()
         }
 
         if (lowered.startsWith("interval=")) {
+          Serial.println(F("[USB] ✅ Commande 'interval' reçue et acceptée"));
           long requested = lowered.substring(9).toInt();
           if (requested < static_cast<long>(USB_STREAM_MIN_INTERVAL_MS) ||
               requested > static_cast<long>(USB_STREAM_MAX_INTERVAL_MS)) {
-            Serial.printf("[USB] Intervalle invalide (%ld ms). Autorisé: %lu-%lu ms.\n",
+            Serial.printf("[USB] ❌ Réponse: Intervalle invalide (%ld ms). Autorisé: %lu-%lu ms.\n",
                           requested,
                           static_cast<unsigned long>(USB_STREAM_MIN_INTERVAL_MS),
                           static_cast<unsigned long>(USB_STREAM_MAX_INTERVAL_MS));
           } else {
             intervalMs = static_cast<uint32_t>(requested);
-            Serial.printf("[USB] Nouvel intervalle: %lu ms.\n", static_cast<unsigned long>(intervalMs));
+            Serial.printf("[USB] ✅ Réponse: Nouvel intervalle configuré: %lu ms.\n", static_cast<unsigned long>(intervalMs));
             lastSend = millis();
           }
           continue;
         }
 
-        Serial.printf("[USB] Commande inconnue: %s\n", command.c_str());
+        // Commande inconnue
+        Serial.printf("[USB] ❌ Commande inconnue: '%s'\n", command.c_str());
+        Serial.println(F("[USB] ℹ️  Réponse: Commande non reconnue. Tapez 'help' pour voir les commandes disponibles."));
         printUsbStreamHelp(intervalMs);
       } else {
         commandBuffer += incoming;

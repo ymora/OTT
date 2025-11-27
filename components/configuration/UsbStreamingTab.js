@@ -256,16 +256,45 @@ export default function UsbStreamingTab() {
 
   // Fonction pour envoyer une commande au dispositif
   const sendCommand = async (command) => {
-    if (!isConnected || !port || sendingCommand) return
+    logger.log(`[USB] sendCommand appelé: ${command}`)
+    logger.log(`[USB] État: isConnected=${isConnected}, port=${!!port}, sendingCommand=${sendingCommand}, isStreaming=${isStreaming}`)
+    
+    if (!isConnected) {
+      logger.error('[USB] sendCommand: Port non connecté')
+      return
+    }
+    
+    if (!port) {
+      logger.error('[USB] sendCommand: Port non disponible')
+      return
+    }
+    
+    if (sendingCommand) {
+      logger.warn('[USB] sendCommand: Commande déjà en cours d\'envoi')
+      return
+    }
+    
+    if (!isStreaming) {
+      logger.warn('[USB] sendCommand: Streaming non actif - Les commandes ne seront pas lues par le firmware')
+      logger.warn('[USB] sendCommand: Démarrez le streaming USB d\'abord')
+    }
     
     setSendingCommand(true)
     try {
-      const encoder = new TextEncoder()
-      const data = encoder.encode(command + '\n')
-      await write(data)
-      logger.log(`[USB] Commande envoyée: ${command}`)
+      // La fonction write attend une string et fait l'encodage elle-même
+      const commandWithNewline = command + '\n'
+      logger.log(`[USB] Envoi de la commande: "${commandWithNewline}"`)
+      const result = await write(commandWithNewline)
+      if (result) {
+        logger.log(`[USB] ✅ Commande "${command}" envoyée avec succès`)
+        appendUsbStreamLog(`📤 Commande envoyée: ${command}`)
+      } else {
+        logger.error(`[USB] ❌ Échec envoi commande "${command}"`)
+        appendUsbStreamLog(`❌ Échec envoi commande: ${command}`)
+      }
     } catch (err) {
       logger.error('[USB] Erreur envoi commande:', err)
+      appendUsbStreamLog(`❌ Erreur envoi commande: ${err.message || err}`)
     } finally {
       setSendingCommand(false)
     }
@@ -346,25 +375,17 @@ export default function UsbStreamingTab() {
               </select>
             </div>
 
-            {/* Bouton toggle Démarrer/Arrêter */}
+            {/* Bouton Démarrer streaming */}
             <div className="flex items-end">
               <button
                 onClick={handleToggleStreaming}
-                disabled={!canToggle}
+                disabled={!canToggle || isStreaming || isPaused}
                 className={`px-6 py-2 rounded-lg font-semibold text-sm transition-colors ${
-                  isStreaming
-                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                    : isPaused
-                    ? 'bg-primary-500 hover:bg-primary-600 text-white'
-                    : 'bg-primary-500 hover:bg-primary-600 text-white'
+                  'bg-primary-500 hover:bg-primary-600 text-white'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isToggling ? (
                   '⏳...'
-                ) : isStreaming ? (
-                  '⏸️ Pause'
-                ) : isPaused ? (
-                  '▶️ Reprendre'
                 ) : (
                   '▶️ Démarrer'
                 )}
@@ -388,63 +409,13 @@ export default function UsbStreamingTab() {
           </div>
         )}
 
-        {/* Contrôles modem et GPS */}
-        {isStreaming && (
-          <div className="mb-4 p-4 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">🔧 Contrôles modem et GPS</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <button
-                onClick={handleModemOn}
-                disabled={!isConnected || sendingCommand || modemStatus === 'running' || modemStatus === 'starting'}
-                className="px-3 py-2 text-xs font-medium rounded-lg bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Démarrer le modem pour tester le réseau et le GPS"
-              >
-                {modemStatus === 'starting' ? '⏳...' : '📡 Démarrer modem'}
-              </button>
-              <button
-                onClick={handleModemOff}
-                disabled={!isConnected || sendingCommand || modemStatus === 'stopped' || modemStatus === 'stopping'}
-                className="px-3 py-2 text-xs font-medium rounded-lg bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Arrêter le modem pour économiser l'énergie"
-              >
-                {modemStatus === 'stopping' ? '⏳...' : '🛑 Arrêter modem'}
-              </button>
-              <button
-                onClick={handleTestNetwork}
-                disabled={!isConnected || sendingCommand || modemStatus !== 'running'}
-                className="px-3 py-2 text-xs font-medium rounded-lg bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Tester l'enregistrement réseau (nécessite modem démarré)"
-              >
-                📶 Test réseau
-              </button>
-              <button
-                onClick={handleTestGps}
-                disabled={!isConnected || sendingCommand || modemStatus !== 'running'}
-                className="px-3 py-2 text-xs font-medium rounded-lg bg-purple-500 hover:bg-purple-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Tester le GPS (nécessite modem démarré)"
-              >
-                📍 Test GPS
-              </button>
-            </div>
-            <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-800 dark:text-blue-300">
-              <p className="font-semibold mb-1">📋 Comment utiliser :</p>
-              <ol className="list-decimal list-inside space-y-0.5">
-                <li>Cliquez sur <strong>"📡 Démarrer modem"</strong> pour démarrer le modem</li>
-                <li>Attendez que l'indicateur Modem passe à <strong>"Démarré"</strong> (vert) - <strong>Les logs du démarrage s'affichent dans la console ci-dessous</strong></li>
-                <li>Cliquez sur <strong>"📶 Test réseau"</strong> pour tester l'enregistrement Free</li>
-                <li>Cliquez sur <strong>"📍 Test GPS"</strong> pour tester le GPS</li>
-                <li><strong>⚠️ Important :</strong> Le GPS est intégré au modem SIM7600, il nécessite donc que le modem soit démarré. On ne peut pas utiliser le GPS sans démarrer le modem.</li>
-                <li>Tous les logs (démarrage modem, tests réseau/GPS) s'affichent dans la console en bas de page</li>
-              </ol>
-            </div>
-          </div>
-        )}
 
-        {/* Section 1 : État de connexion */}
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">🔌 État de connexion</h3>
-          <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 ${isDisabled ? 'opacity-50' : ''}`}>
-            {/* État connexion USB */}
+        {/* 4 sections en lignes avec indicateurs en colonne */}
+        <div className={`mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 ${isDisabled ? 'opacity-50' : ''}`}>
+          {/* Section 1 : État de connexion */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">🔌 État de connexion</h3>
+            {/* Connexion USB */}
             <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
               <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
                 isConnected 
@@ -465,115 +436,210 @@ export default function UsbStreamingTab() {
               </div>
             </div>
 
-            {/* État streaming */}
-            <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                usbStreamStatus === 'running'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                  : usbStreamStatus === 'paused'
-                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
-                  : usbStreamStatus === 'connecting' || usbStreamStatus === 'waiting'
-                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
-              }`}>
-                <span className="text-xl">
-                  {usbStreamStatus === 'running' ? '▶️' : 
-                   usbStreamStatus === 'paused' ? '⏸️' : 
-                   usbStreamStatus === 'connecting' || usbStreamStatus === 'waiting' ? '⏳' : '⏹️'}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Streaming</p>
-                <p className={`text-sm font-semibold truncate ${
+            {/* Streaming avec bouton pause/reprendre intégré */}
+            <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
                   usbStreamStatus === 'running'
-                    ? 'text-blue-600 dark:text-blue-400'
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
                     : usbStreamStatus === 'paused'
-                    ? 'text-yellow-600 dark:text-yellow-400'
+                    ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
                     : usbStreamStatus === 'connecting' || usbStreamStatus === 'waiting'
-                    ? 'text-purple-600 dark:text-purple-400'
-                    : 'text-gray-400 dark:text-gray-500'
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                 }`}>
-                  {usbStreamStatus === 'running' ? 'En cours' : 
-                   usbStreamStatus === 'paused' ? 'En pause' : 
-                   usbStreamStatus === 'connecting' ? 'Connexion...' : 
-                   usbStreamStatus === 'waiting' ? 'En attente...' : 
-                   'Arrêté'}
-                </p>
+                  <span className="text-xl">
+                    {usbStreamStatus === 'running' ? '▶️' : 
+                     usbStreamStatus === 'paused' ? '⏸️' : 
+                     usbStreamStatus === 'connecting' || usbStreamStatus === 'waiting' ? '⏳' : '⏹️'}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Streaming</p>
+                  <p className={`text-sm font-semibold truncate ${
+                    usbStreamStatus === 'running'
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : usbStreamStatus === 'paused'
+                      ? 'text-yellow-600 dark:text-yellow-400'
+                      : usbStreamStatus === 'connecting' || usbStreamStatus === 'waiting'
+                      ? 'text-purple-600 dark:text-purple-400'
+                      : 'text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {usbStreamStatus === 'running' ? 'En cours' : 
+                     usbStreamStatus === 'paused' ? 'En pause' : 
+                     usbStreamStatus === 'connecting' ? 'Connexion...' : 
+                     usbStreamStatus === 'waiting' ? 'En attente...' : 
+                     'Arrêté'}
+                  </p>
+                </div>
+                {(isStreaming || isPaused) && (
+                  <div className="flex gap-2 ml-auto">
+                    <button
+                      onClick={handleToggleStreaming}
+                      disabled={isToggling}
+                      className={`px-2 py-1 text-xs font-medium rounded transition-colors relative group ${
+                        isStreaming
+                          ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                          : 'bg-green-500 hover:bg-green-600 text-white'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {isToggling ? '⏳...' : isStreaming ? '⏸️' : '▶️'}
+                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
+                        <p className="font-semibold mb-2">
+                          {isStreaming ? '⏸️ Pause du streaming' : '▶️ Reprendre le streaming'}
+                        </p>
+                        <p className="text-left">
+                          {isStreaming 
+                            ? 'Mettre en pause le streaming USB. Les logs seront conservés et vous pourrez reprendre le streaming plus tard.'
+                            : 'Reprendre le streaming USB. Les données du dispositif seront à nouveau affichées en temps réel.'}
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Section 2 : Système (Modem & GPS) */}
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">📡 Système</h3>
-          <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 ${isDisabled ? 'opacity-50' : ''}`}>
-            {/* État modem */}
-            <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                isDisabled
-                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
-                  : modemStatus === 'running'
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                  : modemStatus === 'starting' || modemStatus === 'stopping'
-                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
-              }`}>
-                <span className="text-xl">📡</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Modem</p>
-                <p className={`text-sm font-semibold truncate ${
+          {/* Section 2 : Système */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">📡 Système</h3>
+
+            {/* Modem avec contrôles sur la même ligne */}
+            <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
                   isDisabled
-                    ? 'text-gray-400 dark:text-gray-500'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                     : modemStatus === 'running'
-                    ? 'text-green-600 dark:text-green-400'
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
                     : modemStatus === 'starting' || modemStatus === 'stopping'
-                    ? 'text-yellow-600 dark:text-yellow-400'
-                    : 'text-gray-400 dark:text-gray-500'
+                    ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                 }`}>
-                  {isDisabled ? 'N/A' :
-                   modemStatus === 'running' ? 'Démarré' : 
-                   modemStatus === 'starting' ? 'Démarrage...' : 
-                   modemStatus === 'stopping' ? 'Arrêt...' : 
-                   'Arrêté'}
-                </p>
+                  <span className="text-xl">📡</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Modem</p>
+                  <p className={`text-sm font-semibold truncate ${
+                    isDisabled
+                      ? 'text-gray-400 dark:text-gray-500'
+                      : modemStatus === 'running'
+                      ? 'text-green-600 dark:text-green-400'
+                      : modemStatus === 'starting' || modemStatus === 'stopping'
+                      ? 'text-yellow-600 dark:text-yellow-400'
+                      : 'text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {isDisabled ? 'N/A' :
+                     modemStatus === 'running' ? 'Démarré' : 
+                     modemStatus === 'starting' ? 'Démarrage...' : 
+                     modemStatus === 'stopping' ? 'Arrêt...' : 
+                     'Arrêté'}
+                  </p>
+                </div>
+                {isStreaming && (
+                  <div className="flex gap-2 ml-auto">
+                    <button
+                      onClick={handleModemOn}
+                      disabled={!isConnected || sendingCommand || modemStatus === 'running' || modemStatus === 'starting'}
+                      className="px-2 py-1 text-xs font-medium rounded bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors relative group"
+                    >
+                      {modemStatus === 'starting' ? '⏳...' : '📡 Démarrer'}
+                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
+                        <p className="font-semibold mb-2">📋 Comment utiliser :</p>
+                        <ol className="list-decimal list-inside space-y-1 text-left">
+                          <li>Cliquez sur <strong>"📡 Démarrer modem"</strong> pour démarrer le modem</li>
+                          <li>Attendez que l'indicateur Modem passe à <strong>"Démarré"</strong> (vert) - <strong>Les logs du démarrage s'affichent dans la console ci-dessous</strong></li>
+                          <li>Cliquez sur <strong>"📶 Test réseau"</strong> pour tester l'enregistrement Free</li>
+                          <li>Cliquez sur <strong>"📍 Test GPS"</strong> pour tester le GPS</li>
+                          <li><strong>⚠️ Important :</strong> Le GPS est intégré au modem SIM7600, il nécessite donc que le modem soit démarré. On ne peut pas utiliser le GPS sans démarrer le modem.</li>
+                          <li>Tous les logs (démarrage modem, tests réseau/GPS) s'affichent dans la console en bas de page</li>
+                        </ol>
+                      </div>
+                    </button>
+                    <button
+                      onClick={handleModemOff}
+                      disabled={!isConnected || sendingCommand || modemStatus === 'stopped' || modemStatus === 'stopping'}
+                      className="px-2 py-1 text-xs font-medium rounded bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Arrêter le modem pour économiser l'énergie"
+                    >
+                      {modemStatus === 'stopping' ? '⏳...' : '🛑 Arrêter'}
+                    </button>
+                    <button
+                      onClick={handleTestNetwork}
+                      disabled={!isConnected || sendingCommand || modemStatus !== 'running'}
+                      className="px-2 py-1 text-xs font-medium rounded bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors relative group"
+                    >
+                      📶 Test réseau
+                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
+                        <p className="font-semibold mb-2">📋 Comment utiliser :</p>
+                        <ol className="list-decimal list-inside space-y-1 text-left">
+                          <li>Cliquez sur <strong>"📡 Démarrer modem"</strong> pour démarrer le modem</li>
+                          <li>Attendez que l'indicateur Modem passe à <strong>"Démarré"</strong> (vert) - <strong>Les logs du démarrage s'affichent dans la console ci-dessous</strong></li>
+                          <li>Cliquez sur <strong>"📶 Test réseau"</strong> pour tester l'enregistrement Free</li>
+                          <li>Tous les logs s'affichent dans la console en bas de page</li>
+                        </ol>
+                      </div>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* État GPS */}
-            <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                isDisabled
-                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
-                  : isReady && usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
-              }`}>
-                <span className="text-xl">📍</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Position GPS</p>
-                <p className={`text-sm font-semibold truncate ${
+            {/* GPS avec contrôles sur la même ligne */}
+            <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
                   isDisabled
-                    ? 'text-gray-400 dark:text-gray-500'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                     : isReady && usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-gray-400 dark:text-gray-500'
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
                 }`}>
-                  {isReady && usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
-                    ? `${usbStreamLastMeasurement.latitude.toFixed(6)}, ${usbStreamLastMeasurement.longitude.toFixed(6)}`
-                    : 'Non disponible'}
-                </p>
+                  <span className="text-xl">📍</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Position GPS</p>
+                  <p className={`text-sm font-semibold truncate ${
+                    isDisabled
+                      ? 'text-gray-400 dark:text-gray-500'
+                      : isReady && usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-gray-400 dark:text-gray-500'
+                  }`}>
+                    {isReady && usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
+                      ? `${usbStreamLastMeasurement.latitude.toFixed(6)}, ${usbStreamLastMeasurement.longitude.toFixed(6)}`
+                      : 'Non disponible'}
+                  </p>
+                </div>
+                {isStreaming && (
+                  <div className="flex gap-2 ml-auto">
+                    <button
+                      onClick={handleTestGps}
+                      disabled={!isConnected || sendingCommand || modemStatus !== 'running'}
+                      className="px-2 py-1 text-xs font-medium rounded bg-purple-500 hover:bg-purple-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors relative group"
+                    >
+                      📍 Test GPS
+                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
+                        <p className="font-semibold mb-2">📋 Comment utiliser :</p>
+                        <ol className="list-decimal list-inside space-y-1 text-left">
+                          <li>Cliquez sur <strong>"📡 Démarrer modem"</strong> pour démarrer le modem</li>
+                          <li>Attendez que l'indicateur Modem passe à <strong>"Démarré"</strong> (vert) - <strong>Les logs du démarrage s'affichent dans la console ci-dessous</strong></li>
+                          <li>Cliquez sur <strong>"📍 Test GPS"</strong> pour tester le GPS</li>
+                          <li><strong>⚠️ Important :</strong> Le GPS est intégré au modem SIM7600, il nécessite donc que le modem soit démarré. On ne peut pas utiliser le GPS sans démarrer le modem.</li>
+                          <li>Tous les logs (démarrage modem, tests réseau/GPS) s'affichent dans la console en bas de page</li>
+                        </ol>
+                      </div>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Section 3 : Mesures en temps réel */}
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">📊 Mesures en temps réel</h3>
-          <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 ${isDisabled ? 'opacity-50' : ''}`}>
+          {/* Section 3 : Mesures en temps réel */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">📊 Mesures</h3>
             {/* Débit */}
             <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
               <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isDisabled ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'}`}>
@@ -671,17 +737,15 @@ export default function UsbStreamingTab() {
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Section 4 : Statistiques et informations */}
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ℹ️ Statistiques et informations</h3>
-          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 ${isDisabled ? 'opacity-50' : ''}`}>
-            {/* Statistiques mesures */}
+          {/* Section 4 : Statistiques et informations */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ℹ️ Statistiques</h3>
+            {/* Mesures reçues */}
             <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
               <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isDisabled ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'}`}>
                 <span className="text-xl">📊</span>
-                    </div>
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Mesures</p>
                 <p className={`text-sm font-semibold truncate ${isDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
@@ -714,8 +778,8 @@ export default function UsbStreamingTab() {
                     ? `${Math.floor((Date.now() - usbStreamLastUpdate) / 1000)}s`
                     : 'Jamais'}
                 </p>
-                      </div>
-                    </div>
+              </div>
+            </div>
 
             {/* Version firmware */}
             <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
@@ -733,8 +797,8 @@ export default function UsbStreamingTab() {
                        usbConnectedDevice?.firmware_version)
                     : 'N/A'}
                 </p>
-                  </div>
-                </div>
+              </div>
+            </div>
 
             {/* ICCID/Serial */}
             <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
