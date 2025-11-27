@@ -121,6 +121,33 @@ function MarkdownViewer({ fileName }) {
   // Ref pour éviter les rechargements multiples du même fichier
   const loadedFileNameRef = useRef(null)
   const isLoadingRef = useRef(false)
+  
+  // Détecter le thème pour le MarkdownViewer (4ème doc - Suivi Temps)
+  useEffect(() => {
+    const checkTheme = () => {
+      const isDarkMode = document.documentElement.classList.contains('dark')
+      const container = document.getElementById('markdown-viewer-container')
+      if (container) {
+        if (isDarkMode) {
+          container.classList.add('dark')
+        } else {
+          container.classList.remove('dark')
+        }
+      }
+    }
+    
+    // Vérifier immédiatement
+    checkTheme()
+    
+    // Observer les changements de thème
+    const observer = new MutationObserver(checkTheme)
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    })
+    
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     // Ne charger que si le fichier a changé ou n'a jamais été chargé
