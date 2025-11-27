@@ -124,41 +124,24 @@ export default function Sidebar() {
       {/* Footer Sidebar - Menu déroulant Documentation */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white/90 via-primary-50/30 to-transparent dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-transparent backdrop-blur-sm">
         <div className="relative">
-          <div
-            className={`w-full flex items-center justify-between gap-2 px-4 py-2 rounded-lg transition-all duration-300 shadow-sm text-sm font-medium ${
-              normalizedPathname === '/dashboard/documentation'
-                ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white'
-                : 'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300'
-            }`}
-          >
-            {/* Partie cliquable pour naviguer vers la documentation */}
+          <div className="w-full flex items-center justify-between gap-2 px-4 py-2 rounded-lg transition-all duration-300 shadow-sm text-sm font-medium bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300">
+            {/* Partie cliquable pour naviguer vers la documentation - ne toggle PAS le menu */}
             <Link
               href="/dashboard/documentation?doc=presentation"
               className="flex items-center gap-2 flex-1 hover:scale-[1.02] transition-transform duration-300"
-              onClick={(e) => {
-                // Si on est déjà sur la page documentation, ne pas naviguer, juste ouvrir/fermer
-                if (normalizedPathname === '/dashboard/documentation') {
-                  e.preventDefault()
-                  setIsDocsOpen(!isDocsOpen)
-                }
-              }}
             >
               <span>📚</span>
               <span>Documentation</span>
             </Link>
             
-            {/* Triangle pour déployer/minimiser - toujours actif */}
+            {/* Triangle pour déployer/minimiser - SEUL élément qui toggle le menu */}
             <button
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 setIsDocsOpen(!isDocsOpen)
               }}
-              className={`p-1 rounded transition-all duration-300 hover:scale-110 ${
-                normalizedPathname === '/dashboard/documentation'
-                  ? 'hover:bg-white/20'
-                  : 'hover:bg-primary-200/50 dark:hover:bg-primary-800/50'
-              }`}
+              className="p-1 rounded transition-all duration-300 hover:scale-110 hover:bg-primary-200/50 dark:hover:bg-primary-800/50"
               aria-label={isDocsOpen ? 'Minimiser le menu' : 'Déployer le menu'}
             >
               <span className={`transition-transform duration-300 block ${isDocsOpen ? 'rotate-180' : ''}`}>
