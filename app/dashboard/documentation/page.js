@@ -588,23 +588,28 @@ function MarkdownViewer({ fileName }) {
     
     try {
       return {
-    labels: ['0-2h', '2-4h', '4-6h', '6-8h', '8-10h', '10h+'],
-    datasets: [{
-      label: 'Nombre de jours',
-      data: [
-        chartData.dailyData.filter(d => d.hours >= 0 && d.hours < 2).length,
-        chartData.dailyData.filter(d => d.hours >= 2 && d.hours < 4).length,
-        chartData.dailyData.filter(d => d.hours >= 4 && d.hours < 6).length,
-        chartData.dailyData.filter(d => d.hours >= 6 && d.hours < 8).length,
-        chartData.dailyData.filter(d => d.hours >= 8 && d.hours < 10).length,
-        chartData.dailyData.filter(d => d.hours >= 10).length
-      ],
-      backgroundColor: 'rgba(168, 85, 247, 0.8)',
-      borderColor: 'rgb(168, 85, 247)',
-      borderWidth: 2,
-      borderRadius: 4
-    }]
-  } : null
+        labels: ['0-2h', '2-4h', '4-6h', '6-8h', '8-10h', '10h+'],
+        datasets: [{
+          label: 'Nombre de jours',
+          data: [
+            chartData.dailyData.filter(d => d.hours >= 0 && d.hours < 2).length,
+            chartData.dailyData.filter(d => d.hours >= 2 && d.hours < 4).length,
+            chartData.dailyData.filter(d => d.hours >= 4 && d.hours < 6).length,
+            chartData.dailyData.filter(d => d.hours >= 6 && d.hours < 8).length,
+            chartData.dailyData.filter(d => d.hours >= 8 && d.hours < 10).length,
+            chartData.dailyData.filter(d => d.hours >= 10).length
+          ],
+          backgroundColor: 'rgba(168, 85, 247, 0.8)',
+          borderColor: 'rgb(168, 85, 247)',
+          borderWidth: 2,
+          borderRadius: 4
+        }]
+      }
+    } catch (error) {
+      logger.error('Erreur calcul hoursDistributionData:', error)
+      return null
+    }
+  }, [chartData])
 
   const chartOptions = {
     responsive: true,
