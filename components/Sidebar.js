@@ -48,7 +48,10 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user } = useAuth()
-  const [isDocsOpen, setIsDocsOpen] = useState(false)
+  
+  // Garder le menu documentation ouvert si on est sur la page documentation
+  const isOnDocumentationPage = pathname === '/dashboard/documentation'
+  const [isDocsOpen, setIsDocsOpen] = useState(isOnDocumentationPage)
   
   const hasPermission = (permission) => {
     if (!permission) return true
@@ -61,6 +64,13 @@ export default function Sidebar() {
     if (!pathname) return ''
     return pathname
   }, [pathname])
+  
+  // Maintenir le menu ouvert quand on est sur la page documentation
+  useEffect(() => {
+    if (isOnDocumentationPage && !isDocsOpen) {
+      setIsDocsOpen(true)
+    }
+  }, [isOnDocumentationPage, isDocsOpen])
   
   const documentationLinks = [
     { name: 'Présentation', icon: '📸', doc: 'presentation' },
@@ -154,7 +164,6 @@ export default function Sidebar() {
                         ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white'
                         : 'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30'
                     }`}
-                    onClick={() => setIsDocsOpen(false)}
                   >
                     <span>{doc.icon}</span>
                     <span className="font-medium">{doc.name}</span>
