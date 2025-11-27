@@ -539,6 +539,64 @@ export default function UsbStreamingTab() {
 
         {/* Indicateurs supplémentaires (2ème ligne) */}
         <div className="mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Débit */}
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+              <span className="text-xl">💨</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Débit</p>
+              <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 truncate">
+              {usbStreamLastMeasurement?.flowrate !== null && usbStreamLastMeasurement?.flowrate !== undefined
+                ? `${usbStreamLastMeasurement.flowrate.toFixed(2)} L/min`
+                : '0.00 L/min'}
+            </p>
+            {(minMaxValues.flowrate.min !== null || minMaxValues.flowrate.max !== null) && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                Min: {minMaxValues.flowrate.min !== null ? `${minMaxValues.flowrate.min.toFixed(2)}` : '-'} | 
+                  Max: {minMaxValues.flowrate.max !== null ? `${minMaxValues.flowrate.max.toFixed(2)}` : '-'}
+              </p>
+            )}
+            </div>
+          </div>
+
+          {/* Batterie */}
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+              usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
+                ? usbStreamLastMeasurement.battery >= 50
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                  : usbStreamLastMeasurement.battery >= 20
+                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
+                  : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+            }`}>
+              <span className="text-xl">🔋</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Batterie</p>
+              <p className={`text-sm font-semibold truncate ${
+                usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
+                  ? usbStreamLastMeasurement.battery >= 50
+                    ? 'text-green-600 dark:text-green-400'
+                    : usbStreamLastMeasurement.battery >= 20
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : 'text-red-600 dark:text-red-400'
+                  : 'text-gray-400 dark:text-gray-500'
+              }`}>
+              {usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
+                ? `${usbStreamLastMeasurement.battery.toFixed(0)}%`
+                : '0%'}
+            </p>
+            {(minMaxValues.battery.min !== null || minMaxValues.battery.max !== null) && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                Min: {minMaxValues.battery.min !== null ? `${minMaxValues.battery.min.toFixed(0)}` : '-'} | 
+                  Max: {minMaxValues.battery.max !== null ? `${minMaxValues.battery.max.toFixed(0)}` : '-'}
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* RSSI Signal */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
@@ -569,11 +627,12 @@ export default function UsbStreamingTab() {
               </p>
             </div>
           </div>
+
           {/* Statistiques mesures */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
               <span className="text-xl">📊</span>
-            </div>
+                  </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Mesures</p>
               <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 truncate">
@@ -602,8 +661,8 @@ export default function UsbStreamingTab() {
                   ? `${Math.floor((Date.now() - usbStreamLastUpdate) / 1000)}s`
                   : 'Jamais'}
               </p>
-            </div>
-          </div>
+                    </div>
+                  </div>
 
           {/* Version firmware */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
@@ -618,8 +677,8 @@ export default function UsbStreamingTab() {
                  usbConnectedDevice?.firmware_version || 
                  'N/A'}
               </p>
-            </div>
-          </div>
+                </div>
+              </div>
 
           {/* ICCID/Serial */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
@@ -636,84 +695,6 @@ export default function UsbStreamingTab() {
           </div>
         </div>
 
-        {/* Mesures en temps réel - Au-dessus de la console */}
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">Débit</p>
-            <p className="text-2xl font-bold text-primary">
-              {usbStreamLastMeasurement?.flowrate !== null && usbStreamLastMeasurement?.flowrate !== undefined
-                ? `${usbStreamLastMeasurement.flowrate.toFixed(2)} L/min`
-                : '0.00 L/min'}
-            </p>
-            {(minMaxValues.flowrate.min !== null || minMaxValues.flowrate.max !== null) && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Min: {minMaxValues.flowrate.min !== null ? `${minMaxValues.flowrate.min.toFixed(2)}` : '-'} | 
-                Max: {minMaxValues.flowrate.max !== null ? `${minMaxValues.flowrate.max.toFixed(2)}` : '-'} L/min
-              </p>
-            )}
-          </div>
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">Batterie</p>
-            <p className="text-2xl font-bold text-primary">
-              {usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
-                ? `${usbStreamLastMeasurement.battery.toFixed(0)}%`
-                : '0%'}
-            </p>
-            {(minMaxValues.battery.min !== null || minMaxValues.battery.max !== null) && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Min: {minMaxValues.battery.min !== null ? `${minMaxValues.battery.min.toFixed(0)}` : '-'} | 
-                Max: {minMaxValues.battery.max !== null ? `${minMaxValues.battery.max.toFixed(0)}` : '-'}%
-              </p>
-            )}
-          </div>
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 relative group">
-            <div className="flex items-center gap-2 mb-1">
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">RSSI</p>
-              <div className="relative">
-                <button 
-                  type="button"
-                  className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 cursor-help transition-colors"
-                  title="Cliquez pour plus d'infos"
-                >
-                  ℹ️
-                </button>
-                <div className="absolute left-0 bottom-full mb-2 w-72 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-20 pointer-events-none">
-                  <div className="absolute bottom-0 left-4 transform translate-y-full">
-                    <div className="border-4 border-transparent border-t-blue-200 dark:border-t-blue-800"></div>
-                  </div>
-                  <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-1">
-                    <span>📡</span>
-                    <span>RSSI (Received Signal Strength Indicator)</span>
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">
-                    Mesure la <strong>force du signal réseau cellulaire</strong> entre le dispositif et l&apos;antenne la plus proche.
-                  </p>
-                  <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
-                    <p className="font-semibold mb-1">Valeurs typiques :</p>
-                    <div className="space-y-0.5">
-                      <div>• <strong className="text-green-600 dark:text-green-400">-50 à -70 dBm</strong> : Excellent signal ⭐⭐⭐</div>
-                      <div>• <strong className="text-blue-600 dark:text-blue-400">-70 à -90 dBm</strong> : Bon signal ⭐⭐</div>
-                      <div>• <strong className="text-yellow-600 dark:text-yellow-400">-90 à -110 dBm</strong> : Signal faible ⭐</div>
-                      <div>• <strong className="text-red-600 dark:text-red-400">-110 à -150 dBm</strong> : Signal très faible ⚠️</div>
-                      <div>• <strong className="text-gray-600 dark:text-gray-400">-999 dBm</strong> : Pas de signal ou erreur</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p className="text-2xl font-bold text-primary">
-              {usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
-                ? `${usbStreamLastMeasurement.rssi} dBm`
-                : <span className="text-gray-400">N/A</span>}
-            </p>
-            {(minMaxValues.rssi.min !== null || minMaxValues.rssi.max !== null) && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Min: {minMaxValues.rssi.min !== null ? `${minMaxValues.rssi.min}` : '-'} | 
-                Max: {minMaxValues.rssi.max !== null ? `${minMaxValues.rssi.max}` : '-'} dBm
-              </p>
-            )}
-          </div>
-        </div>
 
         {/* Console de logs - logs récents en haut */}
         <div 
