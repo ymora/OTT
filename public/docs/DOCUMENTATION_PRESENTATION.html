@@ -234,10 +234,118 @@
             margin-top: 3rem;
         }
         
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #1a1a1a;
+                color: #e0e0e0;
+            }
+            
+            body::before {
+                color: rgba(255, 255, 255, 0.03);
+            }
+            
+            .section {
+                background: #2d2d2d;
+                color: #e0e0e0;
+            }
+            
+            .section h2 {
+                color: #9d8aff;
+            }
+            
+            .section h3 {
+                color: #b794f6;
+            }
+            
+            .section h4 {
+                color: #9d8aff;
+            }
+            
+            code {
+                background: #3d3d3d;
+                color: #ff79c6;
+            }
+            
+            .alert-success { background: #1e4620; border-color: #28a745; color: #90ee90; }
+            .alert-warning { background: #4a3d00; border-color: #ffc107; color: #ffd700; }
+            .alert-danger { background: #4a1e1e; border-color: #dc3545; color: #ff6b6b; }
+            .alert-info { background: #1e3a4a; border-color: #17a2b8; color: #6bc5d4; }
+            
+            td {
+                border-bottom: 1px solid #444;
+            }
+            
+            tr:hover {
+                background: #3a3a3a;
+            }
+        }
+        
+        /* Dark mode via classe (pour synchronisation avec parent) */
+        body.dark {
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        
+        body.dark::before {
+            color: rgba(255, 255, 255, 0.03);
+        }
+        
+        body.dark .section {
+            background: #2d2d2d;
+            color: #e0e0e0;
+        }
+        
+        body.dark .section h2 {
+            color: #9d8aff;
+        }
+        
+        body.dark .section h3 {
+            color: #b794f6;
+        }
+        
+        body.dark .section h4 {
+            color: #9d8aff;
+        }
+        
+        body.dark code {
+            background: #3d3d3d;
+            color: #ff79c6;
+        }
+        
+        body.dark .alert-success { background: #1e4620; border-color: #28a745; color: #90ee90; }
+        body.dark .alert-warning { background: #4a3d00; border-color: #ffc107; color: #ffd700; }
+        body.dark .alert-danger { background: #4a1e1e; border-color: #dc3545; color: #ff6b6b; }
+        body.dark .alert-info { background: #1e3a4a; border-color: #17a2b8; color: #6bc5d4; }
+        
+        body.dark td {
+            border-bottom: 1px solid #444;
+        }
+        
+        body.dark tr:hover {
+            background: #3a3a3a;
+        }
+        
     </style>
 </head>
 <body>
     <script>
+        // Détecter le thème depuis le parent
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'theme') {
+                if (event.data.isDark) {
+                    document.body.classList.add('dark')
+                } else {
+                    document.body.classList.remove('dark')
+                }
+            }
+        })
+        
+        // Détecter aussi le thème système au chargement
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.body.classList.add('dark')
+        }
+        
         // Protection contre la copie et les fuites
         (function() {
             // Désactiver le clic droit
@@ -414,28 +522,44 @@
     <h3>🏠 Vue d'Ensemble (Dashboard)</h3>
     <p>La page principale avec les indicateurs clés et les graphiques :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/dashboard-overview.png" alt="Vue d'ensemble" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <img src="screenshots/dashboard-overview.png" alt="Vue d'ensemble" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div style="display: none; background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%); min-height: 300px; align-items: center; justify-content: center; border: 2px dashed #ccc; border-radius: 8px; color: #999; font-style: italic; flex-direction: column; margin: 1rem 0;">
+            📸 Vue d'ensemble<br>
+            <small style="display: block; margin-top: 0.5rem; font-size: 0.9rem;">Capture d'écran non disponible</small>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Vue d'ensemble avec KPI, graphiques et actions requises</p>
     </div>
     
     <h3>🔌 Page Dispositifs</h3>
     <p>La liste des dispositifs avec leurs statuts et informations :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/devices-list.png" alt="Liste des dispositifs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <img src="screenshots/devices-list.png" alt="Liste des dispositifs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div style="display: none; background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%); min-height: 300px; align-items: center; justify-content: center; border: 2px dashed #ccc; border-radius: 8px; color: #999; font-style: italic; flex-direction: column; margin: 1rem 0;">
+            📸 Liste des dispositifs<br>
+            <small style="display: block; margin-top: 0.5rem; font-size: 0.9rem;">Capture d'écran non disponible</small>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Liste des dispositifs avec recherche et filtres</p>
     </div>
     
     <h3>🏥 Page Patients</h3>
     <p>La gestion des patients avec leurs dispositifs associés :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/patients-list.png" alt="Liste des patients" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <img src="screenshots/patients-list.png" alt="Liste des patients" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div style="display: none; background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%); min-height: 300px; align-items: center; justify-content: center; border: 2px dashed #ccc; border-radius: 8px; color: #999; font-style: italic; flex-direction: column; margin: 1rem 0;">
+            📸 Liste des patients<br>
+            <small style="display: block; margin-top: 0.5rem; font-size: 0.9rem;">Capture d'écran non disponible</small>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Liste des patients avec recherche, création, modification, assignation/désassignation de dispositifs. Interface simplifiée sans alertes (accessibles via le modal de détails du dispositif).</p>
     </div>
     
     <h3>📍 Carte Interactive</h3>
     <p>La visualisation géographique des dispositifs :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/map.png" alt="Carte interactive" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <img src="screenshots/map.png" alt="Carte interactive" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+        <div style="display: none; background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%); min-height: 300px; align-items: center; justify-content: center; border: 2px dashed #ccc; border-radius: 8px; color: #999; font-style: italic; flex-direction: column; margin: 1rem 0;">
+            📸 Carte interactive<br>
+            <small style="display: block; margin-top: 0.5rem; font-size: 0.9rem;">Capture d'écran non disponible</small>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Carte Leaflet avec marqueurs des dispositifs</p>
     </div>
     

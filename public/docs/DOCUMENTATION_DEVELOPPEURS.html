@@ -243,10 +243,118 @@
             margin-top: 3rem;
         }
         
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #1a1a1a;
+                color: #e0e0e0;
+            }
+            
+            body::before {
+                color: rgba(255, 255, 255, 0.03);
+            }
+            
+            .section {
+                background: #2d2d2d;
+                color: #e0e0e0;
+            }
+            
+            .section h2 {
+                color: #9d8aff;
+            }
+            
+            .section h3 {
+                color: #b794f6;
+            }
+            
+            .section h4 {
+                color: #9d8aff;
+            }
+            
+            code {
+                background: #3d3d3d;
+                color: #ff79c6;
+            }
+            
+            .alert-success { background: #1e4620; border-color: #28a745; color: #90ee90; }
+            .alert-warning { background: #4a3d00; border-color: #ffc107; color: #ffd700; }
+            .alert-danger { background: #4a1e1e; border-color: #dc3545; color: #ff6b6b; }
+            .alert-info { background: #1e3a4a; border-color: #17a2b8; color: #6bc5d4; }
+            
+            td {
+                border-bottom: 1px solid #444;
+            }
+            
+            tr:hover {
+                background: #3a3a3a;
+            }
+        }
+        
+        /* Dark mode via classe (pour synchronisation avec parent) */
+        body.dark {
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        
+        body.dark::before {
+            color: rgba(255, 255, 255, 0.03);
+        }
+        
+        body.dark .section {
+            background: #2d2d2d;
+            color: #e0e0e0;
+        }
+        
+        body.dark .section h2 {
+            color: #9d8aff;
+        }
+        
+        body.dark .section h3 {
+            color: #b794f6;
+        }
+        
+        body.dark .section h4 {
+            color: #9d8aff;
+        }
+        
+        body.dark code {
+            background: #3d3d3d;
+            color: #ff79c6;
+        }
+        
+        body.dark .alert-success { background: #1e4620; border-color: #28a745; color: #90ee90; }
+        body.dark .alert-warning { background: #4a3d00; border-color: #ffc107; color: #ffd700; }
+        body.dark .alert-danger { background: #4a1e1e; border-color: #dc3545; color: #ff6b6b; }
+        body.dark .alert-info { background: #1e3a4a; border-color: #17a2b8; color: #6bc5d4; }
+        
+        body.dark td {
+            border-bottom: 1px solid #444;
+        }
+        
+        body.dark tr:hover {
+            background: #3a3a3a;
+        }
+        
     </style>
 </head>
 <body>
     <script>
+        // Détecter le thème depuis le parent
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'theme') {
+                if (event.data.isDark) {
+                    document.body.classList.add('dark')
+                } else {
+                    document.body.classList.remove('dark')
+                }
+            }
+        })
+        
+        // Détecter aussi le thème système au chargement
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.body.classList.add('dark')
+        }
+        
         // Protection contre la copie et les fuites
         (function() {
             // Désactiver le clic droit

@@ -70,13 +70,48 @@ export default function DocumentationPage() {
     return <MarkdownViewer fileName="SUIVI_TEMPS_FACTURATION.md" />
   }
 
+  // Référence à l'iframe pour envoyer le thème
+  const iframeRef = useRef(null)
+  const [isDark, setIsDark] = useState(false)
+
+  // Détecter le thème actuel
+  useEffect(() => {
+    const checkTheme = () => {
+      const isDarkMode = document.documentElement.classList.contains('dark')
+      setIsDark(isDarkMode)
+      // Envoyer le thème à l'iframe
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'theme', isDark: isDarkMode }, '*')
+      }
+    }
+
+    checkTheme()
+
+    // Observer les changements de thème
+    const observer = new MutationObserver(checkTheme)
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    })
+
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 -m-6">
       <iframe
+        ref={iframeRef}
         src={docUrl}
         className="w-full h-full border-0"
         title="Documentation OTT"
         allow="fullscreen"
+        onLoad={() => {
+          // Envoyer le thème dès que l'iframe est chargée
+          if (iframeRef.current?.contentWindow) {
+            const isDarkMode = document.documentElement.classList.contains('dark')
+            iframeRef.current.contentWindow.postMessage({ type: 'theme', isDark: isDarkMode }, '*')
+          }
+        }}
       />
     </div>
   )
