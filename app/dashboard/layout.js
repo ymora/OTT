@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
 import { useAuth } from '@/contexts/AuthContext'
 import { UsbProvider } from '@/contexts/UsbContext'
+import logger from '@/lib/logger'
 
 // Authentification toujours requise
 const REQUIRE_AUTH = true
@@ -19,7 +20,7 @@ function DashboardLayoutContent({ children }) {
   // Logging pour le débogage
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      console.log('[DashboardLayout] État:', { loading, hasUser: !!user, pathname })
+      logger.debug('[DashboardLayout] État:', { loading, hasUser: !!user, pathname })
     }
   }, [loading, user, pathname])
 
@@ -29,7 +30,7 @@ function DashboardLayoutContent({ children }) {
     if (hasRedirected.current || !pathname?.startsWith('/dashboard')) return
     
     if (!loading && !user) {
-      console.log('[DashboardLayout] Redirection vers / (pas d\'utilisateur)')
+      logger.debug('[DashboardLayout] Redirection vers / (pas d\'utilisateur)')
       hasRedirected.current = true
       // Next.js gère automatiquement le basePath
       router.replace('/')
@@ -40,7 +41,7 @@ function DashboardLayoutContent({ children }) {
   }, [user, loading, router, pathname])
 
   if (REQUIRE_AUTH && loading) {
-    console.log('[DashboardLayout] Affichage du loader (loading=true)')
+    logger.debug('[DashboardLayout] Affichage du loader (loading=true)')
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[rgb(var(--night-bg-start))]">
         <div className="text-center">
@@ -52,7 +53,7 @@ function DashboardLayoutContent({ children }) {
   }
 
   if (REQUIRE_AUTH && !user) {
-    console.warn('[DashboardLayout] Pas d\'utilisateur authentifié, redirection en cours...')
+    logger.warn('[DashboardLayout] Pas d\'utilisateur authentifié, redirection en cours...')
     // Afficher un message au lieu de retourner null
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">

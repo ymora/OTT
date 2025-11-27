@@ -7,6 +7,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
+import logger from '@/lib/logger'
 
 // Cache simple en mémoire (peut être amélioré avec localStorage ou un cache plus sophistiqué)
 const cache = new Map()
@@ -70,7 +71,7 @@ export function useApiData(endpoints, options = {}) {
         const promises = endpointsToUse.map(endpoint =>
           fetchJson(fetchWithAuth, API_URL, endpoint, memoizedFetchOptions, { requiresAuth })
             .catch(err => {
-              console.error(`Erreur chargement ${endpoint}:`, err)
+              logger.error(`Erreur chargement ${endpoint}:`, err)
               return null // Retourner null en cas d'erreur pour ne pas bloquer les autres
             })
         )
@@ -103,7 +104,7 @@ export function useApiData(endpoints, options = {}) {
         setData(result)
       }
     } catch (err) {
-      console.error('Erreur chargement données:', err)
+      logger.error('Erreur chargement données:', err)
       setError(err.message || 'Erreur lors du chargement des données')
       setData(isMultiple ? {} : null)
     } finally {

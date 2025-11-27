@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Logging pour le débogage
     if (typeof window !== 'undefined') {
-      console.log('[AuthContext] Initialisation...')
+      logger.debug('[AuthContext] Initialisation...')
     }
 
     try {
@@ -54,7 +54,7 @@ export function AuthProvider({ children }) {
       const storedUser = localStorage.getItem('ott_user')
 
       if (typeof window !== 'undefined') {
-        console.log('[AuthContext] localStorage:', { 
+        logger.debug('[AuthContext] localStorage:', { 
           hasToken: !!storedToken, 
           hasUser: !!storedUser,
           tokenLength: storedToken?.length || 0
@@ -67,25 +67,25 @@ export function AuthProvider({ children }) {
           setToken(storedToken)
           setUser(parsedUser)
           if (typeof window !== 'undefined') {
-            console.log('[AuthContext] Utilisateur restauré:', parsedUser.email || parsedUser.username)
+            logger.debug('[AuthContext] Utilisateur restauré:', parsedUser.email || parsedUser.username)
           }
         } catch (parseError) {
-          console.error('[AuthContext] Erreur parsing user:', parseError)
+          logger.error('[AuthContext] Erreur parsing user:', parseError)
           // Nettoyer les données corrompues
           localStorage.removeItem('ott_token')
           localStorage.removeItem('ott_user')
         }
       } else {
         if (typeof window !== 'undefined') {
-          console.log('[AuthContext] Aucun utilisateur stocké')
+          logger.debug('[AuthContext] Aucun utilisateur stocké')
         }
       }
     } catch (error) {
-      console.error('[AuthContext] Erreur lors de l\'initialisation:', error)
+      logger.error('[AuthContext] Erreur lors de l\'initialisation:', error)
     } finally {
       setLoading(false)
       if (typeof window !== 'undefined') {
-        console.log('[AuthContext] Initialisation terminée, loading=false')
+        logger.debug('[AuthContext] Initialisation terminée, loading=false')
       }
     }
   }, [])
@@ -105,10 +105,10 @@ export function AuthProvider({ children }) {
       // Si erreur HTTP ou réponse non-JSON, gérer l'erreur
       if (!response.ok || !isJson) {
         const text = await response.text()
-        console.error('[AuthContext] ❌ Erreur serveur')
-        console.error('[AuthContext] Status:', response.status)
-        console.error('[AuthContext] Content-Type:', contentType)
-        console.error('[AuthContext] Réponse complète:', text)
+        logger.error('[AuthContext] ❌ Erreur serveur')
+        logger.error('[AuthContext] Status:', response.status)
+        logger.error('[AuthContext] Content-Type:', contentType)
+        logger.error('[AuthContext] Réponse complète:', text)
         
         // Essayer de parser comme JSON si possible
         let errorMessage = `Erreur serveur (${response.status})`
@@ -141,9 +141,9 @@ export function AuthProvider({ children }) {
             `Réponse: ${text.substring(0, 1000)}\n\n`
           try {
             localStorage.setItem('api_error_log', logEntry)
-            console.log('[AuthContext] 💾 Log sauvegardé dans localStorage')
+            logger.debug('[AuthContext] 💾 Log sauvegardé dans localStorage')
           } catch (e) {
-            console.error('[AuthContext] Erreur sauvegarde log:', e)
+            logger.error('[AuthContext] Erreur sauvegarde log:', e)
           }
         }
         
@@ -169,7 +169,7 @@ export function AuthProvider({ children }) {
         throw err
       }
       // Sinon, c'est probablement une erreur de parsing JSON
-      console.error('[AuthContext] ❌ Erreur lors de la connexion:', err)
+      logger.error('[AuthContext] ❌ Erreur lors de la connexion:', err)
       throw new Error('Erreur de connexion au serveur. Vérifiez votre connexion internet.')
     }
   }

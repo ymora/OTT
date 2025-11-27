@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import logger from '@/lib/logger'
 
 export default function Topbar() {
   const { user, logout } = useAuth()
@@ -56,20 +57,20 @@ export default function Topbar() {
       const registrations = await navigator.serviceWorker.getRegistrations()
       for (const reg of registrations) {
         await reg.unregister()
-        console.log('✅ Service worker désinscrit')
+        logger.debug('✅ Service worker désinscrit')
       }
       
       // Vider tous les caches
       const cacheNames = await caches.keys()
       for (const name of cacheNames) {
         await caches.delete(name)
-        console.log('✅ Cache supprimé:', name)
+        logger.debug('✅ Cache supprimé:', name)
       }
       
       // Recharger la page
       setTimeout(() => window.location.reload(true), 500)
     } catch (err) {
-      console.error('❌ Erreur lors du nettoyage:', err)
+      logger.error('❌ Erreur lors du nettoyage:', err)
       alert('Erreur lors du nettoyage du cache')
     }
   }

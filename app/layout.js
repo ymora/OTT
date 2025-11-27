@@ -53,7 +53,7 @@ export default function RootLayout({ children }) {
                       for(let registration of registrations) {
                         registration.unregister().then(function(success) {
                           if (success) {
-                            console.log('[SW] Service worker désenregistré (mode local)');
+                            logger.debug('[SW] Service worker désenregistré (mode local)');
                           }
                         });
                       }
@@ -78,10 +78,10 @@ export default function RootLayout({ children }) {
                     window.addEventListener('load', () => {
                       navigator.serviceWorker.register(swPath)
                         .then(registration => {
-                          console.log('[SW] Service worker enregistré (production):', registration.scope);
+                          logger.debug('[SW] Service worker enregistré (production):', registration.scope);
                         })
                         .catch(err => {
-                          console.warn('[SW] Échec enregistrement:', err);
+                          logger.warn('[SW] Échec enregistrement:', err);
                         });
                     });
                   }

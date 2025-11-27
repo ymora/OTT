@@ -132,7 +132,7 @@ function MarkdownViewer({ fileName }) {
         const parsed = parseMarkdownForCharts(text)
         setChartData(parsed)
       } catch (error) {
-        console.error('Erreur chargement markdown:', error)
+        logger.error('Erreur chargement markdown:', error)
         setContent('# Erreur\n\nImpossible de charger le document.\n\n' + error.message)
       } finally {
         setLoading(false)
