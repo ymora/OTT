@@ -293,6 +293,11 @@ export default function UsbStreamingTab() {
   const isStreaming = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
   const isPaused = usbStreamStatus === 'paused'
   const canToggle = isSupported && !isToggling && (selectedPortId || isStreaming || isPaused)
+  
+  // Tout doit être grisé tant qu'on n'a pas choisi un port ET démarré le streaming
+  // isReady = streaming actif (running/waiting/connecting) ou en pause
+  const isReady = isStreaming || isPaused
+  const isDisabled = !isReady // Grisé si pas prêt (pas de port sélectionné ou streaming non démarré)
 
   return (
     <div className="space-y-6">
@@ -435,7 +440,7 @@ export default function UsbStreamingTab() {
         )}
 
         {/* Indicateurs d'état */}
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className={`mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 ${isDisabled ? 'opacity-50' : ''}`}>
           {/* État connexion USB */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
@@ -497,7 +502,9 @@ export default function UsbStreamingTab() {
           {/* État modem */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-              modemStatus === 'running'
+              isDisabled
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+                : modemStatus === 'running'
                 ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
                 : modemStatus === 'starting' || modemStatus === 'stopping'
                 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
@@ -508,13 +515,16 @@ export default function UsbStreamingTab() {
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Modem</p>
               <p className={`text-sm font-semibold truncate ${
-                modemStatus === 'running'
+                isDisabled
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : modemStatus === 'running'
                   ? 'text-green-600 dark:text-green-400'
                   : modemStatus === 'starting' || modemStatus === 'stopping'
                   ? 'text-yellow-600 dark:text-yellow-400'
                   : 'text-gray-400 dark:text-gray-500'
               }`}>
-                {modemStatus === 'running' ? 'Démarré' : 
+                {isDisabled ? 'N/A' :
+                 modemStatus === 'running' ? 'Démarré' : 
                  modemStatus === 'starting' ? 'Démarrage...' : 
                  modemStatus === 'stopping' ? 'Arrêt...' : 
                  'Arrêté'}
@@ -525,7 +535,9 @@ export default function UsbStreamingTab() {
           {/* État GPS */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-              usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
+              isDisabled
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+                : isReady && usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
                 ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
             }`}>
@@ -534,11 +546,13 @@ export default function UsbStreamingTab() {
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Position GPS</p>
               <p className={`text-sm font-semibold truncate ${
-                usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
+                isDisabled
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : isReady && usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
                   ? 'text-green-600 dark:text-green-400'
                   : 'text-gray-400 dark:text-gray-500'
               }`}>
-                {usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
+                {isReady && usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
                   ? `${usbStreamLastMeasurement.latitude.toFixed(6)}, ${usbStreamLastMeasurement.longitude.toFixed(6)}`
                   : 'Non disponible'}
               </p>
@@ -547,16 +561,16 @@ export default function UsbStreamingTab() {
         </div>
 
         {/* Indicateurs supplémentaires (2ème ligne) */}
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className={`mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 ${isDisabled ? 'opacity-50' : ''}`}>
           {/* Débit */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isDisabled ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'}`}>
               <span className="text-xl">💨</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Débit</p>
-              <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 truncate">
-              {usbStreamLastMeasurement?.flowrate !== null && usbStreamLastMeasurement?.flowrate !== undefined
+              <p className={`text-sm font-semibold truncate ${isDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-blue-600 dark:text-blue-400'}`}>
+              {isReady && usbStreamLastMeasurement?.flowrate !== null && usbStreamLastMeasurement?.flowrate !== undefined
                 ? `${usbStreamLastMeasurement.flowrate.toFixed(2)} L/min`
                 : '0.00 L/min'}
             </p>
@@ -572,7 +586,9 @@ export default function UsbStreamingTab() {
           {/* Batterie */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-              usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
+              isDisabled
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+                : isReady && usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
                 ? usbStreamLastMeasurement.battery >= 50
                   ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
                   : usbStreamLastMeasurement.battery >= 20
@@ -585,7 +601,9 @@ export default function UsbStreamingTab() {
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Batterie</p>
               <p className={`text-sm font-semibold truncate ${
-                usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
+                isDisabled
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : isReady && usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
                   ? usbStreamLastMeasurement.battery >= 50
                     ? 'text-green-600 dark:text-green-400'
                     : usbStreamLastMeasurement.battery >= 20
@@ -593,7 +611,7 @@ export default function UsbStreamingTab() {
                     : 'text-red-600 dark:text-red-400'
                   : 'text-gray-400 dark:text-gray-500'
               }`}>
-              {usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
+              {isReady && usbStreamLastMeasurement?.battery !== null && usbStreamLastMeasurement?.battery !== undefined
                 ? `${usbStreamLastMeasurement.battery.toFixed(0)}%`
                 : '0%'}
             </p>
@@ -609,7 +627,9 @@ export default function UsbStreamingTab() {
           {/* RSSI Signal */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-              usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
+              isDisabled
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+                : isReady && usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
                 ? usbStreamLastMeasurement.rssi >= -70
                   ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
                   : usbStreamLastMeasurement.rssi >= -90
@@ -622,7 +642,9 @@ export default function UsbStreamingTab() {
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Signal RSSI</p>
               <p className={`text-sm font-semibold truncate ${
-                usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
+                isDisabled
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : isReady && usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
                   ? usbStreamLastMeasurement.rssi >= -70
                     ? 'text-green-600 dark:text-green-400'
                     : usbStreamLastMeasurement.rssi >= -90
@@ -630,7 +652,7 @@ export default function UsbStreamingTab() {
                     : 'text-red-600 dark:text-red-400'
                   : 'text-gray-400 dark:text-gray-500'
               }`}>
-                {usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
+                {isReady && usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
                   ? `${usbStreamLastMeasurement.rssi} dBm`
                   : 'N/A'}
               </p>
@@ -639,13 +661,13 @@ export default function UsbStreamingTab() {
 
           {/* Statistiques mesures */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isDisabled ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'}`}>
               <span className="text-xl">📊</span>
                   </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Mesures</p>
-              <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 truncate">
-                {usbStreamMeasurements?.length || 0} reçues
+              <p className={`text-sm font-semibold truncate ${isDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                {isReady ? (usbStreamMeasurements?.length || 0) : 0} reçues
               </p>
             </div>
           </div>
@@ -653,7 +675,9 @@ export default function UsbStreamingTab() {
           {/* Dernière mise à jour */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-              usbStreamLastUpdate && (Date.now() - usbStreamLastUpdate) < 5000
+              isDisabled
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+                : isReady && usbStreamLastUpdate && (Date.now() - usbStreamLastUpdate) < 5000
                 ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
             }`}>
@@ -662,11 +686,13 @@ export default function UsbStreamingTab() {
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Dernière MAJ</p>
               <p className={`text-sm font-semibold truncate ${
-                usbStreamLastUpdate && (Date.now() - usbStreamLastUpdate) < 5000
+                isDisabled
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : isReady && usbStreamLastUpdate && (Date.now() - usbStreamLastUpdate) < 5000
                   ? 'text-green-600 dark:text-green-400'
                   : 'text-gray-400 dark:text-gray-500'
               }`}>
-                {usbStreamLastUpdate 
+                {isReady && usbStreamLastUpdate 
                   ? `${Math.floor((Date.now() - usbStreamLastUpdate) / 1000)}s`
                   : 'Jamais'}
               </p>
@@ -675,30 +701,36 @@ export default function UsbStreamingTab() {
 
           {/* Version firmware */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isDisabled ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500' : 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400'}`}>
               <span className="text-xl">💾</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Firmware</p>
-              <p className="text-sm font-semibold text-cyan-600 dark:text-cyan-400 truncate font-mono">
-                {usbStreamLastMeasurement?.raw?.firmware_version || 
+              <p className={`text-sm font-semibold truncate font-mono ${isDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
+                {isReady && (usbStreamLastMeasurement?.raw?.firmware_version || 
                  usbVirtualDevice?.firmware_version || 
-                 usbConnectedDevice?.firmware_version || 
-                 'N/A'}
+                 usbConnectedDevice?.firmware_version)
+                  ? (usbStreamLastMeasurement?.raw?.firmware_version || 
+                     usbVirtualDevice?.firmware_version || 
+                     usbConnectedDevice?.firmware_version)
+                  : 'N/A'}
               </p>
                 </div>
               </div>
 
           {/* ICCID/Serial */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isDisabled ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
               <span className="text-xl">🆔</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Identifiant</p>
-              <p className="text-sm font-semibold text-orange-600 dark:text-orange-400 truncate font-mono">
-                {(usbConnectedDevice?.sim_iccid || usbVirtualDevice?.sim_iccid || 
-                  usbConnectedDevice?.device_serial || usbVirtualDevice?.device_serial)?.slice(-8) || 'N/A'}
+              <p className={`text-sm font-semibold truncate font-mono ${isDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-orange-600 dark:text-orange-400'}`}>
+                {isReady && (usbConnectedDevice?.sim_iccid || usbVirtualDevice?.sim_iccid || 
+                  usbConnectedDevice?.device_serial || usbVirtualDevice?.device_serial)
+                  ? (usbConnectedDevice?.sim_iccid || usbVirtualDevice?.sim_iccid || 
+                     usbConnectedDevice?.device_serial || usbVirtualDevice?.device_serial)?.slice(-8)
+                  : 'N/A'}
               </p>
             </div>
           </div>

@@ -376,9 +376,12 @@ bool startModem()
     Serial.printf("[MODEM] ICCID réel invalide (longueur %d): %s\n", realIccid.length(), realIccid.c_str());
   }
 
+  // Configuration APN pour internet (type IP, pas MMS)
+  // Pour Free Mobile: APN="free" (internet), pas "mmsfree" (MMS uniquement)
+  // Format: +CGDCONT=1,"IP","free" (1=context ID, IP=type internet, free=APN)
   modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), NETWORK_APN.c_str(), "\"");
   modem.waitResponse(2000);
-  Serial.printf("[MODEM] APN=%s\n", NETWORK_APN.c_str());
+  Serial.printf("[MODEM] APN=%s (type: IP pour internet)\n", NETWORK_APN.c_str());
 
   if (!attachNetwork(networkAttachTimeoutMs)) {
     Serial.println(F("[MODEM] réseau indisponible"));
@@ -874,21 +877,29 @@ bool waitForSimReady(uint32_t timeoutMs)
 
 /**
  * Obtient l'APN recommandé selon l'opérateur détecté
+ * 
+ * Configuration Free Mobile (MCC: 208, MNC: 15):
+ * - APN Internet: "free" (pour données/internet)
+ * - APN MMS: "mmsfree" (pour MMS uniquement, non utilisé ici)
+ * 
+ * On utilise "free" pour les données internet, pas "mmsfree" qui est réservé aux MMS.
  */
 String getRecommendedApnForOperator(const String& operatorCode)
 {
   // Codes opérateurs français (MCC+MNC)
   if (operatorCode.indexOf("20801") >= 0 || operatorCode.indexOf("20802") >= 0) {
-    // Orange France
+    // Orange France (MCC: 208, MNC: 01/02)
     return String("orange");
   } else if (operatorCode.indexOf("20810") >= 0 || operatorCode.indexOf("20811") >= 0) {
-    // SFR France
+    // SFR France (MCC: 208, MNC: 10/11)
     return String("sl2sfr");
   } else if (operatorCode.indexOf("20815") >= 0 || operatorCode.indexOf("20816") >= 0) {
-    // Free Mobile France
+    // Free Mobile France (MCC: 208, MNC: 15/16)
+    // APN Internet: "free" (pour données/internet)
+    // Note: "mmsfree" existe mais est uniquement pour MMS, pas pour internet
     return String("free");
   } else if (operatorCode.indexOf("20820") >= 0) {
-    // Bouygues Telecom France
+    // Bouygues Telecom France (MCC: 208, MNC: 20)
     return String("mmsbouygtel");
   }
   
