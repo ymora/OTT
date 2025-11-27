@@ -72,19 +72,18 @@ export default function Sidebar() {
     return pathname
   }, [pathname])
   
-  // Ouvrir automatiquement le menu quand on arrive sur la page documentation (sauf si l'utilisateur l'a fermé manuellement)
+  // Gérer l'ouverture automatique du menu et la réinitialisation du flag
   useEffect(() => {
-    if (isOnDocumentationPage && !userManuallyClosed) {
-      setIsDocsOpen(true)
-    }
-  }, [isOnDocumentationPage, userManuallyClosed])
-  
-  // Réinitialiser le flag quand on quitte la page documentation
-  useEffect(() => {
-    if (!isOnDocumentationPage) {
+    if (isOnDocumentationPage) {
+      // Ouvrir automatiquement si l'utilisateur ne l'a pas fermé manuellement
+      if (!userManuallyClosed) {
+        setIsDocsOpen(true)
+      }
+    } else {
+      // Réinitialiser le flag quand on quitte la page documentation
       setUserManuallyClosed(false)
     }
-  }, [isOnDocumentationPage])
+  }, [isOnDocumentationPage, userManuallyClosed])
   
   const documentationLinks = [
     { name: 'Présentation', icon: '📸', doc: 'presentation' },
