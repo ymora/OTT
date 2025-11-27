@@ -759,8 +759,45 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li><strong>Web Serial API</strong> - Communication USB directe avec les dispositifs</li>
     </ul>
     
-    <h3>📱 12 Pages Complètes</h3>
-    <p>Le dashboard comprend 12 pages : Login, Vue d'Ensemble, Dispositifs, Patients, Alertes, Carte, Historique, Rapports, Utilisateurs, OTA, Audit, Documentation.</p>
+    <h3>📱 Pages Disponibles</h3>
+    <p>Le dashboard comprend <strong>12 pages principales</strong> accessibles depuis le menu latéral :</p>
+    <ul>
+        <li><strong>🏠 Vue d'Ensemble</strong> : KPI, graphiques, actions requises</li>
+        <li><strong>🔌 Dispositifs OTT</strong> : Gestion complète (liste, carte, détails, OTA, commandes, logs, streaming USB)</li>
+        <li><strong>🏥 Patients</strong> : Gestion des patients avec assignation/désassignation de dispositifs</li>
+        <li><strong>👨‍💼 Utilisateurs</strong> : Gestion des utilisateurs, rôles et permissions (admin uniquement)</li>
+        <li><strong>⚙️ Outils</strong> : Upload firmware, compilation, flash USB, streaming USB, configuration dispositifs</li>
+        <li><strong>📚 Documentation</strong> : 3 documentations intégrées (Présentation, Développeurs, Commerciale) + Suivi temps</li>
+    </ul>
+    
+    <h3>🎯 Fonctionnalités Disponibles Directement dans l'Interface</h3>
+    
+    <h4>🔌 Gestion des Dispositifs</h4>
+    <ul>
+        <li><strong>Configuration</strong> : Modifier les paramètres (intervalle réveil, durée mesure, coefficients calibration a0/a1/a2) directement depuis l'onglet "Configuration"</li>
+        <li><strong>Commandes OTA</strong> : Envoyer des commandes (SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST) depuis le modal de détails</li>
+        <li><strong>Flash Firmware</strong> : Flasher un firmware compilé via OTA ou USB depuis le modal de détails</li>
+        <li><strong>Streaming USB</strong> : Visualiser les mesures en temps réel via USB avec affichage min/max (débit, batterie, RSSI)</li>
+        <li><strong>Carte Interactive</strong> : Visualisation géographique des dispositifs avec Leaflet</li>
+        <li><strong>Historique</strong> : Consulter les mesures, logs et alertes de chaque dispositif</li>
+    </ul>
+    
+    <h4>⚙️ Outils Techniques</h4>
+    <ul>
+        <li><strong>Upload Firmware</strong> : Uploader un fichier .ino depuis l'onglet "Firmware"</li>
+        <li><strong>Compilation Automatique</strong> : Compilation en direct avec logs SSE (Server-Sent Events)</li>
+        <li><strong>Flash USB</strong> : Flasher un firmware directement via USB depuis l'onglet "Flash USB"</li>
+        <li><strong>Streaming USB</strong> : Monitoring en temps réel des logs et mesures USB</li>
+        <li><strong>Configuration Dispositifs</strong> : Interface complète pour configurer les paramètres et coefficients de calibration</li>
+    </ul>
+    
+    <h4>📊 Visualisation & Monitoring</h4>
+    <ul>
+        <li><strong>Graphiques</strong> : Graphiques de débit, batterie, signal (Chart.js)</li>
+        <li><strong>Min/Max</strong> : Affichage des valeurs min/max pour débit, batterie et RSSI</li>
+        <li><strong>Alertes</strong> : Gestion des alertes (batterie faible, offline, etc.) avec résolution</li>
+        <li><strong>Audit</strong> : Logs d'audit de toutes les actions (admin uniquement)</li>
+    </ul>
 </section>
 
 <section id="deployment" class="section">
