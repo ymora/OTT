@@ -93,7 +93,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.3-usb-detection"
+#define FIRMWARE_VERSION_STR "3.4-modem-logs"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -625,12 +625,27 @@ void usbStreamingLoop()
           if (modemReady) {
             Serial.println(F("[USB] Modem déjà démarré"));
           } else {
+            Serial.println(F("[USB] ========================================"));
             Serial.println(F("[USB] Démarrage du modem..."));
+            Serial.println(F("[USB] ========================================"));
+            Serial.println(F("[USB] Les logs du démarrage s'affichent ci-dessous:"));
+            Serial.println();
+            
             if (startModem()) {
+              Serial.println();
+              Serial.println(F("[USB] ========================================"));
               Serial.println(F("[USB] ✅ Modem démarré avec succès"));
-              Serial.println(F("[USB] Vous pouvez maintenant tester le GPS avec 'gps' ou 'location'"));
+              Serial.println(F("[USB] ========================================"));
+              Serial.println(F("[USB] Le modem est maintenant prêt pour:"));
+              Serial.println(F("[USB]   - Tester le réseau: 'test_network'"));
+              Serial.println(F("[USB]   - Tester le GPS: 'gps'"));
+              Serial.println(F("[USB] Note: Le GPS nécessite le modem (intégré au SIM7600)"));
             } else {
+              Serial.println();
+              Serial.println(F("[USB] ========================================"));
               Serial.println(F("[USB] ❌ Échec démarrage modem"));
+              Serial.println(F("[USB] ========================================"));
+              Serial.println(F("[USB] Vérifiez les logs ci-dessus pour plus de détails"));
             }
           }
           continue;
@@ -672,16 +687,28 @@ void usbStreamingLoop()
         }
 
         // Tester le GPS (nécessite modem démarré)
+        // IMPORTANT: Le GPS est intégré au modem SIM7600, donc il nécessite le modem
+        // On ne peut pas utiliser le GPS sans démarrer le modem car c'est le même composant
         if (lowered == "gps" || lowered == "location" || lowered == "test_gps") {
           if (!modemReady) {
             Serial.println(F("[USB] ⚠️  Modem non démarré. Tapez 'modem_on' d'abord."));
+            Serial.println(F("[USB] Note: Le GPS est intégré au modem SIM7600, il nécessite le modem."));
           } else {
-            Serial.println(F("[USB] Test GPS..."));
+            Serial.println(F("[USB] ========================================"));
+            Serial.println(F("[USB] Test GPS en cours..."));
+            Serial.println(F("[USB] Le GPS est intégré au modem SIM7600"));
+            Serial.println(F("[USB] Tentative GPS (priorité) puis réseau cellulaire (fallback)..."));
+            Serial.println(F("[USB] ========================================"));
             float lat = 0.0, lon = 0.0;
             if (getDeviceLocation(&lat, &lon)) {
+              Serial.println(F("[USB] ========================================"));
               Serial.printf("[USB] ✅ Position obtenue: %.6f, %.6f\n", lat, lon);
+              Serial.println(F("[USB] ========================================"));
             } else {
+              Serial.println(F("[USB] ========================================"));
               Serial.println(F("[USB] ❌ Échec obtention position GPS"));
+              Serial.println(F("[USB] Vérifiez les logs ci-dessus pour plus de détails"));
+              Serial.println(F("[USB] ========================================"));
             }
           }
           continue;
@@ -1874,9 +1901,12 @@ bool performOtaUpdate(const String& url, const String& expectedMd5, const String
 /**
  * Obtient la position du dispositif via GPS ou réseau cellulaire.
  * 
+ * IMPORTANT: Le GPS est intégré au modem SIM7600, donc il nécessite que le modem soit démarré.
+ * On ne peut pas utiliser le GPS sans démarrer le modem car c'est le même composant matériel.
+ * 
  * Priorité:
- * 1. GPS si disponible (modem.getGPS())
- * 2. Réseau cellulaire (modem.getGsmLocation()) si GPS échoue
+ * 1. GPS si disponible (modem.getGPS()) - nécessite modem démarré
+ * 2. Réseau cellulaire (modem.getGsmLocation()) si GPS échoue - nécessite aussi modem démarré
  * 
  * @param latitude Pointeur vers la variable latitude (sortie)
  * @param longitude Pointeur vers la variable longitude (sortie)
@@ -1885,6 +1915,7 @@ bool performOtaUpdate(const String& url, const String& expectedMd5, const String
 bool getDeviceLocation(float* latitude, float* longitude)
 {
   if (!modemReady || latitude == nullptr || longitude == nullptr) {
+    Serial.println(F("[GPS] ⚠️  Modem non démarré - Le GPS nécessite le modem (intégré au SIM7600)"));
     return false;
   }
   
