@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { withBasePath } from '@/lib/utils'
+import logger from '@/lib/logger'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -450,35 +451,46 @@ function MarkdownViewer({ fileName }) {
   }
 
   // Calculer des statistiques supplémentaires
-  const stats = chartData ? {
-    avgHoursPerDay: chartData.totalHours / chartData.dailyData.length,
-    avgCommitsPerDay: chartData.totalCommits / chartData.dailyData.length,
-    maxHours: Math.max(...chartData.dailyData.map(d => d.hours)),
-    minHours: Math.min(...chartData.dailyData.map(d => d.hours)),
-    maxCommits: Math.max(...chartData.dailyData.map(d => d.commits)),
-    minCommits: Math.min(...chartData.dailyData.map(d => d.commits)),
-    // Régularité : écart-type des heures
-    regularity: (() => {
-      const avg = chartData.totalHours / chartData.dailyData.length
-      const variance = chartData.dailyData.reduce((sum, d) => sum + Math.pow(d.hours - avg, 2), 0) / chartData.dailyData.length
-      return Math.sqrt(variance)
-    })(),
-    // Distribution par jour de la semaine
-    byDayOfWeek: (() => {
-      const byDay = {}
-      chartData.dailyData.forEach(d => {
-        const date = new Date(d.date)
-        const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' })
-        if (!byDay[dayName]) {
-          byDay[dayName] = { hours: 0, commits: 0, days: 0 }
-        }
-        byDay[dayName].hours += d.hours
-        byDay[dayName].commits += d.commits
-        byDay[dayName].days += 1
-      })
-      return byDay
-    })()
-  } : null
+  const stats = useMemo(() => {
+    if (!chartData || !chartData.dailyData || chartData.dailyData.length === 0) {
+      return null
+    }
+    
+    try {
+      return {
+        avgHoursPerDay: chartData.totalHours / chartData.dailyData.length,
+        avgCommitsPerDay: chartData.totalCommits / chartData.dailyData.length,
+        maxHours: Math.max(...chartData.dailyData.map(d => d.hours)),
+        minHours: Math.min(...chartData.dailyData.map(d => d.hours)),
+        maxCommits: Math.max(...chartData.dailyData.map(d => d.commits)),
+        minCommits: Math.min(...chartData.dailyData.map(d => d.commits)),
+        // Régularité : écart-type des heures
+        regularity: (() => {
+          const avg = chartData.totalHours / chartData.dailyData.length
+          const variance = chartData.dailyData.reduce((sum, d) => sum + Math.pow(d.hours - avg, 2), 0) / chartData.dailyData.length
+          return Math.sqrt(variance)
+        })(),
+        // Distribution par jour de la semaine
+        byDayOfWeek: (() => {
+          const byDay = {}
+          chartData.dailyData.forEach(d => {
+            const date = new Date(d.date)
+            const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' })
+            if (!byDay[dayName]) {
+              byDay[dayName] = { hours: 0, commits: 0, days: 0 }
+            }
+            byDay[dayName].hours += d.hours
+            byDay[dayName].commits += d.commits
+            byDay[dayName].days += 1
+          })
+          return byDay
+        })()
+      }
+    } catch (error) {
+      logger.error('Erreur calcul stats:', error)
+      return null
+    }
+  }, [chartData])
 
   // Préparer les données pour les graphiques (avec vue jour/semaine/mois)
   const commitsChartData = displayData ? {
@@ -512,10 +524,14 @@ function MarkdownViewer({ fileName }) {
     }]
   } : null
 
-  const pieChartData = chartData ? {
-    labels: Object.keys(chartData.categories).filter(k => chartData.categories[k] > 0),
-    datasets: [{
-      data: Object.values(chartData.categories).filter(v => v > 0),
+  const pieChartData = useMemo(() => {
+    if (!chartData || !chartData.categories) return null
+    
+    try {
+      return {
+        labels: Object.keys(chartData.categories).filter(k => chartData.categories[k] > 0),
+        datasets: [{
+          data: Object.values(chartData.categories).filter(v => v > 0),
       backgroundColor: [
         'rgba(102, 126, 234, 0.8)',   // Développement
         'rgba(239, 68, 68, 0.8)',      // Correction
@@ -534,10 +550,19 @@ function MarkdownViewer({ fileName }) {
       ],
       borderWidth: 2
     }]
-  } : null
+      }
+    } catch (error) {
+      logger.error('Erreur calcul pieChartData:', error)
+      return null
+    }
+  }, [chartData])
 
   // Graphique par jour de la semaine
-  const dayOfWeekChartData = stats ? {
+  const dayOfWeekChartData = useMemo(() => {
+    if (!stats || !stats.byDayOfWeek) return null
+    
+    try {
+      return {
     labels: ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'],
     datasets: [{
       label: 'Heures moyennes',
@@ -550,10 +575,19 @@ function MarkdownViewer({ fileName }) {
       borderWidth: 2,
       borderRadius: 4
     }]
-  } : null
+      }
+    } catch (error) {
+      logger.error('Erreur calcul dayOfWeekChartData:', error)
+      return null
+    }
+  }, [stats])
 
   // Histogramme des heures (distribution)
-  const hoursDistributionData = chartData ? {
+  const hoursDistributionData = useMemo(() => {
+    if (!chartData || !chartData.dailyData || chartData.dailyData.length === 0) return null
+    
+    try {
+      return {
     labels: ['0-2h', '2-4h', '4-6h', '6-8h', '8-10h', '10h+'],
     datasets: [{
       label: 'Nombre de jours',
