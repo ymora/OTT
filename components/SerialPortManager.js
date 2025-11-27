@@ -321,6 +321,8 @@ export function useSerialPort() {
 
     let reading = true
     let readLoopActive = true
+    let consecutiveErrors = 0
+    const MAX_CONSECUTIVE_ERRORS = 5 // Arrêter après 5 erreurs consécutives
     
     const readLoop = async () => {
       try {
@@ -334,6 +336,9 @@ export function useSerialPort() {
 
           try {
             const { value, done } = await readerRef.current.read()
+            
+            // Réinitialiser le compteur d'erreurs en cas de succès
+            consecutiveErrors = 0
             
             if (done) {
               logger.debug('[SerialPortManager] Stream terminé (done=true)')
@@ -349,6 +354,8 @@ export function useSerialPort() {
               }
             }
           } catch (readErr) {
+            consecutiveErrors++
+            
             // Erreur lors de la lecture d'un chunk
             if (readErr.name === 'NetworkError') {
               // Erreur réseau normale (déconnexion)
@@ -359,8 +366,20 @@ export function useSerialPort() {
               logger.debug('[SerialPortManager] Lecture annulée')
               break
             } else {
-              logger.error('[SerialPortManager] Erreur lors de la lecture:', readErr)
-              // Continuer la lecture malgré l'erreur
+              // Log l'erreur seulement la première fois et après plusieurs erreurs
+              if (consecutiveErrors === 1) {
+                logger.error('[SerialPortManager] Erreur lors de la lecture:', readErr)
+              } else if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                logger.error(`[SerialPortManager] Trop d'erreurs consécutives (${consecutiveErrors}), arrêt de la lecture`)
+                setError(`Erreur de lecture répétée: ${readErr.message}`)
+                break
+              } else {
+                // Log en debug pour éviter le spam
+                logger.debug(`[SerialPortManager] Erreur ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}:`, readErr.message)
+              }
+              
+              // Attendre un peu avant de réessayer pour éviter la boucle infinie
+              await new Promise(resolve => setTimeout(resolve, 100))
             }
           }
         }

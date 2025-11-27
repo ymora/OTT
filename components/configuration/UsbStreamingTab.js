@@ -392,6 +392,7 @@ export default function UsbStreamingTab() {
                 onClick={handleModemOn}
                 disabled={!isConnected || sendingCommand || modemStatus === 'running' || modemStatus === 'starting'}
                 className="px-3 py-2 text-xs font-medium rounded-lg bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Démarrer le modem pour tester le réseau et le GPS"
               >
                 {modemStatus === 'starting' ? '⏳...' : '📡 Démarrer modem'}
               </button>
@@ -399,6 +400,7 @@ export default function UsbStreamingTab() {
                 onClick={handleModemOff}
                 disabled={!isConnected || sendingCommand || modemStatus === 'stopped' || modemStatus === 'stopping'}
                 className="px-3 py-2 text-xs font-medium rounded-lg bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Arrêter le modem pour économiser l'énergie"
               >
                 {modemStatus === 'stopping' ? '⏳...' : '🛑 Arrêter modem'}
               </button>
@@ -419,9 +421,16 @@ export default function UsbStreamingTab() {
                 📍 Test GPS
               </button>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              💡 Le modem est arrêté par défaut pour économiser l'énergie. Démarrez-le pour tester le réseau et le GPS.
-            </p>
+            <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-800 dark:text-blue-300">
+              <p className="font-semibold mb-1">📋 Comment utiliser :</p>
+              <ol className="list-decimal list-inside space-y-0.5">
+                <li>Cliquez sur <strong>"📡 Démarrer modem"</strong> pour démarrer le modem</li>
+                <li>Attendez que l'indicateur Modem passe à <strong>"Démarré"</strong> (vert)</li>
+                <li>Cliquez sur <strong>"📶 Test réseau"</strong> pour tester l'enregistrement Free</li>
+                <li>Cliquez sur <strong>"📍 Test GPS"</strong> pour tester le GPS</li>
+                <li>Les logs s'affichent dans la console en bas de page</li>
+              </ol>
+            </div>
           </div>
         )}
 
