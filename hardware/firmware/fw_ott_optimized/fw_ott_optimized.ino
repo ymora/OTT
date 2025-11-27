@@ -93,7 +93,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.1-gps"
+#define FIRMWARE_VERSION_STR "3.2-rssi"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -235,8 +235,19 @@ void setup()
     return;
   }
 
-  m.rssi = modem.getSignalQuality();
-  Serial.printf("[MEASURE] final flow=%.2f L/min, batt=%.1f%%, rssi=%d dBm\n", m.flow, m.battery, m.rssi);
+  // Convertir CSQ (0-31 ou 99) en dBm selon 3GPP TS 27.007
+  // CSQ 0 = -113 dBm ou moins, CSQ 1 = -111 dBm, CSQ 2-31 = -110 + (CSQ*2) dBm, CSQ 99 = erreur
+  int8_t csq = modem.getSignalQuality();
+  if (csq == 99) {
+    m.rssi = -999;  // Pas de signal ou erreur
+  } else if (csq == 0) {
+    m.rssi = -113;  // Signal très faible ou moins
+  } else if (csq == 1) {
+    m.rssi = -111;
+  } else {
+    m.rssi = -110 + (csq * 2);  // Formule standard 3GPP
+  }
+  Serial.printf("[MEASURE] final flow=%.2f L/min, batt=%.1f%%, rssi=%d dBm (CSQ=%d)\n", m.flow, m.battery, m.rssi, csq);
 
   // Obtenir la position GPS ou réseau cellulaire (optionnel, ne bloque pas l'envoi)
   float latitude = 0.0, longitude = 0.0;
@@ -673,14 +684,17 @@ static const char* regStatusToString(RegStatus status)
 void logRadioSnapshot(const char* stage)
 {
   RegStatus reg = modem.getRegistrationStatus();
-  int csq = modem.getSignalQuality();
+  int8_t csq = modem.getSignalQuality();
+  // Convertir CSQ en dBm pour affichage
+  int16_t rssi_dbm = (csq == 99) ? -999 : (csq == 0) ? -113 : (csq == 1) ? -111 : (-110 + (csq * 2));
   String oper = modem.getOperator();
   bool eps = modem.isNetworkConnected();
   bool gprs = modem.isGprsConnected();
 
-  Serial.printf("[MODEM][%s] CSQ=%d reg=%d (%s) oper=%s eps=%s gprs=%s\n",
+  Serial.printf("[MODEM][%s] CSQ=%d (RSSI=%d dBm) reg=%d (%s) oper=%s eps=%s gprs=%s\n",
                 stage,
                 csq,
+                rssi_dbm,
                 reg,
                 regStatusToString(reg),
                 oper.length() ? oper.c_str() : "<n/a>",

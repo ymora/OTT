@@ -59,6 +59,7 @@ export default function DeviceConfigurationTab() {
           sleep_minutes: response.config.sleep_minutes ?? 30,
           measurement_duration_ms: response.config.measurement_duration_ms ?? 100,
           send_every_n_wakeups: response.config.send_every_n_wakeups ?? 1,
+          // Les valeurs sont déjà en minutes et millisecondes depuis la DB
           calibration_coefficients: response.config.calibration_coefficients 
             ? (Array.isArray(response.config.calibration_coefficients) 
                 ? response.config.calibration_coefficients 

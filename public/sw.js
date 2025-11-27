@@ -128,25 +128,23 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Pour les autres fichiers, utiliser "network first" pour éviter les problèmes de cache
+  // Pour les pages HTML, toujours utiliser "network first" pour éviter les problèmes de cache
+  // Laisser Next.js gérer le routage, ne pas intervenir
+  if (event.request.destination === 'document' || (!pathname.includes('/_next') && !pathname.includes('/api.php') && !pathname.includes('/docs/'))) {
+    // Laisser passer les requêtes de pages sans intervention du service worker
+    // Next.js gère le routage correctement
+    return
+  }
+
+  // Pour les fichiers statiques (images, etc.), utiliser "network first"
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Ne pas mettre en cache automatiquement pour éviter les problèmes
-        // Le cache peut causer des boucles de rechargement
         return response
       })
       .catch(() => {
         // En dernier recours, essayer le cache
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse
-          }
-          // Si pas de cache et pas de réseau, retourner la page d'accueil
-          if (event.request.destination === 'document') {
-            return caches.match(withBase('/'))
-          }
-        })
+        return caches.match(event.request)
       })
   )
 })

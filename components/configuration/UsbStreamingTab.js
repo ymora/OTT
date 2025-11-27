@@ -202,13 +202,17 @@ export default function UsbStreamingTab() {
           }
         }
         
-        // RSSI
+        // RSSI - Exclure -999 du calcul des min/max (valeur sentinelle pour "pas de signal")
         if (usbStreamLastMeasurement.rssi !== null && usbStreamLastMeasurement.rssi !== undefined) {
-          if (newValues.rssi.min === null || usbStreamLastMeasurement.rssi < newValues.rssi.min) {
-            newValues.rssi.min = usbStreamLastMeasurement.rssi
-          }
-          if (newValues.rssi.max === null || usbStreamLastMeasurement.rssi > newValues.rssi.max) {
-            newValues.rssi.max = usbStreamLastMeasurement.rssi
+          const rssiValue = usbStreamLastMeasurement.rssi
+          // Ignorer -999 qui signifie "pas de signal" ou "erreur"
+          if (rssiValue !== -999) {
+            if (newValues.rssi.min === null || rssiValue < newValues.rssi.min) {
+              newValues.rssi.min = rssiValue
+            }
+            if (newValues.rssi.max === null || rssiValue > newValues.rssi.max) {
+              newValues.rssi.max = rssiValue
+            }
           }
         }
         
@@ -387,9 +391,9 @@ export default function UsbStreamingTab() {
               </div>
             </div>
             <p className="text-2xl font-bold text-primary">
-              {usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined
+              {usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
                 ? `${usbStreamLastMeasurement.rssi} dBm`
-                : '-999 dBm'}
+                : <span className="text-gray-400">N/A</span>}
             </p>
             {(minMaxValues.rssi.min !== null || minMaxValues.rssi.max !== null) && (
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">

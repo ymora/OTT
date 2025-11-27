@@ -4,13 +4,22 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import Login from '@/components/Login'
 
 export default function HomePage() {
   const { user, loading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
+
+  // S'assurer qu'on est bien sur la page d'accueil (pas sur une autre route)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && pathname && pathname !== '/' && !pathname.startsWith('/dashboard')) {
+      // Si on est sur une route inconnue, rediriger vers la page d'accueil
+      router.replace('/')
+    }
+  }, [pathname, router])
 
   // Redirection simple et unique si utilisateur déjà connecté
   useEffect(() => {
@@ -32,6 +41,8 @@ export default function HomePage() {
     )
   }
 
+  // Toujours afficher le login si pas d'utilisateur
+  // Ne jamais afficher la documentation sur la page d'accueil
   return <Login />
 }
 
