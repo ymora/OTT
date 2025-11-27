@@ -407,6 +407,21 @@
             border-color: #555 !important;
         }
         
+        /* Placeholders captures d'écran avec dark mode */
+        html.dark div[style*="background: #f8f9fa"] {
+            background: #2d2d2d !important;
+            border-color: #555 !important;
+            color: #e0e0e0 !important;
+        }
+        
+        html.dark div[style*="background: #f8f9fa"] p[style*="color: #6c757d"] {
+            color: #b0b0b0 !important;
+        }
+        
+        html.dark div[style*="background: #f8f9fa"] p[style*="color: #adb5bd"] {
+            color: #888 !important;
+        }
+        
     </style>
     <script>
         // Détecter le thème AVANT le rendu pour éviter le flash
@@ -924,56 +939,88 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h3>🔐 Page de Connexion</h3>
     <p>La page d'authentification avec formulaire de connexion sécurisé :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/login.png" alt="Page de connexion" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
-        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Page de connexion avec authentification JWT</p>
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.9rem; margin-top: 0.5rem;">Page de connexion avec authentification JWT</p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/login.png</p>
+        </div>
     </div>
     
     <h3>🏠 Vue d'Ensemble (Dashboard)</h3>
     <p>La page principale avec les indicateurs clés et les graphiques :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/dashboard-overview.png" alt="Vue d'ensemble" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/dashboard-overview.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Vue d'ensemble avec KPI, graphiques et actions requises</p>
     </div>
     
     <h3>🔌 Page Dispositifs</h3>
     <p>La liste des dispositifs avec leurs statuts et informations :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/devices-list.png" alt="Liste des dispositifs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/devices-list.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Liste des dispositifs avec recherche et filtres</p>
     </div>
     
     <h3>🏥 Page Patients</h3>
     <p>La gestion des patients avec leurs dispositifs associés :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/patients-list.png" alt="Liste des patients" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/patients-list.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Liste des patients avec recherche, création, modification, assignation/désassignation de dispositifs. Interface simplifiée sans alertes (accessibles via le modal de détails du dispositif).</p>
     </div>
     
     <h3>📍 Carte Interactive</h3>
     <p>La visualisation géographique des dispositifs :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/map.png" alt="Carte interactive" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/map.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Carte Leaflet avec marqueurs des dispositifs</p>
     </div>
     
     <h3>⚠️ Page Alertes</h3>
     <p>La liste des alertes avec leurs statuts :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/alerts.png" alt="Page alertes" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/alerts.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des alertes avec filtres et actions</p>
     </div>
     
     <h3>👥 Page Utilisateurs</h3>
     <p>La gestion des utilisateurs et des permissions :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/users.png" alt="Page utilisateurs" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/users.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des utilisateurs avec rôles, permissions, statut actif/inactif et dernière connexion. Interface simplifiée sans alertes (accessibles via le modal de détails dispositif).</p>
     </div>
     
     <h3>🔄 Page OTA</h3>
     <p>La gestion des mises à jour OTA :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/ota.png" alt="Page OTA" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/ota.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Gestion des mises à jour OTA des dispositifs</p>
     </div>
     
@@ -982,42 +1029,66 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h4>Modal Création/Édition Patient</h4>
     <p>Le modal pour créer ou modifier un patient :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/modal-patient.png" alt="Modal patient" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/modal-patient.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de création/édition de patient avec formulaire complet</p>
     </div>
     
     <h4>Modal Détails Dispositif</h4>
     <p>Le modal avec les détails complets d'un dispositif :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/modal-device-details.png" alt="Modal détails dispositif" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/modal-device-details.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal avec onglets : Détails, Alertes, Logs, Commandes, Streaming USB</p>
     </div>
     
     <h4>Modal Assignation Dispositif</h4>
     <p>Le modal pour assigner un dispositif à un patient :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/modal-assign-device.png" alt="Modal assignation" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/modal-assign-device.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal d'assignation d'un dispositif libre à un patient</p>
     </div>
     
     <h4>Modal Création/Édition Utilisateur</h4>
     <p>Le modal pour créer ou modifier un utilisateur :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/modal-user.png" alt="Modal utilisateur" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/modal-user.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de création/édition d'utilisateur avec gestion des rôles</p>
     </div>
     
     <h4>Modal Désassignation Dispositif</h4>
     <p>Le modal pour désassigner un dispositif d'un patient :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/modal-unassign-device.png" alt="Modal désassignation" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/modal-unassign-device.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal de confirmation pour désassigner un dispositif d'un patient</p>
     </div>
     
     <h4>Modal Commande Dispositif</h4>
     <p>Le modal pour envoyer une commande à un dispositif :</p>
     <div style="text-align: center; margin: 2rem 0;">
-        <img src="screenshots/modal-command.png" alt="Modal commande" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+        <div style="background: #f8f9fa; border: 2px dashed #dee2e6; border-radius: 8px; padding: 3rem; color: #6c757d;">
+            <p style="font-size: 3rem; margin-bottom: 1rem;">📸</p>
+            <p><strong>Capture d'écran à venir</strong></p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem; color: #adb5bd;">screenshots/modal-command.png</p>
+        </div>
         <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Modal d'envoi de commandes (SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, etc.)</p>
     </div>
     
@@ -1197,60 +1268,156 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h2>📁 Structure du Projet</h2>
     
     <h3>🎯 Organisation Principale</h3>
-    <pre><code>maxime/
-├── 📱 app/                          # Application Next.js (Frontend)
-│   ├── dashboard/                   # Pages du dashboard
-│   │   ├── firmware-upload/         # Upload & compilation firmware
-│   │   ├── devices/                 # Gestion dispositifs
-│   │   ├── patients/                # Gestion patients
-│   │   └── ...
-│   └── layout.js                    # Layout principal
-│
-├── 🔧 api.php                       # API Backend PHP (monolithique)
-│
-├── 📦 components/                   # Composants React réutilisables
-│   ├── FlashUSBModal.js             # Modal flash USB
-│   ├── Sidebar.js                   # Menu navigation
-│   └── ...
-│
-├── 🎨 contexts/                     # Contextes React (état global)
-│   ├── AuthContext.js               # Authentification
-│   └── UsbContext.js                # Gestion USB
-│
-├── 📚 lib/                          # Bibliothèques utilitaires
-│   ├── api.js                       # Helpers API
-│   ├── config.js                    # Configuration
-│   ├── usbDevices.js                # Mapping USB devices
-│   ├── measurementSender.js         # Envoi mesures robuste
-│   └── measurementQueue.js         # Queue mesures (IndexedDB)
-│
-├── 🔌 hardware/                     # Matériel & Firmware
-│   ├── firmware/                    # Firmware source et compilés
-│   │   ├── fw_ott_optimized/        # Code source du firmware (versionné)
-│   │   │   └── fw_ott_optimized.ino # Source principale v3.0-rebuild
-│   │   └── v3.0/                    # Firmwares compilés et uploadés (non versionné)
-│   │       ├── *.bin                 # Firmwares compilés
-│   │       └── *.ino                 # Firmwares uploadés via dashboard
-│   ├── lib/                         # Bibliothèques externes (TinyGSM)
-│   ├── cad/                         # Plans CAO (STL, PDF)
-│   └── docs/                        # Documentation matériel
-│
-├── 🗄️ sql/                          # Schémas & migrations base de données
-│   ├── schema.sql                   # Schéma principal
-│   └── ...
-│
-├── 🛠️ scripts/                     # Scripts utilitaires
-│   ├── build_firmware_bin.ps1       # Compile .ino → .bin
-│   ├── flash_firmware.ps1           # Flash direct
-│   └── ...
-│
-├── 📄 public/                       # Fichiers statiques
-│   ├── DOCUMENTATION_*.html         # Documentation (3 fichiers)
-│   └── screenshots/                 # Captures d'écran
-│
-├── 🐳 Dockerfile                    # Image Docker API
-├── 📋 README.md                     # Documentation principale
-└── ⚙️ package.json                  # Dépendances Node.js</code></pre>
+    
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+        <h4 style="color: #667eea; margin-bottom: 1rem;">📱 Frontend (Next.js)</h4>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>app/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Application Next.js principale</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;└─ <code>dashboard/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Pages du dashboard (12 pages)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>page.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Vue d'ensemble</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>devices/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Gestion dispositifs (carte, OTA, commandes)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>patients/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Gestion patients</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>users/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Gestion utilisateurs</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>outils/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Outils (firmware, USB, streaming)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>configuration/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Configuration dispositifs</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>firmware-upload/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Upload & compilation firmware</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;&nbsp;&nbsp;└─ <code>documentation/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Documentation intégrée</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+        <h4 style="color: #667eea; margin-bottom: 1rem;">📦 Composants & Contextes</h4>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>components/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Composants React réutilisables (20+ composants)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;├─ <code>configuration/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Onglets configuration (Device, Firmware, USB, Editor)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;├─ <code>Sidebar.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Menu navigation avec permissions</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;└─ <code>LeafletMap.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Carte interactive des dispositifs</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>contexts/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Contextes React (état global)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;├─ <code>AuthContext.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Authentification JWT + refresh token</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;└─ <code>UsbContext.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Gestion USB (Web Serial API)</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+        <h4 style="color: #667eea; margin-bottom: 1rem;">📚 Bibliothèques Utilitaires</h4>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>lib/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Bibliothèques utilitaires</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;├─ <code>api.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Helpers API (fetchJson, gestion erreurs)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;├─ <code>deviceCommands.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Construction payloads OTA (UPDATE_CONFIG, UPDATE_CALIBRATION)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;├─ <code>measurementSender.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Envoi mesures robuste avec retry</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;└─ <code>measurementQueue.js</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Queue mesures (IndexedDB) pour offline</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+        <h4 style="color: #667eea; margin-bottom: 1rem;">🔧 Backend & Infrastructure</h4>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>api.php</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">API Backend PHP (monolithique, REST)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>api/handlers/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Handlers modulaires (auth, devices, firmwares, notifications)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>sql/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Schémas & migrations PostgreSQL</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;├─ <code>schema.sql</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Schéma principal (16 tables)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;└─ <code>migration_*.sql</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Migrations (min/max, firmware, etc.)</td>
+            </tr>
+        </table>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+        <h4 style="color: #667eea; margin-bottom: 1rem;">🔌 Hardware & Firmware</h4>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>hardware/firmware/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Firmware source et compilés</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">&nbsp;&nbsp;└─ <code>fw_ott_optimized/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Code source du firmware (versionné)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;"><code>hardware/lib/TinyGSM/</code></td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid #dee2e6;">Bibliothèque GSM (modem 4G)</td>
+            </tr>
+        </table>
+    </div>
     
     <h3>📍 Chemins Importants</h3>
     <ul>
