@@ -22,6 +22,7 @@ export default function UsbStreamingTab() {
     startReading,
     write,
     startUsbStreaming,
+    pauseUsbStreaming,
     stopUsbStreaming,
     appendUsbStreamLog
   } = useUsb()
@@ -103,28 +104,29 @@ export default function UsbStreamingTab() {
     }
   }
 
-  // Toggle lecture/arrêt
+  // Toggle pause/reprise
   const handleToggleStreaming = async () => {
     if (isToggling) return
     
     setIsToggling(true)
     try {
       if (usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting') {
-        // Arrêter
-        logger.debug('[UsbStreamingTab] Arrêt du streaming...')
-        stopUsbStreaming()
-        // Attendre un peu pour que le streaming s'arrête complètement
-        await new Promise(resolve => setTimeout(resolve, 500))
-        if (isConnected || port) {
-          logger.debug('[UsbStreamingTab] Déconnexion du port...')
-          await disconnect()
-          // Attendre plus longtemps pour que le port soit complètement libéré
-          // Les locks peuvent prendre du temps à se libérer
-          await new Promise(resolve => setTimeout(resolve, 800))
+        // Mettre en pause (garde le port connecté et les logs)
+        logger.debug('[UsbStreamingTab] Pause du streaming...')
+        pauseUsbStreaming()
+        // Attendre un peu pour que le streaming se mette en pause
+        await new Promise(resolve => setTimeout(resolve, 300))
+        logger.debug('[UsbStreamingTab] Streaming en pause, port toujours connecté')
+      } else if (usbStreamStatus === 'paused') {
+        // Reprendre depuis la pause
+        logger.debug('[UsbStreamingTab] Reprise du streaming...')
+        // Le port est déjà connecté, on peut reprendre directement
+        if (!port) {
+          throw new Error('Port non disponible pour la reprise')
         }
-        logger.debug('[UsbStreamingTab] Streaming arrêté et port déconnecté')
+        await startUsbStreaming(port)
       } else {
-        // Démarrer
+        // Démarrer (première fois)
         if (!selectedPortId) {
           alert('Veuillez sélectionner un port USB')
           setIsToggling(false)
@@ -168,6 +170,7 @@ export default function UsbStreamingTab() {
   }
 
   const isStreaming = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
+  const isPaused = usbStreamStatus === 'paused'
   const canToggle = isSupported && !isToggling && (selectedPortId || isStreaming)
 
   return (
@@ -224,14 +227,18 @@ export default function UsbStreamingTab() {
                 disabled={!canToggle}
                 className={`px-6 py-2 rounded-lg font-semibold text-sm transition-colors ${
                   isStreaming
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                    : isPaused
+                    ? 'bg-primary-500 hover:bg-primary-600 text-white'
                     : 'bg-primary-500 hover:bg-primary-600 text-white'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isToggling ? (
                   '⏳...'
                 ) : isStreaming ? (
-                  '⏹️ Arrêter'
+                  '⏸️ Pause'
+                ) : isPaused ? (
+                  '▶️ Reprendre'
                 ) : (
                   '▶️ Démarrer'
                 )}

@@ -17,7 +17,7 @@ export function UsbProvider({ children }) {
   const [checkingUSB, setCheckingUSB] = useState(false)
   
   // État streaming USB
-  const [usbStreamStatus, setUsbStreamStatus] = useState('idle')
+  const [usbStreamStatus, setUsbStreamStatus] = useState('idle') // 'idle', 'connecting', 'waiting', 'running', 'paused'
   const [usbStreamMeasurements, setUsbStreamMeasurements] = useState([])
   const [usbStreamLogs, setUsbStreamLogs] = useState([])
   const [usbStreamError, setUsbStreamError] = useState(null)
@@ -271,13 +271,21 @@ export function UsbProvider({ children }) {
     }
   }, [processUsbStreamLine, usbStreamStatus])
 
-  // Démarrer le streaming USB
+  // Démarrer ou reprendre le streaming USB
   const startUsbStreaming = useCallback(async (explicitPort = null) => {
     try {
       setUsbStreamError(null)
-      setUsbStreamStatus('connecting')
       
-      logger.log('📡 [USB] Démarrage du streaming USB...')
+      // Si on reprend depuis une pause, ne pas réinitialiser les logs
+      const isResuming = usbStreamStatus === 'paused'
+      
+      if (isResuming) {
+        logger.log('▶️ [USB] Reprise du streaming USB depuis la pause...')
+        setUsbStreamStatus('connecting')
+      } else {
+        logger.log('📡 [USB] Démarrage du streaming USB...')
+        setUsbStreamStatus('connecting')
+      }
       
       // Utiliser le port explicite si fourni, sinon utiliser le port du contexte
       const portToUse = explicitPort || port
@@ -308,8 +316,8 @@ export function UsbProvider({ children }) {
         throw new Error('Aucun port USB connecté. Veuillez sélectionner et connecter un port d\'abord.')
       }
 
-      // Arrêter l'ancien streaming s'il existe
-      if (usbStreamStopRef.current) {
+      // Arrêter l'ancien streaming s'il existe (si on n'est pas en pause)
+      if (usbStreamStopRef.current && !isResuming) {
         logger.log('🛑 [USB] Arrêt de l\'ancien streaming')
         try {
           usbStreamStopRef.current()
@@ -321,12 +329,18 @@ export function UsbProvider({ children }) {
         await new Promise(resolve => setTimeout(resolve, 300))
       }
 
-      // Réinitialiser les buffers et états
-      usbStreamBufferRef.current = ''
-      setUsbStreamMeasurements([])
-      setUsbStreamLogs([])
-      setUsbStreamLastMeasurement(null)
-      setUsbStreamLastUpdate(null)
+      // Réinitialiser les buffers et états seulement si on démarre (pas si on reprend)
+      if (!isResuming) {
+        usbStreamBufferRef.current = ''
+        setUsbStreamMeasurements([])
+        setUsbStreamLogs([])
+        setUsbStreamLastMeasurement(null)
+        setUsbStreamLastUpdate(null)
+      } else {
+        // En reprise, on garde les logs mais on réinitialise le buffer pour les nouvelles données
+        usbStreamBufferRef.current = ''
+        appendUsbStreamLog('▶️ Reprise du streaming...')
+      }
       
       logger.log('📖 [USB] Démarrage de la lecture...')
 
@@ -384,29 +398,44 @@ export function UsbProvider({ children }) {
       setUsbStreamStatus('idle')
       appendUsbStreamLog(`❌ Erreur: ${errorMsg}`)
     }
-  }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger, port, isConnected, write])
+    }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger, port, isConnected, write, usbStreamStatus])
 
-  // Arrêter le streaming USB
-  const stopUsbStreaming = useCallback(() => {
-    logger.log('🛑 [USB] Arrêt du streaming demandé')
+  // Mettre en pause le streaming USB (garde le port connecté et les logs)
+  const pauseUsbStreaming = useCallback(() => {
+    logger.log('⏸️ [USB] Pause du streaming demandée')
     if (usbStreamStopRef.current) {
       try {
-        logger.log('🛑 [USB] Appel de la fonction stop du streaming')
+        logger.log('⏸️ [USB] Appel de la fonction stop du streaming (pause)')
         usbStreamStopRef.current()
         logger.log('✅ [USB] Fonction stop exécutée')
       } catch (stopErr) {
-        logger.warn('⚠️ [USB] Erreur lors de l\'arrêt du streaming:', stopErr)
+        logger.warn('⚠️ [USB] Erreur lors de la pause du streaming:', stopErr)
       }
       usbStreamStopRef.current = null
     } else {
-      logger.log('ℹ️ [USB] Aucun streaming actif à arrêter')
+      logger.log('ℹ️ [USB] Aucun streaming actif à mettre en pause')
     }
-    // Réinitialiser le buffer
-    usbStreamBufferRef.current = ''
-    setUsbStreamStatus('idle')
+    // Ne pas réinitialiser le buffer ni les logs - on garde tout en mémoire
+    // Ne pas déconnecter le port - on le garde connecté
+    setUsbStreamStatus('paused')
     setUsbStreamError(null)
-    logger.log('✅ [USB] Streaming arrêté, état réinitialisé')
-  }, [])
+    appendUsbStreamLog('⏸️ Streaming en pause - Les logs sont conservés')
+    logger.log('✅ [USB] Streaming en pause, port toujours connecté')
+  }, [appendUsbStreamLog])
+
+  // Arrêter complètement le streaming USB (déconnecte le port et réinitialise)
+  const stopUsbStreaming = useCallback(() => {
+    logger.log('🛑 [USB] Arrêt complet du streaming demandé')
+    pauseUsbStreaming()
+    // Réinitialiser les buffers et logs
+    usbStreamBufferRef.current = ''
+    setUsbStreamMeasurements([])
+    setUsbStreamLogs([])
+    setUsbStreamLastMeasurement(null)
+    setUsbStreamLastUpdate(null)
+    setUsbStreamStatus('idle')
+    logger.log('✅ [USB] Streaming complètement arrêté, état réinitialisé')
+  }, [pauseUsbStreaming])
 
   // Détecter un dispositif USB (fonction simplifiée - à compléter avec la logique de détection)
   const detectUSBDevice = useCallback(async (devices = [], fetchWithAuth, API_URL, refetch, notifyDevicesUpdated) => {
@@ -494,6 +523,7 @@ export function UsbProvider({ children }) {
     usbStreamLastMeasurement,
     usbStreamLastUpdate,
     startUsbStreaming,
+    pauseUsbStreaming,
     stopUsbStreaming,
     
     // Fonctions
