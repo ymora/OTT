@@ -171,7 +171,7 @@ export default function UsbStreamingTab() {
 
   const isStreaming = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
   const isPaused = usbStreamStatus === 'paused'
-  const canToggle = isSupported && !isToggling && (selectedPortId || isStreaming)
+  const canToggle = isSupported && !isToggling && (selectedPortId || isStreaming || isPaused)
 
   return (
     <div className="space-y-6">
