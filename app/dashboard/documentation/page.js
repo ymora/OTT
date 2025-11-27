@@ -190,39 +190,62 @@ function MarkdownViewer({ fileName }) {
     
     const loadMarkdown = async () => {
       try {
-        // En développement local, essayer de charger directement depuis /public
-        // Sinon, charger depuis l'API
-        const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-        
         let text = ''
-        if (isLocal) {
-          // Essayer de charger depuis le serveur Next.js (si le fichier est dans public/)
-          try {
-            const localResponse = await fetch(`/${fileName}`)
-            if (localResponse.ok) {
-              text = await localResponse.text()
-            } else {
-              throw new Error('Not in public')
+        let lastError = null
+        
+        // Essayer plusieurs méthodes de chargement
+        const methods = [
+          // 1. Essayer depuis public/ avec basePath
+          async () => {
+            const url = withBasePath(`/${fileName}`)
+            const response = await fetch(url)
+            if (response.ok) {
+              return await response.text()
             }
-          } catch (e) {
-            // Si pas dans public, essayer l'API locale
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+            throw new Error(`HTTP ${response.status}`)
+          },
+          // 2. Essayer depuis public/ sans basePath (fallback)
+          async () => {
+            const response = await fetch(`/${fileName}`)
+            if (response.ok) {
+              return await response.text()
+            }
+            throw new Error(`HTTP ${response.status}`)
+          },
+          // 3. Essayer depuis l'API
+          async () => {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
+              (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+                ? 'http://localhost:8000' 
+                : 'https://ott-jbln.onrender.com')
             const response = await fetch(`${apiUrl}/api.php/docs/${fileName}`)
             if (response.ok) {
-              text = await response.text()
-            } else {
-              throw new Error('API not available')
+              return await response.text()
             }
+            throw new Error(`API HTTP ${response.status}`)
           }
-        } else {
-          // En production, charger depuis l'API
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
-          const response = await fetch(`${apiUrl}/api.php/docs/${fileName}`)
-          if (response.ok) {
-            text = await response.text()
-          } else {
-            throw new Error('API not available')
+        ]
+        
+        // Essayer chaque méthode jusqu'à ce qu'une fonctionne
+        for (const method of methods) {
+          try {
+            text = await method()
+            if (text) {
+              break // Succès, sortir de la boucle
+            }
+          } catch (err) {
+            lastError = err
+            logger.debug(`Méthode de chargement échouée: ${err.message}`)
+            continue // Essayer la méthode suivante
           }
+        }
+        
+        if (!text) {
+          throw new Error(
+            `Impossible de charger ${fileName}. ` +
+            `Vérifiez que le fichier existe dans public/ ou que l'API est accessible. ` +
+            `Dernière erreur: ${lastError?.message || 'Inconnue'}`
+          )
         }
         
         setContent(text)
@@ -231,7 +254,7 @@ function MarkdownViewer({ fileName }) {
         setChartData(parsed)
       } catch (error) {
         logger.error('Erreur chargement markdown:', error)
-        setContent('# Erreur\n\nImpossible de charger le document.\n\n' + error.message)
+        setContent(`# Erreur de chargement\n\nImpossible de charger le document **${fileName}**.\n\n**Détails :** ${error.message}\n\n**Solutions possibles :**\n- Vérifiez que le fichier existe dans le dossier \`public/\`\n- Vérifiez que l'API backend est accessible\n- Vérifiez votre connexion réseau`)
       } finally {
         setLoading(false)
         isLoadingRef.current = false
