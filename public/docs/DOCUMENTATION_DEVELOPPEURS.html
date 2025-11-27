@@ -7,6 +7,52 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
+        /* Scrollbar personnalisée visible */
+        html {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 0, 0, 0.4) rgba(0, 0, 0, 0.15);
+        }
+        
+        html::-webkit-scrollbar {
+            width: 14px;
+        }
+        
+        html::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: 7px;
+        }
+        
+        html::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 7px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
+        
+        html::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.6);
+            background-clip: padding-box;
+        }
+        
+        /* Dark mode scrollbar */
+        html.dark {
+            scrollbar-color: rgba(255, 255, 255, 0.4) rgba(255, 255, 255, 0.15);
+        }
+        
+        html.dark::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        html.dark::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.4);
+            background-clip: padding-box;
+        }
+        
+        html.dark::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.6);
+            background-clip: padding-box;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
@@ -349,7 +395,6 @@
                             if (isDark) {
                                 // Appliquer immédiatement avant le rendu
                                 document.documentElement.classList.add('dark')
-                                document.body.classList.add('dark')
                             }
                         }
                     } catch (e) {
@@ -360,7 +405,6 @@
                 // Détecter aussi le thème système
                 if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
                     document.documentElement.classList.add('dark')
-                    document.body.classList.add('dark')
                 }
             } catch (e) {
                 // Erreur silencieuse
@@ -375,10 +419,8 @@
             if (event.data && event.data.type === 'theme') {
                 if (event.data.isDark) {
                     document.documentElement.classList.add('dark')
-                    document.body.classList.add('dark')
                 } else {
                     document.documentElement.classList.remove('dark')
-                    document.body.classList.remove('dark')
                 }
             }
         })
@@ -386,7 +428,6 @@
         // Détecter aussi le thème système au chargement (fallback)
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             document.documentElement.classList.add('dark')
-            document.body.classList.add('dark')
         }
         
         // Protection contre la copie et les fuites
