@@ -31,6 +31,13 @@ export default function UsbStreamingTab() {
   const [selectedPortId, setSelectedPortId] = useState('')
   const [loadingPorts, setLoadingPorts] = useState(false)
   const [isToggling, setIsToggling] = useState(false)
+  
+  // Suivi des valeurs min/max
+  const [minMaxValues, setMinMaxValues] = useState({
+    flowrate: { min: null, max: null },
+    battery: { min: null, max: null },
+    rssi: { min: null, max: null }
+  })
 
   // Charger les ports disponibles au montage et périodiquement
   const loadAvailablePorts = async () => {
@@ -169,6 +176,58 @@ export default function UsbStreamingTab() {
     }
   }
 
+  // Mettre à jour les valeurs min/max à chaque nouvelle mesure
+  useEffect(() => {
+    if (usbStreamLastMeasurement) {
+      setMinMaxValues(prev => {
+        const newValues = { ...prev }
+        
+        // Débit
+        if (usbStreamLastMeasurement.flowrate !== null && usbStreamLastMeasurement.flowrate !== undefined) {
+          if (newValues.flowrate.min === null || usbStreamLastMeasurement.flowrate < newValues.flowrate.min) {
+            newValues.flowrate.min = usbStreamLastMeasurement.flowrate
+          }
+          if (newValues.flowrate.max === null || usbStreamLastMeasurement.flowrate > newValues.flowrate.max) {
+            newValues.flowrate.max = usbStreamLastMeasurement.flowrate
+          }
+        }
+        
+        // Batterie
+        if (usbStreamLastMeasurement.battery !== null && usbStreamLastMeasurement.battery !== undefined) {
+          if (newValues.battery.min === null || usbStreamLastMeasurement.battery < newValues.battery.min) {
+            newValues.battery.min = usbStreamLastMeasurement.battery
+          }
+          if (newValues.battery.max === null || usbStreamLastMeasurement.battery > newValues.battery.max) {
+            newValues.battery.max = usbStreamLastMeasurement.battery
+          }
+        }
+        
+        // RSSI
+        if (usbStreamLastMeasurement.rssi !== null && usbStreamLastMeasurement.rssi !== undefined) {
+          if (newValues.rssi.min === null || usbStreamLastMeasurement.rssi < newValues.rssi.min) {
+            newValues.rssi.min = usbStreamLastMeasurement.rssi
+          }
+          if (newValues.rssi.max === null || usbStreamLastMeasurement.rssi > newValues.rssi.max) {
+            newValues.rssi.max = usbStreamLastMeasurement.rssi
+          }
+        }
+        
+        return newValues
+      })
+    }
+  }, [usbStreamLastMeasurement])
+  
+  // Réinitialiser les min/max quand on démarre un nouveau streaming
+  useEffect(() => {
+    if (usbStreamStatus === 'connecting' || usbStreamStatus === 'waiting') {
+      setMinMaxValues({
+        flowrate: { min: null, max: null },
+        battery: { min: null, max: null },
+        rssi: { min: null, max: null }
+      })
+    }
+  }, [usbStreamStatus])
+
   const isStreaming = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
   const isPaused = usbStreamStatus === 'paused'
   const canToggle = isSupported && !isToggling && (selectedPortId || isStreaming || isPaused)
@@ -271,6 +330,12 @@ export default function UsbStreamingTab() {
                 ? `${usbStreamLastMeasurement.flowrate.toFixed(2)} L/min`
                 : '0.00 L/min'}
             </p>
+            {(minMaxValues.flowrate.min !== null || minMaxValues.flowrate.max !== null) && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Min: {minMaxValues.flowrate.min !== null ? `${minMaxValues.flowrate.min.toFixed(2)}` : '-'} | 
+                Max: {minMaxValues.flowrate.max !== null ? `${minMaxValues.flowrate.max.toFixed(2)}` : '-'} L/min
+              </p>
+            )}
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">Batterie</p>
@@ -279,6 +344,12 @@ export default function UsbStreamingTab() {
                 ? `${usbStreamLastMeasurement.battery.toFixed(0)}%`
                 : '0%'}
             </p>
+            {(minMaxValues.battery.min !== null || minMaxValues.battery.max !== null) && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Min: {minMaxValues.battery.min !== null ? `${minMaxValues.battery.min.toFixed(0)}` : '-'} | 
+                Max: {minMaxValues.battery.max !== null ? `${minMaxValues.battery.max.toFixed(0)}` : '-'}%
+              </p>
+            )}
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">RSSI</p>
@@ -287,6 +358,12 @@ export default function UsbStreamingTab() {
                 ? `${usbStreamLastMeasurement.rssi} dBm`
                 : '-999 dBm'}
             </p>
+            {(minMaxValues.rssi.min !== null || minMaxValues.rssi.max !== null) && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Min: {minMaxValues.rssi.min !== null ? `${minMaxValues.rssi.min}` : '-'} | 
+                Max: {minMaxValues.rssi.max !== null ? `${minMaxValues.rssi.max}` : '-'} dBm
+              </p>
+            )}
           </div>
         </div>
 
