@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { withBasePath } from '@/lib/utils'
 
@@ -47,11 +47,17 @@ const menuStructure = [
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   
   // Garder le menu documentation ouvert si on est sur la page documentation
   const isOnDocumentationPage = pathname === '/dashboard/documentation'
   const [isDocsOpen, setIsDocsOpen] = useState(isOnDocumentationPage)
+  
+  // Obtenir le doc actuel depuis les search params (réactif)
+  const currentDoc = useMemo(() => {
+    return searchParams.get('doc') || 'presentation'
+  }, [searchParams])
   
   const hasPermission = (permission) => {
     if (!permission) return true
@@ -151,12 +157,10 @@ export default function Sidebar() {
           </div>
           
           {isDocsOpen && (
-            <div className="mt-2 space-y-1 animate-fade-in">
+            <div className="mb-2 space-y-1 animate-fade-in">
               {documentationLinks.map((doc) => {
-                const currentDoc = typeof window !== 'undefined' 
-                  ? new URLSearchParams(window.location.search).get('doc') || 'presentation'
-                  : 'presentation'
-                const isActive = normalizedPathname === '/dashboard/documentation' && currentDoc === doc.doc
+                // Vérifier si ce doc est actif (seul celui-ci passe en violet)
+                const isActive = isOnDocumentationPage && currentDoc === doc.doc
                 
                 return (
                   <Link
