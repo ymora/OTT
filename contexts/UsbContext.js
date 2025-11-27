@@ -400,33 +400,42 @@ export function UsbProvider({ children }) {
     }
     }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger, port, isConnected, write, usbStreamStatus])
 
+  // Fonction interne pour arrêter le streaming (sans logs, réutilisable)
+  const stopStreamingInternal = useCallback((silent = false) => {
+    if (usbStreamStopRef.current) {
+      try {
+        if (!silent) {
+          logger.log('⏸️ [USB] Arrêt du streaming...')
+        }
+        usbStreamStopRef.current()
+        if (!silent) {
+          logger.log('✅ [USB] Fonction stop exécutée')
+        }
+      } catch (stopErr) {
+        logger.warn('⚠️ [USB] Erreur lors de l\'arrêt du streaming:', stopErr)
+      }
+      usbStreamStopRef.current = null
+    } else if (!silent) {
+      logger.log('ℹ️ [USB] Aucun streaming actif à arrêter')
+    }
+  }, [])
+
   // Mettre en pause le streaming USB (garde le port connecté et les logs)
   const pauseUsbStreaming = useCallback(() => {
     logger.log('⏸️ [USB] Pause du streaming demandée')
-    if (usbStreamStopRef.current) {
-      try {
-        logger.log('⏸️ [USB] Appel de la fonction stop du streaming (pause)')
-        usbStreamStopRef.current()
-        logger.log('✅ [USB] Fonction stop exécutée')
-      } catch (stopErr) {
-        logger.warn('⚠️ [USB] Erreur lors de la pause du streaming:', stopErr)
-      }
-      usbStreamStopRef.current = null
-    } else {
-      logger.log('ℹ️ [USB] Aucun streaming actif à mettre en pause')
-    }
+    stopStreamingInternal(true) // Arrêter silencieusement le streaming
     // Ne pas réinitialiser le buffer ni les logs - on garde tout en mémoire
     // Ne pas déconnecter le port - on le garde connecté
     setUsbStreamStatus('paused')
     setUsbStreamError(null)
     appendUsbStreamLog('⏸️ Streaming en pause - Les logs sont conservés')
     logger.log('✅ [USB] Streaming en pause, port toujours connecté')
-  }, [appendUsbStreamLog])
+  }, [stopStreamingInternal, appendUsbStreamLog])
 
   // Arrêter complètement le streaming USB (déconnecte le port et réinitialise)
   const stopUsbStreaming = useCallback(() => {
     logger.log('🛑 [USB] Arrêt complet du streaming demandé')
-    pauseUsbStreaming()
+    stopStreamingInternal(true) // Arrêter silencieusement le streaming
     // Réinitialiser les buffers et logs
     usbStreamBufferRef.current = ''
     setUsbStreamMeasurements([])
@@ -435,7 +444,7 @@ export function UsbProvider({ children }) {
     setUsbStreamLastUpdate(null)
     setUsbStreamStatus('idle')
     logger.log('✅ [USB] Streaming complètement arrêté, état réinitialisé')
-  }, [pauseUsbStreaming])
+  }, [stopStreamingInternal])
 
   // Détecter un dispositif USB (fonction simplifiée - à compléter avec la logique de détection)
   const detectUSBDevice = useCallback(async (devices = [], fetchWithAuth, API_URL, refetch, notifyDevicesUpdated) => {

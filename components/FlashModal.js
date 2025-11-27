@@ -33,7 +33,8 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
   const {
     isConnected: usbIsConnected,
     isSupported: usbIsSupported,
-    stopUsbStreaming
+    usbStreamStatus,
+    pauseUsbStreaming
   } = useUsb()
 
   // Gestion du port série (instance séparée pour le flash USB)
@@ -48,14 +49,19 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
     startReading,
     write
   } = useSerialPort()
-
-  // Déconnecter le streaming USB quand on ouvre le modal
+  
   useEffect(() => {
-    if (isOpen && usbIsConnected && stopUsbStreaming) {
-      logger.log('🔄 Arrêt du streaming USB pour libérer le port pour le flash')
-      stopUsbStreaming()
+    // Mettre en pause le streaming seulement si :
+    // 1. Le modal est ouvert
+    // 2. L'appareil est connecté
+    // 3. Le streaming est actif (running, waiting, ou connecting)
+    const isStreamingActive = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
+    
+    if (isOpen && usbIsConnected && isStreamingActive && pauseUsbStreaming) {
+      logger.log('⏸️ Mise en pause du streaming USB pour libérer le port pour le flash')
+      pauseUsbStreaming()
     }
-  }, [isOpen, usbIsConnected, stopUsbStreaming])
+  }, [isOpen, usbIsConnected, usbStreamStatus, pauseUsbStreaming])
 
   // Charger les firmwares
   const loadFirmwares = useCallback(async () => {
@@ -119,8 +125,11 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
   // Gérer la connexion USB
   const handleConnect = useCallback(async () => {
     try {
-      if (stopUsbStreaming) {
-        stopUsbStreaming()
+      // Mettre en pause le streaming seulement s'il est actif (pour libérer le port)
+      const isStreamingActive = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
+      if (isStreamingActive && pauseUsbStreaming) {
+        logger.log('⏸️ Mise en pause du streaming USB avant connexion pour flash')
+        pauseUsbStreaming()
         await new Promise(resolve => setTimeout(resolve, 500))
       }
 
@@ -142,7 +151,7 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
       logger.error('Erreur connexion port pour flash:', err)
       setError(`Erreur de connexion: ${err.message}`)
     }
-  }, [requestPort, connect, startReading, stopUsbStreaming, serialError])
+  }, [requestPort, connect, startReading, pauseUsbStreaming, serialError, usbStreamStatus])
 
   const handleDisconnect = useCallback(async () => {
     if (stopReadingRef.current) {

@@ -918,15 +918,16 @@ export default function DevicesPage() {
 
   // Déconnecter le port USB
   const disconnectUSB = useCallback(async () => {
+    // Déconnecter le port - le streaming s'arrêtera automatiquement
+    // car le reader sera annulé lors de la déconnexion du port
     await disconnect()
-    stopUsbStreaming()
     setUsbConnectedDevice(null)
     setUsbVirtualDevice(null)
     setUsbPortInfo(null)
     // Réactiver la détection automatique après déconnexion
     setAutoDetecting(true)
     logger.log('🔄 Détection automatique USB réactivée après déconnexion')
-  }, [disconnect, stopUsbStreaming, setUsbConnectedDevice, setUsbVirtualDevice, setUsbPortInfo, setAutoDetecting])
+  }, [disconnect, setUsbConnectedDevice, setUsbVirtualDevice, setUsbPortInfo, setAutoDetecting])
 
   // Vérifier si le dispositif sélectionné correspond au dispositif USB connecté
   const isSelectedDeviceUsbConnected = useCallback(() => {

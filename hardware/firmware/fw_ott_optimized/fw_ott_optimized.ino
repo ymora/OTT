@@ -47,7 +47,7 @@
 #define SENSOR_PIN            33
 #define BATTERY_ADC_PIN       35
 
-static constexpr uint32_t DEFAULT_SLEEP_MINUTES = 5;
+static constexpr uint32_t DEFAULT_SLEEP_MINUTES = 1440; // 24 heures (1 envoi par jour pour limiter les coûts réseau)
 static constexpr uint8_t  MAX_COMMANDS = 4;
 static constexpr uint32_t MODEM_BOOT_TIMEOUT_DEFAULT_MS = 15000;
 static constexpr uint32_t SIM_READY_TIMEOUT_DEFAULT_MS = 30000;
@@ -93,7 +93,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.2-rssi"
+#define FIRMWARE_VERSION_STR "3.3-usb-detection"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -524,6 +524,10 @@ void usbStreamingLoop()
   uint32_t sequence = 0;
   unsigned long lastSend = 0;
   String commandBuffer;
+  unsigned long lastUsbCheck = 0;
+  const unsigned long USB_CHECK_INTERVAL_MS = 5000; // Vérifier la connexion USB toutes les 5 secondes
+  unsigned long consecutiveUsbErrors = 0;
+  const unsigned long MAX_USB_ERRORS = 3; // Si 3 erreurs consécutives, USB déconnecté
 
   Serial.println(F("[USB] Streaming en continu (1 mesure/s)."));
   printUsbStreamHelp(intervalMs);
@@ -532,6 +536,28 @@ void usbStreamingLoop()
     feedWatchdog();
 
     unsigned long now = millis();
+    
+    // Vérifier périodiquement si l'USB est toujours connecté
+    // Sur ESP32, si USB est déconnecté, Serial reste "valide" mais les écritures peuvent échouer
+    // On vérifie si on peut écrire dans le buffer Serial
+    if (now - lastUsbCheck >= USB_CHECK_INTERVAL_MS) {
+      lastUsbCheck = now;
+      // Vérifier si le buffer Serial est disponible pour écriture
+      // Si USB est déconnecté, availableForWrite() peut retourner 0 ou un nombre très petit
+      size_t available = Serial.availableForWrite();
+      if (available == 0 || available < 64) {
+        // Buffer plein ou USB déconnecté - incrémenter le compteur d'erreurs
+        consecutiveUsbErrors++;
+        if (consecutiveUsbErrors >= MAX_USB_ERRORS) {
+          // USB déconnecté depuis trop longtemps, sortir du mode streaming
+          // Le dispositif redémarrera et reprendra le cycle normal (avec réseau)
+          return; // Sortir de la boucle pour reprendre le cycle normal
+        }
+      } else {
+        consecutiveUsbErrors = 0; // Reset le compteur si USB semble OK
+      }
+    }
+
     if (now - lastSend >= intervalMs) {
       Measurement snapshot = captureSensorSnapshot();
       emitUsbMeasurement(snapshot, ++sequence, intervalMs);
@@ -604,7 +630,7 @@ void usbStreamingLoop()
 
 void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs)
 {
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<320> doc; // Augmenté pour inclure firmware_version
   doc["mode"] = "usb_stream";
   doc["seq"] = sequence;
   doc["flow_lpm"] = m.flow;
@@ -613,7 +639,7 @@ void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t interv
   doc["interval_ms"] = intervalMs;
   doc["sleep_minutes"] = configuredSleepMinutes;
   doc["timestamp_ms"] = millis();
-  doc["firmware_version"] = FIRMWARE_VERSION; // Ajout de la version firmware
+  doc["firmware_version"] = FIRMWARE_VERSION; // Version du firmware flashé
   serializeJson(doc, Serial);
   Serial.println();
 
