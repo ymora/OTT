@@ -160,14 +160,11 @@ export default function Sidebar() {
           
           {/* Bouton Documentation avec triangle */}
           <div className="w-full flex items-center justify-between gap-2 px-4 py-2 rounded-lg transition-all duration-300 shadow-sm text-sm font-medium bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300">
-            {/* Partie cliquable pour naviguer vers la documentation - ne toggle PAS le menu */}
-            <Link
-              href="/dashboard/documentation?doc=presentation"
-              className="flex items-center gap-2 flex-1 hover:scale-[1.02] transition-transform duration-300"
-            >
+            {/* Texte Documentation - non cliquable, ne fait rien */}
+            <div className="flex items-center gap-2 flex-1">
               <span>📚</span>
               <span>Documentation</span>
-            </Link>
+            </div>
             
             {/* Triangle pour déployer/minimiser - SEUL élément qui toggle le menu */}
             <button
@@ -177,7 +174,7 @@ export default function Sidebar() {
                 setIsDocsOpen(!isDocsOpen)
               }}
               className="p-1 rounded transition-all duration-300 hover:scale-110 hover:bg-primary-200/50 dark:hover:bg-primary-800/50"
-              aria-label={isDocsOpen ? 'Minimiser le menu' : 'Déployer le menu'}
+              aria-label={isDocsOpen ? 'Masquer les docs' : 'Afficher les docs'}
             >
               <span className={`transition-transform duration-300 block ${isDocsOpen ? 'rotate-180' : ''}`}>
                 ▼
