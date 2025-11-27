@@ -243,118 +243,181 @@ export default function DeviceConfigurationTab() {
               <LoadingSpinner />
             ) : (
               <>
-                {/* Intervalle de réveil */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">
-                    ⏰ Intervalle de réveil (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="1440"
-                    value={config.sleep_minutes || ''}
-                    onChange={(e) => setConfig(prev => ({ ...prev, sleep_minutes: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
-                    placeholder="30"
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Durée entre chaque réveil du dispositif pour prendre une mesure (1-1440 minutes)
-                  </p>
-                </div>
+                {/* Section : Cycle de fonctionnement */}
+                <div className="space-y-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <span className="text-lg">⏰</span>
+                    Cycle de Fonctionnement
+                  </h3>
+                  
+                  {/* Intervalle de réveil */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                      Intervalle de réveil (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1440"
+                      value={config.sleep_minutes || ''}
+                      onChange={(e) => setConfig(prev => ({ ...prev, sleep_minutes: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
+                      placeholder="30"
+                    />
+                    <div className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+                      <span className="text-blue-500">ℹ️</span>
+                      <span>
+                        Le dispositif se réveille toutes les <strong>{config.sleep_minutes || 30} minutes</strong> pour prendre une mesure.
+                        <br />
+                        <span className="text-gray-500 dark:text-gray-400">Plage : 1 minute (très fréquent) à 1440 minutes (24h)</span>
+                      </span>
+                    </div>
+                  </div>
 
-                {/* Durée de mesure */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">
-                    📊 Durée de mesure (millisecondes)
-                  </label>
-                  <input
-                    type="number"
-                    min="10"
-                    max="10000"
-                    value={config.measurement_duration_ms || ''}
-                    onChange={(e) => setConfig(prev => ({ ...prev, measurement_duration_ms: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
-                    placeholder="100"
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Durée pendant laquelle le capteur prend la mesure (10-10000 ms)
-                  </p>
-                </div>
+                  {/* Durée de mesure */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                      Durée de mesure (millisecondes)
+                    </label>
+                    <input
+                      type="number"
+                      min="10"
+                      max="10000"
+                      value={config.measurement_duration_ms || ''}
+                      onChange={(e) => setConfig(prev => ({ ...prev, measurement_duration_ms: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
+                      placeholder="100"
+                    />
+                    <div className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+                      <span className="text-blue-500">ℹ️</span>
+                      <span>
+                        Temps pendant lequel le capteur collecte des données à chaque réveil.
+                        <br />
+                        <span className="text-gray-500 dark:text-gray-400">Plage : 10ms (rapide) à 10000ms (10 secondes, plus précis)</span>
+                      </span>
+                    </div>
+                  </div>
 
-                {/* Envoi toutes les N réveils */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">
-                    📤 Envoyer toutes les N réveils
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={config.send_every_n_wakeups || ''}
-                    onChange={(e) => setConfig(prev => ({ ...prev, send_every_n_wakeups: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
-                    placeholder="1"
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Nombre de réveils avant d&apos;envoyer les données (1 = à chaque réveil, 2 = tous les 2 réveils, etc.)
-                  </p>
+                  {/* Envoi toutes les N réveils */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                      Fréquence d&apos;envoi des données
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={config.send_every_n_wakeups || ''}
+                      onChange={(e) => setConfig(prev => ({ ...prev, send_every_n_wakeups: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
+                      placeholder="1"
+                    />
+                    <div className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+                      <span className="text-blue-500">ℹ️</span>
+                      <span>
+                        {config.send_every_n_wakeups === '1' || !config.send_every_n_wakeups ? (
+                          <>Les données sont envoyées <strong>à chaque réveil</strong> (fréquence maximale).</>
+                        ) : (
+                          <>Les données sont envoyées <strong>tous les {config.send_every_n_wakeups} réveils</strong> (économie de batterie et données).</>
+                        )}
+                        <br />
+                        <span className="text-gray-500 dark:text-gray-400">1 = à chaque réveil, 2 = tous les 2 réveils, etc.</span>
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Coefficients de calibration */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">
-                    🔧 Coefficients de calibration (a0, a1, a2)
-                  </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">a0</label>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={config.calibration_coefficients?.[0] ?? 0}
-                        onChange={(e) => {
-                          const newCoeffs = [...(config.calibration_coefficients || [0, 1, 0])]
-                          newCoeffs[0] = parseFloat(e.target.value) || 0
-                          setConfig(prev => ({ ...prev, calibration_coefficients: newCoeffs }))
-                        }}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
-                        placeholder="0"
-                      />
+                <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-1">
+                      <div className="w-8 h-8 bg-blue-500 dark:bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+                        🔧
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">a1</label>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={config.calibration_coefficients?.[1] ?? 1}
-                        onChange={(e) => {
-                          const newCoeffs = [...(config.calibration_coefficients || [0, 1, 0])]
-                          newCoeffs[1] = parseFloat(e.target.value) || 1
-                          setConfig(prev => ({ ...prev, calibration_coefficients: newCoeffs }))
-                        }}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
-                        placeholder="1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">a2</label>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        value={config.calibration_coefficients?.[2] ?? 0}
-                        onChange={(e) => {
-                          const newCoeffs = [...(config.calibration_coefficients || [0, 1, 0])]
-                          newCoeffs[2] = parseFloat(e.target.value) || 0
-                          setConfig(prev => ({ ...prev, calibration_coefficients: newCoeffs }))
-                        }}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700"
-                        placeholder="0"
-                      />
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100">
+                        Calibration du Capteur de Débit
+                      </label>
+                      <p className="text-xs text-gray-600 dark:text-gray-300 mb-4">
+                        Les coefficients permettent de convertir la valeur brute du capteur en débit réel (L/min).
+                        <br />
+                        <span className="font-mono bg-white dark:bg-gray-800 px-2 py-1 rounded mt-2 inline-block">
+                          Débit = a0 + (a1 × valeur) + (a2 × valeur²)
+                        </span>
+                      </p>
+                      
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            a0 - Offset
+                          </label>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={config.calibration_coefficients?.[0] ?? 0}
+                            onChange={(e) => {
+                              const newCoeffs = [...(config.calibration_coefficients || [0, 1, 0])]
+                              newCoeffs[0] = parseFloat(e.target.value) || 0
+                              setConfig(prev => ({ ...prev, calibration_coefficients: newCoeffs }))
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                            placeholder="0"
+                          />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Décalage constant (valeur par défaut : 0)
+                          </p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            a1 - Coefficient Linéaire
+                          </label>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={config.calibration_coefficients?.[1] ?? 1}
+                            onChange={(e) => {
+                              const newCoeffs = [...(config.calibration_coefficients || [0, 1, 0])]
+                              newCoeffs[1] = parseFloat(e.target.value) || 1
+                              setConfig(prev => ({ ...prev, calibration_coefficients: newCoeffs }))
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                            placeholder="1"
+                          />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Facteur de proportionnalité (valeur par défaut : 1)
+                          </p>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            a2 - Coefficient Quadratique
+                          </label>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={config.calibration_coefficients?.[2] ?? 0}
+                            onChange={(e) => {
+                              const newCoeffs = [...(config.calibration_coefficients || [0, 1, 0])]
+                              newCoeffs[2] = parseFloat(e.target.value) || 0
+                              setConfig(prev => ({ ...prev, calibration_coefficients: newCoeffs }))
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                            placeholder="0"
+                          />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Correction de courbure (valeur par défaut : 0)
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                        <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                          <strong>💡 Exemple :</strong> Si le capteur lit 100 et que a0=0, a1=0.5, a2=0.001,
+                          alors le débit calculé sera : 0 + (0.5 × 100) + (0.001 × 100²) = 50 + 10 = 60 L/min
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Coefficients polynomiaux pour la calibration du capteur de débit (débit = a0 + a1 × valeur + a2 × valeur²)
-                  </p>
                 </div>
 
                 {/* Informations du dispositif */}
