@@ -129,7 +129,36 @@ export default function Sidebar() {
       
       {/* Footer Sidebar - Menu déroulant Documentation */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white/90 via-primary-50/30 to-transparent dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-transparent backdrop-blur-sm">
-        <div className="relative">
+        <div className="relative flex flex-col-reverse">
+          {/* Menu déroulant - se déploie vers le haut (au-dessus du bouton) */}
+          {isDocsOpen && (
+            <div className="mt-2 space-y-1 animate-fade-in">
+              {documentationLinks.map((doc) => {
+                // Vérifier si ce doc est actif (seul celui-ci passe en violet)
+                const isActive = isOnDocumentationPage && currentDoc === doc.doc
+                
+                return (
+                  <Link
+                    key={doc.doc}
+                    href={`/dashboard/documentation?doc=${doc.doc}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm text-sm ${
+                      isActive
+                        ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold'
+                        : 'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30'
+                    }`}
+                  >
+                    <span>{doc.icon}</span>
+                    <span className="font-medium">{doc.name}</span>
+                    {isActive && (
+                      <div className="ml-auto w-2 h-2 bg-white/90 dark:bg-slate-800 rounded-full animate-pulse"></div>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+          
+          {/* Bouton Documentation avec triangle */}
           <div className="w-full flex items-center justify-between gap-2 px-4 py-2 rounded-lg transition-all duration-300 shadow-sm text-sm font-medium bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300">
             {/* Partie cliquable pour naviguer vers la documentation - ne toggle PAS le menu */}
             <Link
@@ -155,33 +184,6 @@ export default function Sidebar() {
               </span>
             </button>
           </div>
-          
-          {isDocsOpen && (
-            <div className="mb-2 space-y-1 animate-fade-in">
-              {documentationLinks.map((doc) => {
-                // Vérifier si ce doc est actif (seul celui-ci passe en violet)
-                const isActive = isOnDocumentationPage && currentDoc === doc.doc
-                
-                return (
-                  <Link
-                    key={doc.doc}
-                    href={`/dashboard/documentation?doc=${doc.doc}`}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 hover:scale-[1.02] shadow-sm text-sm ${
-                      isActive
-                        ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold'
-                        : 'bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 text-primary-700 dark:text-primary-300 hover:from-primary-100 hover:to-primary-100 dark:hover:from-primary-900/50 dark:hover:to-primary-800/30'
-                    }`}
-                  >
-                    <span>{doc.icon}</span>
-                    <span className="font-medium">{doc.name}</span>
-                    {isActive && (
-                      <div className="ml-auto w-2 h-2 bg-white/90 dark:bg-slate-800 rounded-full animate-pulse"></div>
-                    )}
-                  </Link>
-                )
-              })}
-            </div>
-          )}
         </div>
       </div>
     </aside>
