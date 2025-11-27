@@ -3,7 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { withBasePath } from '@/lib/utils'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
@@ -88,8 +88,20 @@ function MarkdownViewer({ fileName }) {
   const [loading, setLoading] = useState(true)
   const [chartData, setChartData] = useState(null)
   const [timeView, setTimeView] = useState('day') // 'day', 'week', 'month'
+  
+  // Ref pour éviter les rechargements multiples du même fichier
+  const loadedFileNameRef = useRef(null)
+  const isLoadingRef = useRef(false)
 
   useEffect(() => {
+    // Ne charger que si le fichier a changé ou n'a jamais été chargé
+    if (loadedFileNameRef.current === fileName || isLoadingRef.current) {
+      return
+    }
+    
+    isLoadingRef.current = true
+    loadedFileNameRef.current = fileName
+    
     const loadMarkdown = async () => {
       try {
         // En développement local, essayer de charger directement depuis /public
@@ -136,6 +148,7 @@ function MarkdownViewer({ fileName }) {
         setContent('# Erreur\n\nImpossible de charger le document.\n\n' + error.message)
       } finally {
         setLoading(false)
+        isLoadingRef.current = false
       }
     }
     loadMarkdown()
@@ -255,8 +268,8 @@ function MarkdownViewer({ fileName }) {
     return Object.values(months).sort((a, b) => new Date(a.date) - new Date(b.date))
   }
 
-  // Préparer les données selon la vue sélectionnée
-  const getDisplayData = () => {
+  // Préparer les données selon la vue sélectionnée - MÉMORISÉ pour éviter les recalculs
+  const displayData = useMemo(() => {
     if (!chartData) return null
     
     switch (timeView) {
@@ -267,9 +280,7 @@ function MarkdownViewer({ fileName }) {
       default:
         return chartData.dailyData
     }
-  }
-
-  const displayData = getDisplayData()
+  }, [chartData, timeView])
 
   if (loading) {
     return (
