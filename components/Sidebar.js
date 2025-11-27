@@ -53,6 +53,7 @@ export default function Sidebar() {
   // Garder le menu documentation ouvert si on est sur la page documentation
   const isOnDocumentationPage = pathname === '/dashboard/documentation'
   const [isDocsOpen, setIsDocsOpen] = useState(isOnDocumentationPage)
+  const [userManuallyClosed, setUserManuallyClosed] = useState(false)
   
   // Obtenir le doc actuel depuis les search params (réactif)
   const currentDoc = useMemo(() => {
@@ -71,12 +72,19 @@ export default function Sidebar() {
     return pathname
   }, [pathname])
   
-  // Maintenir le menu ouvert quand on est sur la page documentation
+  // Ouvrir automatiquement le menu quand on arrive sur la page documentation (sauf si l'utilisateur l'a fermé manuellement)
   useEffect(() => {
-    if (isOnDocumentationPage && !isDocsOpen) {
+    if (isOnDocumentationPage && !userManuallyClosed) {
       setIsDocsOpen(true)
     }
-  }, [isOnDocumentationPage, isDocsOpen])
+  }, [isOnDocumentationPage, userManuallyClosed])
+  
+  // Réinitialiser le flag quand on quitte la page documentation
+  useEffect(() => {
+    if (!isOnDocumentationPage) {
+      setUserManuallyClosed(false)
+    }
+  }, [isOnDocumentationPage])
   
   const documentationLinks = [
     { name: 'Présentation', icon: '📸', doc: 'presentation' },
@@ -171,7 +179,15 @@ export default function Sidebar() {
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                setIsDocsOpen(!isDocsOpen)
+                const newState = !isDocsOpen
+                setIsDocsOpen(newState)
+                // Si l'utilisateur ferme le menu manuellement, marquer qu'il l'a fait
+                if (!newState && isOnDocumentationPage) {
+                  setUserManuallyClosed(true)
+                } else if (newState) {
+                  // Si l'utilisateur ouvre le menu, réinitialiser le flag
+                  setUserManuallyClosed(false)
+                }
               }}
               className="p-1 rounded transition-all duration-300 hover:scale-110 hover:bg-primary-200/50 dark:hover:bg-primary-800/50"
               aria-label={isDocsOpen ? 'Masquer les docs' : 'Afficher les docs'}
