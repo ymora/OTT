@@ -128,16 +128,13 @@ export default function DocumentationPage() {
         title="Documentation OTT"
         allow="fullscreen"
         onLoad={() => {
-          // Envoyer le thème immédiatement
-          sendThemeToIframe()
-          // Réessayer après un court délai pour s'assurer que le script est prêt
-          setTimeout(() => {
+          // Envoyer le thème avec plusieurs tentatives pour s'assurer que le script est prêt
+          const sendWithRetry = () => {
             sendThemeToIframe()
-          }, 100)
-          // Encore une fois après un délai plus long
-          setTimeout(() => {
-            sendThemeToIframe()
-          }, 500)
+          }
+          sendWithRetry() // Immédiatement
+          setTimeout(sendWithRetry, 100) // Après 100ms
+          setTimeout(sendWithRetry, 500) // Après 500ms
         }}
       />
     </div>
