@@ -1,7 +1,7 @@
 # Analyse du Firmware OTT - Rapport d'optimisation
 
 **Date** : $(date)  
-**Version firmware** : 3.4-modem-logs  
+**Version firmware** : 3.5-usb-optimized  
 **Fichier analysé** : `hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino`
 
 ## ✅ Points positifs
@@ -18,9 +18,10 @@
 - ✅ Fonctions bien séparées et réutilisables
 
 ### 3. Fonctionnalités complètes
-- ✅ Mesures (débit, batterie, RSSI)
+- ✅ Mesures (débit, batterie, RSSI avec conversion CSQ → dBm selon 3GPP TS 27.007)
 - ✅ GPS et localisation réseau cellulaire
-- ✅ Streaming USB avec commandes interactives
+- ✅ Streaming USB avec commandes interactives (`modem_on`, `modem_off`, `test_network`, `gps`, `once`, `interval`, `help`, `exit`)
+- ✅ **Modem non démarré automatiquement en mode USB** : Le modem n'est initialisé que si nécessaire, évitant les connexions réseau inutiles
 - ✅ Gestion des commandes OTA
 - ✅ Gestion de la configuration
 - ✅ Logs avec tampon offline
@@ -28,6 +29,9 @@
 - ✅ Deep sleep
 - ✅ Retry avec backoff exponentiel pour réseau
 - ✅ Gestion APN avec recommandations par opérateur
+- ✅ Confirmations de réception et réponses structurées pour toutes les commandes USB
+- ✅ Détection de déconnexion USB pour retour automatique au mode réseau
+- ✅ RSSI correctement géré en mode USB (calculé si modem démarré, sinon -999)
 
 ## ⚠️ Optimisations appliquées
 
@@ -108,7 +112,7 @@
 - **Lignes de code** : ~1993
 - **Fonctions** : ~40
 - **Sections principales** : 8
-- **Commandes USB supportées** : 8
+- **Commandes USB supportées** : 8 (`usb`, `modem_on`, `modem_off`, `test_network`, `gps`, `once`, `interval`, `help`, `exit`)
 - **Commandes API supportées** : 5
 
 ## ✅ Conclusion
@@ -118,6 +122,8 @@ Le firmware est **bien organisé, optimisé et correspond à tous les besoins id
 **Optimisations appliquées** :
 1. ✅ Suppression double initialisation modem
 2. ✅ Refactorisation construction device_name
+3. ✅ **Modem non initialisé en mode USB** : `initModem()` est appelé seulement si le mode USB n'est pas détecté, évitant le démarrage automatique du modem en mode USB
+4. ✅ **RSSI géré correctement en mode USB** : Calcul du RSSI seulement si le modem est démarré, sinon -999
 
 **Recommandations** :
 - Le firmware est prêt pour la production

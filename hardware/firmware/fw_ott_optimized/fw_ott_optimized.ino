@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v3.1-gps - Reconstruction complète + GPS
+ *  OTT Firmware v3.5-usb-optimized - Optimisation USB et Modem
  * ================================================================
  * Objectifs :
  *   - Mesurer le débit d'oxygène + la batterie et publier la mesure
@@ -8,14 +8,45 @@
  *   - Journaliser localement ou côté API chaque événement important
  *   - Autoriser la reconfiguration complète d'un boîtier sans reflasher
  *   - Envoyer la position GPS/réseau cellulaire avec chaque mesure
+ *   - Mode streaming USB pour tests et diagnostics en temps réel
  *
- * Nouveautés majeures :
+ * Fonctionnalités principales :
  *   - TinyGSM SIM7600 : init matériel, gestion SIM/PIN, GPRS, HTTPS
- *   - Commandes : SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, UPDATE_CALIBRATION
+ *   - Commandes API : SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
  *   - Persistence : APN/JWT/ICCID/PIN/calibration stockés en NVS (Preferences)
  *   - Logs : POST /devices/logs + tampon en NVS quand le réseau est coupé
  *   - Payloads mesures enrichis (firmware_version, RSSI, latitude, longitude)
  *   - Géolocalisation : GPS (priorité) ou réseau cellulaire (fallback) inclus dans chaque mesure
+ *   - RSSI : Conversion CSQ vers dBm selon standard 3GPP TS 27.007
+ *   - Deep sleep : Intervalle par défaut 24h pour limiter les coûts réseau
+ *
+ * Mode Streaming USB (v3.2+) :
+ *   - Détection automatique : commande "usb" dans les 3 secondes après boot
+ *   - Streaming continu : mesures JSON + logs lisibles en temps réel
+ *   - Commandes interactives :
+ *     * `modem_on` : Démarre le modem (non démarré automatiquement en mode USB)
+ *     * `modem_off` : Arrête le modem
+ *     * `test_network` : Teste l'enregistrement réseau (modem doit être démarré)
+ *     * `gps` : Teste le GPS (modem doit être démarré)
+ *     * `once` : Envoie une mesure immédiatement
+ *     * `interval=<ms>` : Change l'intervalle (200-10000ms, défaut 1000ms)
+ *     * `help` : Affiche l'aide
+ *     * `exit` : Quitte le streaming et redémarre pour reprendre le cycle normal
+ *   - Détection déconnexion USB : retour automatique au mode réseau
+ *   - Confirmations : Réception et réponses structurées pour toutes les commandes
+ *
+ * Optimisations réseau (v3.3+) :
+ *   - Retry avec backoff exponentiel pour l'attachement réseau
+ *   - Gestion APN : Recommandations automatiques par opérateur (MCC/MNC)
+ *   - Gestion REG_DENIED : Changement automatique d'APN et retry
+ *   - Modem non initialisé en mode USB : économie d'énergie et coûts
+ *
+ * Améliorations récentes (v3.4-v3.5) :
+ *   - Modem non démarré automatiquement en mode USB (économie énergie/coûts)
+ *   - RSSI calculé seulement si modem démarré, sinon -999
+ *   - Logs structurés avec séparateurs visuels pour modem start/stop
+ *   - Confirmations de réception pour toutes les commandes USB
+ *   - Détection robuste de déconnexion USB
  *
  * Toutes les sections ci-dessous sont abondamment commentées pour guider
  * la maintenance ou l'extension (ex. ajout d'une commande OTA_REQUEST).
@@ -93,7 +124,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.4-modem-logs"
+#define FIRMWARE_VERSION_STR "3.5-usb-optimized"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -208,7 +239,8 @@ void setup()
   Serial.println(F("[BOOT] ========================================\n"));
   
   initBoard();
-  initModem();
+  // Ne pas initialiser le modem si on est en mode USB (pour éviter de démarrer le modem inutilement)
+  // initModem() sera appelé seulement si on n'est pas en mode USB
   loadConfig();
   
   // Vérifier si on doit faire un rollback (si le boot a échoué plusieurs fois)
@@ -222,11 +254,15 @@ void setup()
   logRuntimeConfig();
 
   if (detectUsbStreamingMode()) {
+    // En mode USB, ne pas initialiser le modem (il sera démarré seulement si l'utilisateur le demande)
     usbStreamingLoop();
     Serial.println(F("[USB] Redémarrage pour reprendre le cycle normal..."));
     delay(100);
     ESP.restart();
   }
+  
+  // Si on n'est pas en mode USB, initialiser le modem pour le cycle normal
+  initModem();
 
   Measurement m = captureSensorSnapshot();
   Serial.printf("[MEASURE] pré-mesure flow=%.2f L/min, batt=%.1f%% (RSSI en attente)\n", m.flow, m.battery);
@@ -535,6 +571,7 @@ void usbStreamingLoop()
 {
   uint32_t intervalMs = USB_STREAM_DEFAULT_INTERVAL_MS;
   uint32_t sequence = 0;
+  bool streamingActive = false; // Le streaming n'est actif que si explicitement démarré via commande
   unsigned long lastSend = 0;
   String commandBuffer;
   unsigned long lastUsbCheck = 0;
@@ -542,7 +579,9 @@ void usbStreamingLoop()
   unsigned long consecutiveUsbErrors = 0;
   const unsigned long MAX_USB_ERRORS = 3; // Si 3 erreurs consécutives, USB déconnecté
 
-  Serial.println(F("[USB] Streaming en continu (1 mesure/s)."));
+  Serial.println(F("[USB] Mode USB activé - En attente de commandes du dashboard."));
+  Serial.println(F("[USB] Le dispositif n'envoie des mesures que sur commande explicite."));
+  Serial.println(F("[USB] Tapez 'help' pour voir les commandes disponibles."));
   printUsbStreamHelp(intervalMs);
 
   while (true) {
@@ -571,8 +610,28 @@ void usbStreamingLoop()
       }
     }
 
-    if (now - lastSend >= intervalMs) {
+    // Envoyer des mesures uniquement si le streaming est explicitement activé
+    if (streamingActive && now - lastSend >= intervalMs) {
       Measurement snapshot = captureSensorSnapshot();
+      
+      // En mode USB, le RSSI n'est pas disponible si le modem n'est pas démarré
+      // On laisse snapshot.rssi à sa valeur par défaut (probablement 0 ou -999)
+      // Si le modem est démarré, on peut essayer d'obtenir le RSSI
+      if (modemReady) {
+        int8_t csq = modem.getSignalQuality();
+        if (csq == 99) {
+          snapshot.rssi = -999;  // Pas de signal ou erreur
+        } else if (csq == 0) {
+          snapshot.rssi = -113;  // Signal très faible ou moins
+        } else if (csq == 1) {
+          snapshot.rssi = -111;
+        } else {
+          snapshot.rssi = -110 + (csq * 2);  // Formule standard 3GPP
+        }
+      } else {
+        // Modem non démarré en mode USB, RSSI non disponible
+        snapshot.rssi = -999;
+      }
       
       // Essayer d'obtenir la position GPS si le modem est disponible
       // (en mode USB, le modem n'est généralement pas démarré, donc GPS sera null)
@@ -620,10 +679,53 @@ void usbStreamingLoop()
           continue;
         }
 
+        // Démarrer le streaming continu (envoi automatique de mesures)
+        if (lowered == "start" || lowered == "stream" || lowered == "stream_on") {
+          Serial.println(F("[USB] ✅ Commande 'start' reçue et acceptée"));
+          if (streamingActive) {
+            Serial.println(F("[USB] ℹ️  Réponse: Streaming déjà actif"));
+          } else {
+            streamingActive = true;
+            Serial.println(F("[USB] ✅ Réponse: Streaming démarré - Mesures envoyées automatiquement"));
+            Serial.printf("[USB] Intervalle: %lu ms (1 mesure toutes les %.1f secondes)\n", 
+                         static_cast<unsigned long>(intervalMs), intervalMs / 1000.0);
+          }
+          continue;
+        }
+
+        // Arrêter le streaming continu
+        if (lowered == "stop" || lowered == "stream_off" || lowered == "pause") {
+          Serial.println(F("[USB] ✅ Commande 'stop' reçue et acceptée"));
+          if (!streamingActive) {
+            Serial.println(F("[USB] ℹ️  Réponse: Streaming déjà arrêté"));
+          } else {
+            streamingActive = false;
+            Serial.println(F("[USB] ✅ Réponse: Streaming arrêté - Plus de mesures automatiques"));
+            Serial.println(F("[USB] Utilisez 'once' pour une mesure unique ou 'start' pour redémarrer"));
+          }
+          continue;
+        }
+
         if (lowered == "once") {
           Serial.println(F("[USB] ✅ Commande 'once' reçue et acceptée"));
           Serial.println(F("[USB] 📊 Capture d'une mesure immédiate..."));
           Measurement snapshot = captureSensorSnapshot();
+          
+          // En mode USB, le RSSI n'est pas disponible si le modem n'est pas démarré
+          if (modemReady) {
+            int8_t csq = modem.getSignalQuality();
+            if (csq == 99) {
+              snapshot.rssi = -999;
+            } else if (csq == 0) {
+              snapshot.rssi = -113;
+            } else if (csq == 1) {
+              snapshot.rssi = -111;
+            } else {
+              snapshot.rssi = -110 + (csq * 2);
+            }
+          } else {
+            snapshot.rssi = -999;
+          }
           
           // Essayer d'obtenir la position GPS si le modem est disponible
           float lat = 0.0, lon = 0.0;
@@ -740,6 +842,15 @@ void usbStreamingLoop()
           continue;
         }
 
+        // Demander les informations du dispositif
+        if (lowered == "device_info" || lowered == "info") {
+          Serial.println(F("[USB] ✅ Commande 'device_info' reçue et acceptée"));
+          Serial.println(F("[USB] ℹ️  Réponse: Envoi des informations du dispositif..."));
+          emitUsbDeviceInfo();
+          Serial.println(F("[USB] ✅ Informations du dispositif envoyées"));
+          continue;
+        }
+
         if (lowered.startsWith("interval=")) {
           Serial.println(F("[USB] ✅ Commande 'interval' reçue et acceptée"));
           long requested = lowered.substring(9).toInt();
@@ -816,17 +927,22 @@ void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t interv
 
 void printUsbStreamHelp(uint32_t intervalMs)
 {
-  Serial.println(F("[USB] Commandes (terminer par Entrée):"));
-  Serial.println(F("  once ............. Mesure immédiate sans attendre l'intervalle"));
-  Serial.println(F("  interval=<ms> .... Modifier l'intervalle (200-10000 ms)"));
-  Serial.println(F("  modem_on ......... Démarrer le modem (pour tester réseau/GPS)"));
-  Serial.println(F("  modem_off ........ Arrêter le modem"));
-  Serial.println(F("  test_network ...... Tester l'enregistrement réseau"));
-  Serial.println(F("  gps .............. Tester le GPS"));
-  Serial.println(F("  help ............. Afficher cette aide"));
-  Serial.println(F("  exit ............. Quitter le streaming et redémarrer"));
+  Serial.println(F("[USB] ========================================"));
+  Serial.println(F("[USB] Commandes disponibles (terminer par Entrée):"));
+  Serial.println(F("[USB]   start         → Démarrer le streaming continu (mesures automatiques)"));
+  Serial.println(F("[USB]   stop          → Arrêter le streaming continu"));
+  Serial.println(F("[USB]   once          → Mesure immédiate unique"));
+  Serial.println(F("[USB]   device_info   → Demander les informations du dispositif"));
+  Serial.println(F("[USB]   interval=<ms> → Modifier l'intervalle (200-10000 ms)"));
+  Serial.println(F("[USB]   modem_on       → Démarrer le modem (pour tester réseau/GPS)"));
+  Serial.println(F("[USB]   modem_off     → Arrêter le modem"));
+  Serial.println(F("[USB]   test_network  → Tester l'enregistrement réseau"));
+  Serial.println(F("[USB]   gps            → Tester le GPS"));
+  Serial.println(F("[USB]   help           → Afficher cette aide"));
+  Serial.println(F("[USB]   exit           → Quitter le streaming et redémarrer"));
   Serial.printf("[USB] Intervalle actuel: %lu ms.\n", static_cast<unsigned long>(intervalMs));
   Serial.printf("[USB] État modem: %s\n", modemReady ? "démarré" : "arrêté");
+  Serial.println(F("[USB] ========================================"));
 }
 
 void configureWatchdog(uint32_t timeoutSeconds)

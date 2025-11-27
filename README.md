@@ -1,6 +1,6 @@
 # 🏥 OTT - Dispositif Médical IoT
 
-**Version 3.3 Enterprise** - Solution Cloud Complète
+**Version 3.4 Enterprise** - Solution Cloud Complète
 
 **HAPPLYZ MEDICAL SAS**
 
@@ -439,22 +439,52 @@ grep -r "function " api/ | sort | uniq -d
 
 #### Mode streaming USB – mode opératoire
 
-1. Alimenter l’OTT via USB et ouvrir un moniteur série 115200 bauds (Arduino IDE, screen, dashboard Web Serial…).
-2. Dès l’affichage de la bannière `[BOOT]`, taper `usb` puis Entrée (délai ~3 secondes).
-3. Le firmware reste éveillé et publie une mesure par seconde au format JSON + une ligne lisible.
+1. Alimenter l'OTT via USB et ouvrir le dashboard (`/dashboard/devices` → onglet "⚡ Streaming USB").
+2. Cliquer sur l'icône **🔌 Connexion USB** pour autoriser le port USB (Web Serial API).
+3. Le dashboard envoie automatiquement les commandes `usb` puis `start` pour activer le streaming continu.
+4. **Important** : En mode USB, le firmware **attend uniquement les commandes du dashboard** et n'envoie des mesures que sur demande explicite. Le modem n'est **pas démarré automatiquement** pour économiser l'énergie et éviter les connexions réseau inutiles.
 
-Commandes durant la session :
+**Mode sécurisé (v3.5+)** : Le firmware ne fait rien d'autre qu'attendre les commandes entrantes du dashboard. Toutes les actions doivent être déclenchées depuis le dashboard pour garantir la sécurité.
 
-- `once` → envoie immédiatement une mesure
-- `interval=<ms>` → change l’intervalle (200 à 10000 ms, défaut 1000 ms)
-- `help` → affiche l’aide
-- `exit` / `usb_stream_off` → quitte le streaming et redémarre pour reprendre le cycle 4G/deep sleep
+Commandes disponibles depuis le dashboard (icônes cliquables) :
+
+- **🆔 Identifiant / 💾 Firmware** : `device_info` → demande les informations du dispositif
+- **📡 Modem** : `modem_on` / `modem_off` → démarre/arrête le modem
+- **📍 GPS** : `gps` → teste le GPS (modem requis)
+- **💨 Débit / 🔋 Batterie** : `once` → demande une mesure immédiate
+- **📶 RSSI** : `test_network` → teste le réseau et affiche le RSSI (modem requis)
+- **▶️ Streaming** : `start` → démarre le streaming continu (mesures automatiques)
+- **⏸️ Streaming** : `stop` → arrête le streaming continu
+
+Commandes texte (console) :
+
+- `start` → démarre le streaming continu (mesures automatiques)
+- `stop` → arrête le streaming continu
+- `once` → envoie immédiatement une mesure unique
+- `device_info` → envoie les informations du dispositif
+- `interval=<ms>` → change l'intervalle (200 à 10000 ms, défaut 1000 ms)
+- `modem_on` → démarre le modem (pour tester réseau/GPS)
+- `modem_off` → arrête le modem
+- `test_network` → teste l'enregistrement réseau (modem doit être démarré)
+- `gps` → teste le GPS (modem doit être démarré)
+- `help` → affiche l'aide
+- `exit` → quitte le streaming et redémarre pour reprendre le cycle 4G/deep sleep
 
 📁 Firmwares : `hardware/firmware/vX.X/` (organisés par version, .bin et .ino ensemble)
 
 💻 Côté dashboard (`/dashboard/devices`), l’onglet « ⚡ Streaming USB » du modal dispositif permet désormais :
 - de déclencher `🔍 Détecter USB` (Web Serial) et de lire ICCID/Serial pour réconcilier automatiquement avec la base ;
-- d’afficher les logs bruts en plein écran (console verte) avec boutons `▶️ Redémarrer` / `⏹️ Arrêter` ;
+- d'afficher les logs en temps réel avec **deux couleurs distinctes** :
+  - **🔵 Bleu** : Logs du dashboard (commandes envoyées, statuts, erreurs)
+  - **🟢 Vert** : Logs du dispositif (mesures, firmware, modem, GPS)
+- **Sélection automatique du port** : Le port USB est automatiquement sélectionné dès qu'un dispositif est connecté
+- indicateurs d'état en temps réel organisés en 4 sections :
+  - **État de connexion** : USB (avec bouton détection/démarrage intégré), Streaming (avec pause/reprise)
+  - **Système** : Modem (démarrer/arrêter), GPS (test), Firmware, Identifiant
+  - **Mesures en temps réel** : Débit, Batterie, Signal RSSI
+  - **Statistiques** : Mesures reçues, Dernière mesure
+- contrôles interactifs pour démarrer/arrêter le modem, tester le réseau et le GPS (icônes avec tooltips) ;
+- **Mise à jour automatique** : Toutes les informations du dispositif (firmware_version, last_battery, status, last_seen) sont mises à jour automatiquement dans la base de données dès qu'une mesure est reçue
 - de voir immédiatement si l’on utilise un dispositif réel ou un « virtuel » (identifiant incomplet) avec bouton « Relancer la détection » ;
 - pour les admins, d’assigner le boîtier détecté au patient de leur choix directement depuis ce même onglet.
 

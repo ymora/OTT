@@ -217,9 +217,15 @@ export default function DevicesPage() {
     setSendMeasurementCallback(sendMeasurementToApi)
     
     // Fonction pour mettre à jour automatiquement le firmware_version dans la base
-    const updateDeviceFirmwareVersion = async (identifier, firmwareVersion) => {
-      if (!identifier || !firmwareVersion) {
-        logger.debug('⚠️ Identifiant ou version firmware manquant pour mise à jour')
+    const updateDeviceFirmwareVersion = async (identifier, firmwareVersion, additionalData = {}) => {
+      if (!identifier) {
+        logger.debug('⚠️ Identifiant manquant pour mise à jour')
+        return
+      }
+      
+      // Si firmwareVersion n'est pas fourni mais qu'on a des données supplémentaires, on peut quand même mettre à jour
+      if (!firmwareVersion && Object.keys(additionalData).length === 0) {
+        logger.debug('⚠️ Aucune donnée à mettre à jour')
         return
       }
       
@@ -274,27 +280,48 @@ export default function DevicesPage() {
           return
         }
         
-        // Vérifier si la version a changé
-        if (device.firmware_version === firmwareVersion) {
-          logger.debug('✅ Firmware_version déjà à jour:', firmwareVersion)
+        // Préparer les données à mettre à jour
+        const updateData = {}
+        
+        // Vérifier si la version a changé (seulement si firmwareVersion est fourni)
+        if (firmwareVersion && device.firmware_version !== firmwareVersion) {
+          updateData.firmware_version = firmwareVersion
+        }
+        
+        // Toujours mettre à jour last_seen et status si fournis (même si firmware_version n'a pas changé)
+        if (additionalData.last_seen) {
+          updateData.last_seen = additionalData.last_seen
+        }
+        if (additionalData.status) {
+          updateData.status = additionalData.status
+        }
+        // Mettre à jour last_battery si fourni
+        if (additionalData.last_battery !== undefined && additionalData.last_battery !== null) {
+          updateData.last_battery = additionalData.last_battery
+        }
+        
+        // Si rien à mettre à jour, sortir
+        if (Object.keys(updateData).length === 0) {
+          logger.debug('✅ Informations dispositif déjà à jour')
           return
         }
         
-        // Mettre à jour le firmware_version
-        logger.log('🔄 Mise à jour firmware_version:', { device: device.device_name, old: device.firmware_version, new: firmwareVersion })
+        // Mettre à jour les informations du dispositif
+        logger.log('🔄 Mise à jour informations dispositif:', { device: device.device_name, updates: updateData })
         await fetchJson(
           fetchWithAuth,
           API_URL,
           `/api.php/devices/${device.id}`,
           {
             method: 'PUT',
-            body: JSON.stringify({ firmware_version: firmwareVersion })
+            body: JSON.stringify(updateData)
           },
           { requiresAuth: true }
         )
         
-        logger.log('✅ Firmware_version mis à jour avec succès')
-        refetch() // Rafraîchir les données
+        logger.log('✅ Informations dispositif mises à jour avec succès')
+        // Rafraîchir les données pour afficher les informations à jour dans l'interface
+        await refetch()
       } catch (err) {
         logger.warn('⚠️ Erreur mise à jour firmware_version:', err)
       }
@@ -1670,6 +1697,23 @@ export default function DevicesPage() {
 
 
   const getStatusBadge = (device) => {
+    // Vérifier si le dispositif est actuellement connecté en USB (statut en temps réel)
+    const isUsbConnected = (usbConnectedDevice && (
+      usbConnectedDevice.sim_iccid === device.sim_iccid ||
+      usbConnectedDevice.device_serial === device.device_serial ||
+      usbConnectedDevice.id === device.id
+    )) || (usbVirtualDevice && (
+      usbVirtualDevice.sim_iccid === device.sim_iccid ||
+      usbVirtualDevice.device_serial === device.device_serial ||
+      usbVirtualDevice.device_name === device.device_name
+    ))
+    
+    // Si connecté en USB et streaming actif, toujours "En ligne"
+    if (isUsbConnected && (usbStreamStatus === 'running' || usbStreamStatus === 'paused')) {
+      return { label: 'En ligne (USB)', color: 'bg-green-100 text-green-700' }
+    }
+    
+    // Sinon, utiliser last_seen de la base de données
     if (!device.last_seen) return { label: 'Jamais vu', color: 'bg-gray-100 text-gray-700' }
     const hours = (Date.now() - new Date(device.last_seen).getTime()) / (1000 * 60 * 60)
     if (hours < 2) return { label: 'En ligne', color: 'bg-green-100 text-green-700' }

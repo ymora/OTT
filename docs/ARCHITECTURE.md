@@ -359,18 +359,31 @@ components/configuration/UsbStreamingTab.js  # Couche présentation (309 lignes)
 └── Affichage mesures
 ```
 
-### Flux de Streaming USB
+### Flux de Streaming USB (v3.5+)
 
 ```
-1. Connexion au port USB (connect())
+1. Connexion au port USB (connect()) - Sélection automatique si dispositif déjà connecté
    ↓
 2. Démarrage de la lecture (startReading())
    ↓
 3. Envoi commande "usb\n" au firmware (write('usb\n'))
    ↓
-4. Firmware envoie données JSON en continu
+4. Envoi commande "start\n" au firmware pour activer le streaming continu
    ↓
-5. Parsing et envoi à l'API (processUsbStreamLine)
+5. Firmware attend les commandes du dashboard (mode sécurisé)
+   ↓
+6. Dashboard envoie des commandes via icônes cliquables :
+   - start/stop : contrôle du streaming continu
+   - once : mesure immédiate
+   - device_info : informations du dispositif
+   - modem_on/off : contrôle du modem
+   - test_network/gps : tests réseau et GPS
+   ↓
+7. Firmware envoie données JSON uniquement sur commande explicite
+   ↓
+8. Parsing et envoi à l'API (processUsbStreamLine)
+   ↓
+9. Mise à jour automatique des informations du dispositif (firmware_version, last_battery, status, last_seen)
 ```
 
 ### Commande "usb" au Firmware
