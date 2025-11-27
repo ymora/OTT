@@ -100,6 +100,13 @@ export default function DeviceConfigurationTab() {
     setSuccess(null)
 
     try {
+      const selectedDevice = devices.find(d => d.id === parseInt(selectedDeviceId))
+      if (!selectedDevice) {
+        setError('Dispositif introuvable')
+        return
+      }
+
+      // 1. Mettre à jour la base de données
       const updateData = {}
       
       if (config.sleep_minutes !== null && config.sleep_minutes !== '') {
@@ -126,7 +133,54 @@ export default function DeviceConfigurationTab() {
         { requiresAuth: true }
       )
 
-      setSuccess('Configuration sauvegardée avec succès')
+      // 2. Créer automatiquement une commande OTA pour appliquer la configuration
+      const commandPayload = {}
+      
+      // Mapper les paramètres vers le format attendu par UPDATE_CONFIG
+      if (config.sleep_minutes !== null && config.sleep_minutes !== '') {
+        commandPayload.sleep_minutes_default = parseInt(config.sleep_minutes)
+      }
+      if (config.measurement_duration_ms !== null && config.measurement_duration_ms !== '') {
+        commandPayload.measurement_duration_ms = parseInt(config.measurement_duration_ms)
+      }
+      if (config.send_every_n_wakeups !== null && config.send_every_n_wakeups !== '') {
+        commandPayload.send_every_n_wakeups = parseInt(config.send_every_n_wakeups)
+      }
+      if (config.calibration_coefficients && Array.isArray(config.calibration_coefficients)) {
+        commandPayload.calA0 = parseFloat(config.calibration_coefficients[0]) || 0
+        commandPayload.calA1 = parseFloat(config.calibration_coefficients[1]) || 1
+        commandPayload.calA2 = parseFloat(config.calibration_coefficients[2]) || 0
+      }
+
+      // Créer la commande OTA seulement si au moins un paramètre est défini
+      if (Object.keys(commandPayload).length > 0) {
+        try {
+          const commandBody = {
+            command: 'UPDATE_CONFIG',
+            payload: commandPayload,
+            priority: 'normal',
+            expires_in_seconds: 7 * 24 * 60 * 60 // 7 jours
+          }
+
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${selectedDevice.sim_iccid}/commands`,
+            {
+              method: 'POST',
+              body: JSON.stringify(commandBody)
+            },
+            { requiresAuth: true }
+          )
+          logger.debug('Commande OTA UPDATE_CONFIG créée avec succès')
+        } catch (cmdErr) {
+          // Ne pas bloquer la sauvegarde si la création de commande échoue
+          logger.error('Erreur création commande OTA:', cmdErr)
+          // On continue quand même, la DB est déjà mise à jour
+        }
+      }
+
+      setSuccess('Configuration sauvegardée. Le dispositif sera mis à jour lors de sa prochaine connexion.')
       await refetch()
       
       // Recharger la configuration pour afficher les valeurs sauvegardées
@@ -137,7 +191,7 @@ export default function DeviceConfigurationTab() {
     } finally {
       setSaving(false)
     }
-  }, [selectedDeviceId, config, fetchWithAuth, API_URL, refetch, loadDeviceConfig])
+  }, [selectedDeviceId, config, devices, fetchWithAuth, API_URL, refetch, loadDeviceConfig])
 
   const selectedDevice = devices.find(d => d.id === parseInt(selectedDeviceId))
 
@@ -146,7 +200,11 @@ export default function DeviceConfigurationTab() {
       <div className="card">
         <h2 className="text-xl font-semibold mb-4">⚙️ Configuration des dispositifs</h2>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          Configurez les paramètres de réveil, mesure et envoi des données pour chaque dispositif
+          Configurez les paramètres de réveil, mesure et envoi des données pour chaque dispositif.
+          <br />
+          <span className="text-primary-600 dark:text-primary-400 font-medium">
+            ℹ️ Les modifications seront appliquées au dispositif lors de sa prochaine connexion via OTA.
+          </span>
         </p>
 
         {/* Sélection du dispositif */}
