@@ -1461,7 +1461,7 @@ export default function DevicesPage() {
     e.preventDefault()
     if (!selectedDevice) return
 
-    const payload = {}
+    let payload = {}
     if (commandForm.command === 'SET_SLEEP_SECONDS') {
       payload.seconds = Number(commandForm.sleepSeconds) || 300
     } else if (commandForm.command === 'PING') {
