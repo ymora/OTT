@@ -32,6 +32,8 @@ export default function UsbStreamingTab() {
   const [selectedPortId, setSelectedPortId] = useState('')
   const [loadingPorts, setLoadingPorts] = useState(false)
   const [isToggling, setIsToggling] = useState(false)
+  const [modemStatus, setModemStatus] = useState('stopped') // 'stopped', 'starting', 'running', 'stopping'
+  const [sendingCommand, setSendingCommand] = useState(false)
   
   // Suivi des valeurs min/max
   const [minMaxValues, setMinMaxValues] = useState({
@@ -233,6 +235,61 @@ export default function UsbStreamingTab() {
     }
   }, [usbStreamStatus])
 
+  // Détecter l'état du modem depuis les logs
+  useEffect(() => {
+    if (usbStreamLogs.length === 0) return
+    
+    const lastLogs = usbStreamLogs.slice(-5) // Vérifier les 5 derniers logs
+    for (const log of lastLogs) {
+      const line = log.line || ''
+      if (line.includes('✅ Modem démarré avec succès') || line.includes('Modem démarré')) {
+        setModemStatus('running')
+      } else if (line.includes('✅ Modem arrêté') || line.includes('Modem arrêté')) {
+        setModemStatus('stopped')
+      } else if (line.includes('Démarrage du modem')) {
+        setModemStatus('starting')
+      } else if (line.includes('Arrêt du modem')) {
+        setModemStatus('stopping')
+      }
+    }
+  }, [usbStreamLogs])
+
+  // Fonction pour envoyer une commande au dispositif
+  const sendCommand = async (command) => {
+    if (!isConnected || !port || sendingCommand) return
+    
+    setSendingCommand(true)
+    try {
+      const encoder = new TextEncoder()
+      const data = encoder.encode(command + '\n')
+      await write(data)
+      logger.log(`[USB] Commande envoyée: ${command}`)
+    } catch (err) {
+      logger.error('[USB] Erreur envoi commande:', err)
+    } finally {
+      setSendingCommand(false)
+    }
+  }
+
+  // Handlers pour les commandes modem
+  const handleModemOn = () => {
+    sendCommand('modem_on')
+    setModemStatus('starting')
+  }
+
+  const handleModemOff = () => {
+    sendCommand('modem_off')
+    setModemStatus('stopping')
+  }
+
+  const handleTestNetwork = () => {
+    sendCommand('test_network')
+  }
+
+  const handleTestGps = () => {
+    sendCommand('gps')
+  }
+
   const isStreaming = usbStreamStatus === 'running' || usbStreamStatus === 'waiting' || usbStreamStatus === 'connecting'
   const isPaused = usbStreamStatus === 'paused'
   const canToggle = isSupported && !isToggling && (selectedPortId || isStreaming || isPaused)
@@ -326,6 +383,48 @@ export default function UsbStreamingTab() {
           </div>
         )}
 
+        {/* Contrôles modem et GPS */}
+        {isStreaming && (
+          <div className="mb-4 p-4 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">🔧 Contrôles modem et GPS</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <button
+                onClick={handleModemOn}
+                disabled={!isConnected || sendingCommand || modemStatus === 'running' || modemStatus === 'starting'}
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {modemStatus === 'starting' ? '⏳...' : '📡 Démarrer modem'}
+              </button>
+              <button
+                onClick={handleModemOff}
+                disabled={!isConnected || sendingCommand || modemStatus === 'stopped' || modemStatus === 'stopping'}
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {modemStatus === 'stopping' ? '⏳...' : '🛑 Arrêter modem'}
+              </button>
+              <button
+                onClick={handleTestNetwork}
+                disabled={!isConnected || sendingCommand || modemStatus !== 'running'}
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Tester l'enregistrement réseau (nécessite modem démarré)"
+              >
+                📶 Test réseau
+              </button>
+              <button
+                onClick={handleTestGps}
+                disabled={!isConnected || sendingCommand || modemStatus !== 'running'}
+                className="px-3 py-2 text-xs font-medium rounded-lg bg-purple-500 hover:bg-purple-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Tester le GPS (nécessite modem démarré)"
+              >
+                📍 Test GPS
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              💡 Le modem est arrêté par défaut pour économiser l'énergie. Démarrez-le pour tester le réseau et le GPS.
+            </p>
+          </div>
+        )}
+
         {/* Indicateurs d'état */}
         <div className="mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* État connexion USB */}
@@ -388,13 +487,28 @@ export default function UsbStreamingTab() {
 
           {/* État modem */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+              modemStatus === 'running'
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                : modemStatus === 'starting' || modemStatus === 'stopping'
+                ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+            }`}>
               <span className="text-xl">📡</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Modem</p>
-              <p className="text-sm font-semibold text-gray-400 dark:text-gray-500 truncate">
-                Désactivé (USB)
+              <p className={`text-sm font-semibold truncate ${
+                modemStatus === 'running'
+                  ? 'text-green-600 dark:text-green-400'
+                  : modemStatus === 'starting' || modemStatus === 'stopping'
+                  ? 'text-yellow-600 dark:text-yellow-400'
+                  : 'text-gray-400 dark:text-gray-500'
+              }`}>
+                {modemStatus === 'running' ? 'Démarré' : 
+                 modemStatus === 'starting' ? 'Démarrage...' : 
+                 modemStatus === 'stopping' ? 'Arrêt...' : 
+                 'Arrêté'}
               </p>
             </div>
           </div>

@@ -157,6 +157,8 @@ void stopModem();
 bool waitForSimReady(uint32_t timeoutMs);
 bool attachNetwork(uint32_t timeoutMs);
 bool connectData(uint32_t timeoutMs);
+String getRecommendedApnForOperator(const String& operatorCode);
+bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries = 3);
 void goToSleep(uint32_t minutes);
 void configureWatchdog(uint32_t timeoutSeconds);
 void feedWatchdog();
@@ -615,6 +617,73 @@ void usbStreamingLoop()
           continue;
         }
 
+        // Démarrer le modem pour tester l'enregistrement réseau et GPS
+        if (lowered == "modem_on" || lowered == "start_modem") {
+          if (modemReady) {
+            Serial.println(F("[USB] Modem déjà démarré"));
+          } else {
+            Serial.println(F("[USB] Démarrage du modem..."));
+            if (startModem()) {
+              Serial.println(F("[USB] ✅ Modem démarré avec succès"));
+              Serial.println(F("[USB] Vous pouvez maintenant tester le GPS avec 'gps' ou 'location'"));
+            } else {
+              Serial.println(F("[USB] ❌ Échec démarrage modem"));
+            }
+          }
+          continue;
+        }
+
+        // Arrêter le modem
+        if (lowered == "modem_off" || lowered == "stop_modem") {
+          if (!modemReady) {
+            Serial.println(F("[USB] Modem déjà arrêté"));
+          } else {
+            Serial.println(F("[USB] Arrêt du modem..."));
+            stopModem();
+            Serial.println(F("[USB] ✅ Modem arrêté"));
+          }
+          continue;
+        }
+
+        // Tester l'enregistrement réseau (nécessite modem démarré)
+        if (lowered == "test_network" || lowered == "network") {
+          if (!modemReady) {
+            Serial.println(F("[USB] ⚠️  Modem non démarré. Tapez 'modem_on' d'abord."));
+          } else {
+            Serial.println(F("[USB] Test enregistrement réseau..."));
+            logRadioSnapshot("test:start");
+            if (modem.isNetworkConnected()) {
+              Serial.println(F("[USB] ✅ Réseau déjà attaché"));
+            } else {
+              Serial.println(F("[USB] Tentative d'attache au réseau..."));
+              if (attachNetwork(networkAttachTimeoutMs)) {
+                Serial.println(F("[USB] ✅ Réseau attaché avec succès"));
+                logRadioSnapshot("test:success");
+              } else {
+                Serial.println(F("[USB] ❌ Échec attache réseau"));
+                logRadioSnapshot("test:failed");
+              }
+            }
+          }
+          continue;
+        }
+
+        // Tester le GPS (nécessite modem démarré)
+        if (lowered == "gps" || lowered == "location" || lowered == "test_gps") {
+          if (!modemReady) {
+            Serial.println(F("[USB] ⚠️  Modem non démarré. Tapez 'modem_on' d'abord."));
+          } else {
+            Serial.println(F("[USB] Test GPS..."));
+            float lat = 0.0, lon = 0.0;
+            if (getDeviceLocation(&lat, &lon)) {
+              Serial.printf("[USB] ✅ Position obtenue: %.6f, %.6f\n", lat, lon);
+            } else {
+              Serial.println(F("[USB] ❌ Échec obtention position GPS"));
+            }
+          }
+          continue;
+        }
+
         if (lowered.startsWith("interval=")) {
           long requested = lowered.substring(9).toInt();
           if (requested < static_cast<long>(USB_STREAM_MIN_INTERVAL_MS) ||
@@ -645,7 +714,7 @@ void usbStreamingLoop()
   }
 }
 
-void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude = nullptr, float* longitude = nullptr)
+void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude, float* longitude)
 {
   StaticJsonDocument<400> doc; // Augmenté pour inclure GPS
   doc["mode"] = "usb_stream";
@@ -691,9 +760,14 @@ void printUsbStreamHelp(uint32_t intervalMs)
   Serial.println(F("[USB] Commandes (terminer par Entrée):"));
   Serial.println(F("  once ............. Mesure immédiate sans attendre l'intervalle"));
   Serial.println(F("  interval=<ms> .... Modifier l'intervalle (200-10000 ms)"));
+  Serial.println(F("  modem_on ......... Démarrer le modem (pour tester réseau/GPS)"));
+  Serial.println(F("  modem_off ........ Arrêter le modem"));
+  Serial.println(F("  test_network ...... Tester l'enregistrement réseau"));
+  Serial.println(F("  gps .............. Tester le GPS"));
   Serial.println(F("  help ............. Afficher cette aide"));
   Serial.println(F("  exit ............. Quitter le streaming et redémarrer"));
   Serial.printf("[USB] Intervalle actuel: %lu ms.\n", static_cast<unsigned long>(intervalMs));
+  Serial.printf("[USB] État modem: %s\n", modemReady ? "démarré" : "arrêté");
 }
 
 void configureWatchdog(uint32_t timeoutSeconds)
@@ -761,6 +835,21 @@ void logRadioSnapshot(const char* stage)
                 oper.length() ? oper.c_str() : "<n/a>",
                 eps ? "ok" : "KO",
                 gprs ? "ok" : "KO");
+  
+  // Logs détaillés pour REG_DENIED
+  if (reg == REG_DENIED) {
+    Serial.println(F("[MODEM] ⚠️  ENREGISTREMENT REFUSÉ - Causes possibles:"));
+    Serial.println(F("[MODEM]   1. Carte SIM non activée pour les données"));
+    Serial.println(F("[MODEM]   2. APN incorrect pour l'opérateur"));
+    Serial.println(F("[MODEM]   3. Problème d'authentification réseau"));
+    if (oper.length() > 0) {
+      String recommendedApn = getRecommendedApnForOperator(oper);
+      if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
+        Serial.printf("[MODEM]   → APN recommandé pour %s: %s (actuel: %s)\n", 
+                      oper.c_str(), recommendedApn.c_str(), NETWORK_APN.c_str());
+      }
+    }
+  }
 }
 
 bool waitForSimReady(uint32_t timeoutMs)
@@ -783,26 +872,101 @@ bool waitForSimReady(uint32_t timeoutMs)
   return false;
 }
 
-bool attachNetwork(uint32_t timeoutMs)
+/**
+ * Obtient l'APN recommandé selon l'opérateur détecté
+ */
+String getRecommendedApnForOperator(const String& operatorCode)
+{
+  // Codes opérateurs français (MCC+MNC)
+  if (operatorCode.indexOf("20801") >= 0 || operatorCode.indexOf("20802") >= 0) {
+    // Orange France
+    return String("orange");
+  } else if (operatorCode.indexOf("20810") >= 0 || operatorCode.indexOf("20811") >= 0) {
+    // SFR France
+    return String("sl2sfr");
+  } else if (operatorCode.indexOf("20815") >= 0 || operatorCode.indexOf("20816") >= 0) {
+    // Free Mobile France
+    return String("free");
+  } else if (operatorCode.indexOf("20820") >= 0) {
+    // Bouygues Telecom France
+    return String("mmsbouygtel");
+  }
+  
+  // Par défaut, retourner l'APN configuré
+  return NETWORK_APN;
+}
+
+/**
+ * Attache le réseau avec retry et backoff exponentiel
+ * Gère spécifiquement le cas REG_DENIED avec tentative d'APN alternatif
+ */
+bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
 {
   unsigned long start = millis();
-  Serial.println(F("[MODEM] attache réseau en cours"));
+  uint8_t retryCount = 0;
+  uint32_t baseDelay = 5000; // 5 secondes de base
+  
+  Serial.println(F("[MODEM] attache réseau en cours (avec retry)"));
   logRadioSnapshot("attach:start");
-  while (millis() - start < timeoutMs) {
+  
+  while (millis() - start < timeoutMs && retryCount < maxRetries) {
     feedWatchdog();
+    
+    // Vérifier si déjà connecté
     if (modem.isNetworkConnected()) {
       logRadioSnapshot("attach:success");
       return true;
     }
+    
+    // Obtenir le statut d'enregistrement
+    RegStatus reg = modem.getRegistrationStatus();
+    
+    // Si REG_DENIED, essayer avec un APN alternatif
+    if (reg == REG_DENIED && retryCount == 0) {
+      String oper = modem.getOperator();
+      if (oper.length() > 0) {
+        String recommendedApn = getRecommendedApnForOperator(oper);
+        if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
+          Serial.printf("[MODEM] ⚠️  Tentative avec APN alternatif: %s (au lieu de %s)\n", 
+                        recommendedApn.c_str(), NETWORK_APN.c_str());
+          modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), recommendedApn.c_str(), "\"");
+          modem.waitResponse(2000);
+          delay(2000); // Attendre que l'APN soit appliqué
+          feedWatchdog();
+        }
+      }
+    }
+    
+    // Attendre l'enregistrement réseau
     if (modem.waitForNetwork(10000)) {
       logRadioSnapshot("attach:event");
       return true;
     }
-    Serial.println(F("[MODEM] attente réseau..."));
+    
+    // Log du statut actuel
+    Serial.printf("[MODEM] attente réseau... (tentative %d/%d)\n", retryCount + 1, maxRetries);
     logRadioSnapshot("attach:retry");
+    
+    // Backoff exponentiel : délai augmente à chaque retry
+    uint32_t delayMs = baseDelay * (1 << retryCount); // 5s, 10s, 20s...
+    if (delayMs > 30000) delayMs = 30000; // Max 30 secondes
+    Serial.printf("[MODEM] Attente %lu ms avant prochaine tentative...\n", delayMs);
+    delay(delayMs);
+    retryCount++;
+    feedWatchdog();
   }
+  
   logRadioSnapshot("attach:timeout");
+  Serial.printf("[MODEM] ❌ Échec après %d tentatives\n", retryCount);
   return false;
+}
+
+/**
+ * Attache le réseau (fonction originale, maintenant utilise attachNetworkWithRetry)
+ */
+bool attachNetwork(uint32_t timeoutMs)
+{
+  return attachNetworkWithRetry(timeoutMs, 3);
 }
 
 bool connectData(uint32_t timeoutMs)
@@ -810,21 +974,66 @@ bool connectData(uint32_t timeoutMs)
   unsigned long start = millis();
   Serial.println(F("[MODEM] connexion data"));
   logRadioSnapshot("data:start");
-  while (millis() - start < timeoutMs) {
+  
+  // Liste d'APN à essayer (APN configuré en premier, puis APN recommandé)
+  String apnList[3];
+  apnList[0] = NETWORK_APN;
+  
+  String oper = modem.getOperator();
+  if (oper.length() > 0) {
+    String recommendedApn = getRecommendedApnForOperator(oper);
+    if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
+      apnList[1] = recommendedApn;
+    }
+  }
+  // APN génériques en dernier recours
+  apnList[2] = "internet";
+  
+  uint8_t apnIndex = 0;
+  uint8_t maxApnAttempts = 3;
+  
+  while (millis() - start < timeoutMs && apnIndex < maxApnAttempts) {
     feedWatchdog();
+    
     if (modem.isGprsConnected()) {
       logRadioSnapshot("data:already");
       return true;
     }
-    if (modem.gprsConnect(NETWORK_APN.c_str(), "", "")) {
+    
+    String currentApn = apnList[apnIndex];
+    if (currentApn.length() == 0) {
+      apnIndex++;
+      continue;
+    }
+    
+    Serial.printf("[MODEM] Tentative connexion GPRS avec APN: %s\n", currentApn.c_str());
+    
+    // Configurer l'APN avant de se connecter
+    modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), currentApn.c_str(), "\"");
+    modem.waitResponse(2000);
+    delay(1000);
+    feedWatchdog();
+    
+    if (modem.gprsConnect(currentApn.c_str(), "", "")) {
       logRadioSnapshot("data:connected");
+      Serial.printf("[MODEM] ✅ Connexion GPRS réussie avec APN: %s\n", currentApn.c_str());
       return true;
     }
-    Serial.println(F("[MODEM] tentative GPRS supplémentaire"));
+    
+    Serial.printf("[MODEM] ❌ Échec connexion GPRS avec APN: %s\n", currentApn.c_str());
     logRadioSnapshot("data:retry");
-    delay(2000);
+    
+    // Essayer l'APN suivant après un délai
+    apnIndex++;
+    if (apnIndex < maxApnAttempts) {
+      Serial.println(F("[MODEM] Essai avec APN suivant..."));
+      delay(3000);
+    }
+    feedWatchdog();
   }
+  
   logRadioSnapshot("data:timeout");
+  Serial.println(F("[MODEM] ❌ Échec connexion GPRS après toutes les tentatives"));
   return false;
 }
 
