@@ -18,6 +18,7 @@ import { decorateUsbInfo } from '@/lib/usbDevices'
 import { startQueueProcessor, stopQueueProcessor } from '@/lib/measurementSender'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
+import { buildUpdateConfigPayload, buildUpdateCalibrationPayload } from '@/lib/deviceCommands'
 
 // Lazy load des composants lourds pour accélérer Fast Refresh
 const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr: false })
@@ -1466,49 +1467,42 @@ export default function DevicesPage() {
     } else if (commandForm.command === 'PING') {
       payload.message = commandForm.message?.trim() || 'PING'
     } else if (commandForm.command === 'UPDATE_CONFIG') {
-      const addString = (key, value) => {
-        const trimmed = (value ?? '').trim()
-        if (trimmed) payload[key] = trimmed
+      // Utiliser la fonction utilitaire pour construire le payload
+      const config = {
+        apn: commandForm.configApn,
+        jwt: commandForm.configJwt,
+        iccid: commandForm.configIccid,
+        serial: commandForm.configSerial,
+        simPin: commandForm.configSimPin,
+        sleepMinutes: commandForm.configSleepMinutes,
+        airflowPasses: commandForm.configAirflowPasses,
+        airflowSamples: commandForm.configAirflowSamples,
+        airflowDelay: commandForm.configAirflowDelay,
+        watchdogSeconds: commandForm.configWatchdogSeconds,
+        modemBootTimeout: commandForm.configModemBootTimeout,
+        simReadyTimeout: commandForm.configSimReadyTimeout,
+        networkAttachTimeout: commandForm.configNetworkAttachTimeout,
+        modemReboots: commandForm.configModemReboots,
+        otaPrimaryUrl: commandForm.configOtaPrimaryUrl,
+        otaFallbackUrl: commandForm.configOtaFallbackUrl,
+        otaMd5: commandForm.configOtaMd5
       }
-      const addNumber = (key, value) => {
-        if (value === '' || value === null || value === undefined) return
-        const num = Number(value)
-        if (Number.isFinite(num)) {
-          payload[key] = num
+      
+      try {
+        payload = buildUpdateConfigPayload(config)
+        if (Object.keys(payload).length === 0) {
+          setCommandError('Veuillez renseigner au moins un champ de configuration')
+          return
         }
-      }
-      addString('apn', commandForm.configApn)
-      addString('jwt', commandForm.configJwt)
-      addString('iccid', commandForm.configIccid)
-      addString('serial', commandForm.configSerial)
-      addString('sim_pin', commandForm.configSimPin)
-      addNumber('sleep_minutes_default', commandForm.configSleepMinutes)
-      addNumber('airflow_passes', commandForm.configAirflowPasses)
-      addNumber('airflow_samples_per_pass', commandForm.configAirflowSamples)
-      addNumber('airflow_delay_ms', commandForm.configAirflowDelay)
-      addNumber('watchdog_seconds', commandForm.configWatchdogSeconds)
-      addNumber('modem_boot_timeout_ms', commandForm.configModemBootTimeout)
-      addNumber('sim_ready_timeout_ms', commandForm.configSimReadyTimeout)
-      addNumber('network_attach_timeout_ms', commandForm.configNetworkAttachTimeout)
-      addNumber('modem_max_reboots', commandForm.configModemReboots)
-      addString('ota_primary_url', commandForm.configOtaPrimaryUrl)
-      addString('ota_fallback_url', commandForm.configOtaFallbackUrl)
-      addString('ota_md5', commandForm.configOtaMd5)
-
-      if (Object.keys(payload).length === 0) {
-        setCommandError('Veuillez renseigner au moins un champ de configuration')
+      } catch (err) {
+        setCommandError(err.message || 'Erreur lors de la construction du payload')
         return
       }
     } else if (commandForm.command === 'UPDATE_CALIBRATION') {
-      if (commandForm.calA0 === '' || commandForm.calA1 === '' || commandForm.calA2 === '') {
-        setCommandError('Veuillez fournir les coefficients a0, a1 et a2')
-        return
-      }
-      payload.a0 = Number(commandForm.calA0)
-      payload.a1 = Number(commandForm.calA1)
-      payload.a2 = Number(commandForm.calA2)
-      if ([payload.a0, payload.a1, payload.a2].some((value) => Number.isNaN(value))) {
-        setCommandError('Les coefficients doivent être numériques')
+      try {
+        payload = buildUpdateCalibrationPayload(commandForm.calA0, commandForm.calA1, commandForm.calA2)
+      } catch (err) {
+        setCommandError(err.message)
         return
       }
     } else if (commandForm.command === 'OTA_REQUEST') {

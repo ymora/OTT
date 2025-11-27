@@ -11,6 +11,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import logger from '@/lib/logger'
+import { buildUpdateConfigPayload, buildUpdateCalibrationPayload } from '@/lib/deviceCommands'
 
 const commandOptions = [
   { value: 'SET_SLEEP_SECONDS', label: 'Modifier intervalle de sommeil' },
@@ -111,49 +112,42 @@ export default function CommandsPage() {
     } else if (form.command === 'PING') {
       payload.message = form.message?.trim() || 'PING'
     } else if (form.command === 'UPDATE_CONFIG') {
-      const addString = (key, value) => {
-        const trimmed = (value ?? '').trim()
-        if (trimmed) payload[key] = trimmed
+      // Utiliser la fonction utilitaire pour construire le payload
+      const config = {
+        apn: form.configApn,
+        jwt: form.configJwt,
+        iccid: form.configIccid,
+        serial: form.configSerial,
+        simPin: form.configSimPin,
+        sleepMinutes: form.configSleepMinutes,
+        airflowPasses: form.configAirflowPasses,
+        airflowSamples: form.configAirflowSamples,
+        airflowDelay: form.configAirflowDelay,
+        watchdogSeconds: form.configWatchdogSeconds,
+        modemBootTimeout: form.configModemBootTimeout,
+        simReadyTimeout: form.configSimReadyTimeout,
+        networkAttachTimeout: form.configNetworkAttachTimeout,
+        modemReboots: form.configModemReboots,
+        otaPrimaryUrl: form.configOtaPrimaryUrl,
+        otaFallbackUrl: form.configOtaFallbackUrl,
+        otaMd5: form.configOtaMd5
       }
-      const addNumber = (key, value) => {
-        if (value === '' || value === null || value === undefined) return
-        const num = Number(value)
-        if (Number.isFinite(num)) {
-          payload[key] = num
+      
+      try {
+        payload = buildUpdateConfigPayload(config)
+        if (Object.keys(payload).length === 0) {
+          setActionError('Veuillez renseigner au moins un champ de configuration')
+          return
         }
-      }
-      addString('apn', form.configApn)
-      addString('jwt', form.configJwt)
-      addString('iccid', form.configIccid)
-      addString('serial', form.configSerial)
-      addString('sim_pin', form.configSimPin)
-      addNumber('sleep_minutes_default', form.configSleepMinutes)
-      addNumber('airflow_passes', form.configAirflowPasses)
-      addNumber('airflow_samples_per_pass', form.configAirflowSamples)
-      addNumber('airflow_delay_ms', form.configAirflowDelay)
-      addNumber('watchdog_seconds', form.configWatchdogSeconds)
-      addNumber('modem_boot_timeout_ms', form.configModemBootTimeout)
-      addNumber('sim_ready_timeout_ms', form.configSimReadyTimeout)
-      addNumber('network_attach_timeout_ms', form.configNetworkAttachTimeout)
-      addNumber('modem_max_reboots', form.configModemReboots)
-      addString('ota_primary_url', form.configOtaPrimaryUrl)
-      addString('ota_fallback_url', form.configOtaFallbackUrl)
-      addString('ota_md5', form.configOtaMd5)
-
-      if (Object.keys(payload).length === 0) {
-        setActionError('Veuillez renseigner au moins un champ de configuration')
+      } catch (err) {
+        setActionError(err.message || 'Erreur lors de la construction du payload')
         return
       }
     } else if (form.command === 'UPDATE_CALIBRATION') {
-      if (form.calA0 === '' || form.calA1 === '' || form.calA2 === '') {
-        setActionError('Veuillez fournir les coefficients a0, a1 et a2')
-        return
-      }
-      payload.a0 = Number(form.calA0)
-      payload.a1 = Number(form.calA1)
-      payload.a2 = Number(form.calA2)
-      if ([payload.a0, payload.a1, payload.a2].some((value) => Number.isNaN(value))) {
-        setActionError('Les coefficients doivent être numériques')
+      try {
+        payload = buildUpdateCalibrationPayload(form.calA0, form.calA1, form.calA2)
+      } catch (err) {
+        setActionError(err.message)
         return
       }
     } else if (form.command === 'OTA_REQUEST') {

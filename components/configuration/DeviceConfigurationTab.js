@@ -8,6 +8,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import logger from '@/lib/logger'
+import { createUpdateConfigCommand, createUpdateCalibrationCommand } from '@/lib/deviceCommands'
 
 export default function DeviceConfigurationTab() {
   const { fetchWithAuth, API_URL } = useAuth()
@@ -134,44 +135,28 @@ export default function DeviceConfigurationTab() {
       )
 
       // 2. Créer automatiquement des commandes OTA pour appliquer la configuration
-      const configPayload = {}
-      let hasConfigPayload = false
+      const configForCommand = {
+        sleep_minutes: config.sleep_minutes,
+        measurement_duration_ms: config.measurement_duration_ms,
+        send_every_n_wakeups: config.send_every_n_wakeups
+      }
       
-      // Mapper les paramètres vers le format attendu par UPDATE_CONFIG
-      if (config.sleep_minutes !== null && config.sleep_minutes !== '') {
-        configPayload.sleep_minutes_default = parseInt(config.sleep_minutes)
-        hasConfigPayload = true
-      }
-      if (config.measurement_duration_ms !== null && config.measurement_duration_ms !== '') {
-        configPayload.measurement_duration_ms = parseInt(config.measurement_duration_ms)
-        hasConfigPayload = true
-      }
-      if (config.send_every_n_wakeups !== null && config.send_every_n_wakeups !== '') {
-        configPayload.send_every_n_wakeups = parseInt(config.send_every_n_wakeups)
-        hasConfigPayload = true
-      }
+      // Vérifier si au moins un paramètre de config est défini
+      const hasConfigParams = 
+        (config.sleep_minutes !== null && config.sleep_minutes !== '') ||
+        (config.measurement_duration_ms !== null && config.measurement_duration_ms !== '') ||
+        (config.send_every_n_wakeups !== null && config.send_every_n_wakeups !== '')
 
       // Créer la commande UPDATE_CONFIG si nécessaire
-      if (hasConfigPayload) {
+      if (hasConfigParams) {
         try {
-          const commandBody = {
-            command: 'UPDATE_CONFIG',
-            payload: configPayload,
-            priority: 'normal',
-            expires_in_seconds: 7 * 24 * 60 * 60 // 7 jours
-          }
-
-          await fetchJson(
+          await createUpdateConfigCommand(
             fetchWithAuth,
             API_URL,
-            `/api.php/devices/${selectedDevice.sim_iccid}/commands`,
-            {
-              method: 'POST',
-              body: JSON.stringify(commandBody)
-            },
-            { requiresAuth: true }
+            selectedDevice.sim_iccid,
+            configForCommand,
+            { priority: 'normal', expiresInSeconds: 7 * 24 * 60 * 60 }
           )
-          logger.debug('Commande OTA UPDATE_CONFIG créée avec succès')
         } catch (cmdErr) {
           // Ne pas bloquer la sauvegarde si la création de commande échoue
           logger.error('Erreur création commande OTA UPDATE_CONFIG:', cmdErr)
@@ -180,35 +165,22 @@ export default function DeviceConfigurationTab() {
 
       // Créer une commande UPDATE_CALIBRATION séparée pour les coefficients
       if (config.calibration_coefficients && Array.isArray(config.calibration_coefficients)) {
-        const calA0 = parseFloat(config.calibration_coefficients[0])
-        const calA1 = parseFloat(config.calibration_coefficients[1])
-        const calA2 = parseFloat(config.calibration_coefficients[2])
+        const calA0 = config.calibration_coefficients[0]
+        const calA1 = config.calibration_coefficients[1]
+        const calA2 = config.calibration_coefficients[2]
         
         // Vérifier que les valeurs sont valides
-        if (!isNaN(calA0) && !isNaN(calA1) && !isNaN(calA2)) {
+        if (calA0 !== undefined && calA1 !== undefined && calA2 !== undefined) {
           try {
-            const calibrationBody = {
-              command: 'UPDATE_CALIBRATION',
-              payload: {
-                a0: calA0,
-                a1: calA1,
-                a2: calA2
-              },
-              priority: 'normal',
-              expires_in_seconds: 7 * 24 * 60 * 60 // 7 jours
-            }
-
-            await fetchJson(
+            await createUpdateCalibrationCommand(
               fetchWithAuth,
               API_URL,
-              `/api.php/devices/${selectedDevice.sim_iccid}/commands`,
-              {
-                method: 'POST',
-                body: JSON.stringify(calibrationBody)
-              },
-              { requiresAuth: true }
+              selectedDevice.sim_iccid,
+              calA0,
+              calA1,
+              calA2,
+              { priority: 'normal', expiresInSeconds: 7 * 24 * 60 * 60 }
             )
-            logger.debug('Commande OTA UPDATE_CALIBRATION créée avec succès')
           } catch (cmdErr) {
             logger.error('Erreur création commande OTA UPDATE_CALIBRATION:', cmdErr)
           }
