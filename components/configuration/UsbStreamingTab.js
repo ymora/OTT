@@ -290,15 +290,9 @@ export default function UsbStreamingTab() {
           </div>
         </div>
 
-        {/* Console de logs */}
+        {/* Console de logs - logs récents en haut */}
         <div 
-          ref={(el) => {
-            if (el && usbStreamLogs.length > 0) {
-              // Scroller vers le haut pour voir les nouveaux logs
-              el.scrollTop = 0
-            }
-          }}
-          className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 text-green-400 p-4 shadow-inner overflow-y-auto flex flex-col-reverse" 
+          className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 text-green-400 p-4 shadow-inner overflow-y-auto" 
           style={{ minHeight: '500px', maxHeight: '600px' }}
         >
           {usbStreamLogs.length === 0 ? (
