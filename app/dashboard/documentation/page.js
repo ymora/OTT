@@ -98,31 +98,7 @@ export default function DocumentationPage() {
   }, [])
 
   return (
-    <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 -m-6 overflow-y-auto">
-      <style jsx>{`
-        div::-webkit-scrollbar {
-          width: 12px;
-        }
-        div::-webkit-scrollbar-track {
-          background: rgba(0, 0, 0, 0.1);
-        }
-        div::-webkit-scrollbar-thumb {
-          background: rgba(0, 0, 0, 0.3);
-          border-radius: 6px;
-        }
-        div::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 0, 0, 0.5);
-        }
-        .dark div::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.1);
-        }
-        .dark div::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.3);
-        }
-        .dark div::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.5);
-        }
-      `}</style>
+    <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 -m-6 overflow-y-auto docs-scrollbar">
       <iframe
         ref={iframeRef}
         src={docUrl}
@@ -648,34 +624,7 @@ function MarkdownViewer({ fileName }) {
   }
 
   return (
-    <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 overflow-y-auto bg-gradient-to-b from-gray-50 to-white dark:from-[rgb(var(--night-bg-start))] dark:to-[rgb(var(--night-bg-mid))]" style={{
-      scrollbarWidth: 'thin',
-      scrollbarColor: 'rgba(0, 0, 0, 0.3) rgba(0, 0, 0, 0.1)'
-    }}>
-      <style jsx>{`
-        div::-webkit-scrollbar {
-          width: 12px;
-        }
-        div::-webkit-scrollbar-track {
-          background: rgba(0, 0, 0, 0.1);
-        }
-        div::-webkit-scrollbar-thumb {
-          background: rgba(0, 0, 0, 0.3);
-          border-radius: 6px;
-        }
-        div::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 0, 0, 0.5);
-        }
-        .dark div::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.1);
-        }
-        .dark div::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.3);
-        }
-        .dark div::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.5);
-        }
-      `}</style>
+    <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 overflow-y-auto bg-gradient-to-b from-gray-50 to-white dark:from-[rgb(var(--night-bg-start))] dark:to-[rgb(var(--night-bg-mid))] docs-scrollbar">
       {/* Menu de navigation sticky pour accès rapides */}
       {chartData && (
         <nav className="sticky top-0 z-50 bg-gradient-to-r from-primary-600 to-secondary-600 shadow-lg">
