@@ -194,7 +194,7 @@ void rollbackToPreviousFirmware();
 Measurement captureSensorSnapshot();
 bool detectUsbStreamingMode();
 void usbStreamingLoop();
-void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs);
+void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude = nullptr, float* longitude = nullptr);
 void printUsbStreamHelp(uint32_t intervalMs);
 bool getDeviceLocation(float* latitude, float* longitude);
 
@@ -560,7 +560,16 @@ void usbStreamingLoop()
 
     if (now - lastSend >= intervalMs) {
       Measurement snapshot = captureSensorSnapshot();
-      emitUsbMeasurement(snapshot, ++sequence, intervalMs);
+      
+      // Essayer d'obtenir la position GPS si le modem est disponible
+      // (en mode USB, le modem n'est généralement pas démarré, donc GPS sera null)
+      float lat = 0.0, lon = 0.0;
+      bool hasLocation = false;
+      if (modemReady) {
+        hasLocation = getDeviceLocation(&lat, &lon);
+      }
+      
+      emitUsbMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
       lastSend = now;
     }
 
@@ -593,7 +602,15 @@ void usbStreamingLoop()
 
         if (lowered == "once") {
           Measurement snapshot = captureSensorSnapshot();
-          emitUsbMeasurement(snapshot, ++sequence, intervalMs);
+          
+          // Essayer d'obtenir la position GPS si le modem est disponible
+          float lat = 0.0, lon = 0.0;
+          bool hasLocation = false;
+          if (modemReady) {
+            hasLocation = getDeviceLocation(&lat, &lon);
+          }
+          
+          emitUsbMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
           lastSend = millis();
           continue;
         }
@@ -628,9 +645,9 @@ void usbStreamingLoop()
   }
 }
 
-void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs)
+void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude = nullptr, float* longitude = nullptr)
 {
-  StaticJsonDocument<320> doc; // Augmenté pour inclure firmware_version
+  StaticJsonDocument<400> doc; // Augmenté pour inclure GPS
   doc["mode"] = "usb_stream";
   doc["seq"] = sequence;
   doc["flow_lpm"] = m.flow;
@@ -640,15 +657,33 @@ void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t interv
   doc["sleep_minutes"] = configuredSleepMinutes;
   doc["timestamp_ms"] = millis();
   doc["firmware_version"] = FIRMWARE_VERSION; // Version du firmware flashé
+  
+  // Ajouter la position GPS/réseau cellulaire si disponible
+  if (latitude != nullptr && longitude != nullptr) {
+    doc["latitude"] = *latitude;
+    doc["longitude"] = *longitude;
+  }
+  
   serializeJson(doc, Serial);
   Serial.println();
 
-  Serial.printf("[USB] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | interval=%lums\n",
-                static_cast<unsigned long>(sequence),
-                m.flow,
-                m.battery,
-                m.rssi,
-                static_cast<unsigned long>(intervalMs));
+  if (latitude != nullptr && longitude != nullptr) {
+    Serial.printf("[USB] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | GPS=%.6f,%.6f | interval=%lums\n",
+                  static_cast<unsigned long>(sequence),
+                  m.flow,
+                  m.battery,
+                  m.rssi,
+                  *latitude,
+                  *longitude,
+                  static_cast<unsigned long>(intervalMs));
+  } else {
+    Serial.printf("[USB] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | GPS=N/A | interval=%lums\n",
+                  static_cast<unsigned long>(sequence),
+                  m.flow,
+                  m.battery,
+                  m.rssi,
+                  static_cast<unsigned long>(intervalMs));
+  }
 }
 
 void printUsbStreamHelp(uint32_t intervalMs)
@@ -1666,7 +1701,7 @@ bool getDeviceLocation(float* latitude, float* longitude)
   Serial.println(F("[GPS] GPS indisponible, tentative réseau cellulaire..."));
   lat = 0.0;
   lon = 0.0;
-  int gsmAccuracy = 0;
+  float gsmAccuracy = 0.0;
   
   if (modem.getGsmLocation(&lat, &lon, &gsmAccuracy)) {
     // Valider les coordonnées
@@ -1674,7 +1709,7 @@ bool getDeviceLocation(float* latitude, float* longitude)
         lat != 0.0 && lon != 0.0) {
       *latitude = lat;
       *longitude = lon;
-      Serial.printf("[GPS] Position réseau cellulaire obtenue: %.6f, %.6f (précision: %dm)\n", 
+      Serial.printf("[GPS] Position réseau cellulaire obtenue: %.6f, %.6f (précision: %.0fm)\n", 
                     lat, lon, gsmAccuracy);
       return true;
     }

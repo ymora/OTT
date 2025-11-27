@@ -211,6 +211,8 @@ export function UsbProvider({ children }) {
             flowrate: payload.flow_lpm ?? payload.flowrate ?? payload.flow ?? null,
             battery: payload.battery_percent ?? payload.battery ?? null,
             rssi: payload.rssi ?? null,
+            latitude: payload.latitude ?? null,
+            longitude: payload.longitude ?? null,
             interval: payload.interval_ms ?? payload.interval ?? null,
             raw: {
               ...payload,

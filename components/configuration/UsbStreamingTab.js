@@ -399,17 +399,25 @@ export default function UsbStreamingTab() {
             </div>
           </div>
 
-          {/* État réseau */}
+          {/* État GPS */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500">
-              <span className="text-xl">📶</span>
+            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+              usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+            }`}>
+              <span className="text-xl">📍</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Réseau</p>
-              <p className="text-sm font-semibold text-gray-400 dark:text-gray-500 truncate">
-                {usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
-                  ? `${usbStreamLastMeasurement.rssi} dBm`
-                  : 'N/A'}
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Position GPS</p>
+              <p className={`text-sm font-semibold truncate ${
+                usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-gray-400 dark:text-gray-500'
+              }`}>
+                {usbStreamLastMeasurement?.latitude && usbStreamLastMeasurement?.longitude
+                  ? `${usbStreamLastMeasurement.latitude.toFixed(6)}, ${usbStreamLastMeasurement.longitude.toFixed(6)}`
+                  : 'Non disponible'}
               </p>
             </div>
           </div>
@@ -417,6 +425,36 @@ export default function UsbStreamingTab() {
 
         {/* Indicateurs supplémentaires (2ème ligne) */}
         <div className="mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* RSSI Signal */}
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+              usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
+                ? usbStreamLastMeasurement.rssi >= -70
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                  : usbStreamLastMeasurement.rssi >= -90
+                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
+                  : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+            }`}>
+              <span className="text-xl">📶</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Signal RSSI</p>
+              <p className={`text-sm font-semibold truncate ${
+                usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
+                  ? usbStreamLastMeasurement.rssi >= -70
+                    ? 'text-green-600 dark:text-green-400'
+                    : usbStreamLastMeasurement.rssi >= -90
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : 'text-red-600 dark:text-red-400'
+                  : 'text-gray-400 dark:text-gray-500'
+              }`}>
+                {usbStreamLastMeasurement?.rssi !== null && usbStreamLastMeasurement?.rssi !== undefined && usbStreamLastMeasurement.rssi !== -999
+                  ? `${usbStreamLastMeasurement.rssi} dBm`
+                  : 'N/A'}
+              </p>
+            </div>
+          </div>
           {/* Statistiques mesures */}
           <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
             <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
