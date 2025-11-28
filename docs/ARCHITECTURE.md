@@ -98,6 +98,73 @@ OTT/
 
 ## 🔄 Flux de Données
 
+### Mode Normal (Production)
+
+Le firmware fonctionne en cycle automatique :
+
+```
+Boot → Init Modem → Démarrage Modem
+  ↓
+Capture Mesures {
+  - Débit d'air
+  - Niveau batterie
+  - RSSI (qualité signal)
+}
+  ↓
+Géolocalisation {
+  - GPS (priorité)
+  - Réseau cellulaire (fallback)
+}
+  ↓
+Envoi API {
+  - POST /api.php/devices/measurements
+  - JSON avec toutes les données
+}
+  ↓
+Récupération Commandes {
+  - GET /api.php/devices/commands
+  - Traitement des commandes
+}
+  ↓
+Arrêt Modem → Deep Sleep (24h par défaut)
+  ↓
+Réveil → Répète le cycle
+```
+
+**Caractéristiques** :
+- ✅ Modem démarré automatiquement
+- ✅ Mesures automatiques à chaque réveil
+- ✅ Envoi automatique à l'API
+- ✅ Deep sleep entre les cycles (économie d'énergie)
+- ✅ 1 envoi par jour par défaut (limite les coûts réseau)
+
+### Mode USB (Tests/Diagnostics)
+
+Le firmware attend uniquement les commandes :
+
+```
+Boot → Détection USB (3.5s) → Mode USB activé
+  ↓
+usbStreamingLoop() {
+  while (true) {
+    - feedWatchdog()
+    - Vérifier connexion USB (toutes les 5s)
+    - Lire commandes Serial
+    - Traiter commandes
+    - Envoyer mesures SEULEMENT si streamingActive = true ET commande reçue
+  }
+}
+```
+
+**Caractéristiques** :
+- ❌ Modem non démarré automatiquement (sur demande uniquement)
+- ❌ Aucune mesure automatique (sur commande uniquement)
+- ❌ Pas de connexion réseau (pas de coûts)
+- ❌ Pas de deep sleep (boucle active)
+- ✅ Mode interactif complet (toutes les commandes disponibles)
+
+📖 **Documentation complète** : Voir [Mode USB vs Mode Normal](./MODE_USB_VS_MODE_NORMAL.md)
+
 ### 1. Firmware → API
 ```
 ESP32 + SIM7600
@@ -359,7 +426,7 @@ components/configuration/UsbStreamingTab.js  # Couche présentation (309 lignes)
 └── Affichage mesures
 ```
 
-### Flux de Streaming USB (v3.5+)
+### Flux de Streaming USB (v3.6+)
 
 ```
 1. Connexion au port USB (connect()) - Sélection automatique si dispositif déjà connecté

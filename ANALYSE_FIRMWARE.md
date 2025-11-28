@@ -1,4 +1,6 @@
-# Analyse du Firmware OTT - Rapport d'optimisation
+# Analyse du Firmware OTT v3.6
+
+> 📖 **Documentation complète** : Voir [Mode USB vs Mode Normal](./docs/MODE_USB_VS_MODE_NORMAL.md) et [Cas d'Usage Complets](./docs/CAS_USAGE_COMPLETS.md) - Rapport d'optimisation
 
 **Date** : $(date)  
 **Version firmware** : 3.5-usb-optimized  

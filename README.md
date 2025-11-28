@@ -1,6 +1,6 @@
 # 🏥 OTT - Dispositif Médical IoT
 
-**Version 3.4 Enterprise** - Solution Cloud Complète
+**Version 3.6 Enterprise** - Solution Cloud Complète
 
 **HAPPLYZ MEDICAL SAS**
 
@@ -93,10 +93,21 @@ git push origin main
 ```
 
 ### Flux global
-- **Montant (devices → cloud)** : le firmware capture débit/batterie toutes les 5 min, ouvre le modem 4G, obtient la position GPS/réseau cellulaire (si disponible), puis poste sur `/api.php/devices/measurements` (JSON avec `latitude`/`longitude` + Bearer token quand auth active). Les logs et alertes utilisent `/api.php/devices/logs` et `/api.php/alerts`.
-- **Géolocalisation** :
-  - **Dispositifs OTA** : le firmware tente d'obtenir la position via GPS (priorité) ou réseau cellulaire (fallback) et l'inclut dans chaque mesure. L'API met à jour automatiquement `latitude`/`longitude` du dispositif.
-  - **Dispositifs USB** : la position est déterminée via géolocalisation IP du PC client (service ip-api.com). Mise à jour automatique lors de la réception d'une mesure USB.
+
+#### Mode Normal (Production)
+- **Cycle automatique** : Le firmware se réveille toutes les 24h (configurable), capture débit/batterie, ouvre le modem 4G, obtient la position GPS/réseau cellulaire (si disponible), puis poste sur `/api.php/devices/measurements` (JSON avec `latitude`/`longitude` + Bearer token quand auth active). Les logs et alertes utilisent `/api.php/devices/logs` et `/api.php/alerts`.
+- **Deep Sleep** : Après chaque envoi, le dispositif entre en deep sleep pour économiser l'énergie et limiter les coûts réseau (1 envoi par jour par défaut).
+
+#### Mode USB (Tests/Diagnostics)
+- **Mode interactif** : Le firmware attend uniquement les commandes depuis le dashboard. Le modem n'est **pas démarré automatiquement** pour économiser l'énergie et éviter les connexions réseau inutiles.
+- **Commandes disponibles** : `start`, `stop`, `once`, `modem_on`, `modem_off`, `test_network`, `gps`, `flowrate`, `battery`, `device_info`, `interval=<ms>`, `help`, `exit`
+- **Aucune mesure automatique** : Les mesures ne sont envoyées que sur commande explicite (`start`, `once`, `flowrate`, `battery`, etc.)
+
+#### Géolocalisation
+- **Dispositifs OTA (Mode Normal)** : le firmware tente d'obtenir la position via GPS (priorité) ou réseau cellulaire (fallback) et l'inclut dans chaque mesure. L'API met à jour automatiquement `latitude`/`longitude` du dispositif.
+- **Dispositifs USB** : la position est déterminée via géolocalisation IP du PC client (service ip-api.com). Mise à jour automatique lors de la réception d'une mesure USB.
+
+📖 **Documentation complète** : Voir [Mode USB vs Mode Normal](./docs/MODE_USB_VS_MODE_NORMAL.md)
 - **Persisté** : l’API écrit dans PostgreSQL (tables `devices`, `measurements`, `alerts`, `audit_logs`, etc.). Les requêtes utilisent PDO (pgsql) et auditent chaque action.
 - **Descendant** :
   - Dashboard Next.js appelle l’API (`NEXT_PUBLIC_API_URL`) pour charger stats, cartes Leaflet, notifications, OTA…
