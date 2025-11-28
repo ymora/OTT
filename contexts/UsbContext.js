@@ -30,7 +30,7 @@ export function UsbProvider({ children }) {
   const usbStreamStopRef = useRef(null)
   const usbStreamBufferRef = useRef('')
   const sendMeasurementToApiRef = useRef(null) // Callback pour envoyer les mesures à l'API
-  const updateDeviceFirmwareRef = useRef(null) // Callback pour mettre à jour le firmware_version dans la base
+  const updateDeviceFirmwareRef = useRef(null) // Callback pour mettre à jour les informations du dispositif dans la base (firmware_version, last_battery, last_seen, status)
 
   // Fonction pour ajouter un log USB
   // source: 'device' pour les logs venant du dispositif, 'dashboard' pour les logs du dashboard
@@ -166,24 +166,31 @@ export function UsbProvider({ children }) {
         if (payload.type === 'device_info') {
           logger.log('📱 Infos dispositif reçues:', payload)
           
-          // Stocker les données reçues du dispositif (uniquement depuis le dispositif USB)
+          const now = new Date().toISOString()
+          
+          // Stocker TOUTES les données reçues du dispositif (uniquement depuis le dispositif USB)
           const deviceInfoFromUsb = {
             sim_iccid: payload.iccid || null,
             device_serial: payload.serial || null,
             firmware_version: payload.firmware_version || null,
             device_name: payload.device_name || null,
-            last_seen: new Date().toISOString()
+            last_seen: now
           }
           
-          // Mettre à jour l'état avec les données reçues du dispositif
+          // Mettre à jour l'état avec TOUTES les données reçues du dispositif
           setUsbDeviceInfo(prev => ({
             ...prev,
-            ...deviceInfoFromUsb,
-            // Conserver les valeurs précédentes si nouvelles valeurs sont null
+            // Utiliser les nouvelles valeurs si disponibles, sinon conserver les précédentes
             sim_iccid: deviceInfoFromUsb.sim_iccid || prev?.sim_iccid || null,
             device_serial: deviceInfoFromUsb.device_serial || prev?.device_serial || null,
             firmware_version: deviceInfoFromUsb.firmware_version || prev?.firmware_version || null,
-            device_name: deviceInfoFromUsb.device_name || prev?.device_name || null
+            device_name: deviceInfoFromUsb.device_name || prev?.device_name || null,
+            // Conserver les autres données (batterie, GPS, RSSI) si elles existent déjà
+            last_battery: prev?.last_battery || null,
+            latitude: prev?.latitude || null,
+            longitude: prev?.longitude || null,
+            rssi: prev?.rssi || null,
+            last_seen: now
           }))
           
           // Créer ou mettre à jour un dispositif virtuel avec ces infos (pour compatibilité)
@@ -194,7 +201,7 @@ export function UsbProvider({ children }) {
             device_serial: payload.serial || null,
             firmware_version: payload.firmware_version || null,
             status: 'usb_connected',
-            last_seen: new Date().toISOString(),
+            last_seen: now,
             isVirtual: true,
             fromUsbInfo: true // Flag pour indiquer que c'est depuis device_info
           }
@@ -209,7 +216,7 @@ export function UsbProvider({ children }) {
               ...prev,
               ...deviceInfo,
               firmware_version: deviceInfo.firmware_version || prev.firmware_version,
-              last_seen: new Date().toISOString()
+              last_seen: now
             }))
             logger.log('✅ Dispositif USB connecté mis à jour avec device_info')
           } else if (usbVirtualDevice) {
@@ -218,23 +225,36 @@ export function UsbProvider({ children }) {
               ...prev,
               ...deviceInfo,
               firmware_version: deviceInfo.firmware_version || prev.firmware_version,
-              last_seen: new Date().toISOString()
+              last_seen: now
             }))
             logger.log('✅ Dispositif USB mis à jour avec device_info')
           }
           
           // Mettre à jour automatiquement les informations du dispositif dans la base de données
-          // Utiliser ICCID, serial, ou device_name pour trouver le dispositif
+          // À CHAQUE réception de device_info, on vérifie et met à jour la base de données
           if (updateDeviceFirmwareRef.current) {
             // Essayer ICCID d'abord, puis serial, puis device_name
             const identifier = payload.iccid || payload.serial || payload.device_name
-            if (identifier && payload.firmware_version) {
-              updateDeviceFirmwareRef.current(identifier, payload.firmware_version, {
-                last_seen: new Date().toISOString(),
-                status: 'usb_connected',
+            if (identifier) {
+              const firmwareVersion = payload.firmware_version || ''
+              
+              // Mettre à jour la base de données avec les informations disponibles
+              updateDeviceFirmwareRef.current(identifier, firmwareVersion, {
+                last_seen: now,
+                status: 'usb_connected'
                 // Pas de last_battery dans device_info, seulement dans les mesures
               })
+              
+              logger.debug('🔄 Mise à jour base de données (device_info):', {
+                identifier,
+                firmwareVersion: firmwareVersion || '(non disponible)',
+                last_seen: now
+              })
+            } else {
+              logger.debug('⚠️ Aucun identifiant disponible dans device_info pour mise à jour base de données')
             }
+          } else {
+            logger.debug('⚠️ Callback updateDeviceFirmwareRef non disponible pour device_info')
           }
           
           return
@@ -267,14 +287,34 @@ export function UsbProvider({ children }) {
           setUsbStreamError(null)
           setUsbStreamStatus('running')
           
-          // Mettre à jour les données reçues du dispositif USB (uniquement depuis le dispositif)
-          if (payload.firmware_version) {
-            setUsbDeviceInfo(prev => ({
-              ...prev,
-              firmware_version: payload.firmware_version,
-              last_seen: new Date().toISOString()
-            }))
-          }
+          // Mettre à jour TOUTES les données reçues du dispositif USB (uniquement depuis le dispositif)
+          // À chaque réception, on met à jour toutes les informations disponibles
+          const now = new Date().toISOString()
+          setUsbDeviceInfo(prev => ({
+            ...prev,
+            // Conserver les identifiants existants (ICCID, Serial) car ils ne changent pas
+            sim_iccid: prev?.sim_iccid || null,
+            device_serial: prev?.device_serial || null,
+            // Mettre à jour la version firmware si disponible dans le payload
+            firmware_version: payload.firmware_version || prev?.firmware_version || null,
+            // Mettre à jour la batterie si disponible
+            last_battery: measurement.battery !== null && measurement.battery !== undefined 
+              ? measurement.battery 
+              : prev?.last_battery || null,
+            // Mettre à jour la position GPS si disponible
+            latitude: measurement.latitude !== null && measurement.latitude !== undefined 
+              ? measurement.latitude 
+              : prev?.latitude || null,
+            longitude: measurement.longitude !== null && measurement.longitude !== undefined 
+              ? measurement.longitude 
+              : prev?.longitude || null,
+            // Mettre à jour le RSSI si disponible
+            rssi: measurement.rssi !== null && measurement.rssi !== undefined && measurement.rssi !== -999
+              ? measurement.rssi 
+              : prev?.rssi || null,
+            // Toujours mettre à jour last_seen
+            last_seen: now
+          }))
           
           // Envoyer la mesure à l'API si un dispositif USB est connecté
           const currentDevice = usbConnectedDevice || usbVirtualDevice
@@ -282,25 +322,45 @@ export function UsbProvider({ children }) {
             sendMeasurementToApi(measurement, currentDevice)
             
             // Mettre à jour les informations du dispositif dans la base de données
-            // Cette mise à jour est complémentaire à celle faite par l'API lors de l'envoi de la mesure
-            // Elle permet de mettre à jour même si la mesure n'a pas encore été envoyée à l'API
-            // On met à jour à chaque mesure pour avoir les informations les plus récentes
+            // À CHAQUE réception, on vérifie et met à jour la base de données si nécessaire
             if (updateDeviceFirmwareRef.current) {
-              // Utiliser les données du dispositif USB en priorité, puis fallback sur currentDevice
+              // Utiliser les données du dispositif USB en priorité (données en temps réel)
               const identifier = usbDeviceInfo?.sim_iccid || usbDeviceInfo?.device_serial || 
                                  currentDevice.sim_iccid || currentDevice.device_serial || currentDevice.device_name
+              
               if (identifier) {
-                // Utiliser firmware_version depuis le payload (données en temps réel du dispositif)
+                // Récupérer toutes les informations disponibles depuis le dispositif USB
                 const firmwareVersion = payload.firmware_version || usbDeviceInfo?.firmware_version || currentDevice.firmware_version
-                // Mettre à jour même si firmwareVersion n'est pas disponible (pour last_battery, last_seen, status)
-                // Utiliser une chaîne vide si firmwareVersion n'est pas disponible pour permettre la mise à jour
-                updateDeviceFirmwareRef.current(identifier, firmwareVersion || '', {
-                  last_seen: new Date().toISOString(),
-                  status: 'usb_connected',
-                  last_battery: measurement.battery !== null && measurement.battery !== undefined ? measurement.battery : undefined
+                
+                // Préparer les données à mettre à jour dans la base de données
+                const updateData = {
+                  last_seen: now,
+                  status: 'usb_connected'
+                }
+                
+                // Ajouter la batterie si disponible
+                if (measurement.battery !== null && measurement.battery !== undefined) {
+                  updateData.last_battery = measurement.battery
+                }
+                
+                // Mettre à jour la base de données avec toutes les informations disponibles
+                // Même si firmwareVersion n'est pas disponible, on met à jour last_seen, status, last_battery
+                updateDeviceFirmwareRef.current(identifier, firmwareVersion || '', updateData)
+                
+                logger.debug('🔄 Mise à jour base de données demandée:', {
+                  identifier,
+                  firmwareVersion: firmwareVersion || '(non disponible)',
+                  battery: measurement.battery !== null && measurement.battery !== undefined ? measurement.battery : '(non disponible)',
+                  last_seen: now
                 })
+              } else {
+                logger.debug('⚠️ Aucun identifiant disponible pour mise à jour base de données')
               }
+            } else {
+              logger.debug('⚠️ Callback updateDeviceFirmwareRef non disponible')
             }
+          } else {
+            logger.debug('⚠️ Aucun dispositif USB connecté pour mise à jour')
           }
           
           return
@@ -310,7 +370,7 @@ export function UsbProvider({ children }) {
         return
       }
     }
-  }, [appendUsbStreamLog, sendMeasurementToApi, usbConnectedDevice, usbVirtualDevice])
+  }, [appendUsbStreamLog, sendMeasurementToApi, usbConnectedDevice, usbVirtualDevice, usbDeviceInfo])
 
   // Gestion des chunks de streaming
   const handleUsbStreamChunk = useCallback((chunk) => {
@@ -429,10 +489,11 @@ export function UsbProvider({ children }) {
       appendUsbStreamLog('📡 Streaming USB démarré - En attente de données du dispositif...', 'dashboard')
       
       // IMPORTANT: Envoyer la commande "usb" au dispositif pour activer le streaming continu
-      // Le firmware attend cette commande dans les 3 secondes après le boot
-      // Sans cette commande, le firmware n'enverra que les logs de boot, pas le streaming continu
+      // Le firmware attend cette commande dans les 3.5 secondes après le boot
+      // Si le dispositif est déjà allumé, on peut quand même essayer d'envoyer "usb"
+      // car le firmware devrait l'accepter dans usbStreamingLoop() si déjà en mode USB
       // Attendre un peu pour que la lecture soit bien démarrée et que le writer soit prêt
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 200))
       
       try {
         logger.log('📤 [USB] Envoi de la commande "usb" au dispositif pour activer le streaming continu...')
@@ -444,24 +505,47 @@ export function UsbProvider({ children }) {
           throw new Error('Port writable non disponible pour l\'envoi de la commande')
         }
         
+        // Vérifier que le writer existe dans SerialPortManager
+        // Si le writer n'existe pas, write() essaiera de le créer, mais on peut pré-vérifier
         logger.log('📤 [USB] Port writable OK, envoi de la commande "usb"...')
-        const commandSent = await write('usb\n')
+        appendUsbStreamLog('📤 Envoi commande: usb', 'dashboard')
         
-        // Attendre un peu pour que le firmware entre en mode USB
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // Envoyer la commande avec un log détaillé
+        const commandToSend = 'usb\n'
+        logger.log(`📤 [USB] Commande à envoyer: "${commandToSend.trim()}" (${commandToSend.length} caractères, ${new TextEncoder().encode(commandToSend).length} bytes)`)
+        const commandUsbSent = await write(commandToSend)
+        
+        if (commandUsbSent) {
+          logger.log('✅ [USB] Commande "usb" envoyée avec succès')
+          appendUsbStreamLog('✅ Commande "usb" envoyée avec succès', 'dashboard')
+        } else {
+          logger.warn('⚠️ [USB] Échec de l\'envoi de la commande "usb"')
+          appendUsbStreamLog('❌ Échec envoi commande: usb', 'dashboard')
+        }
+        
+        // Attendre un peu pour que le firmware entre en mode USB et traite la commande
+        // Réduire le délai à 300ms pour être plus réactif
+        await new Promise(resolve => setTimeout(resolve, 300))
         
         // Envoyer la commande "start" pour démarrer le streaming continu
         logger.log('📤 [USB] Envoi de la commande "start" pour démarrer le streaming continu...')
-        await write('start\n')
+        appendUsbStreamLog('📤 Envoi commande: start', 'dashboard')
         
-        if (commandSent) {
-          logger.log('✅ [USB] Commande "usb" envoyée avec succès - Le firmware devrait maintenant envoyer des données en continu')
-          appendUsbStreamLog('📤 Commande "usb" envoyée au dispositif pour activer le streaming continu...', 'dashboard')
+        // Envoyer la commande avec un log détaillé
+        const commandStartToSend = 'start\n'
+        logger.log(`📤 [USB] Commande à envoyer: "${commandStartToSend.trim()}" (${commandStartToSend.length} caractères, ${new TextEncoder().encode(commandStartToSend).length} bytes)`)
+        const commandStartSent = await write(commandStartToSend)
+        
+        if (commandStartSent) {
+          logger.log('✅ [USB] Commande "start" envoyée avec succès - Le streaming continu devrait démarrer')
+          appendUsbStreamLog('✅ Commande "start" envoyée avec succès', 'dashboard')
         } else {
-          logger.warn('⚠️ [USB] Échec de l\'envoi de la commande "usb" - Le streaming continu ne démarrera pas')
-          logger.warn('⚠️ [USB] Vérifiez que le port est bien connecté et que le writer est disponible')
-          appendUsbStreamLog('⚠️ Échec de l\'envoi de la commande "usb" - Le streaming continu ne démarrera pas', 'dashboard')
+          logger.warn('⚠️ [USB] Échec de l\'envoi de la commande "start" - Le streaming continu ne démarrera pas automatiquement')
+          appendUsbStreamLog('❌ Échec envoi commande: start', 'dashboard')
         }
+        
+        // Attendre un peu pour que le firmware traite la commande start
+        await new Promise(resolve => setTimeout(resolve, 200))
       } catch (writeErr) {
         logger.error('❌ [USB] Erreur lors de l\'envoi de la commande "usb":', writeErr)
         logger.error('❌ [USB] Détails:', writeErr.message || writeErr)

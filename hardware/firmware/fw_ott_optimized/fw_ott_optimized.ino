@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v3.5-usb-optimized - Optimisation USB et Modem
+ *  OTT Firmware v3.6-commands-enhanced - Amélioration des commandes USB
  * ================================================================
  * Objectifs :
  *   - Mesurer le débit d'oxygène + la batterie et publier la mesure
@@ -124,7 +124,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.5-usb-optimized"
+#define FIRMWARE_VERSION_STR "3.6-commands-enhanced"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -659,8 +659,17 @@ void usbStreamingLoop()
           continue;
         }
 
-        // Log de réception de commande pour débogage
-        Serial.printf("[USB] 📥 Commande reçue: '%s'\n", command.c_str());
+        // Log de réception de commande pour débogage (avec timestamp pour traçabilité)
+        unsigned long cmdTime = millis();
+        Serial.printf("[USB] 📥 [%lu ms] Commande reçue: '%s' (longueur: %d)\n", 
+                     cmdTime, command.c_str(), command.length());
+        
+        // Log des bytes reçus pour débogage avancé
+        Serial.printf("[USB] 🔍 Bytes de la commande: ");
+        for (size_t i = 0; i < command.length(); i++) {
+          Serial.printf("%02X ", (uint8_t)command[i]);
+        }
+        Serial.println();
 
         String lowered = command;
         lowered.toLowerCase();
@@ -796,17 +805,42 @@ void usbStreamingLoop()
             Serial.println(F("[USB] 📶 Traitement: Test enregistrement réseau en cours..."));
             Serial.println(F("[USB] Test enregistrement réseau..."));
             logRadioSnapshot("test:start");
+            bool networkAttached = false;
             if (modem.isNetworkConnected()) {
               Serial.println(F("[USB] ✅ Réponse: Réseau déjà attaché"));
+              networkAttached = true;
             } else {
               Serial.println(F("[USB] Tentative d'attache au réseau..."));
               if (attachNetwork(networkAttachTimeoutMs)) {
                 Serial.println(F("[USB] ✅ Réponse: Réseau attaché avec succès"));
                 logRadioSnapshot("test:success");
+                networkAttached = true;
               } else {
                 Serial.println(F("[USB] ❌ Réponse: Échec attache réseau"));
                 logRadioSnapshot("test:failed");
               }
+            }
+            
+            // Envoyer une mesure avec le RSSI après le test réseau
+            if (networkAttached) {
+              Serial.println(F("[USB] 📊 Envoi d'une mesure avec RSSI..."));
+              Measurement snapshot = captureSensorSnapshot();
+              
+              // Obtenir le RSSI depuis le modem
+              int8_t csq = modem.getSignalQuality();
+              if (csq == 99) {
+                snapshot.rssi = -999;  // Pas de signal ou erreur
+              } else if (csq == 0) {
+                snapshot.rssi = -113;  // Signal très faible ou moins
+              } else if (csq == 1) {
+                snapshot.rssi = -111;
+              } else {
+                snapshot.rssi = -110 + (csq * 2);  // Formule standard 3GPP
+              }
+              
+              // Ne pas inclure GPS pour cette commande spécifique (focus sur RSSI)
+              emitUsbMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
+              Serial.println(F("[USB] ✅ Mesure avec RSSI envoyée"));
             }
           }
           continue;
@@ -828,10 +862,30 @@ void usbStreamingLoop()
             Serial.println(F("[USB] Tentative GPS (priorité) puis réseau cellulaire (fallback)..."));
             Serial.println(F("[USB] ========================================"));
             float lat = 0.0, lon = 0.0;
-            if (getDeviceLocation(&lat, &lon)) {
+            bool hasLocation = getDeviceLocation(&lat, &lon);
+            if (hasLocation) {
               Serial.println(F("[USB] ========================================"));
               Serial.printf("[USB] ✅ Réponse: Position obtenue: %.6f, %.6f\n", lat, lon);
               Serial.println(F("[USB] ========================================"));
+              
+              // Envoyer une mesure avec la position GPS après le test
+              Serial.println(F("[USB] 📊 Envoi d'une mesure avec position GPS..."));
+              Measurement snapshot = captureSensorSnapshot();
+              
+              // Obtenir le RSSI si disponible
+              int8_t csq = modem.getSignalQuality();
+              if (csq == 99) {
+                snapshot.rssi = -999;
+              } else if (csq == 0) {
+                snapshot.rssi = -113;
+              } else if (csq == 1) {
+                snapshot.rssi = -111;
+              } else {
+                snapshot.rssi = -110 + (csq * 2);
+              }
+              
+              emitUsbMeasurement(snapshot, ++sequence, intervalMs, &lat, &lon);
+              Serial.println(F("[USB] ✅ Mesure avec position GPS envoyée"));
             } else {
               Serial.println(F("[USB] ========================================"));
               Serial.println(F("[USB] ❌ Réponse: Échec obtention position GPS"));
@@ -848,6 +902,62 @@ void usbStreamingLoop()
           Serial.println(F("[USB] ℹ️  Réponse: Envoi des informations du dispositif..."));
           emitUsbDeviceInfo();
           Serial.println(F("[USB] ✅ Informations du dispositif envoyées"));
+          continue;
+        }
+
+        // Demander uniquement le débit
+        if (lowered == "flowrate" || lowered == "flow" || lowered == "debit") {
+          Serial.println(F("[USB] ✅ Commande 'flowrate' reçue et acceptée"));
+          Serial.println(F("[USB] 💨 Capture du débit uniquement..."));
+          Measurement snapshot = captureSensorSnapshot();
+          
+          // Inclure RSSI si le modem est démarré (amélioration)
+          if (modemReady) {
+            int8_t csq = modem.getSignalQuality();
+            if (csq == 99) {
+              snapshot.rssi = -999;
+            } else if (csq == 0) {
+              snapshot.rssi = -113;
+            } else if (csq == 1) {
+              snapshot.rssi = -111;
+            } else {
+              snapshot.rssi = -110 + (csq * 2);
+            }
+          } else {
+            snapshot.rssi = -999; // Modem non démarré
+          }
+          
+          // Ne pas inclure GPS pour cette commande spécifique (focus sur débit)
+          emitUsbMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
+          Serial.println(F("[USB] ✅ Débit envoyé"));
+          continue;
+        }
+
+        // Demander uniquement la batterie
+        if (lowered == "battery" || lowered == "batt" || lowered == "batterie") {
+          Serial.println(F("[USB] ✅ Commande 'battery' reçue et acceptée"));
+          Serial.println(F("[USB] 🔋 Capture de la batterie uniquement..."));
+          Measurement snapshot = captureSensorSnapshot();
+          
+          // Inclure RSSI si le modem est démarré (amélioration)
+          if (modemReady) {
+            int8_t csq = modem.getSignalQuality();
+            if (csq == 99) {
+              snapshot.rssi = -999;
+            } else if (csq == 0) {
+              snapshot.rssi = -113;
+            } else if (csq == 1) {
+              snapshot.rssi = -111;
+            } else {
+              snapshot.rssi = -110 + (csq * 2);
+            }
+          } else {
+            snapshot.rssi = -999; // Modem non démarré
+          }
+          
+          // Ne pas inclure GPS pour cette commande spécifique (focus sur batterie)
+          emitUsbMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
+          Serial.println(F("[USB] ✅ Batterie envoyée"));
           continue;
         }
 
@@ -931,13 +1041,15 @@ void printUsbStreamHelp(uint32_t intervalMs)
   Serial.println(F("[USB] Commandes disponibles (terminer par Entrée):"));
   Serial.println(F("[USB]   start         → Démarrer le streaming continu (mesures automatiques)"));
   Serial.println(F("[USB]   stop          → Arrêter le streaming continu"));
-  Serial.println(F("[USB]   once          → Mesure immédiate unique"));
+  Serial.println(F("[USB]   once          → Mesure complète immédiate (débit, batterie, RSSI)"));
+  Serial.println(F("[USB]   flowrate      → Mesure du débit uniquement"));
+  Serial.println(F("[USB]   battery       → Mesure de la batterie uniquement"));
   Serial.println(F("[USB]   device_info   → Demander les informations du dispositif"));
   Serial.println(F("[USB]   interval=<ms> → Modifier l'intervalle (200-10000 ms)"));
-  Serial.println(F("[USB]   modem_on       → Démarrer le modem (pour tester réseau/GPS)"));
+  Serial.println(F("[USB]   modem_on       → Démarrer le modem"));
   Serial.println(F("[USB]   modem_off     → Arrêter le modem"));
-  Serial.println(F("[USB]   test_network  → Tester l'enregistrement réseau"));
-  Serial.println(F("[USB]   gps            → Tester le GPS"));
+  Serial.println(F("[USB]   test_network  → Tester le réseau et obtenir le RSSI (modem requis)"));
+  Serial.println(F("[USB]   gps            → Tester le GPS (modem requis)"));
   Serial.println(F("[USB]   help           → Afficher cette aide"));
   Serial.println(F("[USB]   exit           → Quitter le streaming et redémarrer"));
   Serial.printf("[USB] Intervalle actuel: %lu ms.\n", static_cast<unsigned long>(intervalMs));

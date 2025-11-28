@@ -411,12 +411,20 @@ export function useSerialPort() {
 
   // Écrire des données
   const write = useCallback(async (data) => {
-    logger.debug('[SerialPortManager] write: appelé avec', data.length, 'bytes')
+    logger.debug('[SerialPortManager] write: appelé avec', typeof data === 'string' ? data.length : 'non-string', 'caractères')
     logger.debug('[SerialPortManager] write: writerRef.current existe?', !!writerRef.current)
     logger.debug('[SerialPortManager] write: port existe?', !!port)
     logger.debug('[SerialPortManager] write: port.writable existe?', !!port?.writable)
     logger.debug('[SerialPortManager] write: port.writable.locked?', port?.writable?.locked)
     logger.debug('[SerialPortManager] write: isConnected?', isConnected)
+    
+    // Vérifier que data est une string
+    if (typeof data !== 'string') {
+      const errorMsg = 'Les données doivent être une string'
+      setError(errorMsg)
+      logger.error('[SerialPortManager] write:', errorMsg, 'type reçu:', typeof data)
+      return false
+    }
     
     // Vérifier que le writer existe (plus fiable que isConnected qui peut avoir un délai)
     if (!writerRef.current) {
@@ -452,6 +460,9 @@ export function useSerialPort() {
       const encoder = new TextEncoder()
       const dataArray = encoder.encode(data)
       logger.debug('[SerialPortManager] write: envoi de', dataArray.length, 'bytes via writerRef.current')
+      logger.debug('[SerialPortManager] write: contenu (hex):', Array.from(dataArray).map(b => b.toString(16).padStart(2, '0')).join(' '))
+      logger.debug('[SerialPortManager] write: contenu (ascii):', data.replace(/\n/g, '\\n').replace(/\r/g, '\\r'))
+      
       await writerRef.current.write(dataArray)
       logger.debug('[SerialPortManager] write: ✅ données envoyées avec succès')
       return true
@@ -459,6 +470,16 @@ export function useSerialPort() {
       const errorMsg = `Erreur d'écriture: ${err.message}`
       setError(errorMsg)
       logger.error('[SerialPortManager] write: ❌ erreur lors de l\'écriture:', err)
+      // Si l'erreur est liée au writer, le réinitialiser
+      if (err.name === 'NetworkError' || err.message.includes('writer')) {
+        logger.warn('[SerialPortManager] write: réinitialisation du writer après erreur')
+        try {
+          await writerRef.current.release()
+        } catch (releaseErr) {
+          logger.warn('[SerialPortManager] write: erreur release writer:', releaseErr)
+        }
+        writerRef.current = null
+      }
       return false
     }
   }, [port, isConnected])

@@ -386,19 +386,28 @@ components/configuration/UsbStreamingTab.js  # Couche présentation (309 lignes)
 9. Mise à jour automatique des informations du dispositif (firmware_version, last_battery, status, last_seen)
 ```
 
-### Commande "usb" au Firmware
+### Commandes USB au Firmware (v3.5+)
 
-**Important** : Le firmware ESP32 attend la commande `"usb\n"` dans les **3 secondes après le boot** pour activer le streaming continu.
+**Important** : Le firmware ESP32 attend la commande `"usb\n"` dans les **3 secondes après le boot** pour activer le mode USB streaming.
 
 **Séquence d'activation** (dans `startUsbStreaming()`) :
 1. Vérifier que le port est connecté
 2. Arrêter l'ancien streaming s'il existe
 3. Démarrer la lecture (`startReading()`)
-4. Attendre 200ms pour que la lecture soit prête
+4. Attendre 500ms pour que la lecture soit prête
 5. **Envoyer la commande "usb"** (`write('usb\n')`)
-6. Le firmware commence à envoyer des données en continu
+6. Attendre 500ms pour que le firmware entre en mode USB
+7. **Envoyer la commande "start"** (`write('start\n')`) pour démarrer le streaming continu
+8. Le firmware commence à envoyer des données automatiquement (si `start` a été envoyé)
 
-**Sans cette commande** : Le firmware n'envoie que les logs de boot, pas le streaming continu.
+**Mode sécurisé (v3.5+)** : Le firmware n'envoie des mesures que sur commande explicite :
+- `start` : démarre le streaming continu (mesures automatiques)
+- `stop` : arrête le streaming continu
+- `once` : envoie une mesure unique immédiate
+- `device_info` : envoie les informations du dispositif
+
+**Sans la commande "usb"** : Le firmware n'envoie que les logs de boot, pas le streaming continu.
+**Sans la commande "start"** : Le firmware attend les commandes mais n'envoie pas de mesures automatiquement.
 
 ### Décision : Fichiers Séparés ✅
 

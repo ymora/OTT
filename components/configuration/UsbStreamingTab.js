@@ -138,6 +138,11 @@ export default function UsbStreamingTab() {
             const connected = await connect(newPort, 115200)
             if (connected) {
               appendUsbStreamLog('✅ Connexion USB établie', 'dashboard')
+              // Attendre un peu pour que la connexion soit stable
+              await new Promise(resolve => setTimeout(resolve, 500))
+              // Démarrer automatiquement le streaming
+              appendUsbStreamLog('📡 Démarrage automatique du streaming...', 'dashboard')
+              await startUsbStreaming(newPort)
             } else {
               appendUsbStreamLog('❌ Échec de la connexion', 'dashboard')
             }
@@ -158,6 +163,11 @@ export default function UsbStreamingTab() {
           const connected = await connect(selectedPortData.port, 115200)
           if (connected) {
             appendUsbStreamLog('✅ Connexion USB établie', 'dashboard')
+            // Attendre un peu pour que la connexion soit stable
+            await new Promise(resolve => setTimeout(resolve, 500))
+            // Démarrer automatiquement le streaming
+            appendUsbStreamLog('📡 Démarrage automatique du streaming...', 'dashboard')
+            await startUsbStreaming(selectedPortData.port)
           } else {
             appendUsbStreamLog('❌ Échec de la connexion', 'dashboard')
           }
@@ -353,9 +363,16 @@ export default function UsbStreamingTab() {
     try {
       // La fonction write attend une string et fait l'encodage elle-même
       const commandWithNewline = command + '\n'
-      logger.log(`[USB] Envoi de la commande: "${commandWithNewline}"`)
+      logger.log(`[USB] Envoi de la commande: "${commandWithNewline.trim()}"`)
       appendUsbStreamLog(`📤 Envoi commande: ${command}`, 'dashboard')
+      
+      // Envoyer la commande
       const result = await write(commandWithNewline)
+      
+      // Attendre un peu pour que le firmware reçoive et traite la commande
+      // Cela évite les problèmes de timing et permet au firmware de répondre
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       if (result) {
         logger.log(`[USB] ✅ Commande "${command}" envoyée avec succès`)
         appendUsbStreamLog(`✅ Commande "${command}" envoyée avec succès`, 'dashboard')
@@ -367,6 +384,8 @@ export default function UsbStreamingTab() {
       logger.error('[USB] Erreur envoi commande:', err)
       appendUsbStreamLog(`❌ Erreur envoi commande: ${err.message || err}`, 'dashboard')
     } finally {
+      // Attendre un peu avant de permettre la prochaine commande pour éviter les chevauchements
+      await new Promise(resolve => setTimeout(resolve, 50))
       setSendingCommand(false)
     }
   }
@@ -390,9 +409,21 @@ export default function UsbStreamingTab() {
     sendCommand('gps')
   }
 
-  // Handler pour demander une mesure immédiate
+  // Handler pour demander le débit uniquement
+  const handleRequestFlowrate = () => {
+    appendUsbStreamLog('💨 Demande du débit...', 'dashboard')
+    sendCommand('flowrate')
+  }
+
+  // Handler pour demander la batterie uniquement
+  const handleRequestBattery = () => {
+    appendUsbStreamLog('🔋 Demande de la batterie...', 'dashboard')
+    sendCommand('battery')
+  }
+
+  // Handler pour demander une mesure complète
   const handleRequestMeasurement = () => {
-    appendUsbStreamLog('📊 Demande d\'une mesure immédiate...', 'dashboard')
+    appendUsbStreamLog('📊 Demande d\'une mesure complète...', 'dashboard')
     sendCommand('once')
   }
 
@@ -512,6 +543,11 @@ export default function UsbStreamingTab() {
                             if (connected) {
                               appendUsbStreamLog('✅ Connexion USB établie', 'dashboard')
                               await loadAvailablePorts()
+                              // Attendre un peu pour que la connexion soit stable
+                              await new Promise(resolve => setTimeout(resolve, 500))
+                              // Démarrer automatiquement le streaming
+                              appendUsbStreamLog('📡 Démarrage automatique du streaming...', 'dashboard')
+                              await startUsbStreaming(selectedPortData.port)
                             } else {
                               appendUsbStreamLog('❌ Échec de la connexion au port', 'dashboard')
                             }
@@ -526,9 +562,16 @@ export default function UsbStreamingTab() {
                             const newPort = await requestPort()
                             if (newPort) {
                               appendUsbStreamLog('✅ Port USB autorisé, connexion en cours...', 'dashboard')
-                              await connect(newPort, 115200)
-                              appendUsbStreamLog('✅ Connexion USB établie', 'dashboard')
-                              await loadAvailablePorts()
+                              const connected = await connect(newPort, 115200)
+                              if (connected) {
+                                appendUsbStreamLog('✅ Connexion USB établie', 'dashboard')
+                                await loadAvailablePorts()
+                                // Attendre un peu pour que la connexion soit stable
+                                await new Promise(resolve => setTimeout(resolve, 500))
+                                // Démarrer automatiquement le streaming
+                                appendUsbStreamLog('📡 Démarrage automatique du streaming...', 'dashboard')
+                                await startUsbStreaming(newPort)
+                              }
                             }
                           } catch (err) {
                             logger.error('[UsbStreamingTab] Erreur détection USB:', err)
@@ -542,9 +585,16 @@ export default function UsbStreamingTab() {
                           const newPort = await requestPort()
                           if (newPort) {
                             appendUsbStreamLog('✅ Port USB autorisé, connexion en cours...', 'dashboard')
-                            await connect(newPort, 115200)
-                            appendUsbStreamLog('✅ Connexion USB établie', 'dashboard')
-                            await loadAvailablePorts()
+                            const connected = await connect(newPort, 115200)
+                            if (connected) {
+                              appendUsbStreamLog('✅ Connexion USB établie', 'dashboard')
+                              await loadAvailablePorts()
+                              // Attendre un peu pour que la connexion soit stable
+                              await new Promise(resolve => setTimeout(resolve, 500))
+                              // Démarrer automatiquement le streaming
+                              appendUsbStreamLog('📡 Démarrage automatique du streaming...', 'dashboard')
+                              await startUsbStreaming(newPort)
+                            }
                           }
                         } catch (err) {
                           logger.error('[UsbStreamingTab] Erreur détection USB:', err)
@@ -767,55 +817,6 @@ export default function UsbStreamingTab() {
                      'Arrêté'}
                   </p>
                 </div>
-                {isStreaming && (
-                  <div className="flex gap-2 ml-auto">
-                    <button
-                      onClick={handleModemOn}
-                      disabled={!isConnected || sendingCommand || modemStatus === 'running' || modemStatus === 'starting'}
-                      className="w-8 h-8 flex items-center justify-center text-lg rounded bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors relative group"
-                    >
-                      {modemStatus === 'starting' ? '⏳' : '📡'}
-                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
-                        <p className="font-semibold mb-2">📡 Démarrer le modem</p>
-                        <p className="text-left mb-2">
-                          Démarre le modem SIM7600 pour activer la connectivité réseau et le GPS.
-                        </p>
-                        <p className="text-left text-gray-400">
-                          Les logs du démarrage s'affichent dans la console ci-dessous.
-                        </p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={handleModemOff}
-                      disabled={!isConnected || sendingCommand || modemStatus === 'stopped' || modemStatus === 'stopping'}
-                      className="w-8 h-8 flex items-center justify-center text-lg rounded bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors relative group"
-                    >
-                      {modemStatus === 'stopping' ? '⏳' : '🛑'}
-                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
-                        <p className="font-semibold mb-2">🛑 Arrêter le modem</p>
-                        <p className="text-left">
-                          Arrête le modem pour économiser l'énergie. Le GPS ne sera plus disponible.
-                        </p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={handleTestNetwork}
-                      disabled={!isConnected || sendingCommand || modemStatus !== 'running'}
-                      className="w-8 h-8 flex items-center justify-center text-lg rounded bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors relative group"
-                    >
-                      📶
-                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
-                        <p className="font-semibold mb-2">📶 Test réseau</p>
-                        <p className="text-left mb-2">
-                          Teste l'enregistrement sur le réseau Free et affiche le statut de connexion.
-                        </p>
-                        <p className="text-left text-gray-400">
-                          Le modem doit être démarré pour effectuer ce test. Les résultats s'affichent dans la console.
-                        </p>
-                      </div>
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -894,15 +895,15 @@ export default function UsbStreamingTab() {
             {/* Débit */}
             <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
               <button
-                onClick={handleRequestMeasurement}
+                onClick={handleRequestFlowrate}
                 disabled={!isConnected || sendingCommand || !isStreaming}
                 className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all relative group ${isDisabled || !isStreaming ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 cursor-pointer'}`}
               >
                 <span className="text-xl">💨</span>
                 <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
-                  <p className="font-semibold mb-2">💨 Demander une mesure immédiate</p>
+                  <p className="font-semibold mb-2">💨 Demander le débit</p>
                   <p className="text-left">
-                    Demande au dispositif d'envoyer une mesure immédiate (débit, batterie, RSSI).
+                    Demande au dispositif d'envoyer uniquement la mesure de débit.
                   </p>
                 </div>
               </button>
@@ -925,7 +926,7 @@ export default function UsbStreamingTab() {
             {/* Batterie */}
             <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
               <button
-                onClick={handleRequestMeasurement}
+                onClick={handleRequestBattery}
                 disabled={!isConnected || sendingCommand || !isStreaming}
                 className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all relative group ${
                   isDisabled || !isStreaming
@@ -941,9 +942,9 @@ export default function UsbStreamingTab() {
               >
                 <span className="text-xl">🔋</span>
                 <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
-                  <p className="font-semibold mb-2">🔋 Demander une mesure immédiate</p>
+                  <p className="font-semibold mb-2">🔋 Demander la batterie</p>
                   <p className="text-left">
-                    Demande au dispositif d'envoyer une mesure immédiate (débit, batterie, RSSI).
+                    Demande au dispositif d'envoyer uniquement la mesure de batterie.
                   </p>
                 </div>
               </button>
@@ -1034,11 +1035,21 @@ export default function UsbStreamingTab() {
           {/* Section 4 : Statistiques et informations */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ℹ️ Statistiques</h3>
-            {/* Mesures reçues */}
+            {/* Mesure complète - Bouton d'action */}
             <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isDisabled ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500' : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'}`}>
+              <button
+                onClick={handleRequestMeasurement}
+                disabled={!isConnected || sendingCommand || !isStreaming}
+                className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all relative group ${isDisabled || !isStreaming ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/50 cursor-pointer'}`}
+              >
                 <span className="text-xl">📊</span>
-              </div>
+                <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700">
+                  <p className="font-semibold mb-2">📊 Mesure complète</p>
+                  <p className="text-left">
+                    Demande au dispositif d'envoyer une mesure complète (débit + batterie + RSSI + GPS si disponible).
+                  </p>
+                </div>
+              </button>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-0.5">Mesures</p>
                 <p className={`text-sm font-semibold truncate ${isDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
