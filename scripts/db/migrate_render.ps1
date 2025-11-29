@@ -29,10 +29,11 @@ if (-not $DATABASE_URL) {
     exit 1
 }
 
-# Vérifier que les fichiers SQL existent
-$SCHEMA_FILE = Join-Path $PSScriptRoot "..\sql\schema.sql"
-$MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_optimisations.sql"
-$PHONE_MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_add_phone_users.sql"
+    # Vérifier que les fichiers SQL existent
+    $SCHEMA_FILE = Join-Path $PSScriptRoot "..\sql\schema.sql"
+    $MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_optimisations.sql"
+    $PHONE_MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_add_phone_users.sql"
+    $LAST_VALUES_MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_add_last_values.sql"
 
 if (-not (Test-Path $SCHEMA_FILE)) {
     Write-Host "❌ Fichier SQL introuvable: $SCHEMA_FILE" -ForegroundColor Red
@@ -120,6 +121,18 @@ try {
             Write-Host "   ✅ Migration phone appliquée" -ForegroundColor Green
         } else {
             Write-Host "   ⚠️  Migration phone (vérifiez les messages)" -ForegroundColor Yellow
+        }
+    }
+    Write-Host ""
+
+    # 2.6. Appliquer la migration last_flowrate et last_rssi (si nécessaire)
+    if (Test-Path $LAST_VALUES_MIGRATION_FILE) {
+        Write-Host "2️⃣.6 Application de la migration last_flowrate et last_rssi..." -ForegroundColor Yellow
+        $lastValuesMigrationResult = Invoke-PSQL -DatabaseUrl $DATABASE_URL -File $LAST_VALUES_MIGRATION_FILE 2>&1
+        if ($LASTEXITCODE -eq 0 -or $lastValuesMigrationResult -match "already exists|déjà existe") {
+            Write-Host "   ✅ Migration last_flowrate et last_rssi appliquée" -ForegroundColor Green
+        } else {
+            Write-Host "   ⚠️  Migration last_flowrate et last_rssi (vérifiez les messages)" -ForegroundColor Yellow
         }
     }
     Write-Host ""
