@@ -354,8 +354,6 @@ export function useSerialPort() {
               }
             }
           } catch (readErr) {
-            consecutiveErrors++
-            
             // Erreur lors de la lecture d'un chunk
             if (readErr.name === 'NetworkError') {
               // Erreur réseau normale (déconnexion)
@@ -365,7 +363,23 @@ export function useSerialPort() {
               // Lecture annulée explicitement
               logger.debug('[SerialPortManager] Lecture annulée')
               break
+            } else if (readErr.name === 'FramingError' || readErr.message?.includes('Framing')) {
+              // Erreur de framing : souvent temporaire, ignorer et continuer
+              consecutiveErrors++
+              if (consecutiveErrors <= 3) {
+                // Ignorer les premières erreurs de framing (souvent temporaires)
+                logger.debug(`[SerialPortManager] Erreur de framing ignorée (${consecutiveErrors}/3)`)
+                await new Promise(resolve => setTimeout(resolve, 50))
+                continue // Continuer la boucle sans incrémenter davantage
+              } else {
+                // Après 3 erreurs de framing, log mais continuer
+                logger.warn(`[SerialPortManager] Erreurs de framing répétées (${consecutiveErrors}), mais continuation...`)
+                await new Promise(resolve => setTimeout(resolve, 100))
+                continue
+              }
             } else {
+              consecutiveErrors++
+              
               // Log l'erreur seulement la première fois et après plusieurs erreurs
               if (consecutiveErrors === 1) {
                 logger.error('[SerialPortManager] Erreur lors de la lecture:', readErr)

@@ -25,6 +25,8 @@ function handleGetDevices() {
                 d.first_use_date,
                 d.last_seen,
                 d.last_battery,
+                d.last_flowrate,
+                d.last_rssi,
                 d.latitude,
                 d.longitude,
                 d.created_at,
@@ -357,6 +359,18 @@ function handlePostMeasurement() {
                 $updateParams = ['battery' => $battery, 'id' => $device_id, 'timestamp' => $timestampValue];
                 $updateFields = ['last_seen = :timestamp', 'last_battery = :battery'];
                 
+                // Mettre à jour last_flowrate si fourni
+                if ($flowrate !== null && $flowrate > 0) {
+                    $updateFields[] = 'last_flowrate = :flowrate';
+                    $updateParams['flowrate'] = $flowrate;
+                }
+                
+                // Mettre à jour last_rssi si fourni (et valide, pas -999)
+                if ($rssi !== null && $rssi !== -999) {
+                    $updateFields[] = 'last_rssi = :rssi';
+                    $updateParams['rssi'] = $rssi;
+                }
+                
                 // Mettre à jour la version firmware si fournie et différente
                 if ($firmware_version && $firmware_version !== $device['firmware_version']) {
                     $updateFields[] = 'firmware_version = :firmware_version';
@@ -448,7 +462,21 @@ function handlePostMeasurement() {
                         $device_id = $device['id'];
                         // Continuer avec la mise à jour et l'insertion de la mesure
                         $updateParams = ['battery' => $battery, 'id' => $device_id, 'timestamp' => $timestampValue];
-                        $pdo->prepare("UPDATE devices SET last_seen = :timestamp, last_battery = :battery WHERE id = :id")
+                        $updateFields = ['last_seen = :timestamp', 'last_battery = :battery'];
+                        
+                        // Mettre à jour last_flowrate si fourni
+                        if ($flowrate !== null && $flowrate > 0) {
+                            $updateFields[] = 'last_flowrate = :flowrate';
+                            $updateParams['flowrate'] = $flowrate;
+                        }
+                        
+                        // Mettre à jour last_rssi si fourni (et valide, pas -999)
+                        if ($rssi !== null && $rssi !== -999) {
+                            $updateFields[] = 'last_rssi = :rssi';
+                            $updateParams['rssi'] = $rssi;
+                        }
+                        
+                        $pdo->prepare("UPDATE devices SET " . implode(', ', $updateFields) . " WHERE id = :id")
                             ->execute($updateParams);
                         
                         $pdo->prepare("

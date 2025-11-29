@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v3.6-commands-enhanced - Amélioration des commandes USB
+ *  OTT Firmware v3.7-debug-mode - Mode Debug unifié
  * ================================================================
  * Objectifs :
  *   - Mesurer le débit d'oxygène + la batterie et publier la mesure
@@ -8,7 +8,7 @@
  *   - Journaliser localement ou côté API chaque événement important
  *   - Autoriser la reconfiguration complète d'un boîtier sans reflasher
  *   - Envoyer la position GPS/réseau cellulaire avec chaque mesure
- *   - Mode streaming USB pour tests et diagnostics en temps réel
+ *   - Mode debug pour tests et diagnostics en temps réel (contrôlé par dashboard)
  *
  * Fonctionnalités principales :
  *   - TinyGSM SIM7600 : init matériel, gestion SIM/PIN, GPRS, HTTPS
@@ -20,33 +20,40 @@
  *   - RSSI : Conversion CSQ vers dBm selon standard 3GPP TS 27.007
  *   - Deep sleep : Intervalle par défaut 24h pour limiter les coûts réseau
  *
- * Mode Streaming USB (v3.2+) :
- *   - Détection automatique : commande "usb" dans les 3 secondes après boot
+ * Mode Debug (v3.7+) :
+ *   - Écoute permanente du port série en mode normal (détection commande "debug")
+ *   - Activation : commande "debug" acceptée à tout moment (handshake initial ou pendant opération normale)
  *   - Streaming continu : mesures JSON + logs lisibles en temps réel
- *   - Commandes interactives :
- *     * `modem_on` : Démarre le modem (non démarré automatiquement en mode USB)
+ *   - Commandes interactives (toutes contrôlées par dashboard) :
+ *     * `modem_on` : Démarre le modem (non démarré automatiquement en mode debug)
  *     * `modem_off` : Arrête le modem
  *     * `test_network` : Teste l'enregistrement réseau (modem doit être démarré)
  *     * `gps` : Teste le GPS (modem doit être démarré)
  *     * `once` : Envoie une mesure immédiatement
+ *     * `flowrate` : Mesure du débit uniquement
+ *     * `battery` : Mesure de la batterie uniquement
+ *     * `device_info` : Informations du dispositif
  *     * `interval=<ms>` : Change l'intervalle (200-10000ms, défaut 1000ms)
+ *     * `start` : Démarre le streaming continu
+ *     * `stop` : Arrête le streaming continu
  *     * `help` : Affiche l'aide
- *     * `exit` : Quitte le streaming et redémarre pour reprendre le cycle normal
- *   - Détection déconnexion USB : retour automatique au mode réseau
+ *     * `exit` / `normal` : Quitte le mode debug et redémarre pour reprendre le cycle normal
+ *   - Détection déconnexion série : retour automatique au mode réseau
  *   - Confirmations : Réception et réponses structurées pour toutes les commandes
  *
  * Optimisations réseau (v3.3+) :
  *   - Retry avec backoff exponentiel pour l'attachement réseau
  *   - Gestion APN : Recommandations automatiques par opérateur (MCC/MNC)
  *   - Gestion REG_DENIED : Changement automatique d'APN et retry
- *   - Modem non initialisé en mode USB : économie d'énergie et coûts
+ *   - Modem non initialisé en mode debug : économie d'énergie et coûts
  *
- * Améliorations récentes (v3.4-v3.5) :
- *   - Modem non démarré automatiquement en mode USB (économie énergie/coûts)
+ * Améliorations récentes (v3.6-v3.7) :
+ *   - Modem non démarré automatiquement en mode debug (économie énergie/coûts)
  *   - RSSI calculé seulement si modem démarré, sinon -999
  *   - Logs structurés avec séparateurs visuels pour modem start/stop
- *   - Confirmations de réception pour toutes les commandes USB
- *   - Détection robuste de déconnexion USB
+ *   - Confirmations de réception pour toutes les commandes debug
+ *   - Détection robuste de déconnexion série
+ *   - Écoute permanente du port série en mode normal (activation debug à tout moment)
  *
  * Toutes les sections ci-dessous sont abondamment commentées pour guider
  * la maintenance ou l'extension (ex. ajout d'une commande OTA_REQUEST).
@@ -87,10 +94,10 @@ static constexpr uint8_t  MODEM_MAX_REBOOTS_DEFAULT = 3;
 static constexpr uint32_t WATCHDOG_TIMEOUT_DEFAULT_SEC = 30;
 static constexpr uint8_t  MIN_WATCHDOG_TIMEOUT_SEC = 5;
 static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
-static constexpr uint32_t USB_STREAM_DEFAULT_INTERVAL_MS = 1000;
-static constexpr uint32_t USB_STREAM_MIN_INTERVAL_MS = 200;
-static constexpr uint32_t USB_STREAM_MAX_INTERVAL_MS = 10000;
-static constexpr uint32_t USB_HANDSHAKE_WINDOW_MS = 3500;
+static constexpr uint32_t DEBUG_STREAM_DEFAULT_INTERVAL_MS = 1000;
+static constexpr uint32_t DEBUG_STREAM_MIN_INTERVAL_MS = 200;
+static constexpr uint32_t DEBUG_STREAM_MAX_INTERVAL_MS = 10000;
+static constexpr uint32_t DEBUG_HANDSHAKE_WINDOW_MS = 3500;
 
 // --- Paramètres modifiables localement (puis écrasés via UPDATE_CONFIG) ---
 #ifndef OTT_DEFAULT_SIM_PIN
@@ -124,7 +131,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.6-commands-enhanced"
+#define FIRMWARE_VERSION_STR "3.7-debug-mode"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -153,6 +160,9 @@ float CAL_OVERRIDE_A0 = NAN;
 float CAL_OVERRIDE_A1 = NAN;
 float CAL_OVERRIDE_A2 = NAN;
 bool modemReady = false;
+static bool debugModeActive = false;
+static String debugCommandBuffer = ""; // Buffer pour commandes debug en mode normal
+static String usbLateCommandBuffer;
 
 struct PendingLog {
   String level;
@@ -196,6 +206,9 @@ void feedWatchdog();
 void logRuntimeConfig();
 void logRadioSnapshot(const char* stage);
 static const char* regStatusToString(RegStatus status);
+bool checkDebugActivationCommand();
+void monitorDebugActivation(const __FlashStringHelper* context = nullptr);
+void enterDebugModeFromNormalOperation(const __FlashStringHelper* context = nullptr);
 
 float measureBattery();
 float measureAirflowRaw();
@@ -225,10 +238,10 @@ void checkBootFailureAndRollback();
 void markFirmwareAsStable();
 void rollbackToPreviousFirmware();
 Measurement captureSensorSnapshot();
-bool detectUsbStreamingMode();
-void usbStreamingLoop();
-void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude = nullptr, float* longitude = nullptr);
-void printUsbStreamHelp(uint32_t intervalMs);
+bool detectDebugModeHandshake();
+void debugStreamingLoop();
+void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude = nullptr, float* longitude = nullptr);
+void printDebugStreamHelp(uint32_t intervalMs);
 bool getDeviceLocation(float* latitude, float* longitude);
 
 void setup()
@@ -239,8 +252,8 @@ void setup()
   Serial.println(F("[BOOT] ========================================\n"));
   
   initBoard();
-  // Ne pas initialiser le modem si on est en mode USB (pour éviter de démarrer le modem inutilement)
-  // initModem() sera appelé seulement si on n'est pas en mode USB
+  // Ne pas initialiser le modem si on est en mode debug (pour éviter de démarrer le modem inutilement)
+  // initModem() sera appelé seulement si on n'est pas en mode debug
   loadConfig();
   
   // Vérifier si on doit faire un rollback (si le boot a échoué plusieurs fois)
@@ -253,15 +266,19 @@ void setup()
   feedWatchdog();
   logRuntimeConfig();
 
-  if (detectUsbStreamingMode()) {
-    // En mode USB, ne pas initialiser le modem (il sera démarré seulement si l'utilisateur le demande)
-    usbStreamingLoop();
-    Serial.println(F("[USB] Redémarrage pour reprendre le cycle normal..."));
+  if (detectDebugModeHandshake()) {
+    // En mode debug, ne pas initialiser le modem (il sera démarré seulement si l'utilisateur le demande)
+    debugModeActive = true;
+    debugStreamingLoop();
+    debugModeActive = false;
+    Serial.println(F("[DEBUG] Redémarrage pour reprendre le cycle normal..."));
     delay(100);
     ESP.restart();
   }
+  Serial.println(F("[DEBUG] Mode debug non activé durant la fenêtre initiale. Tapez 'debug' à tout moment pour basculer."));
+  monitorDebugActivation(F("après fenêtre initiale"));
   
-  // Si on n'est pas en mode USB, initialiser le modem pour le cycle normal
+  // Si on n'est pas en mode debug, initialiser le modem pour le cycle normal
   initModem();
 
   Measurement m = captureSensorSnapshot();
@@ -449,6 +466,81 @@ void stopModem()
   modemReady = false;
 }
 
+bool checkDebugActivationCommand()
+{
+  bool activationRequested = false;
+
+  while (Serial.available()) {
+    char incoming = Serial.read();
+    if (incoming == '\r') {
+      continue;
+    }
+
+    if (incoming == '\n') {
+      debugCommandBuffer.trim();
+      if (debugCommandBuffer.length() > 0) {
+        String lowered = debugCommandBuffer;
+        lowered.toLowerCase();
+        // Accepter "debug" (nouveau) et "usb" (rétrocompatibilité)
+        if (lowered == "debug" || lowered == "d" || lowered == "usb" || 
+            lowered == "u" || lowered == "stream" ||
+            lowered == "usb_on" || lowered == "usb_stream_on" || 
+            lowered == "debug_on" || lowered == "debug_stream_on") {
+          activationRequested = true;
+        } else {
+          // Ignorer silencieusement les autres commandes en mode normal
+        }
+      }
+      debugCommandBuffer = "";
+    } else {
+      debugCommandBuffer += incoming;
+      if (debugCommandBuffer.length() > 64) {
+        debugCommandBuffer.remove(0, debugCommandBuffer.length() - 64);
+      }
+    }
+  }
+
+  return activationRequested;
+}
+
+void enterDebugModeFromNormalOperation(const __FlashStringHelper* context)
+{
+  Serial.println();
+  Serial.println(F("[DEBUG] ========================================"));
+  if (context) {
+    Serial.print(F("[DEBUG] ✅ Commande 'debug' reçue ("));
+    Serial.print(context);
+    Serial.println(F(")"));
+  } else {
+    Serial.println(F("[DEBUG] ✅ Commande 'debug' reçue"));
+  }
+  Serial.println(F("[DEBUG] Préparation du mode debug..."));
+
+  if (modemReady) {
+    Serial.println(F("[DEBUG] Arrêt du modem avant bascule..."));
+    stopModem();
+  }
+
+  debugModeActive = true;
+  debugStreamingLoop();
+  debugModeActive = false;
+
+  Serial.println(F("[DEBUG] Redémarrage pour reprendre le cycle normal..."));
+  delay(100);
+  ESP.restart();
+}
+
+void monitorDebugActivation(const __FlashStringHelper* context)
+{
+  if (debugModeActive) {
+    return;
+  }
+
+  if (checkDebugActivationCommand()) {
+    enterDebugModeFromNormalOperation(context);
+  }
+}
+
 void goToSleep(uint32_t minutes)
 {
   Serial.printf("[SLEEP] %lu minutes\n", minutes);
@@ -482,7 +574,7 @@ Measurement captureSensorSnapshot()
 }
 
 // Envoyer les informations du dispositif dès la connexion USB
-void emitUsbDeviceInfo()
+void emitDebugDeviceInfo()
 {
   // Essayer de lire l'ICCID depuis la SIM si le modem est disponible
   // (sans démarrer complètement le modem, juste une lecture rapide)
@@ -523,20 +615,22 @@ void emitUsbDeviceInfo()
   serializeJson(infoDoc, Serial);
   Serial.println();
   
-  Serial.printf("[USB] Device info envoyé: ICCID=%s, Serial=%s, FW=%s\n", 
+  Serial.printf("[DEBUG] Device info envoyé: ICCID=%s, Serial=%s, FW=%s\n", 
                 iccidToSend.c_str(), serialToSend.c_str(), FIRMWARE_VERSION);
 }
 
-bool detectUsbStreamingMode()
+bool detectDebugModeHandshake()
 {
-  // Envoyer immédiatement les infos du dispositif dès la connexion USB
-  emitUsbDeviceInfo();
+  // Envoyer immédiatement les infos du dispositif dès la connexion série
+  emitDebugDeviceInfo();
   
-  Serial.println(F("[USB] Branché au PC ? Tapez 'usb' + Entrée sous 3s pour streaming continu."));
+  // Le dashboard envoie automatiquement la commande "debug" lors de la connexion
+  // On attend cette commande pendant une courte fenêtre (3.5s) pour activer le mode debug
+  Serial.println(F("[DEBUG] Connexion série détectée - En attente de la commande 'debug' du dashboard..."));
   unsigned long start = millis();
   String buffer;
 
-  while (millis() - start < USB_HANDSHAKE_WINDOW_MS) {
+  while (millis() - start < DEBUG_HANDSHAKE_WINDOW_MS) {
     while (Serial.available()) {
       char incoming = Serial.read();
       if (incoming == '\r') {
@@ -547,9 +641,12 @@ bool detectUsbStreamingMode()
         if (buffer.length() > 0) {
           String lowered = buffer;
           lowered.toLowerCase();
-          if (lowered == "usb" || lowered == "u" || lowered == "stream" ||
-              lowered == "usb_on" || lowered == "usb_stream_on") {
-            Serial.println(F("[USB] Mode streaming continu activé."));
+          // Accepter "debug" (nouveau) et "usb" (rétrocompatibilité)
+          if (lowered == "debug" || lowered == "d" || lowered == "usb" || 
+              lowered == "u" || lowered == "stream" ||
+              lowered == "usb_on" || lowered == "usb_stream_on" ||
+              lowered == "debug_on" || lowered == "debug_stream_on") {
+            Serial.println(F("[DEBUG] ✅ Commande 'debug' reçue du dashboard - Mode debug activé"));
             return true;
           }
         }
@@ -567,46 +664,61 @@ bool detectUsbStreamingMode()
   return false;
 }
 
-void usbStreamingLoop()
+void debugStreamingLoop()
 {
-  uint32_t intervalMs = USB_STREAM_DEFAULT_INTERVAL_MS;
+  uint32_t intervalMs = DEBUG_STREAM_DEFAULT_INTERVAL_MS;
   uint32_t sequence = 0;
   bool streamingActive = false; // Le streaming n'est actif que si explicitement démarré via commande
   unsigned long lastSend = 0;
   String commandBuffer;
-  unsigned long lastUsbCheck = 0;
-  const unsigned long USB_CHECK_INTERVAL_MS = 5000; // Vérifier la connexion USB toutes les 5 secondes
-  unsigned long consecutiveUsbErrors = 0;
-  const unsigned long MAX_USB_ERRORS = 3; // Si 3 erreurs consécutives, USB déconnecté
+  unsigned long lastSerialCheck = 0;
+  const unsigned long SERIAL_CHECK_INTERVAL_MS = 5000; // Vérifier la connexion série toutes les 5 secondes
+  unsigned long consecutiveSerialErrors = 0;
+  const unsigned long MAX_SERIAL_ERRORS = 3; // Si 3 erreurs consécutives, série déconnecté
 
-  Serial.println(F("[USB] Mode USB activé - En attente de commandes du dashboard."));
-  Serial.println(F("[USB] Le dispositif n'envoie des mesures que sur commande explicite."));
-  Serial.println(F("[USB] Tapez 'help' pour voir les commandes disponibles."));
-  printUsbStreamHelp(intervalMs);
+  Serial.println(F("[DEBUG] Mode debug activé - En attente de commandes du dashboard."));
+  Serial.println(F("[DEBUG] Le dispositif n'envoie des mesures que sur commande explicite."));
+  Serial.println(F("[DEBUG] Tapez 'help' pour voir les commandes disponibles."));
+  printDebugStreamHelp(intervalMs);
 
   while (true) {
     feedWatchdog();
 
     unsigned long now = millis();
     
-    // Vérifier périodiquement si l'USB est toujours connecté
-    // Sur ESP32, si USB est déconnecté, Serial reste "valide" mais les écritures peuvent échouer
+    // Vérifier périodiquement si la connexion série est toujours active
+    // Sur ESP32, si série est déconnecté, Serial reste "valide" mais les écritures peuvent échouer
     // On vérifie si on peut écrire dans le buffer Serial
-    if (now - lastUsbCheck >= USB_CHECK_INTERVAL_MS) {
-      lastUsbCheck = now;
+    if (now - lastSerialCheck >= SERIAL_CHECK_INTERVAL_MS) {
+      lastSerialCheck = now;
       // Vérifier si le buffer Serial est disponible pour écriture
       // Si USB est déconnecté, availableForWrite() peut retourner 0 ou un nombre très petit
       size_t available = Serial.availableForWrite();
       if (available == 0 || available < 64) {
         // Buffer plein ou USB déconnecté - incrémenter le compteur d'erreurs
-        consecutiveUsbErrors++;
-        if (consecutiveUsbErrors >= MAX_USB_ERRORS) {
-          // USB déconnecté depuis trop longtemps, sortir du mode streaming
-          // Le dispositif redémarrera et reprendra le cycle normal (avec réseau)
+        consecutiveSerialErrors++;
+        if (consecutiveSerialErrors >= MAX_SERIAL_ERRORS) {
+          // Série déconnecté depuis trop longtemps, sortir du mode debug
+          Serial.println(F("[DEBUG] ⚠️ Déconnexion série détectée (3 vérifications consécutives échouées)"));
+          Serial.println(F("[DEBUG] Sortie du mode debug..."));
+          Serial.println(F("[DEBUG] Le dispositif va redémarrer et reprendre le cycle normal (mode réseau)"));
+          delay(500); // Laisser le temps d'envoyer les messages
           return; // Sortir de la boucle pour reprendre le cycle normal
+        } else {
+          // Log seulement si c'est la première erreur pour éviter le spam
+          if (consecutiveSerialErrors == 1) {
+            Serial.printf("[DEBUG] ⚠️ Vérification série échouée (%lu/%lu) - Buffer: %zu bytes\n", 
+                         consecutiveSerialErrors, MAX_SERIAL_ERRORS, available);
+          }
         }
       } else {
-        consecutiveUsbErrors = 0; // Reset le compteur si USB semble OK
+        if (consecutiveSerialErrors > 0) {
+          // Série récupéré après des erreurs
+          Serial.printf("[DEBUG] ✅ Connexion série rétablie (buffer: %zu bytes)\n", available);
+          consecutiveSerialErrors = 0; // Reset le compteur si série semble OK
+        } else {
+          consecutiveSerialErrors = 0; // Reset silencieux si pas d'erreur précédente
+        }
       }
     }
 
@@ -614,7 +726,7 @@ void usbStreamingLoop()
     if (streamingActive && now - lastSend >= intervalMs) {
       Measurement snapshot = captureSensorSnapshot();
       
-      // En mode USB, le RSSI n'est pas disponible si le modem n'est pas démarré
+      // En mode debug, le RSSI n'est pas disponible si le modem n'est pas démarré
       // On laisse snapshot.rssi à sa valeur par défaut (probablement 0 ou -999)
       // Si le modem est démarré, on peut essayer d'obtenir le RSSI
       if (modemReady) {
@@ -629,19 +741,19 @@ void usbStreamingLoop()
           snapshot.rssi = -110 + (csq * 2);  // Formule standard 3GPP
         }
       } else {
-        // Modem non démarré en mode USB, RSSI non disponible
+        // Modem non démarré en mode debug, RSSI non disponible
         snapshot.rssi = -999;
       }
       
       // Essayer d'obtenir la position GPS si le modem est disponible
-      // (en mode USB, le modem n'est généralement pas démarré, donc GPS sera null)
+      // (en mode debug, le modem n'est généralement pas démarré, donc GPS sera null)
       float lat = 0.0, lon = 0.0;
       bool hasLocation = false;
       if (modemReady) {
         hasLocation = getDeviceLocation(&lat, &lon);
       }
       
-      emitUsbMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
+      emitDebugMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
       lastSend = now;
     }
 
@@ -661,11 +773,11 @@ void usbStreamingLoop()
 
         // Log de réception de commande pour débogage (avec timestamp pour traçabilité)
         unsigned long cmdTime = millis();
-        Serial.printf("[USB] 📥 [%lu ms] Commande reçue: '%s' (longueur: %d)\n", 
+        Serial.printf("[DEBUG] 📥 [%lu ms] Commande reçue: '%s' (longueur: %d)\n", 
                      cmdTime, command.c_str(), command.length());
         
         // Log des bytes reçus pour débogage avancé
-        Serial.printf("[USB] 🔍 Bytes de la commande: ");
+        Serial.printf("[DEBUG] 🔍 Bytes de la commande: ");
         for (size_t i = 0; i < command.length(); i++) {
           Serial.printf("%02X ", (uint8_t)command[i]);
         }
@@ -675,28 +787,28 @@ void usbStreamingLoop()
         lowered.toLowerCase();
 
         // Confirmation de réception et traitement de chaque commande
-        if (lowered == "exit" || lowered == "sleep" || lowered == "usb_stream_off") {
-          Serial.println(F("[USB] ✅ Commande 'exit' reçue et acceptée"));
-          Serial.println(F("[USB] Sortie du streaming sur demande utilisateur."));
+        if (lowered == "exit" || lowered == "normal" || lowered == "sleep" || lowered == "usb_stream_off" || lowered == "debug_off") {
+          Serial.println(F("[DEBUG] ✅ Commande 'exit'/'normal' reçue et acceptée"));
+          Serial.println(F("[DEBUG] Sortie du mode debug - Retour au cycle normal..."));
           return;
         }
 
         if (lowered == "help") {
-          Serial.println(F("[USB] ✅ Commande 'help' reçue et acceptée"));
-          printUsbStreamHelp(intervalMs);
-          Serial.println(F("[USB] ✅ Aide affichée"));
+          Serial.println(F("[DEBUG] ✅ Commande 'help' reçue et acceptée"));
+          printDebugStreamHelp(intervalMs);
+          Serial.println(F("[DEBUG] ✅ Aide affichée"));
           continue;
         }
 
         // Démarrer le streaming continu (envoi automatique de mesures)
         if (lowered == "start" || lowered == "stream" || lowered == "stream_on") {
-          Serial.println(F("[USB] ✅ Commande 'start' reçue et acceptée"));
+          Serial.println(F("[DEBUG] ✅ Commande 'start' reçue et acceptée"));
           if (streamingActive) {
-            Serial.println(F("[USB] ℹ️  Réponse: Streaming déjà actif"));
+            Serial.println(F("[DEBUG] ℹ️  Réponse: Streaming déjà actif"));
           } else {
             streamingActive = true;
-            Serial.println(F("[USB] ✅ Réponse: Streaming démarré - Mesures envoyées automatiquement"));
-            Serial.printf("[USB] Intervalle: %lu ms (1 mesure toutes les %.1f secondes)\n", 
+            Serial.println(F("[DEBUG] ✅ Réponse: Streaming démarré - Mesures envoyées automatiquement"));
+            Serial.printf("[DEBUG] Intervalle: %lu ms (1 mesure toutes les %.1f secondes)\n", 
                          static_cast<unsigned long>(intervalMs), intervalMs / 1000.0);
           }
           continue;
@@ -704,23 +816,23 @@ void usbStreamingLoop()
 
         // Arrêter le streaming continu
         if (lowered == "stop" || lowered == "stream_off" || lowered == "pause") {
-          Serial.println(F("[USB] ✅ Commande 'stop' reçue et acceptée"));
+          Serial.println(F("[DEBUG] ✅ Commande 'stop' reçue et acceptée"));
           if (!streamingActive) {
-            Serial.println(F("[USB] ℹ️  Réponse: Streaming déjà arrêté"));
+            Serial.println(F("[DEBUG] ℹ️  Réponse: Streaming déjà arrêté"));
           } else {
             streamingActive = false;
-            Serial.println(F("[USB] ✅ Réponse: Streaming arrêté - Plus de mesures automatiques"));
-            Serial.println(F("[USB] Utilisez 'once' pour une mesure unique ou 'start' pour redémarrer"));
+            Serial.println(F("[DEBUG] ✅ Réponse: Streaming arrêté - Plus de mesures automatiques"));
+            Serial.println(F("[DEBUG] Utilisez 'once' pour une mesure unique ou 'start' pour redémarrer"));
           }
           continue;
         }
 
         if (lowered == "once") {
-          Serial.println(F("[USB] ✅ Commande 'once' reçue et acceptée"));
-          Serial.println(F("[USB] 📊 Capture d'une mesure immédiate..."));
+          Serial.println(F("[DEBUG] ✅ Commande 'once' reçue et acceptée"));
+          Serial.println(F("[DEBUG] 📊 Capture d'une mesure immédiate..."));
           Measurement snapshot = captureSensorSnapshot();
           
-          // En mode USB, le RSSI n'est pas disponible si le modem n'est pas démarré
+          // En mode debug, le RSSI n'est pas disponible si le modem n'est pas démarré
           if (modemReady) {
             int8_t csq = modem.getSignalQuality();
             if (csq == 99) {
@@ -743,40 +855,40 @@ void usbStreamingLoop()
             hasLocation = getDeviceLocation(&lat, &lon);
           }
           
-          emitUsbMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
+          emitDebugMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
           lastSend = millis();
-          Serial.println(F("[USB] ✅ Mesure immédiate envoyée"));
+          Serial.println(F("[DEBUG] ✅ Mesure immédiate envoyée"));
           continue;
         }
 
         // Démarrer le modem pour tester l'enregistrement réseau et GPS
         if (lowered == "modem_on" || lowered == "start_modem") {
-          Serial.println(F("[USB] ✅ Commande 'modem_on' reçue et acceptée"));
+          Serial.println(F("[DEBUG] ✅ Commande 'modem_on' reçue et acceptée"));
           if (modemReady) {
-            Serial.println(F("[USB] ℹ️  Réponse: Modem déjà démarré"));
+            Serial.println(F("[DEBUG] ℹ️  Réponse: Modem déjà démarré"));
           } else {
-            Serial.println(F("[USB] 📡 Traitement: Démarrage du modem en cours..."));
-            Serial.println(F("[USB] ========================================"));
-            Serial.println(F("[USB] Démarrage du modem..."));
-            Serial.println(F("[USB] ========================================"));
-            Serial.println(F("[USB] Les logs du démarrage s'affichent ci-dessous:"));
+            Serial.println(F("[DEBUG] 📡 Traitement: Démarrage du modem en cours..."));
+            Serial.println(F("[DEBUG] ========================================"));
+            Serial.println(F("[DEBUG] Démarrage du modem..."));
+            Serial.println(F("[DEBUG] ========================================"));
+            Serial.println(F("[DEBUG] Les logs du démarrage s'affichent ci-dessous:"));
             Serial.println();
             
             if (startModem()) {
               Serial.println();
-              Serial.println(F("[USB] ========================================"));
-              Serial.println(F("[USB] ✅ Réponse: Modem démarré avec succès"));
-              Serial.println(F("[USB] ========================================"));
-              Serial.println(F("[USB] Le modem est maintenant prêt pour:"));
-              Serial.println(F("[USB]   - Tester le réseau: 'test_network'"));
-              Serial.println(F("[USB]   - Tester le GPS: 'gps'"));
-              Serial.println(F("[USB] Note: Le GPS nécessite le modem (intégré au SIM7600)"));
+              Serial.println(F("[DEBUG] ========================================"));
+              Serial.println(F("[DEBUG] ✅ Réponse: Modem démarré avec succès"));
+              Serial.println(F("[DEBUG] ========================================"));
+              Serial.println(F("[DEBUG] Le modem est maintenant prêt pour:"));
+              Serial.println(F("[DEBUG]   - Tester le réseau: 'test_network'"));
+              Serial.println(F("[DEBUG]   - Tester le GPS: 'gps'"));
+              Serial.println(F("[DEBUG] Note: Le GPS nécessite le modem (intégré au SIM7600)"));
             } else {
               Serial.println();
-              Serial.println(F("[USB] ========================================"));
-              Serial.println(F("[USB] ❌ Réponse: Échec démarrage modem"));
-              Serial.println(F("[USB] ========================================"));
-              Serial.println(F("[USB] Vérifiez les logs ci-dessus pour plus de détails"));
+              Serial.println(F("[DEBUG] ========================================"));
+              Serial.println(F("[DEBUG] ❌ Réponse: Échec démarrage modem"));
+              Serial.println(F("[DEBUG] ========================================"));
+              Serial.println(F("[DEBUG] Vérifiez les logs ci-dessus pour plus de détails"));
             }
           }
           continue;
@@ -784,46 +896,46 @@ void usbStreamingLoop()
 
         // Arrêter le modem
         if (lowered == "modem_off" || lowered == "stop_modem") {
-          Serial.println(F("[USB] ✅ Commande 'modem_off' reçue et acceptée"));
+          Serial.println(F("[DEBUG] ✅ Commande 'modem_off' reçue et acceptée"));
           if (!modemReady) {
-            Serial.println(F("[USB] ℹ️  Réponse: Modem déjà arrêté"));
+            Serial.println(F("[DEBUG] ℹ️  Réponse: Modem déjà arrêté"));
           } else {
-            Serial.println(F("[USB] 📡 Traitement: Arrêt du modem en cours..."));
-            Serial.println(F("[USB] Arrêt du modem..."));
+            Serial.println(F("[DEBUG] 📡 Traitement: Arrêt du modem en cours..."));
+            Serial.println(F("[DEBUG] Arrêt du modem..."));
             stopModem();
-            Serial.println(F("[USB] ✅ Réponse: Modem arrêté avec succès"));
+            Serial.println(F("[DEBUG] ✅ Réponse: Modem arrêté avec succès"));
           }
           continue;
         }
 
         // Tester l'enregistrement réseau (nécessite modem démarré)
         if (lowered == "test_network" || lowered == "network") {
-          Serial.println(F("[USB] ✅ Commande 'test_network' reçue et acceptée"));
+          Serial.println(F("[DEBUG] ✅ Commande 'test_network' reçue et acceptée"));
           if (!modemReady) {
-            Serial.println(F("[USB] ⚠️  Réponse: Modem non démarré. Tapez 'modem_on' d'abord."));
+            Serial.println(F("[DEBUG] ⚠️  Réponse: Modem non démarré. Tapez 'modem_on' d'abord."));
           } else {
-            Serial.println(F("[USB] 📶 Traitement: Test enregistrement réseau en cours..."));
-            Serial.println(F("[USB] Test enregistrement réseau..."));
+            Serial.println(F("[DEBUG] 📶 Traitement: Test enregistrement réseau en cours..."));
+            Serial.println(F("[DEBUG] Test enregistrement réseau..."));
             logRadioSnapshot("test:start");
             bool networkAttached = false;
             if (modem.isNetworkConnected()) {
-              Serial.println(F("[USB] ✅ Réponse: Réseau déjà attaché"));
+              Serial.println(F("[DEBUG] ✅ Réponse: Réseau déjà attaché"));
               networkAttached = true;
             } else {
-              Serial.println(F("[USB] Tentative d'attache au réseau..."));
+              Serial.println(F("[DEBUG] Tentative d'attache au réseau..."));
               if (attachNetwork(networkAttachTimeoutMs)) {
-                Serial.println(F("[USB] ✅ Réponse: Réseau attaché avec succès"));
+                Serial.println(F("[DEBUG] ✅ Réponse: Réseau attaché avec succès"));
                 logRadioSnapshot("test:success");
                 networkAttached = true;
               } else {
-                Serial.println(F("[USB] ❌ Réponse: Échec attache réseau"));
+                Serial.println(F("[DEBUG] ❌ Réponse: Échec attache réseau"));
                 logRadioSnapshot("test:failed");
               }
             }
             
             // Envoyer une mesure avec le RSSI après le test réseau
             if (networkAttached) {
-              Serial.println(F("[USB] 📊 Envoi d'une mesure avec RSSI..."));
+              Serial.println(F("[DEBUG] 📊 Envoi d'une mesure avec RSSI..."));
               Measurement snapshot = captureSensorSnapshot();
               
               // Obtenir le RSSI depuis le modem
@@ -839,8 +951,8 @@ void usbStreamingLoop()
               }
               
               // Ne pas inclure GPS pour cette commande spécifique (focus sur RSSI)
-              emitUsbMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
-              Serial.println(F("[USB] ✅ Mesure avec RSSI envoyée"));
+              emitDebugMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
+              Serial.println(F("[DEBUG] ✅ Mesure avec RSSI envoyée"));
             }
           }
           continue;
@@ -850,26 +962,26 @@ void usbStreamingLoop()
         // IMPORTANT: Le GPS est intégré au modem SIM7600, donc il nécessite le modem
         // On ne peut pas utiliser le GPS sans démarrer le modem car c'est le même composant
         if (lowered == "gps" || lowered == "location" || lowered == "test_gps") {
-          Serial.println(F("[USB] ✅ Commande 'gps' reçue et acceptée"));
+          Serial.println(F("[DEBUG] ✅ Commande 'gps' reçue et acceptée"));
           if (!modemReady) {
-            Serial.println(F("[USB] ⚠️  Réponse: Modem non démarré. Tapez 'modem_on' d'abord."));
-            Serial.println(F("[USB] Note: Le GPS est intégré au modem SIM7600, il nécessite le modem."));
+            Serial.println(F("[DEBUG] ⚠️  Réponse: Modem non démarré. Tapez 'modem_on' d'abord."));
+            Serial.println(F("[DEBUG] Note: Le GPS est intégré au modem SIM7600, il nécessite le modem."));
           } else {
-            Serial.println(F("[USB] 📍 Traitement: Test GPS en cours..."));
-            Serial.println(F("[USB] ========================================"));
-            Serial.println(F("[USB] Test GPS en cours..."));
-            Serial.println(F("[USB] Le GPS est intégré au modem SIM7600"));
-            Serial.println(F("[USB] Tentative GPS (priorité) puis réseau cellulaire (fallback)..."));
-            Serial.println(F("[USB] ========================================"));
+            Serial.println(F("[DEBUG] 📍 Traitement: Test GPS en cours..."));
+            Serial.println(F("[DEBUG] ========================================"));
+            Serial.println(F("[DEBUG] Test GPS en cours..."));
+            Serial.println(F("[DEBUG] Le GPS est intégré au modem SIM7600"));
+            Serial.println(F("[DEBUG] Tentative GPS (priorité) puis réseau cellulaire (fallback)..."));
+            Serial.println(F("[DEBUG] ========================================"));
             float lat = 0.0, lon = 0.0;
             bool hasLocation = getDeviceLocation(&lat, &lon);
             if (hasLocation) {
-              Serial.println(F("[USB] ========================================"));
-              Serial.printf("[USB] ✅ Réponse: Position obtenue: %.6f, %.6f\n", lat, lon);
-              Serial.println(F("[USB] ========================================"));
+              Serial.println(F("[DEBUG] ========================================"));
+              Serial.printf("[DEBUG] ✅ Réponse: Position obtenue: %.6f, %.6f\n", lat, lon);
+              Serial.println(F("[DEBUG] ========================================"));
               
               // Envoyer une mesure avec la position GPS après le test
-              Serial.println(F("[USB] 📊 Envoi d'une mesure avec position GPS..."));
+              Serial.println(F("[DEBUG] 📊 Envoi d'une mesure avec position GPS..."));
               Measurement snapshot = captureSensorSnapshot();
               
               // Obtenir le RSSI si disponible
@@ -884,13 +996,13 @@ void usbStreamingLoop()
                 snapshot.rssi = -110 + (csq * 2);
               }
               
-              emitUsbMeasurement(snapshot, ++sequence, intervalMs, &lat, &lon);
-              Serial.println(F("[USB] ✅ Mesure avec position GPS envoyée"));
+              emitDebugMeasurement(snapshot, ++sequence, intervalMs, &lat, &lon);
+              Serial.println(F("[DEBUG] ✅ Mesure avec position GPS envoyée"));
             } else {
-              Serial.println(F("[USB] ========================================"));
-              Serial.println(F("[USB] ❌ Réponse: Échec obtention position GPS"));
-              Serial.println(F("[USB] Vérifiez les logs ci-dessus pour plus de détails"));
-              Serial.println(F("[USB] ========================================"));
+              Serial.println(F("[DEBUG] ========================================"));
+              Serial.println(F("[DEBUG] ❌ Réponse: Échec obtention position GPS"));
+              Serial.println(F("[DEBUG] Vérifiez les logs ci-dessus pour plus de détails"));
+              Serial.println(F("[DEBUG] ========================================"));
             }
           }
           continue;
@@ -898,17 +1010,17 @@ void usbStreamingLoop()
 
         // Demander les informations du dispositif
         if (lowered == "device_info" || lowered == "info") {
-          Serial.println(F("[USB] ✅ Commande 'device_info' reçue et acceptée"));
-          Serial.println(F("[USB] ℹ️  Réponse: Envoi des informations du dispositif..."));
-          emitUsbDeviceInfo();
-          Serial.println(F("[USB] ✅ Informations du dispositif envoyées"));
+          Serial.println(F("[DEBUG] ✅ Commande 'device_info' reçue et acceptée"));
+          Serial.println(F("[DEBUG] ℹ️  Réponse: Envoi des informations du dispositif..."));
+          emitDebugDeviceInfo();
+          Serial.println(F("[DEBUG] ✅ Informations du dispositif envoyées"));
           continue;
         }
 
         // Demander uniquement le débit
         if (lowered == "flowrate" || lowered == "flow" || lowered == "debit") {
-          Serial.println(F("[USB] ✅ Commande 'flowrate' reçue et acceptée"));
-          Serial.println(F("[USB] 💨 Capture du débit uniquement..."));
+          Serial.println(F("[DEBUG] ✅ Commande 'flowrate' reçue et acceptée"));
+          Serial.println(F("[DEBUG] 💨 Capture du débit uniquement..."));
           Measurement snapshot = captureSensorSnapshot();
           
           // Inclure RSSI si le modem est démarré (amélioration)
@@ -928,15 +1040,15 @@ void usbStreamingLoop()
           }
           
           // Ne pas inclure GPS pour cette commande spécifique (focus sur débit)
-          emitUsbMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
-          Serial.println(F("[USB] ✅ Débit envoyé"));
+          emitDebugMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
+          Serial.println(F("[DEBUG] ✅ Débit envoyé"));
           continue;
         }
 
         // Demander uniquement la batterie
         if (lowered == "battery" || lowered == "batt" || lowered == "batterie") {
-          Serial.println(F("[USB] ✅ Commande 'battery' reçue et acceptée"));
-          Serial.println(F("[USB] 🔋 Capture de la batterie uniquement..."));
+          Serial.println(F("[DEBUG] ✅ Commande 'battery' reçue et acceptée"));
+          Serial.println(F("[DEBUG] 🔋 Capture de la batterie uniquement..."));
           Measurement snapshot = captureSensorSnapshot();
           
           // Inclure RSSI si le modem est démarré (amélioration)
@@ -956,32 +1068,32 @@ void usbStreamingLoop()
           }
           
           // Ne pas inclure GPS pour cette commande spécifique (focus sur batterie)
-          emitUsbMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
-          Serial.println(F("[USB] ✅ Batterie envoyée"));
+          emitDebugMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
+          Serial.println(F("[DEBUG] ✅ Batterie envoyée"));
           continue;
         }
 
         if (lowered.startsWith("interval=")) {
-          Serial.println(F("[USB] ✅ Commande 'interval' reçue et acceptée"));
+          Serial.println(F("[DEBUG] ✅ Commande 'interval' reçue et acceptée"));
           long requested = lowered.substring(9).toInt();
-          if (requested < static_cast<long>(USB_STREAM_MIN_INTERVAL_MS) ||
-              requested > static_cast<long>(USB_STREAM_MAX_INTERVAL_MS)) {
-            Serial.printf("[USB] ❌ Réponse: Intervalle invalide (%ld ms). Autorisé: %lu-%lu ms.\n",
+          if (requested < static_cast<long>(DEBUG_STREAM_MIN_INTERVAL_MS) ||
+              requested > static_cast<long>(DEBUG_STREAM_MAX_INTERVAL_MS)) {
+            Serial.printf("[DEBUG] ❌ Réponse: Intervalle invalide (%ld ms). Autorisé: %lu-%lu ms.\n",
                           requested,
-                          static_cast<unsigned long>(USB_STREAM_MIN_INTERVAL_MS),
-                          static_cast<unsigned long>(USB_STREAM_MAX_INTERVAL_MS));
+                          static_cast<unsigned long>(DEBUG_STREAM_MIN_INTERVAL_MS),
+                          static_cast<unsigned long>(DEBUG_STREAM_MAX_INTERVAL_MS));
           } else {
             intervalMs = static_cast<uint32_t>(requested);
-            Serial.printf("[USB] ✅ Réponse: Nouvel intervalle configuré: %lu ms.\n", static_cast<unsigned long>(intervalMs));
+            Serial.printf("[DEBUG] ✅ Réponse: Nouvel intervalle configuré: %lu ms.\n", static_cast<unsigned long>(intervalMs));
             lastSend = millis();
           }
           continue;
         }
 
         // Commande inconnue
-        Serial.printf("[USB] ❌ Commande inconnue: '%s'\n", command.c_str());
-        Serial.println(F("[USB] ℹ️  Réponse: Commande non reconnue. Tapez 'help' pour voir les commandes disponibles."));
-        printUsbStreamHelp(intervalMs);
+        Serial.printf("[DEBUG] ❌ Commande inconnue: '%s'\n", command.c_str());
+        Serial.println(F("[DEBUG] ℹ️  Réponse: Commande non reconnue. Tapez 'help' pour voir les commandes disponibles."));
+        printDebugStreamHelp(intervalMs);
       } else {
         commandBuffer += incoming;
         if (commandBuffer.length() > 64) {
@@ -994,10 +1106,10 @@ void usbStreamingLoop()
   }
 }
 
-void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude, float* longitude)
+void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude, float* longitude)
 {
   StaticJsonDocument<400> doc; // Augmenté pour inclure GPS
-  doc["mode"] = "usb_stream";
+  doc["mode"] = "debug_stream";
   doc["seq"] = sequence;
   doc["flow_lpm"] = m.flow;
   doc["battery_percent"] = m.battery;
@@ -1017,7 +1129,7 @@ void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t interv
   Serial.println();
 
   if (latitude != nullptr && longitude != nullptr) {
-    Serial.printf("[USB] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | GPS=%.6f,%.6f | interval=%lums\n",
+    Serial.printf("[DEBUG] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | GPS=%.6f,%.6f | interval=%lums\n",
                   static_cast<unsigned long>(sequence),
                   m.flow,
                   m.battery,
@@ -1026,7 +1138,7 @@ void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t interv
                   *longitude,
                   static_cast<unsigned long>(intervalMs));
   } else {
-    Serial.printf("[USB] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | GPS=N/A | interval=%lums\n",
+    Serial.printf("[DEBUG] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | GPS=N/A | interval=%lums\n",
                   static_cast<unsigned long>(sequence),
                   m.flow,
                   m.battery,
@@ -1035,26 +1147,26 @@ void emitUsbMeasurement(const Measurement& m, uint32_t sequence, uint32_t interv
   }
 }
 
-void printUsbStreamHelp(uint32_t intervalMs)
+void printDebugStreamHelp(uint32_t intervalMs)
 {
-  Serial.println(F("[USB] ========================================"));
-  Serial.println(F("[USB] Commandes disponibles (terminer par Entrée):"));
-  Serial.println(F("[USB]   start         → Démarrer le streaming continu (mesures automatiques)"));
-  Serial.println(F("[USB]   stop          → Arrêter le streaming continu"));
-  Serial.println(F("[USB]   once          → Mesure complète immédiate (débit, batterie, RSSI)"));
-  Serial.println(F("[USB]   flowrate      → Mesure du débit uniquement"));
-  Serial.println(F("[USB]   battery       → Mesure de la batterie uniquement"));
-  Serial.println(F("[USB]   device_info   → Demander les informations du dispositif"));
-  Serial.println(F("[USB]   interval=<ms> → Modifier l'intervalle (200-10000 ms)"));
-  Serial.println(F("[USB]   modem_on       → Démarrer le modem"));
-  Serial.println(F("[USB]   modem_off     → Arrêter le modem"));
-  Serial.println(F("[USB]   test_network  → Tester le réseau et obtenir le RSSI (modem requis)"));
-  Serial.println(F("[USB]   gps            → Tester le GPS (modem requis)"));
-  Serial.println(F("[USB]   help           → Afficher cette aide"));
-  Serial.println(F("[USB]   exit           → Quitter le streaming et redémarrer"));
-  Serial.printf("[USB] Intervalle actuel: %lu ms.\n", static_cast<unsigned long>(intervalMs));
-  Serial.printf("[USB] État modem: %s\n", modemReady ? "démarré" : "arrêté");
-  Serial.println(F("[USB] ========================================"));
+  Serial.println(F("[DEBUG] ========================================"));
+  Serial.println(F("[DEBUG] Commandes disponibles (terminer par Entrée):"));
+  Serial.println(F("[DEBUG]   start         → Démarrer le streaming continu (mesures automatiques)"));
+  Serial.println(F("[DEBUG]   stop          → Arrêter le streaming continu"));
+  Serial.println(F("[DEBUG]   once          → Mesure complète immédiate (débit, batterie, RSSI)"));
+  Serial.println(F("[DEBUG]   flowrate      → Mesure du débit uniquement"));
+  Serial.println(F("[DEBUG]   battery       → Mesure de la batterie uniquement"));
+  Serial.println(F("[DEBUG]   device_info   → Demander les informations du dispositif"));
+  Serial.println(F("[DEBUG]   interval=<ms> → Modifier l'intervalle (200-10000 ms)"));
+  Serial.println(F("[DEBUG]   modem_on       → Démarrer le modem"));
+  Serial.println(F("[DEBUG]   modem_off     → Arrêter le modem"));
+  Serial.println(F("[DEBUG]   test_network  → Tester le réseau et obtenir le RSSI (modem requis)"));
+  Serial.println(F("[DEBUG]   gps            → Tester le GPS (modem requis)"));
+  Serial.println(F("[DEBUG]   help           → Afficher cette aide"));
+  Serial.println(F("[DEBUG]   exit / normal → Quitter le mode debug et redémarrer (retour cycle normal)"));
+  Serial.printf("[DEBUG] Intervalle actuel: %lu ms.\n", static_cast<unsigned long>(intervalMs));
+  Serial.printf("[DEBUG] État modem: %s\n", modemReady ? "démarré" : "arrêté");
+  Serial.println(F("[DEBUG] ========================================"));
 }
 
 void configureWatchdog(uint32_t timeoutSeconds)
@@ -1088,6 +1200,7 @@ void feedWatchdog()
   if (watchdogConfigured) {
     esp_task_wdt_reset();
   }
+  monitorDebugActivation(F("feedWatchdog"));
 }
 
 static const char* regStatusToString(RegStatus status)

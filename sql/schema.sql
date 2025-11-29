@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS devices (
   first_use_date TIMESTAMPTZ,
   last_seen TIMESTAMPTZ,
   last_battery NUMERIC(5,2),
+  last_flowrate NUMERIC(5,2),
+  last_rssi INT,
   latitude NUMERIC(10,8),
   longitude NUMERIC(11,8),
   -- Min/Max values (mises à jour automatiquement par trigger)
