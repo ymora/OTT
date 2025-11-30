@@ -36,8 +36,8 @@ const menuStructure = [
     description: 'Gestion des utilisateurs (audit, notifications, paramètres)'
   },
   {
-    name: 'Outils',
-    icon: '⚙️',
+    name: 'Dispositifs OTT',
+    icon: '🔌',
     path: '/dashboard/outils',
     permission: null, // Vérifié dans la page (admin/technicien)
     description: 'Upload firmware, flash USB et streaming'
