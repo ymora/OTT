@@ -529,6 +529,12 @@ if (strpos($path, 'database-view') !== false) {
     error_log('[DEBUG] Pattern test 2: ' . (preg_match('#^/admin/database-view/?$#', $path) ? 'MATCH' : 'NO MATCH'));
 }
 
+// Debug pour /devices/test/create
+if (strpos($path, 'test/create') !== false) {
+    error_log('[DEBUG] Path: ' . $path . ' | Method: ' . $method . ' | URI: ' . ($_SERVER['REQUEST_URI'] ?? 'N/A'));
+    error_log('[DEBUG] Pattern test: ' . (preg_match('#^/devices/test/create/?$#', $path) ? 'MATCH' : 'NO MATCH'));
+}
+
 // Définir Content-Type selon le type de route
 // ATTENTION: Pour SSE et /docs/, les headers sont définis dans les handlers
 if ($method !== 'OPTIONS') {
@@ -749,10 +755,12 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleGetPermissions();
 
 // Devices (API V1 compatible + V2)
+// Route spécifique pour créer dispositifs fictifs (doit être avant /devices POST)
+} elseif(preg_match('#^/devices/test/create/?$#', $path) && $method === 'POST') {
+    error_log('[ROUTER] ✅ Route /devices/test/create matchée - Path: ' . $path . ' Method: ' . $method);
+    handleCreateTestDevices();
 } elseif(preg_match('#/devices$#', $path) && $method === 'GET') {
     handleGetDevices();
-} elseif(preg_match('#^/devices/test/create/?$#', $path) && $method === 'POST') {
-    handleCreateTestDevices();
 } elseif(preg_match('#/devices$#', $path) && $method === 'POST') {
     handleCreateDevice();
 } elseif(preg_match('#/devices/measurements$#', $path) && $method === 'POST') {
