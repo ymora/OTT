@@ -29,6 +29,8 @@ export default function PatientsPage() {
   const [selectedPatientForAssign, setSelectedPatientForAssign] = useState(null)
   const [showUnassignModal, setShowUnassignModal] = useState(false)
   const [selectedDeviceForUnassign, setSelectedDeviceForUnassign] = useState(null)
+  const [showDeletePatientModal, setShowDeletePatientModal] = useState(false)
+  const [patientToDelete, setPatientToDelete] = useState(null)
 
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -242,9 +244,22 @@ export default function PatientsPage() {
     await refetch()
   }
 
-  const handleDelete = async (patient) => {
-    if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer le patient "${patient.first_name} ${patient.last_name}" ?\n\nCette action est irréversible.`)) {
+  const handleDelete = async (patient, confirmed = false) => {
+    // Vérifier si le patient a un dispositif assigné
+    const hasAssignedDevice = devices.some(d => d.patient_id === patient.id)
+    
+    if (!confirmed && hasAssignedDevice) {
+      // Afficher le modal de confirmation si un dispositif est assigné
+      setPatientToDelete(patient)
+      setShowDeletePatientModal(true)
       return
+    }
+
+    // Si pas de dispositif assigné, utiliser la confirmation native
+    if (!confirmed && !hasAssignedDevice) {
+      if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer le patient "${patient.first_name} ${patient.last_name}" ?\n\nCette action est irréversible.`)) {
+        return
+      }
     }
 
     try {
@@ -260,10 +275,15 @@ export default function PatientsPage() {
       )
       if (response.success) {
         setSuccess(response.message || 'Patient supprimé avec succès')
+        if (response.devices_unassigned > 0) {
+          setSuccess(`Patient supprimé avec succès (${response.devices_unassigned} dispositif(s) désassigné(s) automatiquement)`)
+        }
         refetch()
         if (showModal && editingItem && editingItem.id === patient.id) {
           closeModal()
         }
+        setShowDeletePatientModal(false)
+        setPatientToDelete(null)
       } else {
         setActionError(response.error || 'Erreur lors de la suppression')
       }
@@ -281,6 +301,13 @@ export default function PatientsPage() {
       setDeleteLoading(false)
     }
   }
+  
+  // Confirmer la suppression depuis la modal
+  const confirmDeletePatient = useCallback(() => {
+    if (patientToDelete) {
+      handleDelete(patientToDelete, true)
+    }
+  }, [patientToDelete])
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -390,8 +417,8 @@ export default function PatientsPage() {
                           <button
                             className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                             onClick={() => handleDelete(p)}
-                            disabled={deleteLoading || devices.some(d => d.patient_id === p.id)}
-                            title={devices.some(d => d.patient_id === p.id) ? "Impossible de supprimer un patient avec un dispositif assigné. Désassignez d'abord le dispositif." : "Supprimer le patient"}
+                            disabled={deleteLoading}
+                            title={devices.some(d => d.patient_id === p.id) ? "Supprimer le patient (le dispositif sera désassigné automatiquement)" : "Supprimer le patient"}
                           >
                             <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
                           </button>

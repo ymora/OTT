@@ -1837,15 +1837,22 @@ function handleDeletePatient($patient_id) {
             return;
         }
 
-        // Vérifier s'il y a des dispositifs assignés
-        $deviceStmt = $pdo->prepare("SELECT COUNT(*) FROM devices WHERE patient_id = :patient_id");
+        // Vérifier s'il y a des dispositifs assignés et les désassigner automatiquement
+        $deviceStmt = $pdo->prepare("SELECT id, sim_iccid, device_name FROM devices WHERE patient_id = :patient_id AND deleted_at IS NULL");
         $deviceStmt->execute(['patient_id' => $patient_id]);
-        $deviceCount = $deviceStmt->fetchColumn();
+        $assignedDevices = $deviceStmt->fetchAll();
 
-        if ($deviceCount > 0) {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Impossible de supprimer un patient avec des dispositifs assignés. Veuillez d\'abord désassigner les dispositifs.']);
-            return;
+        $wasAssigned = false;
+        if (count($assignedDevices) > 0) {
+            // Désassigner tous les dispositifs avant de supprimer le patient
+            $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE patient_id = :patient_id")
+                ->execute(['patient_id' => $patient_id]);
+            $wasAssigned = true;
+            
+            // Logger la désassignation pour chaque dispositif
+            foreach ($assignedDevices as $device) {
+                auditLog('device.unassigned_before_patient_delete', 'device', $device['id'], ['old_patient_id' => $patient_id], null);
+            }
         }
 
         // Supprimer les préférences de notifications associées
@@ -1861,7 +1868,11 @@ function handleDeletePatient($patient_id) {
         $pdo->prepare("UPDATE patients SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $patient_id]);
 
         auditLog('patient.deleted', 'patient', $patient_id, $patient, null);
-        echo json_encode(['success' => true, 'message' => 'Patient supprimé avec succès']);
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Patient supprimé avec succès' . ($wasAssigned ? ' (dispositifs désassignés automatiquement)' : ''),
+            'devices_unassigned' => $wasAssigned ? count($assignedDevices) : 0
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
