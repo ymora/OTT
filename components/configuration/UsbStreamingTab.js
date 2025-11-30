@@ -514,7 +514,7 @@ export default function DebugTab() {
               ⚠️ Aucun dispositif connecté ou sélectionné
             </p>
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-              Connectez un dispositif USB pour configurer
+              Ou sélectionnez un dispositif de la base de données
             </p>
           </div>
         )}
@@ -1156,7 +1156,7 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
     
     // Vérifier que le dispositif est bien reconnu
     if (!isDeviceRecognized) {
-      setError('Connectez un dispositif USB ou sélectionnez un dispositif de la base de données.')
+      setError('Sélectionnez un dispositif de la base de données ou connectez un dispositif USB.')
       return
     }
 
@@ -1477,7 +1477,7 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                       }}
                       disabled={isDisabled || saving || !isDeviceRecognized}
                       className="px-3 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      title={!isDeviceRecognized ? 'Connectez un dispositif USB ou sélectionnez un dispositif' : isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
+                      title={!isDeviceRecognized ? 'Sélectionnez un dispositif ou connectez un dispositif USB' : isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : ''}
                     >
                       {saving ? '⏳' : '💾 Sauvegarder'}
                     </button>
@@ -1495,9 +1495,9 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                 }}
                 disabled={isDisabled || saving || !isDeviceRecognized}
                 className="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={!isDeviceRecognized ? 'Connectez un dispositif USB ou sélectionnez un dispositif de la base de données' : ''}
+                title={!isDeviceRecognized ? 'Sélectionnez un dispositif ou connectez un dispositif USB' : ''}
               >
-                {saving ? '⏳ Sauvegarde en cours...' : isConnected ? '💾 Sauvegarder et appliquer via USB' : selectedDeviceId ? '📡 Sauvegarder et envoyer via OTA' : '⚠️ Connectez un dispositif USB'}
+                {saving ? '⏳ Sauvegarde en cours...' : isConnected ? '💾 Sauvegarder et appliquer via USB' : selectedDeviceId ? '📡 Sauvegarder et envoyer via OTA' : '⚠️ Sélectionnez un dispositif'}
               </button>
             </div>
           </>
