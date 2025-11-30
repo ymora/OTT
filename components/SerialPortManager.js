@@ -370,10 +370,19 @@ export function useSerialPort() {
                 // Ignorer les premières erreurs de framing (souvent temporaires)
                 logger.debug(`[SerialPortManager] Erreur de framing ignorée (${consecutiveErrors}/3)`)
                 await new Promise(resolve => setTimeout(resolve, 50))
-                continue // Continuer la boucle sans incrémenter davantage
+                continue
+              } else if (consecutiveErrors === 4) {
+                // Logger une seule fois après les 3 premières
+                logger.warn(`[SerialPortManager] Erreurs de framing détectées (continuation silencieuse...)`)
+                await new Promise(resolve => setTimeout(resolve, 100))
+                continue
+              } else if (consecutiveErrors % 100 === 0) {
+                // Logger seulement toutes les 100 erreurs pour éviter le spam
+                logger.debug(`[SerialPortManager] ${consecutiveErrors} erreurs de framing (continuation...)`)
+                await new Promise(resolve => setTimeout(resolve, 100))
+                continue
               } else {
-                // Après 3 erreurs de framing, log mais continuer
-                logger.warn(`[SerialPortManager] Erreurs de framing répétées (${consecutiveErrors}), mais continuation...`)
+                // Continuer silencieusement
                 await new Promise(resolve => setTimeout(resolve, 100))
                 continue
               }

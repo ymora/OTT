@@ -10,7 +10,6 @@ import { useUsbAutoDetection } from '@/hooks'
 import InoEditorTab from '@/components/configuration/InoEditorTab'
 import FirmwareFlashTab from '@/components/configuration/FirmwareFlashTab'
 import UsbStreamingTab from '@/components/configuration/UsbStreamingTab'
-import DeviceConfigurationTab from '@/components/configuration/DeviceConfigurationTab'
 
 export default function OutilsPage() {
   const { user } = useAuth()
@@ -38,8 +37,7 @@ export default function OutilsPage() {
   const tabs = [
     { id: 'ino', label: 'Upload INO', icon: '📝' },
     { id: 'flash', label: 'Flash', icon: '🔌' },
-    { id: 'configuration', label: 'Configuration', icon: '⚙️' },
-    { id: 'streaming', label: 'Streaming USB', icon: '📡' }
+    { id: 'streaming', label: 'Debug & Config', icon: '🔧' }
   ]
 
   return (
@@ -84,9 +82,6 @@ export default function OutilsPage() {
         </div>
         <div style={{ display: activeTab === 'flash' ? 'block' : 'none' }}>
           <FirmwareFlashTab />
-        </div>
-        <div style={{ display: activeTab === 'configuration' ? 'block' : 'none' }}>
-          <DeviceConfigurationTab />
         </div>
         <div style={{ display: activeTab === 'streaming' ? 'block' : 'none' }}>
           <UsbStreamingTab />

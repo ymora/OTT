@@ -1,6 +1,6 @@
 # 🏥 OTT - Dispositif Médical IoT
 
-**Version 3.6 Enterprise** - Solution Cloud Complète
+**Version 3.7** - Solution Cloud Complète avec Mode Hybride
 
 **HAPPLYZ MEDICAL SAS**
 
@@ -25,6 +25,8 @@ La documentation est divisée en 3 parties accessibles depuis le dashboard :
 - 🏗️ [Architecture](./docs/ARCHITECTURE.md) - Structure complète du projet
 - 🛠️ [Développement Local](./docs/UTILITE_DEVELOPPEMENT_LOCAL.md) - Guide développement
 - 🚢 [Déploiement](./docs/DEPLOIEMENT_TROUBLESHOOTING.md) - Guide déploiement
+- 🔌 [Fonctionnalités Firmware](./docs/FIRMWARE_FEATURES.md) - Liste complète des fonctionnalités
+- 🔄 [Synchronisation USB/OTA](./docs/SYNCHRONISATION_USB_OTA.md) - Logique de synchronisation
 - 🔍 [Audits & Vérifications](./docs/AUDIT_COMPLET_PROJET.md) - Rapports d'audit
 
 ---
@@ -99,9 +101,11 @@ git push origin main
 - **Deep Sleep** : Après chaque envoi, le dispositif entre en deep sleep pour économiser l'énergie et limiter les coûts réseau (1 envoi par jour par défaut).
 
 #### Mode USB (Tests/Diagnostics)
-- **Mode interactif** : Le firmware attend uniquement les commandes depuis le dashboard. Le modem n'est **pas démarré automatiquement** pour économiser l'énergie et éviter les connexions réseau inutiles.
-- **Commandes disponibles** : `start`, `stop`, `once`, `modem_on`, `modem_off`, `test_network`, `gps`, `flowrate`, `battery`, `device_info`, `interval=<ms>`, `help`, `exit`
-- **Aucune mesure automatique** : Les mesures ne sont envoyées que sur commande explicite (`start`, `once`, `flowrate`, `battery`, etc.)
+- **Mode continu automatique** : Détection automatique de la connexion USB, streaming continu de mesures en temps réel
+- **Envoi simultané** : Les mesures sont envoyées simultanément via USB (JSON) et OTA (réseau GSM si disponible)
+- **Configuration directe** : Commandes USB `config {...}` et `calibration {...}` pour configuration immédiate
+- **Commandes disponibles** : `config {...}`, `calibration {...}`, `interval=<ms>`
+- **Pas de deep sleep** : Mode continu tant que USB connecté, retour automatique en mode normal à la déconnexion
 
 #### Géolocalisation
 - **Dispositifs OTA (Mode Normal)** : le firmware tente d'obtenir la position via GPS (priorité) ou réseau cellulaire (fallback) et l'inclut dans chaque mesure. L'API met à jour automatiquement `latitude`/`longitude` du dispositif.

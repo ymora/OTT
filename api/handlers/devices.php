@@ -413,6 +413,44 @@ function handlePostMeasurement() {
                     $pdo->prepare("UPDATE device_configurations SET firmware_version = :firmware_version WHERE device_id = :device_id")
                         ->execute(['firmware_version' => $firmware_version, 'device_id' => $device_id]);
                 }
+                
+                // Mettre à jour la configuration si elle est fournie dans le format unifié
+                if (isset($input['sleep_minutes']) || isset($input['measurement_duration_ms']) || isset($input['calibration_coefficients']) || isset($input['config'])) {
+                    $configData = $input['config'] ?? $input;
+                    $configUpdateFields = [];
+                    $configUpdateParams = ['device_id' => $device_id];
+                    
+                    if (isset($configData['sleep_minutes']) && is_numeric($configData['sleep_minutes'])) {
+                        $configUpdateFields[] = 'sleep_minutes = :sleep_minutes';
+                        $configUpdateParams['sleep_minutes'] = intval($configData['sleep_minutes']);
+                    }
+                    
+                    if (isset($configData['measurement_duration_ms']) && is_numeric($configData['measurement_duration_ms'])) {
+                        $configUpdateFields[] = 'measurement_duration_ms = :measurement_duration_ms';
+                        $configUpdateParams['measurement_duration_ms'] = intval($configData['measurement_duration_ms']);
+                    }
+                    
+                    if (isset($configData['calibration_coefficients']) && is_array($configData['calibration_coefficients'])) {
+                        $configUpdateFields[] = 'calibration_coefficients = :calibration_coefficients';
+                        $configUpdateParams['calibration_coefficients'] = json_encode($configData['calibration_coefficients']);
+                    }
+                    
+                    if (!empty($configUpdateFields)) {
+                        // S'assurer que la configuration existe
+                        $pdo->prepare("
+                            INSERT INTO device_configurations (device_id, firmware_version)
+                            VALUES (:device_id, :firmware_version)
+                            ON CONFLICT (device_id) DO NOTHING
+                        ")->execute(['device_id' => $device_id, 'firmware_version' => $firmware_version]);
+                        
+                        // Mettre à jour la configuration
+                        $pdo->prepare("
+                            UPDATE device_configurations 
+                            SET " . implode(', ', $configUpdateFields) . "
+                            WHERE device_id = :device_id
+                        ")->execute($configUpdateParams);
+                    }
+                }
             }
             
             // Enregistrer la mesure

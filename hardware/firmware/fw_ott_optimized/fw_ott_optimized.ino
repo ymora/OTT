@@ -1,62 +1,19 @@
 /**
  * ================================================================
- *  OTT Firmware v3.7-debug-mode - Mode Debug unifié
+ *  OTT Firmware v3.7 - Mode unifié
  * ================================================================
- * Objectifs :
- *   - Mesurer le débit d'oxygène + la batterie et publier la mesure
- *   - Consommer les commandes descendantes émises depuis le dashboard
- *   - Journaliser localement ou côté API chaque événement important
- *   - Autoriser la reconfiguration complète d'un boîtier sans reflasher
- *   - Envoyer la position GPS/réseau cellulaire avec chaque mesure
- *   - Mode debug pour tests et diagnostics en temps réel (contrôlé par dashboard)
- *
+ * 
  * Fonctionnalités principales :
- *   - TinyGSM SIM7600 : init matériel, gestion SIM/PIN, GPRS, HTTPS
- *   - Commandes API : SET_SLEEP_SECONDS, PING, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
- *   - Persistence : APN/JWT/ICCID/PIN/calibration stockés en NVS (Preferences)
- *   - Logs : POST /devices/logs + tampon en NVS quand le réseau est coupé
- *   - Payloads mesures enrichis (firmware_version, RSSI, latitude, longitude)
- *   - Géolocalisation : GPS (priorité) ou réseau cellulaire (fallback) inclus dans chaque mesure
- *   - RSSI : Conversion CSQ vers dBm selon standard 3GPP TS 27.007
- *   - Deep sleep : Intervalle par défaut 24h pour limiter les coûts réseau
- *
- * Mode Debug (v3.7+) :
- *   - Écoute permanente du port série en mode normal (détection commande "debug")
- *   - Activation : commande "debug" acceptée à tout moment (handshake initial ou pendant opération normale)
- *   - Streaming continu : mesures JSON + logs lisibles en temps réel
- *   - Commandes interactives (toutes contrôlées par dashboard) :
- *     * `modem_on` : Démarre le modem (non démarré automatiquement en mode debug)
- *     * `modem_off` : Arrête le modem
- *     * `test_network` : Teste l'enregistrement réseau (modem doit être démarré)
- *     * `gps` : Teste le GPS (modem doit être démarré)
- *     * `once` : Envoie une mesure immédiatement
- *     * `flowrate` : Mesure du débit uniquement
- *     * `battery` : Mesure de la batterie uniquement
- *     * `device_info` : Informations du dispositif
- *     * `interval=<ms>` : Change l'intervalle (200-10000ms, défaut 1000ms)
- *     * `start` : Démarre le streaming continu
- *     * `stop` : Arrête le streaming continu
- *     * `help` : Affiche l'aide
- *     * `exit` / `normal` : Quitte le mode debug et redémarre pour reprendre le cycle normal
- *   - Détection déconnexion série : retour automatique au mode réseau
- *   - Confirmations : Réception et réponses structurées pour toutes les commandes
- *
- * Optimisations réseau (v3.3+) :
- *   - Retry avec backoff exponentiel pour l'attachement réseau
- *   - Gestion APN : Recommandations automatiques par opérateur (MCC/MNC)
- *   - Gestion REG_DENIED : Changement automatique d'APN et retry
- *   - Modem non initialisé en mode debug : économie d'énergie et coûts
- *
- * Améliorations récentes (v3.6-v3.7) :
- *   - Modem non démarré automatiquement en mode debug (économie énergie/coûts)
- *   - RSSI calculé seulement si modem démarré, sinon -999
- *   - Logs structurés avec séparateurs visuels pour modem start/stop
- *   - Confirmations de réception pour toutes les commandes debug
- *   - Détection robuste de déconnexion série
- *   - Écoute permanente du port série en mode normal (activation debug à tout moment)
- *
- * Toutes les sections ci-dessous sont abondamment commentées pour guider
- * la maintenance ou l'extension (ex. ajout d'une commande OTA_REQUEST).
+ *   - Mesure du débit d'oxygène, batterie, RSSI, GPS
+ *   - Envoi automatique des mesures via OTA (réseau) et USB (si connecté)
+ *   - Format unifié : identifiants + mesures + configuration dans chaque message
+ *   - Mode hybride : envoi au boot + envoi sur changement de flux d'air
+ *   - Configuration via USB (prioritaire) ou OTA
+ *   - TinyGSM SIM7600 : GPRS, HTTPS, GPS
+ *   - Persistence : APN/JWT/ICCID/PIN/calibration en NVS
+ *   - Logs : POST /devices/logs + tampon NVS si réseau coupé
+ *   - Commandes OTA : SET_SLEEP_SECONDS, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
+ *   - Deep sleep : économie d'énergie quand inactif
  */
 
 #define TINY_GSM_MODEM_SIM7600   // Indique à TinyGSM le modem utilisé
@@ -94,10 +51,6 @@ static constexpr uint8_t  MODEM_MAX_REBOOTS_DEFAULT = 3;
 static constexpr uint32_t WATCHDOG_TIMEOUT_DEFAULT_SEC = 30;
 static constexpr uint8_t  MIN_WATCHDOG_TIMEOUT_SEC = 5;
 static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
-static constexpr uint32_t DEBUG_STREAM_DEFAULT_INTERVAL_MS = 1000;
-static constexpr uint32_t DEBUG_STREAM_MIN_INTERVAL_MS = 200;
-static constexpr uint32_t DEBUG_STREAM_MAX_INTERVAL_MS = 10000;
-static constexpr uint32_t DEBUG_HANDSHAKE_WINDOW_MS = 3500;
 
 // --- Paramètres modifiables localement (puis écrasés via UPDATE_CONFIG) ---
 #ifndef OTT_DEFAULT_SIM_PIN
@@ -116,11 +69,17 @@ static constexpr uint32_t DEBUG_HANDSHAKE_WINDOW_MS = 3500;
 #define OTT_DEFAULT_JWT ""
 #endif
 
+// JWT (JSON Web Token) : Token d'authentification pour l'API
+// - Utilisé pour authentifier le dispositif auprès du serveur lors des envois OTA (Over-The-Air)
+// - Format : "Bearer xxxxx" ou simplement "xxxxx" (le préfixe "Bearer " est ajouté automatiquement)
+// - Obtention : Généré par le dashboard/admin, envoyé au dispositif via commande UPDATE_CONFIG
+// - Stockage : Sauvegardé en NVS (mémoire non-volatile) pour persister entre redémarrages
+// - Important : Sans JWT, les envois de mesures via réseau (OTA) échoueront (mais USB fonctionne)
 String SIM_PIN        = OTT_DEFAULT_SIM_PIN;
 String NETWORK_APN    = OTT_DEFAULT_APN;
 String DEVICE_ICCID   = OTT_DEFAULT_ICCID;
 String DEVICE_SERIAL  = OTT_DEFAULT_SERIAL;
-String DEVICE_JWT     = OTT_DEFAULT_JWT;
+String DEVICE_JWT     = OTT_DEFAULT_JWT;  // Token d'authentification API (obligatoire pour OTA)
 
 const char* API_HOST       = "ott-jbln.onrender.com";
 const uint16_t API_PORT    = 443;
@@ -160,9 +119,6 @@ float CAL_OVERRIDE_A0 = NAN;
 float CAL_OVERRIDE_A1 = NAN;
 float CAL_OVERRIDE_A2 = NAN;
 bool modemReady = false;
-static bool debugModeActive = false;
-static String debugCommandBuffer = ""; // Buffer pour commandes debug en mode normal
-static String usbLateCommandBuffer;
 
 struct PendingLog {
   String level;
@@ -180,6 +136,15 @@ static uint16_t airflowPasses = 2;
 static uint16_t airflowSamplesPerPass = 10;
 static uint16_t airflowSampleDelayMs = 5;
 static uint32_t watchdogTimeoutSeconds = WATCHDOG_TIMEOUT_DEFAULT_SEC;
+
+// Variables pour mode hybride (détection changement flux)
+static float lastFlowValue = 0.0;
+static unsigned long lastMeasurementTime = 0;
+static unsigned long lastOtaCheck = 0;
+static const float FLOW_CHANGE_THRESHOLD = 0.5;  // Seuil de changement (L/min)
+static const unsigned long MIN_INTERVAL_MS = 5000;  // Intervalle minimum entre mesures (5s)
+static const unsigned long IDLE_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes sans changement → light sleep
+static const unsigned long OTA_CHECK_INTERVAL_MS = 30000;  // Vérifier commandes OTA toutes les 30s
 static bool watchdogConfigured = false;
 static String otaPrimaryUrl;
 static String otaFallbackUrl;
@@ -206,9 +171,6 @@ void feedWatchdog();
 void logRuntimeConfig();
 void logRadioSnapshot(const char* stage);
 static const char* regStatusToString(RegStatus status);
-bool checkDebugActivationCommand();
-void monitorDebugActivation(const __FlashStringHelper* context = nullptr);
-void enterDebugModeFromNormalOperation(const __FlashStringHelper* context = nullptr);
 
 float measureBattery();
 float measureAirflowRaw();
@@ -218,7 +180,7 @@ bool httpPost(const char* path, const String& body, String* response = nullptr);
 bool httpGet(const char* path, String* response);
 bool sendLog(const char* level, const String& message, const char* type = "firmware");
 
-bool sendMeasurement(const Measurement& m, float* latitude = nullptr, float* longitude = nullptr);
+bool sendMeasurement(const Measurement& m, float* latitude = nullptr, float* longitude = nullptr, const char* status = "TIMER");
 int  fetchCommands(Command* out, size_t maxCount);
 bool acknowledgeCommand(const Command& cmd, bool success, const char* message);
 void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes);
@@ -238,10 +200,8 @@ void checkBootFailureAndRollback();
 void markFirmwareAsStable();
 void rollbackToPreviousFirmware();
 Measurement captureSensorSnapshot();
-bool detectDebugModeHandshake();
-void debugStreamingLoop();
 void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude = nullptr, float* longitude = nullptr);
-void printDebugStreamHelp(uint32_t intervalMs);
+void handleSerialCommand(const String& command);
 bool getDeviceLocation(float* latitude, float* longitude);
 
 void setup()
@@ -252,8 +212,6 @@ void setup()
   Serial.println(F("[BOOT] ========================================\n"));
   
   initBoard();
-  // Ne pas initialiser le modem si on est en mode debug (pour éviter de démarrer le modem inutilement)
-  // initModem() sera appelé seulement si on n'est pas en mode debug
   loadConfig();
   
   // Vérifier si on doit faire un rollback (si le boot a échoué plusieurs fois)
@@ -262,78 +220,288 @@ void setup()
   // Valider le boot et marquer le firmware comme stable si c'est un boot réussi
   validateBootAndMarkStable();
   
+  // Afficher l'état du JWT (JSON Web Token) au démarrage
+  // Le JWT est un token d'authentification nécessaire pour envoyer des données via le réseau (OTA)
+  // Sans JWT : seuls les envois USB fonctionnent (pour tests/développement)
+  // Avec JWT : les envois OTA fonctionnent (production)
+  if (DEVICE_JWT.isEmpty()) {
+    Serial.println(F("[BOOT] ⚠️ JWT (token d'authentification) non configuré"));
+    Serial.println(F("[BOOT] ⚠️ Les envois de mesures via réseau (OTA) peuvent échouer"));
+    Serial.println(F("[BOOT] 💡 Configurez le JWT via commande UPDATE_CONFIG (OTA) ou USB"));
+    Serial.println(F("[BOOT] 💡 Le JWT est obtenu depuis le dashboard/admin"));
+  } else {
+    Serial.printf("[BOOT] ✅ JWT configuré (longueur: %d caractères)\n", DEVICE_JWT.length());
+  }
+  
   configureWatchdog(watchdogTimeoutSeconds);
   feedWatchdog();
   logRuntimeConfig();
 
-  if (detectDebugModeHandshake()) {
-    // En mode debug, ne pas initialiser le modem (il sera démarré seulement si l'utilisateur le demande)
-    debugModeActive = true;
-    debugStreamingLoop();
-    debugModeActive = false;
-    Serial.println(F("[DEBUG] Redémarrage pour reprendre le cycle normal..."));
-    delay(100);
-    ESP.restart();
-  }
-  Serial.println(F("[DEBUG] Mode debug non activé durant la fenêtre initiale. Tapez 'debug' à tout moment pour basculer."));
-  monitorDebugActivation(F("après fenêtre initiale"));
-  
-  // Si on n'est pas en mode debug, initialiser le modem pour le cycle normal
+  // Toujours initialiser le modem - mode normal uniquement
   initModem();
+  
+  // Les identifiants et la configuration seront envoyés dans le premier message unifié
 
-  Measurement m = captureSensorSnapshot();
-  Serial.printf("[MEASURE] pré-mesure flow=%.2f L/min, batt=%.1f%% (RSSI en attente)\n", m.flow, m.battery);
-
+  // Démarrer le modem (activé par défaut)
   if (!startModem()) {
     Serial.println(F("[MODEM] indisponible → wake 1 min (envoi mesure annulé)"));
     goToSleep(1);
     return;
   }
 
-  // Convertir CSQ (0-31 ou 99) en dBm selon 3GPP TS 27.007
-  // CSQ 0 = -113 dBm ou moins, CSQ 1 = -111 dBm, CSQ 2-31 = -110 + (CSQ*2) dBm, CSQ 99 = erreur
+  // Vérifier si USB est connecté (pas de deep sleep si USB connecté)
+  bool usbConnected = Serial.availableForWrite() > 0;
+  
+  if (usbConnected) {
+    // Mode continu : envoi de données en boucle (pas de deep sleep)
+    Serial.println(F("🔌 USB connecté - Mode continu activé"));
+    
+    uint32_t sequence = 0;
+    uint32_t intervalMs = 1000; // 1 seconde par défaut
+    
+    // Envoyer immédiatement un message unifié avec identifiants, config et première mesure
+    {
+      Measurement m = captureSensorSnapshot();
+      int8_t csq = modem.getSignalQuality();
+      int8_t rssi = (csq == 99) ? -999 : (csq == 0) ? -113 : (csq == 1) ? -111 : (-110 + (csq * 2));
+      m.rssi = rssi;
+      float latitude = 0.0, longitude = 0.0;
+      bool hasLocation = getDeviceLocation(&latitude, &longitude);
+      emitDebugMeasurement(m, sequence, intervalMs, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
+    }
+    
+    while (true) {
+      feedWatchdog();
+      
+      // Vérifier si USB toujours connecté
+      if (Serial.availableForWrite() == 0) {
+        Serial.println(F("🔌 USB déconnecté"));
+        break;
+      }
+      
+      // Capturer une mesure
+      Measurement m = captureSensorSnapshot();
+      
+      // Obtenir RSSI
+      int8_t csq = modem.getSignalQuality();
+      if (csq == 99) {
+        m.rssi = -999;
+      } else if (csq == 0) {
+        m.rssi = -113;
+      } else if (csq == 1) {
+        m.rssi = -111;
+      } else {
+        m.rssi = -110 + (csq * 2);
+      }
+      
+      // Obtenir position GPS (activé par défaut)
+      float latitude = 0.0, longitude = 0.0;
+      bool hasLocation = getDeviceLocation(&latitude, &longitude);
+      
+      // Envoyer via USB (format JSON) - TOUTES les données toutes les secondes
+      emitDebugMeasurement(m, ++sequence, intervalMs, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
+      
+      // Envoyer via réseau (si connecté) - TOUTES les données toutes les secondes
+      if (modemReady && modem.isNetworkConnected()) {
+        sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr, "USB_STREAM");
+        
+        // Vérifier périodiquement les commandes OTA (toutes les 30 secondes)
+        static unsigned long lastOtaCheck = 0;
+        unsigned long now = millis();
+        if (now - lastOtaCheck >= 30000) { // Vérifier toutes les 30 secondes
+          lastOtaCheck = now;
+          Command cmds[5];
+          int count = fetchCommands(cmds, 5);
+          if (count > 0) {
+            Serial.printf("📡 %d commande(s) OTA en attente (appliquées après déconnexion USB)\n", count);
+          }
+        }
+      }
+      
+      // Traiter les commandes série si disponibles
+      static String commandBuffer = "";
+      while (Serial.available()) {
+        char incoming = Serial.read();
+        if (incoming == '\r') continue;
+        if (incoming == '\n') {
+          commandBuffer.trim();
+          if (commandBuffer.length() > 0) {
+            // Gérer les commandes spéciales
+            String lowered = commandBuffer;
+            lowered.toLowerCase();
+            if (lowered.startsWith("interval=")) {
+              long requested = lowered.substring(9).toInt();
+              if (requested >= 200 && requested <= 10000) {
+                intervalMs = requested;
+                Serial.printf("✅ Intervalle: %lu ms\n", static_cast<unsigned long>(intervalMs));
+              }
+            } else {
+              handleSerialCommand(commandBuffer);
+            }
+          }
+          commandBuffer = "";
+        } else {
+          commandBuffer += incoming;
+          if (commandBuffer.length() > 128) commandBuffer = "";
+        }
+      }
+      
+      // Attendre avant la prochaine mesure
+      delay(intervalMs);
+    }
+  }
+  
+  // Mode normal (pas d'USB) : Mode hybride avec détection changement
+  Serial.println(F("[MODE] Mode hybride activé - Surveillance continue du flux"));
+  
+  // ✅ ENVOI AU RESET HARD (mesure initiale)
+  Serial.println(F("[BOOT] 📤 Envoi mesure initiale (reset hard)"));
+  Measurement mInit = captureSensorSnapshot();
+  
+  // Obtenir RSSI
   int8_t csq = modem.getSignalQuality();
   if (csq == 99) {
-    m.rssi = -999;  // Pas de signal ou erreur
+    mInit.rssi = -999;
   } else if (csq == 0) {
-    m.rssi = -113;  // Signal très faible ou moins
+    mInit.rssi = -113;
   } else if (csq == 1) {
-    m.rssi = -111;
+    mInit.rssi = -111;
   } else {
-    m.rssi = -110 + (csq * 2);  // Formule standard 3GPP
+    mInit.rssi = -110 + (csq * 2);
   }
-  Serial.printf("[MEASURE] final flow=%.2f L/min, batt=%.1f%%, rssi=%d dBm (CSQ=%d)\n", m.flow, m.battery, m.rssi, csq);
-
-  // Obtenir la position GPS ou réseau cellulaire (optionnel, ne bloque pas l'envoi)
-  float latitude = 0.0, longitude = 0.0;
-  bool hasLocation = getDeviceLocation(&latitude, &longitude);
-  if (hasLocation) {
-    Serial.printf("[GPS] Position: %.6f, %.6f\n", latitude, longitude);
+  
+  // Obtenir GPS
+  float latitudeInit = 0.0, longitudeInit = 0.0;
+  bool hasLocationInit = getDeviceLocation(&latitudeInit, &longitudeInit);
+  
+  // Envoyer mesure initiale
+  bool sentInit = sendMeasurement(mInit, hasLocationInit ? &latitudeInit : nullptr, hasLocationInit ? &longitudeInit : nullptr, "BOOT");
+  if (sentInit) {
+    Serial.println(F("[BOOT] ✅ Mesure initiale envoyée"));
+    lastFlowValue = mInit.flow;
+    lastMeasurementTime = millis();
   } else {
-    Serial.println(F("[GPS] Position non disponible"));
+    Serial.println(F("[BOOT] ⚠️ Échec envoi mesure initiale"));
   }
-
-  if (!sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr)) {
-    Serial.println(F("[API] Echec envoi mesure"));
-  } else {
-    Serial.println(F("[API] Mesure envoyée avec succès"));
+  
+  // Traiter les commandes OTA initiales
+  Command cmdsInit[MAX_COMMANDS];
+  int countInit = fetchCommands(cmdsInit, MAX_COMMANDS);
+  if (countInit > 0) {
+    Serial.printf("[COMMANDS] %d commande(s) reçue(s)\n", countInit);
+    uint32_t dummySleep = configuredSleepMinutes;
+    for (int i = 0; i < countInit; ++i) {
+      handleCommand(cmdsInit[i], dummySleep);
+    }
   }
-
-  uint32_t nextSleep = configuredSleepMinutes > 0 ? configuredSleepMinutes : DEFAULT_SLEEP_MINUTES;
-  Command cmds[MAX_COMMANDS];
-  int count = fetchCommands(cmds, MAX_COMMANDS);
-  Serial.printf("[COMMANDS] %d commande(s) reçue(s)\n", count);
-  for (int i = 0; i < count; ++i) {
-    handleCommand(cmds[i], nextSleep);
-  }
-
-  stopModem();
-  goToSleep(nextSleep);
+  
+  // Ne pas faire deep sleep, continuer en mode actif (loop())
 }
 
 void loop()
 {
-  // pas utilisé (deep sleep permanent)
+  feedWatchdog();
+  
+  // Lire le capteur (optimisé : lecture directe sans mesure complète si pas de changement)
+  float currentFlowRaw = measureAirflowRaw();
+  float currentFlow = airflowToLpm(currentFlowRaw);
+  
+  // Calculer le changement
+  float flowChange = abs(currentFlow - lastFlowValue);
+  
+  // Vérifier si changement significatif ET intervalle minimum respecté
+  unsigned long now = millis();
+  bool shouldMeasure = false;
+  
+  if (flowChange > FLOW_CHANGE_THRESHOLD && (now - lastMeasurementTime >= MIN_INTERVAL_MS)) {
+    shouldMeasure = true;
+    Serial.printf("[SENSOR] ⚡ Changement détecté: %.2f → %.2f L/min (Δ=%.2f)\n",
+                  lastFlowValue, currentFlow, flowChange);
+  }
+  
+  // Si changement détecté, mesurer et envoyer
+  if (shouldMeasure) {
+    // Activer modem si nécessaire
+    if (!modemReady) {
+      if (startModem()) {
+        Serial.println(F("[MODEM] Modem activé pour envoi"));
+      }
+    }
+    
+    // Capturer mesure complète
+    Measurement m = captureSensorSnapshot();
+    
+    // Obtenir RSSI (si modem actif)
+    if (modemReady && modem.isNetworkConnected()) {
+      int8_t csq = modem.getSignalQuality();
+      if (csq == 99) {
+        m.rssi = -999;
+      } else if (csq == 0) {
+        m.rssi = -113;
+      } else if (csq == 1) {
+        m.rssi = -111;
+      } else {
+        m.rssi = -110 + (csq * 2);
+      }
+    } else {
+      m.rssi = -999;
+    }
+    
+    // Obtenir GPS (si disponible)
+    float latitude = 0.0, longitude = 0.0;
+    bool hasLocation = getDeviceLocation(&latitude, &longitude);
+    
+    // Envoyer immédiatement
+    bool sent = sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr, "EVENT");
+    
+    if (sent) {
+      lastFlowValue = currentFlow;
+      lastMeasurementTime = now;
+      Serial.printf("[SENSOR] ✅ Mesure envoyée (flow=%.2f L/min, batt=%.1f%%, rssi=%d dBm)\n", 
+                    m.flow, m.battery, m.rssi);
+    } else {
+      Serial.println(F("[SENSOR] ⚠️ Échec envoi, réessai au prochain changement"));
+    }
+    
+    // Traiter les commandes OTA périodiquement
+    if (now - lastOtaCheck >= OTA_CHECK_INTERVAL_MS) {
+      lastOtaCheck = now;
+      if (modemReady && modem.isNetworkConnected()) {
+  Command cmds[MAX_COMMANDS];
+  int count = fetchCommands(cmds, MAX_COMMANDS);
+        if (count > 0) {
+          Serial.printf("[COMMANDS] %d commande(s) OTA reçue(s)\n", count);
+          uint32_t dummySleep = configuredSleepMinutes;
+  for (int i = 0; i < count; ++i) {
+            handleCommand(cmds[i], dummySleep);
+          }
+        }
+      }
+    }
+  } else {
+    // Pas de changement détecté
+    unsigned long idleTime = now - lastMeasurementTime;
+    
+    // Si inactif depuis X minutes, passer en light sleep
+    if (idleTime > IDLE_TIMEOUT_MS && modemReady) {
+      Serial.printf("[SLEEP] Inactif depuis %lu min → Light sleep 1 min\n", idleTime / 60000);
+      
+      // Arrêter modem pour économie
+  stopModem();
+      
+      // Light sleep 1 minute, puis réveil pour vérification
+      esp_sleep_enable_timer_wakeup(60 * 1000000ULL);
+      esp_light_sleep_start();
+      
+      // Après réveil, réinitialiser modem si nécessaire
+      if (!modemReady) {
+        initModem();
+      }
+    }
+  }
+  
+  // Attendre avant la prochaine vérification
+  delay(1000);  // Vérifier toutes les secondes
 }
 
 // ----------------------------------------------------------------------------- //
@@ -466,81 +634,6 @@ void stopModem()
   modemReady = false;
 }
 
-bool checkDebugActivationCommand()
-{
-  bool activationRequested = false;
-
-  while (Serial.available()) {
-    char incoming = Serial.read();
-    if (incoming == '\r') {
-      continue;
-    }
-
-    if (incoming == '\n') {
-      debugCommandBuffer.trim();
-      if (debugCommandBuffer.length() > 0) {
-        String lowered = debugCommandBuffer;
-        lowered.toLowerCase();
-        // Accepter "debug" (nouveau) et "usb" (rétrocompatibilité)
-        if (lowered == "debug" || lowered == "d" || lowered == "usb" || 
-            lowered == "u" || lowered == "stream" ||
-            lowered == "usb_on" || lowered == "usb_stream_on" || 
-            lowered == "debug_on" || lowered == "debug_stream_on") {
-          activationRequested = true;
-        } else {
-          // Ignorer silencieusement les autres commandes en mode normal
-        }
-      }
-      debugCommandBuffer = "";
-    } else {
-      debugCommandBuffer += incoming;
-      if (debugCommandBuffer.length() > 64) {
-        debugCommandBuffer.remove(0, debugCommandBuffer.length() - 64);
-      }
-    }
-  }
-
-  return activationRequested;
-}
-
-void enterDebugModeFromNormalOperation(const __FlashStringHelper* context)
-{
-  Serial.println();
-  Serial.println(F("[DEBUG] ========================================"));
-  if (context) {
-    Serial.print(F("[DEBUG] ✅ Commande 'debug' reçue ("));
-    Serial.print(context);
-    Serial.println(F(")"));
-  } else {
-    Serial.println(F("[DEBUG] ✅ Commande 'debug' reçue"));
-  }
-  Serial.println(F("[DEBUG] Préparation du mode debug..."));
-
-  if (modemReady) {
-    Serial.println(F("[DEBUG] Arrêt du modem avant bascule..."));
-    stopModem();
-  }
-
-  debugModeActive = true;
-  debugStreamingLoop();
-  debugModeActive = false;
-
-  Serial.println(F("[DEBUG] Redémarrage pour reprendre le cycle normal..."));
-  delay(100);
-  ESP.restart();
-}
-
-void monitorDebugActivation(const __FlashStringHelper* context)
-{
-  if (debugModeActive) {
-    return;
-  }
-
-  if (checkDebugActivationCommand()) {
-    enterDebugModeFromNormalOperation(context);
-  }
-}
-
 void goToSleep(uint32_t minutes)
 {
   Serial.printf("[SLEEP] %lu minutes\n", minutes);
@@ -573,600 +666,171 @@ Measurement captureSensorSnapshot()
   return m;
 }
 
-// Envoyer les informations du dispositif dès la connexion USB
-void emitDebugDeviceInfo()
-{
-  // Essayer de lire l'ICCID depuis la SIM si le modem est disponible
-  // (sans démarrer complètement le modem, juste une lecture rapide)
-  String iccidToSend = DEVICE_ICCID;
-  String serialToSend = DEVICE_SERIAL;
-  
-  // Si l'ICCID est la valeur par défaut, essayer de le lire depuis la SIM
-  // Note: Le modem est déjà initialisé dans setup(), on teste juste s'il répond
-  if (iccidToSend == OTT_DEFAULT_ICCID || iccidToSend.isEmpty()) {
-    // Tester si le modem répond déjà (sans le réinitialiser)
-    if (modem.testAT(2000)) {
-      String realIccid = modem.getSimCCID();
-      if (realIccid.length() > 0 && realIccid.length() <= 20) {
-        iccidToSend = realIccid;
-        DEVICE_ICCID = realIccid;
-        saveConfig();
-      }
-    }
-  }
-  
-  // Envoyer les infos du dispositif en JSON
-  StaticJsonDocument<512> infoDoc;
-  infoDoc["type"] = "device_info";
-  infoDoc["iccid"] = iccidToSend;
-  infoDoc["serial"] = serialToSend;
-  infoDoc["firmware_version"] = FIRMWARE_VERSION;
-  // Construire le nom du dispositif de manière optimisée
-  String deviceName = "OTT-";
-  if (iccidToSend.length() >= 4) {
-    deviceName += iccidToSend.substring(iccidToSend.length() - 4);
-  } else if (serialToSend.length() >= 4) {
-    deviceName += serialToSend.substring(serialToSend.length() - 4);
-  } else {
-    deviceName += "XXXX";
-  }
-  infoDoc["device_name"] = deviceName;
-  
-  serializeJson(infoDoc, Serial);
-  Serial.println();
-  
-  Serial.printf("[DEBUG] Device info envoyé: ICCID=%s, Serial=%s, FW=%s\n", 
-                iccidToSend.c_str(), serialToSend.c_str(), FIRMWARE_VERSION);
-}
-
-bool detectDebugModeHandshake()
-{
-  // Envoyer immédiatement les infos du dispositif dès la connexion série
-  emitDebugDeviceInfo();
-  
-  // Le dashboard envoie automatiquement la commande "debug" lors de la connexion
-  // On attend cette commande pendant une courte fenêtre (3.5s) pour activer le mode debug
-  Serial.println(F("[DEBUG] Connexion série détectée - En attente de la commande 'debug' du dashboard..."));
-  unsigned long start = millis();
-  String buffer;
-
-  while (millis() - start < DEBUG_HANDSHAKE_WINDOW_MS) {
-    while (Serial.available()) {
-      char incoming = Serial.read();
-      if (incoming == '\r') {
-        continue;
-      }
-      if (incoming == '\n') {
-        buffer.trim();
-        if (buffer.length() > 0) {
-          String lowered = buffer;
-          lowered.toLowerCase();
-          // Accepter "debug" (nouveau) et "usb" (rétrocompatibilité)
-          if (lowered == "debug" || lowered == "d" || lowered == "usb" || 
-              lowered == "u" || lowered == "stream" ||
-              lowered == "usb_on" || lowered == "usb_stream_on" ||
-              lowered == "debug_on" || lowered == "debug_stream_on") {
-            Serial.println(F("[DEBUG] ✅ Commande 'debug' reçue du dashboard - Mode debug activé"));
-            return true;
-          }
-        }
-        buffer = "";
-      } else {
-        buffer += incoming;
-        if (buffer.length() > 32) {
-          buffer.remove(0, buffer.length() - 32);
-        }
-      }
-    }
-    delay(20);
-  }
-
-  return false;
-}
-
-void debugStreamingLoop()
-{
-  uint32_t intervalMs = DEBUG_STREAM_DEFAULT_INTERVAL_MS;
-  uint32_t sequence = 0;
-  bool streamingActive = false; // Le streaming n'est actif que si explicitement démarré via commande
-  unsigned long lastSend = 0;
-  String commandBuffer;
-  unsigned long lastSerialCheck = 0;
-  const unsigned long SERIAL_CHECK_INTERVAL_MS = 5000; // Vérifier la connexion série toutes les 5 secondes
-  unsigned long consecutiveSerialErrors = 0;
-  const unsigned long MAX_SERIAL_ERRORS = 3; // Si 3 erreurs consécutives, série déconnecté
-
-  Serial.println(F("[DEBUG] Mode debug activé - En attente de commandes du dashboard."));
-  Serial.println(F("[DEBUG] Le dispositif n'envoie des mesures que sur commande explicite."));
-  Serial.println(F("[DEBUG] Tapez 'help' pour voir les commandes disponibles."));
-  printDebugStreamHelp(intervalMs);
-
-  while (true) {
-    feedWatchdog();
-
-    unsigned long now = millis();
-    
-    // Vérifier périodiquement si la connexion série est toujours active
-    // Sur ESP32, si série est déconnecté, Serial reste "valide" mais les écritures peuvent échouer
-    // On vérifie si on peut écrire dans le buffer Serial
-    if (now - lastSerialCheck >= SERIAL_CHECK_INTERVAL_MS) {
-      lastSerialCheck = now;
-      // Vérifier si le buffer Serial est disponible pour écriture
-      // Si USB est déconnecté, availableForWrite() peut retourner 0 ou un nombre très petit
-      size_t available = Serial.availableForWrite();
-      if (available == 0 || available < 64) {
-        // Buffer plein ou USB déconnecté - incrémenter le compteur d'erreurs
-        consecutiveSerialErrors++;
-        if (consecutiveSerialErrors >= MAX_SERIAL_ERRORS) {
-          // Série déconnecté depuis trop longtemps, sortir du mode debug
-          Serial.println(F("[DEBUG] ⚠️ Déconnexion série détectée (3 vérifications consécutives échouées)"));
-          Serial.println(F("[DEBUG] Sortie du mode debug..."));
-          Serial.println(F("[DEBUG] Le dispositif va redémarrer et reprendre le cycle normal (mode réseau)"));
-          delay(500); // Laisser le temps d'envoyer les messages
-          return; // Sortir de la boucle pour reprendre le cycle normal
-        } else {
-          // Log seulement si c'est la première erreur pour éviter le spam
-          if (consecutiveSerialErrors == 1) {
-            Serial.printf("[DEBUG] ⚠️ Vérification série échouée (%lu/%lu) - Buffer: %zu bytes\n", 
-                         consecutiveSerialErrors, MAX_SERIAL_ERRORS, available);
-          }
-        }
-      } else {
-        if (consecutiveSerialErrors > 0) {
-          // Série récupéré après des erreurs
-          Serial.printf("[DEBUG] ✅ Connexion série rétablie (buffer: %zu bytes)\n", available);
-          consecutiveSerialErrors = 0; // Reset le compteur si série semble OK
-        } else {
-          consecutiveSerialErrors = 0; // Reset silencieux si pas d'erreur précédente
-        }
-      }
-    }
-
-    // Envoyer des mesures uniquement si le streaming est explicitement activé
-    if (streamingActive && now - lastSend >= intervalMs) {
-      Measurement snapshot = captureSensorSnapshot();
-      
-      // En mode debug, le RSSI n'est pas disponible si le modem n'est pas démarré
-      // On laisse snapshot.rssi à sa valeur par défaut (probablement 0 ou -999)
-      // Si le modem est démarré, on peut essayer d'obtenir le RSSI
-      if (modemReady) {
-        int8_t csq = modem.getSignalQuality();
-        if (csq == 99) {
-          snapshot.rssi = -999;  // Pas de signal ou erreur
-        } else if (csq == 0) {
-          snapshot.rssi = -113;  // Signal très faible ou moins
-        } else if (csq == 1) {
-          snapshot.rssi = -111;
-        } else {
-          snapshot.rssi = -110 + (csq * 2);  // Formule standard 3GPP
-        }
-      } else {
-        // Modem non démarré en mode debug, RSSI non disponible
-        snapshot.rssi = -999;
-      }
-      
-      // Essayer d'obtenir la position GPS si le modem est disponible
-      // (en mode debug, le modem n'est généralement pas démarré, donc GPS sera null)
-      float lat = 0.0, lon = 0.0;
-      bool hasLocation = false;
-      if (modemReady) {
-        hasLocation = getDeviceLocation(&lat, &lon);
-      }
-      
-      emitDebugMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
-      lastSend = now;
-    }
-
-    while (Serial.available()) {
-      char incoming = Serial.read();
-      if (incoming == '\r') {
-        continue;
-      }
-      if (incoming == '\n') {
-        String command = commandBuffer;
-        commandBuffer = "";
-        command.trim();
-
-        if (command.length() == 0) {
-          continue;
-        }
-
-        // Log de réception de commande pour débogage (avec timestamp pour traçabilité)
-        unsigned long cmdTime = millis();
-        Serial.printf("[DEBUG] 📥 [%lu ms] Commande reçue: '%s' (longueur: %d)\n", 
-                     cmdTime, command.c_str(), command.length());
-        
-        // Log des bytes reçus pour débogage avancé
-        Serial.printf("[DEBUG] 🔍 Bytes de la commande: ");
-        for (size_t i = 0; i < command.length(); i++) {
-          Serial.printf("%02X ", (uint8_t)command[i]);
-        }
-        Serial.println();
-
-        String lowered = command;
-        lowered.toLowerCase();
-
-        // Confirmation de réception et traitement de chaque commande
-        if (lowered == "exit" || lowered == "normal" || lowered == "sleep" || lowered == "usb_stream_off" || lowered == "debug_off") {
-          Serial.println(F("[DEBUG] ✅ Commande 'exit'/'normal' reçue et acceptée"));
-          Serial.println(F("[DEBUG] Sortie du mode debug - Retour au cycle normal..."));
-          return;
-        }
-
-        if (lowered == "help") {
-          Serial.println(F("[DEBUG] ✅ Commande 'help' reçue et acceptée"));
-          printDebugStreamHelp(intervalMs);
-          Serial.println(F("[DEBUG] ✅ Aide affichée"));
-          continue;
-        }
-
-        // Démarrer le streaming continu (envoi automatique de mesures)
-        if (lowered == "start" || lowered == "stream" || lowered == "stream_on") {
-          Serial.println(F("[DEBUG] ✅ Commande 'start' reçue et acceptée"));
-          if (streamingActive) {
-            Serial.println(F("[DEBUG] ℹ️  Réponse: Streaming déjà actif"));
-          } else {
-            streamingActive = true;
-            Serial.println(F("[DEBUG] ✅ Réponse: Streaming démarré - Mesures envoyées automatiquement"));
-            Serial.printf("[DEBUG] Intervalle: %lu ms (1 mesure toutes les %.1f secondes)\n", 
-                         static_cast<unsigned long>(intervalMs), intervalMs / 1000.0);
-          }
-          continue;
-        }
-
-        // Arrêter le streaming continu
-        if (lowered == "stop" || lowered == "stream_off" || lowered == "pause") {
-          Serial.println(F("[DEBUG] ✅ Commande 'stop' reçue et acceptée"));
-          if (!streamingActive) {
-            Serial.println(F("[DEBUG] ℹ️  Réponse: Streaming déjà arrêté"));
-          } else {
-            streamingActive = false;
-            Serial.println(F("[DEBUG] ✅ Réponse: Streaming arrêté - Plus de mesures automatiques"));
-            Serial.println(F("[DEBUG] Utilisez 'once' pour une mesure unique ou 'start' pour redémarrer"));
-          }
-          continue;
-        }
-
-        if (lowered == "once") {
-          Serial.println(F("[DEBUG] ✅ Commande 'once' reçue et acceptée"));
-          Serial.println(F("[DEBUG] 📊 Capture d'une mesure immédiate..."));
-          Measurement snapshot = captureSensorSnapshot();
-          
-          // En mode debug, le RSSI n'est pas disponible si le modem n'est pas démarré
-          if (modemReady) {
-            int8_t csq = modem.getSignalQuality();
-            if (csq == 99) {
-              snapshot.rssi = -999;
-            } else if (csq == 0) {
-              snapshot.rssi = -113;
-            } else if (csq == 1) {
-              snapshot.rssi = -111;
-            } else {
-              snapshot.rssi = -110 + (csq * 2);
-            }
-          } else {
-            snapshot.rssi = -999;
-          }
-          
-          // Essayer d'obtenir la position GPS si le modem est disponible
-          float lat = 0.0, lon = 0.0;
-          bool hasLocation = false;
-          if (modemReady) {
-            hasLocation = getDeviceLocation(&lat, &lon);
-          }
-          
-          emitDebugMeasurement(snapshot, ++sequence, intervalMs, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr);
-          lastSend = millis();
-          Serial.println(F("[DEBUG] ✅ Mesure immédiate envoyée"));
-          continue;
-        }
-
-        // Démarrer le modem pour tester l'enregistrement réseau et GPS
-        if (lowered == "modem_on" || lowered == "start_modem") {
-          Serial.println(F("[DEBUG] ✅ Commande 'modem_on' reçue et acceptée"));
-          if (modemReady) {
-            Serial.println(F("[DEBUG] ℹ️  Réponse: Modem déjà démarré"));
-          } else {
-            Serial.println(F("[DEBUG] 📡 Traitement: Démarrage du modem en cours..."));
-            Serial.println(F("[DEBUG] ========================================"));
-            Serial.println(F("[DEBUG] Démarrage du modem..."));
-            Serial.println(F("[DEBUG] ========================================"));
-            Serial.println(F("[DEBUG] Les logs du démarrage s'affichent ci-dessous:"));
-            Serial.println();
-            
-            if (startModem()) {
-              Serial.println();
-              Serial.println(F("[DEBUG] ========================================"));
-              Serial.println(F("[DEBUG] ✅ Réponse: Modem démarré avec succès"));
-              Serial.println(F("[DEBUG] ========================================"));
-              Serial.println(F("[DEBUG] Le modem est maintenant prêt pour:"));
-              Serial.println(F("[DEBUG]   - Tester le réseau: 'test_network'"));
-              Serial.println(F("[DEBUG]   - Tester le GPS: 'gps'"));
-              Serial.println(F("[DEBUG] Note: Le GPS nécessite le modem (intégré au SIM7600)"));
-            } else {
-              Serial.println();
-              Serial.println(F("[DEBUG] ========================================"));
-              Serial.println(F("[DEBUG] ❌ Réponse: Échec démarrage modem"));
-              Serial.println(F("[DEBUG] ========================================"));
-              Serial.println(F("[DEBUG] Vérifiez les logs ci-dessus pour plus de détails"));
-            }
-          }
-          continue;
-        }
-
-        // Arrêter le modem
-        if (lowered == "modem_off" || lowered == "stop_modem") {
-          Serial.println(F("[DEBUG] ✅ Commande 'modem_off' reçue et acceptée"));
-          if (!modemReady) {
-            Serial.println(F("[DEBUG] ℹ️  Réponse: Modem déjà arrêté"));
-          } else {
-            Serial.println(F("[DEBUG] 📡 Traitement: Arrêt du modem en cours..."));
-            Serial.println(F("[DEBUG] Arrêt du modem..."));
-            stopModem();
-            Serial.println(F("[DEBUG] ✅ Réponse: Modem arrêté avec succès"));
-          }
-          continue;
-        }
-
-        // Tester l'enregistrement réseau (nécessite modem démarré)
-        if (lowered == "test_network" || lowered == "network") {
-          Serial.println(F("[DEBUG] ✅ Commande 'test_network' reçue et acceptée"));
-          if (!modemReady) {
-            Serial.println(F("[DEBUG] ⚠️  Réponse: Modem non démarré. Tapez 'modem_on' d'abord."));
-          } else {
-            Serial.println(F("[DEBUG] 📶 Traitement: Test enregistrement réseau en cours..."));
-            Serial.println(F("[DEBUG] Test enregistrement réseau..."));
-            logRadioSnapshot("test:start");
-            bool networkAttached = false;
-            if (modem.isNetworkConnected()) {
-              Serial.println(F("[DEBUG] ✅ Réponse: Réseau déjà attaché"));
-              networkAttached = true;
-            } else {
-              Serial.println(F("[DEBUG] Tentative d'attache au réseau..."));
-              if (attachNetwork(networkAttachTimeoutMs)) {
-                Serial.println(F("[DEBUG] ✅ Réponse: Réseau attaché avec succès"));
-                logRadioSnapshot("test:success");
-                networkAttached = true;
-              } else {
-                Serial.println(F("[DEBUG] ❌ Réponse: Échec attache réseau"));
-                logRadioSnapshot("test:failed");
-              }
-            }
-            
-            // Envoyer une mesure avec le RSSI après le test réseau
-            if (networkAttached) {
-              Serial.println(F("[DEBUG] 📊 Envoi d'une mesure avec RSSI..."));
-              Measurement snapshot = captureSensorSnapshot();
-              
-              // Obtenir le RSSI depuis le modem
-              int8_t csq = modem.getSignalQuality();
-              if (csq == 99) {
-                snapshot.rssi = -999;  // Pas de signal ou erreur
-              } else if (csq == 0) {
-                snapshot.rssi = -113;  // Signal très faible ou moins
-              } else if (csq == 1) {
-                snapshot.rssi = -111;
-              } else {
-                snapshot.rssi = -110 + (csq * 2);  // Formule standard 3GPP
-              }
-              
-              // Ne pas inclure GPS pour cette commande spécifique (focus sur RSSI)
-              emitDebugMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
-              Serial.println(F("[DEBUG] ✅ Mesure avec RSSI envoyée"));
-            }
-          }
-          continue;
-        }
-
-        // Tester le GPS (nécessite modem démarré)
-        // IMPORTANT: Le GPS est intégré au modem SIM7600, donc il nécessite le modem
-        // On ne peut pas utiliser le GPS sans démarrer le modem car c'est le même composant
-        if (lowered == "gps" || lowered == "location" || lowered == "test_gps") {
-          Serial.println(F("[DEBUG] ✅ Commande 'gps' reçue et acceptée"));
-          if (!modemReady) {
-            Serial.println(F("[DEBUG] ⚠️  Réponse: Modem non démarré. Tapez 'modem_on' d'abord."));
-            Serial.println(F("[DEBUG] Note: Le GPS est intégré au modem SIM7600, il nécessite le modem."));
-          } else {
-            Serial.println(F("[DEBUG] 📍 Traitement: Test GPS en cours..."));
-            Serial.println(F("[DEBUG] ========================================"));
-            Serial.println(F("[DEBUG] Test GPS en cours..."));
-            Serial.println(F("[DEBUG] Le GPS est intégré au modem SIM7600"));
-            Serial.println(F("[DEBUG] Tentative GPS (priorité) puis réseau cellulaire (fallback)..."));
-            Serial.println(F("[DEBUG] ========================================"));
-            float lat = 0.0, lon = 0.0;
-            bool hasLocation = getDeviceLocation(&lat, &lon);
-            if (hasLocation) {
-              Serial.println(F("[DEBUG] ========================================"));
-              Serial.printf("[DEBUG] ✅ Réponse: Position obtenue: %.6f, %.6f\n", lat, lon);
-              Serial.println(F("[DEBUG] ========================================"));
-              
-              // Envoyer une mesure avec la position GPS après le test
-              Serial.println(F("[DEBUG] 📊 Envoi d'une mesure avec position GPS..."));
-              Measurement snapshot = captureSensorSnapshot();
-              
-              // Obtenir le RSSI si disponible
-              int8_t csq = modem.getSignalQuality();
-              if (csq == 99) {
-                snapshot.rssi = -999;
-              } else if (csq == 0) {
-                snapshot.rssi = -113;
-              } else if (csq == 1) {
-                snapshot.rssi = -111;
-              } else {
-                snapshot.rssi = -110 + (csq * 2);
-              }
-              
-              emitDebugMeasurement(snapshot, ++sequence, intervalMs, &lat, &lon);
-              Serial.println(F("[DEBUG] ✅ Mesure avec position GPS envoyée"));
-            } else {
-              Serial.println(F("[DEBUG] ========================================"));
-              Serial.println(F("[DEBUG] ❌ Réponse: Échec obtention position GPS"));
-              Serial.println(F("[DEBUG] Vérifiez les logs ci-dessus pour plus de détails"));
-              Serial.println(F("[DEBUG] ========================================"));
-            }
-          }
-          continue;
-        }
-
-        // Demander les informations du dispositif
-        if (lowered == "device_info" || lowered == "info") {
-          Serial.println(F("[DEBUG] ✅ Commande 'device_info' reçue et acceptée"));
-          Serial.println(F("[DEBUG] ℹ️  Réponse: Envoi des informations du dispositif..."));
-          emitDebugDeviceInfo();
-          Serial.println(F("[DEBUG] ✅ Informations du dispositif envoyées"));
-          continue;
-        }
-
-        // Demander uniquement le débit
-        if (lowered == "flowrate" || lowered == "flow" || lowered == "debit") {
-          Serial.println(F("[DEBUG] ✅ Commande 'flowrate' reçue et acceptée"));
-          Serial.println(F("[DEBUG] 💨 Capture du débit uniquement..."));
-          Measurement snapshot = captureSensorSnapshot();
-          
-          // Inclure RSSI si le modem est démarré (amélioration)
-          if (modemReady) {
-            int8_t csq = modem.getSignalQuality();
-            if (csq == 99) {
-              snapshot.rssi = -999;
-            } else if (csq == 0) {
-              snapshot.rssi = -113;
-            } else if (csq == 1) {
-              snapshot.rssi = -111;
-            } else {
-              snapshot.rssi = -110 + (csq * 2);
-            }
-          } else {
-            snapshot.rssi = -999; // Modem non démarré
-          }
-          
-          // Ne pas inclure GPS pour cette commande spécifique (focus sur débit)
-          emitDebugMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
-          Serial.println(F("[DEBUG] ✅ Débit envoyé"));
-          continue;
-        }
-
-        // Demander uniquement la batterie
-        if (lowered == "battery" || lowered == "batt" || lowered == "batterie") {
-          Serial.println(F("[DEBUG] ✅ Commande 'battery' reçue et acceptée"));
-          Serial.println(F("[DEBUG] 🔋 Capture de la batterie uniquement..."));
-          Measurement snapshot = captureSensorSnapshot();
-          
-          // Inclure RSSI si le modem est démarré (amélioration)
-          if (modemReady) {
-            int8_t csq = modem.getSignalQuality();
-            if (csq == 99) {
-              snapshot.rssi = -999;
-            } else if (csq == 0) {
-              snapshot.rssi = -113;
-            } else if (csq == 1) {
-              snapshot.rssi = -111;
-            } else {
-              snapshot.rssi = -110 + (csq * 2);
-            }
-          } else {
-            snapshot.rssi = -999; // Modem non démarré
-          }
-          
-          // Ne pas inclure GPS pour cette commande spécifique (focus sur batterie)
-          emitDebugMeasurement(snapshot, ++sequence, intervalMs, nullptr, nullptr);
-          Serial.println(F("[DEBUG] ✅ Batterie envoyée"));
-          continue;
-        }
-
-        if (lowered.startsWith("interval=")) {
-          Serial.println(F("[DEBUG] ✅ Commande 'interval' reçue et acceptée"));
-          long requested = lowered.substring(9).toInt();
-          if (requested < static_cast<long>(DEBUG_STREAM_MIN_INTERVAL_MS) ||
-              requested > static_cast<long>(DEBUG_STREAM_MAX_INTERVAL_MS)) {
-            Serial.printf("[DEBUG] ❌ Réponse: Intervalle invalide (%ld ms). Autorisé: %lu-%lu ms.\n",
-                          requested,
-                          static_cast<unsigned long>(DEBUG_STREAM_MIN_INTERVAL_MS),
-                          static_cast<unsigned long>(DEBUG_STREAM_MAX_INTERVAL_MS));
-          } else {
-            intervalMs = static_cast<uint32_t>(requested);
-            Serial.printf("[DEBUG] ✅ Réponse: Nouvel intervalle configuré: %lu ms.\n", static_cast<unsigned long>(intervalMs));
-            lastSend = millis();
-          }
-          continue;
-        }
-
-        // Commande inconnue
-        Serial.printf("[DEBUG] ❌ Commande inconnue: '%s'\n", command.c_str());
-        Serial.println(F("[DEBUG] ℹ️  Réponse: Commande non reconnue. Tapez 'help' pour voir les commandes disponibles."));
-        printDebugStreamHelp(intervalMs);
-      } else {
-        commandBuffer += incoming;
-        if (commandBuffer.length() > 64) {
-          commandBuffer.remove(0, commandBuffer.length() - 64);
-        }
-      }
-    }
-
-    delay(5);
-  }
-}
 
 void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude, float* longitude)
 {
-  StaticJsonDocument<400> doc; // Augmenté pour inclure GPS
-  doc["mode"] = "debug_stream";
-  doc["seq"] = sequence;
-  doc["flow_lpm"] = m.flow;
-  doc["battery_percent"] = m.battery;
-  doc["rssi"] = m.rssi;
-  doc["interval_ms"] = intervalMs;
-  doc["sleep_minutes"] = configuredSleepMinutes;
-  doc["timestamp_ms"] = millis();
-  doc["firmware_version"] = FIRMWARE_VERSION; // Version du firmware flashé
+  // Envoyer TOUTES les données en USB (format complet)
+  StaticJsonDocument<1024> doc;  // Augmenté pour tous les paramètres
   
-  // Ajouter la position GPS/réseau cellulaire si disponible
+  // Mode et séquence
+  doc["mode"] = "usb_stream";
+  doc["type"] = "usb_stream";  // Compatibilité
+  doc["seq"] = sequence;
+  
+  // Identifiants
+  doc["sim_iccid"] = DEVICE_ICCID;
+  doc["device_serial"] = DEVICE_SERIAL;
+  doc["firmware_version"] = FIRMWARE_VERSION;
+  
+  // Calculer device_name
+  String deviceName = "OTT-";
+  if (DEVICE_ICCID.length() >= 4) {
+    deviceName += DEVICE_ICCID.substring(DEVICE_ICCID.length() - 4);
+  } else if (DEVICE_SERIAL.length() >= 4) {
+    deviceName += DEVICE_SERIAL.substring(DEVICE_SERIAL.length() - 4);
+  } else {
+    deviceName += "XXXX";
+  }
+  doc["device_name"] = deviceName;
+  
+  // Mesures principales
+  doc["flow_lpm"] = m.flow;
+  doc["flowrate"] = m.flow;  // Compatibilité
+  doc["battery_percent"] = m.battery;
+  doc["battery"] = m.battery;  // Compatibilité
+  doc["rssi"] = m.rssi;
+  doc["signal_strength"] = m.rssi;  // Compatibilité
+  
+  // Position GPS/réseau cellulaire
   if (latitude != nullptr && longitude != nullptr) {
     doc["latitude"] = *latitude;
     doc["longitude"] = *longitude;
   }
   
+  // Configuration
+  doc["interval_ms"] = intervalMs;
+  doc["sleep_minutes"] = configuredSleepMinutes;
+  doc["measurement_duration_ms"] = airflowSampleDelayMs;
+  
+  // Coefficients de calibration
+  JsonArray calArray = doc.createNestedArray("calibration_coefficients");
+  float a0 = isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0;
+  float a1 = isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1;
+  float a2 = isnan(CAL_OVERRIDE_A2) ? 0.0f : CAL_OVERRIDE_A2;
+  calArray.add(a0);
+  calArray.add(a1);
+  calArray.add(a2);
+  
+  // Paramètres de mesure
+  doc["airflow_passes"] = airflowPasses;
+  doc["airflow_samples_per_pass"] = airflowSamplesPerPass;
+  doc["airflow_delay_ms"] = airflowSampleDelayMs;
+  
+  // Timestamp
+  doc["timestamp_ms"] = millis();
+  
+  // Statut
+  doc["status"] = "USB_STREAM";
+  
+  // Envoyer le JSON complet en une seule fois (une seule ligne)
   serializeJson(doc, Serial);
-  Serial.println();
-
-  if (latitude != nullptr && longitude != nullptr) {
-    Serial.printf("[DEBUG] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | GPS=%.6f,%.6f | interval=%lums\n",
-                  static_cast<unsigned long>(sequence),
-                  m.flow,
-                  m.battery,
-                  m.rssi,
-                  *latitude,
-                  *longitude,
-                  static_cast<unsigned long>(intervalMs));
-  } else {
-    Serial.printf("[DEBUG] #%lu flow=%.2f L/min | batt=%.1f%% | rssi=%d | GPS=N/A | interval=%lums\n",
-                  static_cast<unsigned long>(sequence),
-                  m.flow,
-                  m.battery,
-                  m.rssi,
-                  static_cast<unsigned long>(intervalMs));
+  Serial.println();  // Nouvelle ligne pour terminer le JSON
+  Serial.flush();     // Forcer l'envoi immédiat (assure que le JSON complet est envoyé)
+  
+  // Message de debug simplifié (seulement toutes les 10 mesures pour réduire le bruit)
+  if (sequence % 10 == 0) {
+    if (latitude != nullptr && longitude != nullptr) {
+      Serial.printf("[#%lu] 💧%.2f L/min | 🔋%.0f%% | 📡%d dBm | 📍%.4f,%.4f\n",
+                    static_cast<unsigned long>(sequence),
+                    m.flow,
+                    m.battery,
+                    m.rssi,
+                    *latitude,
+                    *longitude);
+    } else {
+      Serial.printf("[#%lu] 💧%.2f L/min | 🔋%.0f%% | 📡%d dBm\n",
+                    static_cast<unsigned long>(sequence),
+                    m.flow,
+                    m.battery,
+                    m.rssi);
+    }
   }
 }
 
-void printDebugStreamHelp(uint32_t intervalMs)
+
+// Gérer les commandes série (config, calibration, etc.)
+void handleSerialCommand(const String& command)
 {
-  Serial.println(F("[DEBUG] ========================================"));
-  Serial.println(F("[DEBUG] Commandes disponibles (terminer par Entrée):"));
-  Serial.println(F("[DEBUG]   start         → Démarrer le streaming continu (mesures automatiques)"));
-  Serial.println(F("[DEBUG]   stop          → Arrêter le streaming continu"));
-  Serial.println(F("[DEBUG]   once          → Mesure complète immédiate (débit, batterie, RSSI)"));
-  Serial.println(F("[DEBUG]   flowrate      → Mesure du débit uniquement"));
-  Serial.println(F("[DEBUG]   battery       → Mesure de la batterie uniquement"));
-  Serial.println(F("[DEBUG]   device_info   → Demander les informations du dispositif"));
-  Serial.println(F("[DEBUG]   interval=<ms> → Modifier l'intervalle (200-10000 ms)"));
-  Serial.println(F("[DEBUG]   modem_on       → Démarrer le modem"));
-  Serial.println(F("[DEBUG]   modem_off     → Arrêter le modem"));
-  Serial.println(F("[DEBUG]   test_network  → Tester le réseau et obtenir le RSSI (modem requis)"));
-  Serial.println(F("[DEBUG]   gps            → Tester le GPS (modem requis)"));
-  Serial.println(F("[DEBUG]   help           → Afficher cette aide"));
-  Serial.println(F("[DEBUG]   exit / normal → Quitter le mode debug et redémarrer (retour cycle normal)"));
-  Serial.printf("[DEBUG] Intervalle actuel: %lu ms.\n", static_cast<unsigned long>(intervalMs));
-  Serial.printf("[DEBUG] État modem: %s\n", modemReady ? "démarré" : "arrêté");
-  Serial.println(F("[DEBUG] ========================================"));
+  String lowered = command;
+  lowered.toLowerCase();
+  
+  // Commande config {...} - Configuration directe via USB
+  if (lowered.startsWith("config ")) {
+    String jsonPayload = command.substring(7);
+    jsonPayload.trim();
+    
+    StaticJsonDocument<512> payloadDoc;
+    DeserializationError error = deserializeJson(payloadDoc, jsonPayload);
+    
+    if (error) {
+      Serial.printf("❌ Erreur JSON: %s\n", error.c_str());
+    } else {
+      bool configUpdated = false;
+      
+      if (payloadDoc.containsKey("sleep_minutes")) {
+        uint32_t newSleep = payloadDoc["sleep_minutes"].as<uint32_t>();
+        if (newSleep > 0 && newSleep <= 10080) {
+          configuredSleepMinutes = newSleep;
+          configUpdated = true;
+        }
+      }
+      
+      if (payloadDoc.containsKey("measurement_duration_ms")) {
+        uint32_t newDuration = payloadDoc["measurement_duration_ms"].as<uint32_t>();
+        if (newDuration >= 100 && newDuration <= 60000) {
+          airflowSampleDelayMs = newDuration;
+          configUpdated = true;
+        }
+      }
+      
+      if (configUpdated) {
+        saveConfig();
+        Serial.printf("✅ Config: ⏰%lu min | ⏱️%lu ms\n",
+                      static_cast<unsigned long>(configuredSleepMinutes),
+                      static_cast<unsigned long>(airflowSampleDelayMs));
+      }
+    }
+          return;
+        }
+
+  // Commande calibration {...} - Calibration directe via USB
+  if (lowered.startsWith("calibration ")) {
+    String jsonPayload = command.substring(12);
+    jsonPayload.trim();
+    
+    StaticJsonDocument<256> payloadDoc;
+    DeserializationError error = deserializeJson(payloadDoc, jsonPayload);
+    
+    if (error) {
+      Serial.printf("❌ Erreur JSON: %s\n", error.c_str());
+          } else {
+      if (payloadDoc.containsKey("a0") && payloadDoc.containsKey("a1") && payloadDoc.containsKey("a2")) {
+        float a0 = payloadDoc["a0"].as<float>();
+        float a1 = payloadDoc["a1"].as<float>();
+        float a2 = payloadDoc["a2"].as<float>();
+        
+        updateCalibration(a0, a1, a2);
+        saveConfig();
+        Serial.printf("✅ Calibration: [%.3f, %.3f, %.3f]\n", a0, a1, a2);
+      } else {
+        Serial.println(F("❌ Coefficients manquants"));
+      }
+    }
+    return;
+  }
+  
+  // Commande inconnue
+  Serial.printf("⚠️  Commande inconnue: %s\n", command.c_str());
 }
 
 void configureWatchdog(uint32_t timeoutSeconds)
@@ -1174,8 +838,11 @@ void configureWatchdog(uint32_t timeoutSeconds)
   uint32_t applied = std::max<uint32_t>(timeoutSeconds, static_cast<uint32_t>(MIN_WATCHDOG_TIMEOUT_SEC));
   watchdogTimeoutSeconds = applied;
 
-  // Nettoie toute instance précédente potentiellement créée par l’ESP-IDF
-  esp_task_wdt_delete(NULL);
+  // Nettoie toute instance précédente potentiellement créée par l'ESP-IDF
+  // Ignorer l'erreur si la tâche n'est pas dans le watchdog (première initialisation)
+  if (watchdogConfigured) {
+    esp_task_wdt_delete(NULL);
+  }
   esp_task_wdt_deinit();
   watchdogConfigured = false;
 
@@ -1200,7 +867,6 @@ void feedWatchdog()
   if (watchdogConfigured) {
     esp_task_wdt_reset();
   }
-  monitorDebugActivation(F("feedWatchdog"));
 }
 
 static const char* regStatusToString(RegStatus status)
@@ -1537,11 +1203,15 @@ String buildPath(const char* path)
   return String(API_PREFIX) + path;
 }
 
+// Construire l'en-tête d'authentification HTTP avec le JWT
+// Le JWT (JSON Web Token) est utilisé pour authentifier le dispositif auprès de l'API
+// Format de l'en-tête : "Authorization: Bearer <token>"
 String buildAuthHeader()
 {
   if (DEVICE_JWT.isEmpty()) {
-    return String();
+    return String();  // Pas de JWT = pas d'authentification (envoi échouera probablement)
   }
+  // Ajouter le préfixe "Bearer " si absent (format standard HTTP)
   if (DEVICE_JWT.startsWith("Bearer ")) {
     return DEVICE_JWT;
   }
@@ -1558,6 +1228,8 @@ bool httpPost(const char* path, const String& body, String* response)
   String auth = buildAuthHeader();
   if (auth.length()) {
     http.sendHeader("Authorization", auth);
+  } else {
+    Serial.println(F("[HTTP] ⚠️ Pas de JWT - l'authentification peut échouer"));
   }
   http.sendHeader("Content-Length", body.length());
   http.beginBody();
@@ -1569,6 +1241,21 @@ bool httpPost(const char* path, const String& body, String* response)
   if (response) {
     *response = respBody;
   }
+  
+  // Afficher le status code et la réponse pour debug
+  Serial.printf("[HTTP] POST %s → Status: %d\n", path, status);
+  if (status < 200 || status >= 300) {
+    Serial.printf("[HTTP] ❌ Erreur HTTP %d\n", status);
+    if (respBody.length() > 0 && respBody.length() < 200) {
+      Serial.printf("[HTTP] Réponse erreur: %s\n", respBody.c_str());
+    }
+  } else {
+    Serial.printf("[HTTP] ✅ Succès HTTP %d\n", status);
+    if (respBody.length() > 0 && respBody.length() < 100) {
+      Serial.printf("[HTTP] Réponse: %s\n", respBody.c_str());
+    }
+  }
+  
   return status >= 200 && status < 300;
 }
 
@@ -1596,37 +1283,96 @@ bool httpGet(const char* path, String* response)
 // API logic                                                                     //
 // ----------------------------------------------------------------------------- //
 
-bool sendMeasurement(const Measurement& m, float* latitude, float* longitude)
+bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, const char* status)
 {
-  DynamicJsonDocument doc(768); // Augmenté pour inclure position
-  doc["sim_iccid"] = DEVICE_ICCID; // Format firmware (sim_iccid au lieu de device_sim_iccid)
-  doc["device_sim_iccid"] = DEVICE_ICCID; // Compatibilité ancien format
+  // Envoyer TOUS les paramètres possibles (format unifié)
+  DynamicJsonDocument doc(1024);  // Augmenté pour tous les paramètres
+  
+  // Mode et type (pour format unifié)
+  // Pour OTA, on utilise le status comme mode (BOOT, EVENT, TIMER, USB_STREAM)
+  doc["mode"] = status;  // BOOT, EVENT, TIMER, USB_STREAM
+  doc["type"] = "ota_measurement";  // Pour distinguer OTA de USB
+  doc["status"] = status;  // Compatibilité
+  
+  // Identifiants
+  doc["sim_iccid"] = DEVICE_ICCID;
   doc["device_serial"] = DEVICE_SERIAL;
   doc["firmware_version"] = FIRMWARE_VERSION;
-  doc["status"] = "TIMER";
-  JsonObject payload = doc.createNestedObject("payload");
-  payload["flowrate"] = m.flow;
-  payload["battery"] = m.battery;
-  payload["signal_strength"] = m.rssi;
-  payload["signal_dbm"] = m.rssi;
-  doc["flowrate"] = m.flow;
-  doc["battery"] = m.battery;
-  doc["signal_dbm"] = m.rssi;
   
-  // Ajouter la position GPS/réseau cellulaire si disponible
+  // Calculer device_name
+  String deviceName = "OTT-";
+  if (DEVICE_ICCID.length() >= 4) {
+    deviceName += DEVICE_ICCID.substring(DEVICE_ICCID.length() - 4);
+  } else if (DEVICE_SERIAL.length() >= 4) {
+    deviceName += DEVICE_SERIAL.substring(DEVICE_SERIAL.length() - 4);
+  } else {
+    deviceName += "XXXX";
+  }
+  doc["device_name"] = deviceName;
+  
+  // Mesures principales
+  doc["flow_lpm"] = m.flow;  // Format unifié (prioritaire)
+  doc["flowrate"] = m.flow;  // Compatibilité
+  doc["battery_percent"] = m.battery;  // Format unifié (prioritaire)
+  doc["battery"] = m.battery;  // Compatibilité
+  doc["rssi"] = m.rssi;
+  doc["signal_strength"] = m.rssi; // Compatibilité format V1
+  
+  // Position GPS/réseau cellulaire
   if (latitude != nullptr && longitude != nullptr) {
     doc["latitude"] = *latitude;
     doc["longitude"] = *longitude;
-    payload["latitude"] = *latitude;
-    payload["longitude"] = *longitude;
   }
+  
+  // Configuration actuelle
+  doc["sleep_minutes"] = configuredSleepMinutes;
+  doc["measurement_duration_ms"] = airflowSampleDelayMs;
+  
+  // Coefficients de calibration
+  JsonArray calArray = doc.createNestedArray("calibration_coefficients");
+  float a0 = isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0;
+  float a1 = isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1;
+  float a2 = isnan(CAL_OVERRIDE_A2) ? 0.0f : CAL_OVERRIDE_A2;
+  calArray.add(a0);
+  calArray.add(a1);
+  calArray.add(a2);
+  
+  // Paramètres de mesure
+  doc["airflow_passes"] = airflowPasses;
+  doc["airflow_samples_per_pass"] = airflowSamplesPerPass;
+  doc["airflow_delay_ms"] = airflowSampleDelayMs;
+  
+  // Timestamp (millis depuis boot, utile pour debug)
+  doc["timestamp_ms"] = millis();
   
   String body;
   serializeJson(doc, body);
-  bool ok = httpPost(PATH_MEASURE, body);
-  sendLog(ok ? "INFO" : "ERROR",
-          ok ? "Measurement posted" : "Measurement failed",
-          "measurements");
+  
+  // Vérifier si JWT (token d'authentification) est configuré
+  // Sans JWT, l'API refusera probablement la requête (401 Unauthorized)
+  if (DEVICE_JWT.isEmpty()) {
+    Serial.println(F("[API] ⚠️ JWT (token d'authentification) non configuré - l'envoi OTA peut échouer"));
+    Serial.println(F("[API] 💡 Configurez le JWT via UPDATE_CONFIG pour activer les envois OTA"));
+  }
+  
+  String apiResponse;
+  bool ok = httpPost(PATH_MEASURE, body, &apiResponse);
+  
+  // Afficher le résultat détaillé via USB
+  if (ok) {
+    Serial.printf("[API] ✅ Mesure envoyée avec succès\n");
+    if (apiResponse.length() > 0) {
+      Serial.printf("[API] Réponse: %s\n", apiResponse.c_str());
+    }
+    sendLog("INFO", "Measurement posted successfully", "measurements");
+  } else {
+    Serial.printf("[API] ❌ Échec envoi mesure\n");
+    if (apiResponse.length() > 0) {
+      Serial.printf("[API] Erreur: %s\n", apiResponse.c_str());
+    }
+    sendLog("ERROR", "Measurement failed: " + apiResponse, "measurements");
+  }
+  
   return ok;
 }
 
@@ -1777,6 +1523,10 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     if (payloadDoc.containsKey("apn")) {
       NETWORK_APN = payloadDoc["apn"].as<String>();
     }
+    // Configuration du JWT (JSON Web Token) - Token d'authentification pour l'API
+    // Le JWT permet au dispositif de s'authentifier auprès du serveur lors des envois OTA
+    // Format attendu : {"jwt": "Bearer xxxxx"} ou {"jwt": "xxxxx"} (le préfixe "Bearer " est optionnel)
+    // Le JWT est obtenu depuis le dashboard/admin et doit être unique par dispositif
     if (payloadDoc.containsKey("jwt")) {
       DEVICE_JWT = payloadDoc["jwt"].as<String>();
     }
@@ -1792,6 +1542,10 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     if (payloadDoc.containsKey("sleep_minutes_default")) {
       configuredSleepMinutes = std::max<uint32_t>(static_cast<uint32_t>(1), payloadDoc["sleep_minutes_default"].as<uint32_t>());
     }
+    // Support de "sleep_minutes" (format direct depuis USB)
+    if (payloadDoc.containsKey("sleep_minutes")) {
+      configuredSleepMinutes = std::max<uint32_t>(static_cast<uint32_t>(1), payloadDoc["sleep_minutes"].as<uint32_t>());
+    }
     if (payloadDoc.containsKey("airflow_passes")) {
       airflowPasses = std::max<uint16_t>(static_cast<uint16_t>(1), payloadDoc["airflow_passes"].as<uint16_t>());
     }
@@ -1800,6 +1554,10 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     }
     if (payloadDoc.containsKey("airflow_delay_ms")) {
       airflowSampleDelayMs = std::max<uint16_t>(static_cast<uint16_t>(1), payloadDoc["airflow_delay_ms"].as<uint16_t>());
+    }
+    // Support de "measurement_duration_ms" (format direct depuis USB)
+    if (payloadDoc.containsKey("measurement_duration_ms")) {
+      airflowSampleDelayMs = std::max<uint16_t>(static_cast<uint16_t>(1), payloadDoc["measurement_duration_ms"].as<uint16_t>());
     }
     if (payloadDoc.containsKey("watchdog_seconds")) {
       configureWatchdog(payloadDoc["watchdog_seconds"].as<uint32_t>());

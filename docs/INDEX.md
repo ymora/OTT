@@ -3,8 +3,10 @@
 ## 🚀 Démarrage Rapide
 - [README Principal](../README.md) - Vue d'ensemble et installation
 - [Architecture](./ARCHITECTURE.md) - Structure du projet
-- [Mode USB vs Mode Normal](./MODE_USB_VS_MODE_NORMAL.md) - **NOUVEAU** Guide complet des deux modes
-- [Cas d'Usage Complets](./CAS_USAGE_COMPLETS.md) - **NOUVEAU** Tous les cas d'usage couverts
+- [Fonctionnalités Firmware](./FIRMWARE_FEATURES.md) - **NOUVEAU v3.7** Liste complète des fonctionnalités
+- [Synchronisation USB/OTA](./SYNCHRONISATION_USB_OTA.md) - **NOUVEAU v3.7** Logique de synchronisation
+- [Mode USB vs Mode Normal](./MODE_USB_VS_MODE_NORMAL.md) - Guide complet des deux modes
+- [Cas d'Usage Complets](./CAS_USAGE_COMPLETS.md) - Tous les cas d'usage couverts
 
 ## 🛠️ Développement
 - [Utilité Développement Local](./UTILITE_DEVELOPPEMENT_LOCAL.md) - Guide développement
