@@ -1336,9 +1336,6 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
         {/* Sélection de dispositif depuis la base de données */}
         {!isConnected && (
           <div className="mb-4">
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-              📱 Sélectionner un dispositif (base de données)
-            </label>
             <select
               value={selectedDeviceId || ''}
               onChange={(e) => setSelectedDeviceId(e.target.value || null)}
