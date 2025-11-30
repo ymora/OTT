@@ -650,24 +650,33 @@ export default function DebugTab() {
         )}
 
         {/* Tableau des données - Affiche tous les dispositifs */}
-        <div className="mb-6 overflow-x-auto">
-          {devicesLoading ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              Chargement des dispositifs...
-            </div>
-          ) : allDevices.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              <p className="mb-4">Aucun dispositif trouvé</p>
-              <button
-                onClick={handleCreateTestDevices}
-                disabled={creatingTestDevices}
-                className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {creatingTestDevices ? '⏳ Création...' : '➕ Créer dispositifs fictifs'}
-              </button>
-            </div>
-          ) : (
-            <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="mb-6">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              📊 Tableau des Dispositifs
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Tous les dispositifs de la base de données avec leurs données en temps réel (USB) ou depuis la base de données
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            {devicesLoading ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                Chargement des dispositifs...
+              </div>
+            ) : allDevices.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <p className="mb-4">Aucun dispositif trouvé</p>
+                <button
+                  onClick={handleCreateTestDevices}
+                  disabled={creatingTestDevices}
+                  className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingTestDevices ? '⏳ Création...' : '➕ Créer dispositifs fictifs'}
+                </button>
+              </div>
+            ) : (
+              <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
                   <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État</th>
@@ -1077,7 +1086,8 @@ export default function DebugTab() {
               })}
             </tbody>
           </table>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Configuration */}
