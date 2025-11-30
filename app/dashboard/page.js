@@ -173,7 +173,7 @@ export default function DashboardPage() {
                         )
                       })}
                     </div>
-                    <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
+                    <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/outils')}>
                       Voir tous →
                     </button>
                   </div>
@@ -193,7 +193,7 @@ export default function DashboardPage() {
                         </div>
                       ))}
                     </div>
-                    <button className="btn-primary text-xs mt-2" onClick={() => router.push('/dashboard/devices')}>
+                    <button className="btn-primary text-xs mt-2" onClick={() => router.push('/dashboard/outils')}>
                       Assigner →
                     </button>
                   </div>
