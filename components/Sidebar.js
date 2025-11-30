@@ -15,13 +15,6 @@ const menuStructure = [
     permission: null
   },
   {
-    name: 'Dispositifs OTT',
-    icon: '🔌',
-    path: '/dashboard/devices',
-    permission: 'devices.view',
-    description: 'Gestion complète des dispositifs (carte, OTA, commandes, logs, alertes)'
-  },
-  {
     name: 'Patients',
     icon: '🏥',
     path: '/dashboard/patients',
