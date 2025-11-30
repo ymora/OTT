@@ -1181,12 +1181,18 @@ export default function DevicesPage() {
       }, 2000)
     }
 
-    // Détection périodique toutes les 3 secondes (plus agressif)
+    // Détection périodique : intervalle adaptatif selon l'état
     const interval = setInterval(() => {
       if (!usbConnectedDevice && !usbVirtualDevice && !detectionRef.current.inProgress) {
-        autoDetect()
+        // Si aucun port n'a été trouvé, augmenter l'intervalle pour éviter le spam
+        const intervalDelay = detectionRef.current.noPortsInterval ? 15000 : 3000 // 15s si pas de ports, 3s sinon
+        const now = Date.now()
+        if (!detectionRef.current.lastIntervalCheck || (now - detectionRef.current.lastIntervalCheck >= intervalDelay)) {
+          detectionRef.current.lastIntervalCheck = now
+          autoDetect()
+        }
       }
-    }, 3000) // Toutes les 3 secondes
+    }, 3000) // Vérifier toutes les 3 secondes, mais n'exécuter que si l'intervalle adaptatif le permet
 
     return () => {
       if (initialTimer) clearTimeout(initialTimer)
