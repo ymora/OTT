@@ -520,6 +520,13 @@ function parseRequestPath() {
 $path = parseRequestPath();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
+// Debug pour /admin/database-view
+if (strpos($path, 'database-view') !== false) {
+    error_log('[DEBUG] Path: ' . $path . ' | Method: ' . $method . ' | URI: ' . ($_SERVER['REQUEST_URI'] ?? 'N/A'));
+    error_log('[DEBUG] Pattern test 1: ' . (preg_match('#^/admin/database-view#', $path) ? 'MATCH' : 'NO MATCH'));
+    error_log('[DEBUG] Pattern test 2: ' . (preg_match('#^/admin/database-view/?$#', $path) ? 'MATCH' : 'NO MATCH'));
+}
+
 // Définir Content-Type selon le type de route
 // ATTENTION: Pour SSE et /docs/, les headers sont définis dans les handlers
 if ($method !== 'OPTIONS') {
@@ -819,9 +826,7 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 // Admin tools - IMPORTANT: Routes spécifiques avant routes génériques
 } elseif($method === 'GET' && preg_match('#^/admin/database-view#', $path)) {
     // Route pour la visualisation de la base de données
-    if (getenv('DEBUG_ERRORS') === 'true') {
-        error_log('[ROUTER] Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
-    }
+    error_log('[ROUTER] ✅ Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
     handleDatabaseView();
     exit;
 
