@@ -756,7 +756,7 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 
 // Devices (API V1 compatible + V2)
 // Route spécifique pour créer dispositifs fictifs (doit être avant /devices POST)
-} elseif(($path === '/devices/test/create' || preg_match('#^/devices/test/create/?$#', $path)) && $method === 'POST') {
+} elseif(($path === '/devices/test/create' || preg_match('#^/devices/test/create/?$#', $path) || preg_match('#/devices/test/create#', $path)) && $method === 'POST') {
     error_log('[ROUTER] ✅ Route /devices/test/create matchée - Path: ' . $path . ' Method: ' . $method . ' URI: ' . ($_SERVER['REQUEST_URI'] ?? 'N/A'));
     handleCreateTestDevices();
 } elseif(preg_match('#/devices$#', $path) && $method === 'GET') {
