@@ -165,7 +165,13 @@ export default function DevicesPage() {
   const [focusDeviceId, setFocusDeviceId] = useState(null)
   
   // Ref pour la détection USB (persiste entre les renders)
-  const detectionRef = useRef({ inProgress: false, lastCheck: 0 })
+  const detectionRef = useRef({ 
+    inProgress: false, 
+    lastCheck: 0, 
+    noPortsWarningShown: false,
+    noPortsInterval: false,
+    lastIntervalCheck: 0
+  })
   
   // État pour la suppression
   const [deletingDevice, setDeletingDevice] = useState(null)
@@ -1075,28 +1081,37 @@ export default function DevicesPage() {
       detectionRef.current.lastCheck = now
 
       try {
-        logger.log('🔍 Détection automatique USB...')
-        
         // Récupérer les ports déjà autorisés (sans interaction utilisateur)
         const ports = await navigator.serial.getPorts()
-        logger.log(`📡 Ports trouvés: ${ports.length}`)
         
         if (ports.length === 0) {
           // Pas de ports autorisés - on ne peut pas automatiquement autoriser (limitation sécurité navigateur)
-          // Mais on peut améliorer le message pour guider l'utilisateur
+          // Afficher le message seulement une fois toutes les 30 secondes pour éviter le spam
           if (!detectionRef.current.noPortsWarningShown) {
+            logger.log('🔍 Détection automatique USB...')
+            logger.log(`📡 Ports trouvés: ${ports.length}`)
             logger.log('💡 Aucun port USB autorisé.')
             logger.log('   🔌 Connectez votre dispositif USB, puis cliquez sur "🔍 Détecter USB" pour autoriser le port.')
             logger.log('   📱 Une fois autorisé, la détection et le streaming seront automatiques.')
             detectionRef.current.noPortsWarningShown = true
-            // Réessayer après 5 secondes au cas où l'utilisateur connecte le dispositif
+            // Réafficher le message après 30 secondes au cas où l'utilisateur connecte le dispositif
             setTimeout(() => {
               detectionRef.current.noPortsWarningShown = false
-            }, 5000)
+            }, 30000) // 30 secondes au lieu de 5
           }
+          // Augmenter l'intervalle de détection quand aucun port n'est trouvé
+          detectionRef.current.noPortsInterval = true
           detectionRef.current.inProgress = false
           return
         }
+        
+        // Réinitialiser le flag d'avertissement et l'intervalle si des ports sont trouvés
+        detectionRef.current.noPortsWarningShown = false
+        detectionRef.current.noPortsInterval = false
+        
+        // Logger seulement si on a des ports à tester
+        logger.log('🔍 Détection automatique USB...')
+        logger.log(`📡 Ports trouvés: ${ports.length}`)
         
         // Réinitialiser le flag d'avertissement si des ports sont trouvés
         detectionRef.current.noPortsWarningShown = false
