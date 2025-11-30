@@ -1409,23 +1409,23 @@ export default function DebugTab() {
                 
                 {/* Actions */}
                 <td className="px-3 py-1.5">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-end gap-2">
                     {compiledFirmwares.length > 0 && (
                       <button
                         onClick={() => handleOpenFlashModal(device)}
-                        className="px-3 py-1.5 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
                         title="Flasher le firmware"
                       >
-                        🚀
+                        <span className="text-lg">🚀</span>
                       </button>
                     )}
                     <button
                       onClick={() => handleDeleteDevice(device)}
                       disabled={deleting}
-                      className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
                     >
-                      {deleting ? '⏳' : '🗑️'}
+                      <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
                     </button>
                   </div>
                 </td>
