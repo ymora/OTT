@@ -42,6 +42,13 @@ export default function DebugTab() {
   )
   const allDevices = devicesData?.devices?.devices || []
   
+  // Charger les patients pour l'assignation
+  const { data: patientsData, loading: patientsLoading } = useApiData(
+    ['/api.php/patients'],
+    { requiresAuth: true, autoLoad: !!user }
+  )
+  const allPatients = patientsData?.patients?.patients || []
+  
   // États pour la suppression
   const [deviceToDelete, setDeviceToDelete] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -58,6 +65,11 @@ export default function DebugTab() {
     patient_id: null
   })
   const [deviceFormError, setDeviceFormError] = useState(null)
+  
+  // États pour l'assignation de patient
+  const [showAssignPatientModal, setShowAssignPatientModal] = useState(false)
+  const [deviceToAssign, setDeviceToAssign] = useState(null)
+  const [assigningPatient, setAssigningPatient] = useState(false)
   
   const [availablePorts, setAvailablePorts] = useState([])
   const [selectedPortId, setSelectedPortId] = useState('')
@@ -953,13 +965,22 @@ export default function DebugTab() {
                     const patientName = deviceDbData?.first_name && deviceDbData?.last_name 
                       ? `${deviceDbData.first_name} ${deviceDbData.last_name}` 
                       : null
-                    const source = patientName ? 'database' : null
+                    const hasPatient = !!patientName
                     return (
                       <div className="flex items-center gap-1">
-                        {patientName ? (
+                        {hasPatient ? (
                           <span className="badge badge-success text-xs">{patientName}</span>
                         ) : (
-                          <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs">Non assigné</span>
+                          <button
+                            onClick={() => {
+                              setDeviceToAssign(device)
+                              setShowAssignPatientModal(true)
+                            }}
+                            className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs hover:bg-orange-200 dark:hover:bg-orange-900/40 cursor-pointer transition-colors"
+                            title="Cliquer pour assigner un patient"
+                          >
+                            Non assigné
+                          </button>
                         )}
                       </div>
                     )
