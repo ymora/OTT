@@ -817,7 +817,7 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleProcessNotificationsQueue();
 
 // Admin tools - IMPORTANT: Routes spécifiques avant routes génériques
-} elseif($method === 'GET' && (preg_match('#^/admin/database-view/?$#', $path) || preg_match('#^/admin/database-view#', $path))) {
+} elseif($method === 'GET' && preg_match('#^/admin/database-view#', $path)) {
     // Route pour la visualisation de la base de données
     if (getenv('DEBUG_ERRORS') === 'true') {
         error_log('[ROUTER] Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
