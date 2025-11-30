@@ -99,7 +99,7 @@ export default function Sidebar() {
         {menuStructure.map((item) => {
           if (!hasPermission(item.permission)) return null
           
-          // Vérification spéciale pour le menu Outils (admin ou technicien uniquement)
+          // Vérification spéciale pour le menu Dispositifs OTT (admin ou technicien uniquement)
           if (item.path === '/dashboard/outils') {
             if (user?.role_name !== 'admin' && user?.role_name !== 'technicien') {
               return null
