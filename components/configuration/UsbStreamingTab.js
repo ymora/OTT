@@ -841,11 +841,12 @@ export default function DebugTab() {
               </p>
             </div>
             <button
-              onClick={() => setShowCreateDeviceModal(true)}
-              className="btn-primary"
-              title="Créer un nouveau dispositif"
+              onClick={handleCreateTestDevices}
+              disabled={creatingTestDevices}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Créer des dispositifs fictifs pour les tests"
             >
-              ➕ Nouveau Dispositif
+              {creatingTestDevices ? '⏳ Création...' : '➕ Créer dispositifs fictifs'}
             </button>
           </div>
           <div className="overflow-x-auto">
@@ -877,13 +878,10 @@ export default function DebugTab() {
                       <tr>
                         <td colSpan="12" className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex flex-col items-center gap-3">
-                            <button
-                              onClick={handleCreateTestDevices}
-                              disabled={creatingTestDevices}
-                              className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {creatingTestDevices ? '⏳ Création...' : '➕ Créer dispositifs fictifs'}
-                            </button>
+                            <p className="text-sm">Aucun dispositif dans la base de données</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              Utilisez le bouton "➕ Créer dispositifs fictifs" ci-dessus pour créer des dispositifs de test
+                            </p>
                           </div>
                         </td>
                       </tr>
