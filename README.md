@@ -1,6 +1,6 @@
 # 🏥 OTT - Dispositif Médical IoT
 
-**Version 3.9** - Solution Cloud Complète avec Mode Hybride
+**Version 3.11** - Solution Cloud Complète avec Pagination, Cache Redis, Sentry, OpenAPI
 
 **HAPPLYZ MEDICAL SAS**
 

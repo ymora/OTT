@@ -8,6 +8,7 @@ import { useApiData } from '@/hooks'
 import { createUpdateConfigCommand, createUpdateCalibrationCommand } from '@/lib/deviceCommands'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
+import Modal from '@/components/Modal'
 
 export default function DebugTab() {
   const {
@@ -32,7 +33,19 @@ export default function DebugTab() {
     appendUsbStreamLog
   } = useUsb()
   
-  const { fetchWithAuth, API_URL } = useAuth()
+  const { fetchWithAuth, API_URL, user } = useAuth()
+  
+  // Charger tous les dispositifs pour le tableau
+  const { data: devicesData, loading: devicesLoading, refetch: refetchDevices } = useApiData(
+    ['/api.php/devices'],
+    { requiresAuth: true, autoLoad: !!user }
+  )
+  const allDevices = devicesData?.devices?.devices || []
+  
+  // États pour la suppression
+  const [deviceToDelete, setDeviceToDelete] = useState(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   
   const [availablePorts, setAvailablePorts] = useState([])
   const [selectedPortId, setSelectedPortId] = useState('')

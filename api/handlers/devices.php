@@ -268,7 +268,12 @@ function handleDeleteDevice($device_id) {
     
     try {
         // Vérifier que le dispositif existe
-        $stmt = $pdo->prepare("SELECT * FROM devices WHERE id = :id AND deleted_at IS NULL");
+        $stmt = $pdo->prepare("
+            SELECT d.*, p.first_name, p.last_name
+            FROM devices d
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            WHERE d.id = :id AND d.deleted_at IS NULL
+        ");
         $stmt->execute(['id' => $device_id]);
         $device = $stmt->fetch();
         
@@ -278,14 +283,11 @@ function handleDeleteDevice($device_id) {
             return;
         }
         
-        // Vérifier si le dispositif est assigné à un patient
+        // Si le dispositif est assigné, on le désassigne d'abord (soft delete)
         if ($device['patient_id']) {
-            http_response_code(400);
-            echo json_encode([
-                'success' => false, 
-                'error' => 'Impossible de supprimer un dispositif assigné à un patient. Désassignez d\'abord le dispositif.'
-            ]);
-            return;
+            // Désassigner le patient avant suppression
+            $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE id = :id")
+                ->execute(['id' => $device_id]);
         }
         
         // Soft delete : mettre deleted_at à NOW()
@@ -295,9 +297,14 @@ function handleDeleteDevice($device_id) {
         // Enregistrer dans l'audit
         auditLog('device.deleted', 'device', $device_id, $device, null);
         
+        $message = $device['patient_id'] 
+            ? 'Dispositif supprimé avec succès (désassigné du patient ' . ($device['first_name'] ?? '') . ' ' . ($device['last_name'] ?? '') . ')'
+            : 'Dispositif supprimé avec succès';
+        
         echo json_encode([
             'success' => true, 
-            'message' => 'Dispositif supprimé avec succès'
+            'message' => $message,
+            'was_assigned' => (bool)$device['patient_id']
         ]);
     } catch(PDOException $e) {
         http_response_code(500);
