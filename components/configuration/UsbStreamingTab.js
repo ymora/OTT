@@ -649,28 +649,6 @@ export default function DebugTab() {
           </div>
         )}
 
-        {/* Bouton pour créer les dispositifs fictifs */}
-        <div className="mb-4 flex justify-end">
-          <button
-            onClick={handleCreateTestDevices}
-            disabled={creatingTestDevices}
-            className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            title="Créer deux dispositifs fictifs pour les tests (TEST-ICCID-001 et TEST-ICCID-002)"
-          >
-            {creatingTestDevices ? (
-              <>
-                <span>⏳</span>
-                <span>Création...</span>
-              </>
-            ) : (
-              <>
-                <span>➕</span>
-                <span>Créer dispositifs fictifs</span>
-              </>
-            )}
-          </button>
-        </div>
-
         {/* Tableau des données - Affiche tous les dispositifs */}
         <div className="mb-6 overflow-x-auto">
           {devicesLoading ? (
