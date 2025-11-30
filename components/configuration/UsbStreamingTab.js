@@ -1129,7 +1129,13 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
   // Vérifier si un dispositif est reconnu (USB ou base de données)
   const isDeviceRecognized = useMemo(() => {
     // Vérifier si on a un dispositif USB connecté avec des informations
-    const hasUsbDevice = isConnected && (usbDeviceInfo?.sim_iccid || usbDeviceInfo?.device_serial || usbDeviceInfo?.device_name || usbConnectedDevice || usbVirtualDevice)
+    const hasUsbDevice = isConnected && (
+      usbDeviceInfo?.sim_iccid || 
+      usbDeviceInfo?.device_serial || 
+      usbDeviceInfo?.device_name || 
+      !!usbConnectedDevice || 
+      !!usbVirtualDevice
+    )
     
     // Vérifier si on a un dispositif sélectionné dans la base de données
     const hasDbDevice = selectedDeviceId && devices.find(d => d.id === parseInt(selectedDeviceId))

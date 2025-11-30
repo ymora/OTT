@@ -8,8 +8,8 @@ param(
 
 Write-Host "Analyse des commits Git..." -ForegroundColor Cyan
 
-# Récupérer tous les commits de toutes les branches (y compris locaux)
-Write-Host "Recherche des commits Git (branches distantes et locales)..." -ForegroundColor Cyan
+# Récupérer tous les commits de toutes les branches (distants)
+Write-Host "Recherche des commits Git (branches distantes)..." -ForegroundColor Cyan
 
 $gitCmd = if ($IncludeAllBranches) {
     'git log --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --all --no-merges'
@@ -19,19 +19,55 @@ $gitCmd = if ($IncludeAllBranches) {
 
 $commits = Invoke-Expression $gitCmd
 
-# Récupérer aussi les commits locaux non pushés (reflog)
-Write-Host "Recherche des commits locaux (reflog)..." -ForegroundColor Cyan
+# Récupérer les commits locaux non pushés (méthode plus fiable que reflog)
+Write-Host "Recherche des commits locaux non pushés..." -ForegroundColor Cyan
+$localCommitsCmd = 'git log --branches --not --remotes --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --no-merges'
+$localCommitsRaw = Invoke-Expression $localCommitsCmd
+
+# Parser les commits locaux (même format que les commits distants)
+$localCommits = @()
+if ($localCommitsRaw) {
+    foreach ($commit in $localCommitsRaw) {
+        $parts = $commit -split '\|'
+        if ($parts.Count -ge 4) {
+            $dateTime = $parts[0]
+            $author = $parts[1]
+            $message = $parts[2]
+            $hash = $parts[3]
+            
+            $datePart = $dateTime -split ' ' | Select-Object -First 1
+            $timePart = $dateTime -split ' ' | Select-Object -Last 1
+            
+            $localCommits += [PSCustomObject]@{
+                Date = $datePart
+                Time = $timePart
+                DateTime = $dateTime
+                Author = $author
+                Message = $message
+                Hash = $hash
+                Source = "local"
+            }
+        }
+    }
+}
+
+# Récupérer aussi les commits du reflog (pour les commits qui ne sont plus dans aucune branche)
+Write-Host "Recherche des commits orphelins (reflog)..." -ForegroundColor Cyan
 $reflogCmd = 'git reflog --pretty=format:"%gd|%an|%gs|%h" --date=format:"%Y-%m-%d %H:%M" --all'
 $reflogCommits = Invoke-Expression $reflogCmd
 
 # Parser les commits du reflog (format différent)
-$localCommits = @()
+$orphanCommits = @()
+$processedHashes = @{}
 foreach ($reflogCommit in $reflogCommits) {
     if ($reflogCommit -match '^([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)$') {
         $ref = $matches[1]
         $author = $matches[2]
         $message = $matches[3]
         $hash = $matches[4]
+        
+        # Ignorer si déjà traité
+        if ($processedHashes.ContainsKey($hash)) { continue }
         
         # Extraire la date du reflog (format: HEAD@{2025-12-01 10:30:00})
         if ($ref -match '@\{([^}]+)\}') {
@@ -41,15 +77,16 @@ foreach ($reflogCommit in $reflogCommits) {
                 $datePart = $dateTime.ToString("yyyy-MM-dd")
                 $timePart = $dateTime.ToString("HH:mm")
                 
-                $localCommits += [PSCustomObject]@{
+                $orphanCommits += [PSCustomObject]@{
                     Date = $datePart
                     Time = $timePart
                     DateTime = "$datePart $timePart"
                     Author = $author
                     Message = $message
                     Hash = $hash
-                    Source = "local"
+                    Source = "orphan"
                 }
+                $processedHashes[$hash] = $true
             } catch {
                 # Ignorer les entrées invalides
             }
@@ -59,6 +96,9 @@ foreach ($reflogCommit in $reflogCommits) {
 
 # Combiner les commits distants et locaux
 $allCommits = @()
+$allHashes = @{}
+
+# Ajouter les commits distants
 if ($commits) {
     foreach ($commit in $commits) {
         $parts = $commit -split '\|'
@@ -67,6 +107,8 @@ if ($commits) {
             $author = $parts[1]
             $message = $parts[2]
             $hash = $parts[3]
+            
+            if ($allHashes.ContainsKey($hash)) { continue }
             
             $datePart = $dateTime -split ' ' | Select-Object -First 1
             $timePart = $dateTime -split ' ' | Select-Object -Last 1
@@ -80,18 +122,24 @@ if ($commits) {
                 Hash = $hash
                 Source = "remote"
             }
+            $allHashes[$hash] = $true
         }
     }
 }
 
-# Ajouter les commits locaux (éviter les doublons)
+# Ajouter les commits locaux non pushés (éviter les doublons)
 foreach ($localCommit in $localCommits) {
-    $isDuplicate = $allCommits | Where-Object { 
-        $_.Hash -eq $localCommit.Hash -or 
-        ($_.DateTime -eq $localCommit.DateTime -and $_.Message -eq $localCommit.Message)
-    }
-    if (-not $isDuplicate) {
+    if (-not $allHashes.ContainsKey($localCommit.Hash)) {
         $allCommits += $localCommit
+        $allHashes[$localCommit.Hash] = $true
+    }
+}
+
+# Ajouter les commits orphelins du reflog (éviter les doublons)
+foreach ($orphanCommit in $orphanCommits) {
+    if (-not $allHashes.ContainsKey($orphanCommit.Hash)) {
+        $allCommits += $orphanCommit
+        $allHashes[$orphanCommit.Hash] = $true
     }
 }
 
@@ -100,7 +148,10 @@ if ($allCommits.Count -eq 0) {
     exit 1
 }
 
-Write-Host "OK: $($allCommits.Count) commits trouves ($($commits.Count) distants, $($localCommits.Count) locaux)" -ForegroundColor Green
+$remoteCount = ($allCommits | Where-Object { $_.Source -eq "remote" }).Count
+$localCount = ($allCommits | Where-Object { $_.Source -eq "local" }).Count
+$orphanCount = ($allCommits | Where-Object { $_.Source -eq "orphan" }).Count
+Write-Host "OK: $($allCommits.Count) commits trouves ($remoteCount distants, $localCount locaux non pushés, $orphanCount orphelins)" -ForegroundColor Green
 
 # Utiliser les commits déjà parsés
 $parsedCommits = $allCommits
