@@ -1005,14 +1005,15 @@ export default function DebugTab() {
         <div className="mb-6">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex-1">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                📊 Tableau des Dispositifs
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-2">
+                <span className="text-lg">🔌</span>
+                Dispositifs
                 {!devicesLoading && allDevices.length === 0 && (
-                  <span className="ml-3 text-base font-normal text-gray-500 dark:text-gray-400">
+                  <span className="ml-3 text-xs font-normal text-gray-500 dark:text-gray-400">
                     (Aucun dispositif trouvé dans la base de données)
                   </span>
                 )}
-              </h2>
+              </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Tous les dispositifs de la base de données avec leurs données en temps réel (USB) ou depuis la base de données
               </p>
