@@ -538,7 +538,7 @@ export default function DebugTab() {
       const response = await fetchJson(
         fetchWithAuth,
         API_URL,
-        '/devices/test/create',
+        '/api.php/devices/test/create',
         { method: 'POST' },
         { requiresAuth: true }
       )
@@ -680,6 +680,11 @@ export default function DebugTab() {
           <div className="mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
               📊 Tableau des Dispositifs
+              {!devicesLoading && allDevices.length === 0 && (
+                <span className="ml-3 text-base font-normal text-gray-500 dark:text-gray-400">
+                  (Aucun dispositif trouvé dans la base de données)
+                </span>
+              )}
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Tous les dispositifs de la base de données avec leurs données en temps réel (USB) ou depuis la base de données
@@ -714,7 +719,6 @@ export default function DebugTab() {
                       <tr>
                         <td colSpan="12" className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex flex-col items-center gap-3">
-                            <p className="text-sm">Aucun dispositif trouvé dans la base de données</p>
                             <button
                               onClick={handleCreateTestDevices}
                               disabled={creatingTestDevices}
@@ -1113,10 +1117,10 @@ export default function DebugTab() {
                     {deleting ? '⏳' : '🗑️'}
                   </button>
                 </td>
-                      </tr>
-                      )
-                    })
-                    )}
+              </tr>
+              )
+            })
+            )}
                   </tbody>
                 </table>
               </>
@@ -1589,11 +1593,7 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
               <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
                 Chargement des dispositifs...
               </div>
-            ) : devices.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
-                Aucun dispositif trouvé dans la base de données
-              </div>
-            ) : (
+            ) : devices.length === 0 ? null : (
               <select
                 value={selectedDeviceId || ''}
                 onChange={(e) => setSelectedDeviceId(e.target.value || null)}
