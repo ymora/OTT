@@ -73,7 +73,10 @@ export default function RootLayout({ children }) {
                     window.addEventListener('load', () => {
                       navigator.serviceWorker.register(swPath)
                         .catch(function(err) {
-                          console.warn('[SW] Échec enregistrement:', err);
+                          // Logger l'erreur sans polluer la console en production
+                          if (process.env.NODE_ENV === 'development') {
+                            console.warn('[SW] Échec enregistrement:', err);
+                          }
                         });
                     });
                   }

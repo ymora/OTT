@@ -373,7 +373,19 @@ function handleDatabaseView() {
         // Pour chaque table, récupérer le nombre de lignes et les colonnes
         foreach ($tables as $table) {
             try {
-                $countStmt = $pdo->query("SELECT COUNT(*) FROM \"$table\"");
+                // SÉCURITÉ: Les noms de tables viennent de information_schema (sécurisés)
+                // Mais on valide quand même pour éviter toute injection
+                // Validation: le nom de table ne doit contenir que des caractères alphanumériques et underscores
+                if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table)) {
+                    // Nom de table invalide, ignorer cette table
+                    continue;
+                }
+                
+                // Utiliser des requêtes préparées avec des identifiants échappés
+                // Note: PDO ne supporte pas les identifiants (noms de tables) dans les requêtes préparées
+                // On doit donc échapper manuellement, mais on a validé le nom de table ci-dessus
+                $escapedTable = '"' . str_replace('"', '""', $table) . '"';
+                $countStmt = $pdo->query("SELECT COUNT(*) FROM $escapedTable");
                 $rowCount = intval($countStmt->fetchColumn());
                 
                 // Récupérer les colonnes
@@ -388,7 +400,8 @@ function handleDatabaseView() {
                 $columns = $columnsStmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 // Récupérer un échantillon de données (max 10 lignes)
-                $sampleStmt = $pdo->query("SELECT * FROM \"$table\" LIMIT 10");
+                // SÉCURITÉ: Le nom de table a été validé ci-dessus
+                $sampleStmt = $pdo->query("SELECT * FROM $escapedTable LIMIT 10");
                 $sample = $sampleStmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 $databaseInfo['tables'][] = [
