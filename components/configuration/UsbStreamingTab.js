@@ -649,7 +649,7 @@ export default function DebugTab() {
           </div>
         )}
 
-        {/* Tableau des données - Affiche tous les dispositifs */}
+        {/* Tableau des données - Affiche tous les dispositifs - TOUJOURS VISIBLE */}
         <div className="mb-6">
           <div className="mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
@@ -664,37 +664,43 @@ export default function DebugTab() {
               <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                 Chargement des dispositifs...
               </div>
-            ) : allDevices.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                <p className="mb-4">Aucun dispositif trouvé</p>
-                <button
-                  onClick={handleCreateTestDevices}
-                  disabled={creatingTestDevices}
-                  className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {creatingTestDevices ? '⏳ Création...' : '➕ Créer dispositifs fictifs'}
-                </button>
-              </div>
             ) : (
-              <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Identifiant</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Modem</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">GPS</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Débit</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Batterie</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">RSSI</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Mesures</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dernière mise à jour</th>
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allDevices.map((device) => {
+              <>
+                <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Identifiant</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Modem</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">GPS</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Débit</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Batterie</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">RSSI</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Mesures</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dernière mise à jour</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allDevices.length === 0 ? (
+                      <tr>
+                        <td colSpan="12" className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                          <div className="flex flex-col items-center gap-3">
+                            <p className="text-sm">Aucun dispositif trouvé dans la base de données</p>
+                            <button
+                              onClick={handleCreateTestDevices}
+                              disabled={creatingTestDevices}
+                              className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {creatingTestDevices ? '⏳ Création...' : '➕ Créer dispositifs fictifs'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      allDevices.map((device) => {
                   // Vérifier si ce dispositif est connecté en USB
                   const isDeviceUsbConnected = isConnected && (
                     usbDeviceInfo?.sim_iccid === device.sim_iccid ||
@@ -1081,11 +1087,13 @@ export default function DebugTab() {
                     {deleting ? '⏳' : '🗑️'}
                   </button>
                 </td>
-              </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                      </tr>
+                      )
+                    })
+                    )}
+                  </tbody>
+                </table>
+              </>
             )}
           </div>
         </div>
