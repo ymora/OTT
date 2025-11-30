@@ -15,6 +15,13 @@ const menuStructure = [
     permission: null
   },
   {
+    name: 'Dispositifs OTT',
+    icon: '🔌',
+    path: '/dashboard/outils',
+    permission: null, // Vérifié dans la page (admin/technicien)
+    description: 'Upload firmware, flash USB et streaming'
+  },
+  {
     name: 'Patients',
     icon: '🏥',
     path: '/dashboard/patients',
@@ -27,13 +34,6 @@ const menuStructure = [
     path: '/dashboard/users',
     permission: 'users.view',
     description: 'Gestion des utilisateurs (audit, notifications, paramètres)'
-  },
-  {
-    name: 'Dispositifs OTT',
-    icon: '🔌',
-    path: '/dashboard/outils',
-    permission: null, // Vérifié dans la page (admin/technicien)
-    description: 'Upload firmware, flash USB et streaming'
   },
 ]
 
