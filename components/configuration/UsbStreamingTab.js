@@ -1189,7 +1189,7 @@ export default function DebugTab() {
 function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDeviceInfo, isDisabled, isConnected, appendUsbStreamLog, sendCommand }) {
   const { fetchWithAuth, API_URL, user } = useAuth()
   const { usbConnectedDevice, usbVirtualDevice } = useUsb()
-  const { data: devicesData, error: devicesError } = useApiData(
+  const { data: devicesData, error: devicesError, loading: devicesLoading } = useApiData(
     ['/api.php/devices'], 
     { requiresAuth: true, autoLoad: !!user }
   )
@@ -1585,19 +1585,29 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
         {/* Sélection de dispositif depuis la base de données */}
         {!isConnected && (
           <div className="mb-4">
-            <select
-              value={selectedDeviceId || ''}
-              onChange={(e) => setSelectedDeviceId(e.target.value || null)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            >
-              <option value="">-- Aucun dispositif sélectionné --</option>
-              {devices.map((device) => (
-                <option key={device.id} value={device.id.toString()}>
-                  {device.device_name || device.sim_iccid || device.device_serial || `Dispositif #${device.id}`}
-                  {device.patient_id && ` (${device.first_name} ${device.last_name})`}
-                </option>
-              ))}
-            </select>
+            {devicesLoading ? (
+              <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                Chargement des dispositifs...
+              </div>
+            ) : devices.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+                Aucun dispositif trouvé dans la base de données
+              </div>
+            ) : (
+              <select
+                value={selectedDeviceId || ''}
+                onChange={(e) => setSelectedDeviceId(e.target.value || null)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">-- Aucun dispositif sélectionné --</option>
+                {devices.map((device) => (
+                  <option key={device.id} value={device.id.toString()}>
+                    {device.device_name || device.sim_iccid || device.device_serial || `Dispositif #${device.id}`}
+                    {device.patient_id && ` (${device.first_name} ${device.last_name})`}
+                  </option>
+                ))}
+              </select>
+            )}
             {devicesError && (
               <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                 Erreur chargement dispositifs: {devicesError.message}
