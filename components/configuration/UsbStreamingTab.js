@@ -1524,19 +1524,20 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
             </div>
 
             {/* Bouton de sauvegarde globale */}
-            <div className="mt-4">
-              <button
-                onClick={(e) => {
-                  e.preventDefault()
-                  handleSave(e)
-                }}
-                disabled={isDisabled || saving || !isDeviceRecognized}
-                className="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={!isDeviceRecognized ? 'Sélectionnez un dispositif ou connectez un dispositif USB' : ''}
-              >
-                {saving ? '⏳ Sauvegarde en cours...' : isConnected ? '💾 Sauvegarder et appliquer via USB' : selectedDeviceId ? '📡 Sauvegarder et envoyer via OTA' : '⚠️ Sélectionnez un dispositif'}
-              </button>
-            </div>
+            {isDeviceRecognized && (
+              <div className="mt-4">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleSave(e)
+                  }}
+                  disabled={isDisabled || saving}
+                  className="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? '⏳ Sauvegarde en cours...' : isConnected ? '💾 Sauvegarder et appliquer via USB' : selectedDeviceId ? '📡 Sauvegarder et envoyer via OTA' : '💾 Sauvegarder'}
+                </button>
+              </div>
+            )}
           </>
       </div>
     </div>
