@@ -1081,10 +1081,25 @@ export default function DebugTab() {
                     )
                   })()}
                 </td>
+                
+                {/* Actions */}
+                <td className="px-3 py-1.5">
+                  <button
+                    onClick={() => handleDeleteDevice(device)}
+                    disabled={deleting}
+                    className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
+                  >
+                    {deleting ? '⏳' : '🗑️'}
+                  </button>
+                </td>
               </tr>
+                )
+              })}
             </tbody>
           </table>
-                </div>
+          )}
+        </div>
 
         {/* Configuration */}
         <div className="mb-6">
