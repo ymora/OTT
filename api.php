@@ -518,7 +518,10 @@ if ($method !== 'OPTIONS') {
 
 // Documentation / Markdown files (doit être en premier pour éviter les conflits)
 // Endpoint pour régénérer le fichier de suivi du temps
-if(preg_match('#^/docs/regenerate-time-tracking$#', $path) && $method === 'POST') {
+if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $path) || preg_match('#/docs/regenerate-time-tracking#', $path))) {
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[ROUTER] Route /docs/regenerate-time-tracking matchée - Path: ' . $path . ' Method: ' . $method);
+    }
     requireAuth();
     requireAdmin();
     
@@ -800,20 +803,25 @@ if(preg_match('#^/docs/regenerate-time-tracking$#', $path) && $method === 'POST'
     handleProcessNotificationsQueue();
 
 // Admin tools
-} elseif(preg_match('#/admin/reset-demo$#', $path) && $method === 'POST') {
+} elseif(preg_match('#^/admin/reset-demo/?$#', $path) && $method === 'POST') {
     handleResetDemo();
-} elseif(preg_match('#/admin/database-view$#', $path) && $method === 'GET') {
+} elseif($method === 'GET' && (preg_match('#^/admin/database-view/?$#', $path) || preg_match('#/admin/database-view#', $path))) {
+    // Route pour la visualisation de la base de données
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[ROUTER] Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
+    }
     handleDatabaseView();
+    exit;
 
-       // Health check
-       } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
-           handleHealthCheck();
+// Health check
+} elseif(preg_match('#/health$#', $path) && $method === 'GET') {
+    handleHealthCheck();
 
-       // Audit
-       } elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
-           handleGetAuditLogs();
-       } elseif(preg_match('#/audit$#', $path) && $method === 'DELETE') {
-           handleClearAuditLogs();
+// Audit
+} elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
+    handleGetAuditLogs();
+} elseif(preg_match('#/audit$#', $path) && $method === 'DELETE') {
+    handleClearAuditLogs();
 
 // Logs
 } elseif(preg_match('#/logs$#', $path) && $method === 'GET') {
@@ -869,6 +877,22 @@ if(preg_match('#^/docs/regenerate-time-tracking$#', $path) && $method === 'POST'
     // Log spécifique pour les routes firmwares/ino qui ne matchent pas
     if (preg_match('#/firmwares.*ino#', $path)) {
         error_log("[API Router] Route firmwares/ino non matchée: " . json_encode($debugInfo));
+    }
+    
+    // Log spécifique pour la route database-view
+    if (preg_match('#/admin/database-view#', $path)) {
+        error_log("[API Router] Route /admin/database-view non matchée: " . json_encode($debugInfo));
+        error_log("[API Router] Path exact: '" . $path . "' Method: " . $method);
+        error_log("[API Router] Pattern test 1: " . (preg_match('#^/admin/database-view/?$#', $path) ? 'MATCH' : 'NO MATCH'));
+        error_log("[API Router] Pattern test 2: " . (preg_match('#/admin/database-view#', $path) ? 'MATCH' : 'NO MATCH'));
+    }
+    
+    // Log spécifique pour la route regenerate-time-tracking
+    if (preg_match('#/docs/regenerate-time-tracking#', $path)) {
+        error_log("[API Router] Route /docs/regenerate-time-tracking non matchée: " . json_encode($debugInfo));
+        error_log("[API Router] Path exact: '" . $path . "' Method: " . $method);
+        error_log("[API Router] Pattern test 1: " . (preg_match('#^/docs/regenerate-time-tracking/?$#', $path) ? 'MATCH' : 'NO MATCH'));
+        error_log("[API Router] Pattern test 2: " . (preg_match('#/docs/regenerate-time-tracking#', $path) ? 'MATCH' : 'NO MATCH'));
     }
     
     error_log("[API Router] Path not matched: " . json_encode($debugInfo));

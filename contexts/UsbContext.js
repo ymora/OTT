@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useSerialPort } from '@/components/SerialPortManager'
 import logger from '@/lib/logger'
+import { getUsbPortSharing } from '@/lib/usbPortSharing'
 
 const UsbContext = createContext()
 
@@ -31,6 +32,35 @@ export function UsbProvider({ children }) {
   const usbStreamBufferRef = useRef('')
   const sendMeasurementToApiRef = useRef(null) // Callback pour envoyer les mesures à l'API
   const updateDeviceFirmwareRef = useRef(null) // Callback pour mettre à jour les informations du dispositif dans la base (firmware_version, last_battery, last_seen, status)
+  const portSharingRef = useRef(null)
+  
+  // Initialiser le système de partage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      portSharingRef.current = getUsbPortSharing()
+      
+      // Écouter les données partagées depuis un autre onglet
+      const unsubscribeData = portSharingRef.current.on('data-received', (data) => {
+        logger.debug('[UsbContext] Data received from master tab:', data)
+        // Traiter les données comme si elles venaient du port local
+        if (data.measurement) {
+          setUsbStreamLastMeasurement(data.measurement)
+          setUsbStreamLastUpdate(Date.now())
+          setUsbStreamMeasurements(prev => {
+            const next = [...prev, data.measurement]
+            return next.slice(-120)
+          })
+        }
+        if (data.deviceInfo) {
+          setUsbDeviceInfo(data.deviceInfo)
+        }
+      })
+      
+      return () => {
+        unsubscribeData()
+      }
+    }
+  }, [])
 
   // Fonction pour ajouter un log USB
   // source: 'device' pour les logs venant du dispositif, 'dashboard' pour les logs du dashboard
@@ -509,6 +539,15 @@ export function UsbProvider({ children }) {
             setUsbStreamError(null)
             setUsbStreamStatus('running')
             
+            // Partager les données avec les autres onglets si on est master
+            if (portSharingRef.current && portSharingRef.current.isMaster) {
+              portSharingRef.current.notifyDataReceived({
+                measurement,
+                deviceInfo: usbDeviceInfo,
+                timestamp: Date.now()
+              })
+            }
+            
             // Mettre à jour usbDeviceInfo avec les mesures
             setUsbDeviceInfo(prev => ({
               ...prev,
@@ -614,6 +653,15 @@ export function UsbProvider({ children }) {
           setUsbStreamLastUpdate(Date.now())
           setUsbStreamError(null)
           setUsbStreamStatus('running')
+          
+          // Partager les données avec les autres onglets si on est master
+          if (portSharingRef.current && portSharingRef.current.isMaster) {
+            portSharingRef.current.notifyDataReceived({
+              measurement,
+              deviceInfo: usbDeviceInfo,
+              timestamp: Date.now()
+            })
+          }
           
           // Mettre à jour TOUTES les données reçues du dispositif USB (uniquement depuis le dispositif)
           // À chaque réception, on met à jour toutes les informations disponibles
@@ -997,7 +1045,16 @@ export function UsbProvider({ children }) {
 
           // Vérifier si le port est déjà ouvert
           if (availablePort.readable && availablePort.writable) {
-            // Port déjà ouvert, l'utiliser
+            // Port déjà ouvert, vérifier s'il est verrouillé (utilisé par un autre onglet)
+            if (availablePort.writable.locked || availablePort.readable.locked) {
+              // Port verrouillé par un autre onglet, ne pas essayer de l'ouvrir
+              logger.debug('🔌 [USB] Port déjà ouvert et verrouillé par un autre onglet, écoute des données partagées...')
+              // Le système de partage gérera l'écoute des données
+              connectionAttemptInProgress = false
+              return
+            }
+            
+            // Port déjà ouvert et non verrouillé, l'utiliser
             logger.log('🔌 [USB] Port déjà ouvert détecté, connexion automatique...')
             try {
               const connected = await connect(availablePort, 115200)

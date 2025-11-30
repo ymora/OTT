@@ -1126,6 +1126,17 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
     }
   }, [])
 
+  // Vérifier si un dispositif est reconnu (USB ou base de données)
+  const isDeviceRecognized = useMemo(() => {
+    // Vérifier si on a un dispositif USB connecté avec des informations
+    const hasUsbDevice = isConnected && (usbDeviceInfo?.sim_iccid || usbDeviceInfo?.device_serial || usbDeviceInfo?.device_name || usbConnectedDevice || usbVirtualDevice)
+    
+    // Vérifier si on a un dispositif sélectionné dans la base de données
+    const hasDbDevice = selectedDeviceId && devices.find(d => d.id === parseInt(selectedDeviceId))
+    
+    return hasUsbDevice || hasDbDevice
+  }, [isConnected, usbDeviceInfo, usbConnectedDevice, usbVirtualDevice, selectedDeviceId, devices])
+
   // Sauvegarder la configuration
   const handleSave = useCallback(async (e) => {
     e.preventDefault()
@@ -1133,6 +1144,12 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
     // Si connecté en USB, on peut configurer même sans dispositif dans la base de données
     if (!isConnected && !selectedDeviceId) {
       setError('Aucun dispositif sélectionné et aucun dispositif connecté en USB')
+      return
+    }
+    
+    // Vérifier que le dispositif est bien reconnu
+    if (!isDeviceRecognized) {
+      setError('Aucun dispositif reconnu. Connectez un dispositif USB ou sélectionnez un dispositif de la base de données.')
       return
     }
 
@@ -1451,9 +1468,9 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                         e.preventDefault()
                         handleSave(e)
                       }}
-                      disabled={isDisabled || saving || (!isConnected && !selectedDeviceId)}
+                      disabled={isDisabled || saving || !isDeviceRecognized}
                       className="px-3 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      title={isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
+                      title={!isDeviceRecognized ? 'Aucun dispositif reconnu' : isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
                     >
                       {saving ? '⏳' : '💾 Sauvegarder'}
                     </button>
@@ -1469,10 +1486,11 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                   e.preventDefault()
                   handleSave(e)
                 }}
-                disabled={isDisabled || saving || (!isConnected && !selectedDeviceId)}
+                disabled={isDisabled || saving || !isDeviceRecognized}
                 className="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!isDeviceRecognized ? 'Aucun dispositif reconnu. Connectez un dispositif USB ou sélectionnez un dispositif de la base de données.' : ''}
               >
-                {saving ? '⏳ Sauvegarde en cours...' : isConnected ? '💾 Sauvegarder et appliquer via USB' : selectedDeviceId ? '📡 Sauvegarder et envoyer via OTA' : '⚠️ Connectez un dispositif USB'}
+                {saving ? '⏳ Sauvegarde en cours...' : !isDeviceRecognized ? '⚠️ Aucun dispositif reconnu' : isConnected ? '💾 Sauvegarder et appliquer via USB' : selectedDeviceId ? '📡 Sauvegarder et envoyer via OTA' : '⚠️ Connectez un dispositif USB'}
               </button>
             </div>
           </>

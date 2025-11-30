@@ -454,8 +454,9 @@ export default function DeviceConfigurationTab() {
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    disabled={saving || loadingConfig}
+                    disabled={saving || loadingConfig || !selectedDeviceId || !selectedDevice}
                     className="px-6 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={!selectedDeviceId || !selectedDevice ? 'Veuillez sélectionner un dispositif reconnu' : ''}
                   >
                     {saving ? '⏳ Sauvegarde...' : '💾 Sauvegarder la configuration'}
                   </button>
