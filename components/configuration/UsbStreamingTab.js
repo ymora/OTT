@@ -9,6 +9,7 @@ import { createUpdateConfigCommand, createUpdateCalibrationCommand } from '@/lib
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
+import FlashModal from '@/components/FlashModal'
 
 export default function DebugTab() {
   const {
@@ -49,6 +50,13 @@ export default function DebugTab() {
   )
   const allPatients = patientsData?.patients?.patients || []
   
+  // Charger les firmwares compilés pour le flash
+  const { data: firmwaresData, loading: firmwaresLoading } = useApiData(
+    ['/api.php/firmwares'],
+    { requiresAuth: true, autoLoad: !!user }
+  )
+  const compiledFirmwares = (firmwaresData?.firmwares?.firmwares || []).filter(fw => fw.status === 'compiled')
+  
   // États pour la suppression
   const [deviceToDelete, setDeviceToDelete] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -70,6 +78,15 @@ export default function DebugTab() {
   const [showAssignPatientModal, setShowAssignPatientModal] = useState(false)
   const [deviceToAssign, setDeviceToAssign] = useState(null)
   const [assigningPatient, setAssigningPatient] = useState(false)
+  
+  // États pour le flash
+  const [showFlashModal, setShowFlashModal] = useState(false)
+  const [deviceToFlash, setDeviceToFlash] = useState(null)
+  
+  // États pour le flash
+  const [showFlashModal, setShowFlashModal] = useState(false)
+  const [deviceToFlash, setDeviceToFlash] = useState(null)
+  const [flashingDevice, setFlashingDevice] = useState(false)
   
   const [availablePorts, setAvailablePorts] = useState([])
   const [selectedPortId, setSelectedPortId] = useState('')
@@ -884,6 +901,20 @@ export default function DebugTab() {
         </div>
       </Modal>
       
+      {/* Modal de flash */}
+      <FlashModal
+        isOpen={showFlashModal}
+        onClose={() => {
+          setShowFlashModal(false)
+          setDeviceToFlash(null)
+        }}
+        device={deviceToFlash}
+        flashMode={deviceToFlash && isConnected && (
+          usbDeviceInfo?.sim_iccid === deviceToFlash.sim_iccid ||
+          usbDeviceInfo?.device_serial === deviceToFlash.device_serial
+        ) ? 'usb' : 'ota'}
+      />
+      
       {/* Modal de confirmation de suppression */}
       <Modal
         isOpen={showDeleteModal}
@@ -1366,14 +1397,25 @@ export default function DebugTab() {
                 
                 {/* Actions */}
                 <td className="px-3 py-1.5">
-                  <button
-                    onClick={() => handleDeleteDevice(device)}
-                    disabled={deleting}
-                    className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
-                  >
-                    {deleting ? '⏳' : '🗑️'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {compiledFirmwares.length > 0 && (
+                      <button
+                        onClick={() => handleOpenFlashModal(device)}
+                        className="px-3 py-1.5 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Flasher le firmware"
+                      >
+                        🚀
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteDevice(device)}
+                      disabled={deleting}
+                      className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
+                    >
+                      {deleting ? '⏳' : '🗑️'}
+                    </button>
+                  </div>
                 </td>
               </tr>
               )
