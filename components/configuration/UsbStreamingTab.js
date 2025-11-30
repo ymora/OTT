@@ -1069,6 +1069,7 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
   useEffect(() => {
     if (usbDeviceInfo?.config && isConnected) {
       const usbConfig = usbDeviceInfo.config
+      logger.log('⚙️ usbDeviceInfo.config détecté, mise à jour de la configuration:', usbConfig)
       setConfig(prev => {
         // Toujours mettre à jour avec les valeurs USB si disponibles (source de vérité)
         // MAIS conserver send_every_n_wakeups depuis la DB (le firmware ne l'envoie pas)
@@ -1080,11 +1081,11 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
             ? usbConfig.calibration_coefficients
             : prev.calibration_coefficients
         }
-        if (process.env.NODE_ENV === 'development') {
-          logger.debug('⚙️ Configuration mise à jour depuis USB:', newConfig)
-        }
+        logger.log('⚙️ Configuration mise à jour depuis USB:', newConfig)
         return newConfig
       })
+    } else {
+      logger.debug('⚙️ Pas de config USB disponible:', { hasConfig: !!usbDeviceInfo?.config, isConnected })
     }
   }, [usbDeviceInfo?.config, isConnected])
 
@@ -1092,7 +1093,7 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
   useEffect(() => {
     const handleConfigReceived = (event) => {
       const deviceConfig = event.detail
-      logger.log('⚙️ Configuration reçue depuis USB:', deviceConfig)
+      logger.log('⚙️ Événement usb-device-config-received reçu:', deviceConfig)
       
       // Mettre à jour la configuration avec les valeurs du dispositif
       // IMPORTANT : Utiliser les valeurs du firmware comme source de vérité (priorité USB)
@@ -1340,27 +1341,17 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
               </div>
             )}
 
-            {/* Tableau de configuration visible en permanence */}
+            {/* Configuration sur une seule ligne */}
             <div className="overflow-x-auto mb-4">
-              <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Paramètre</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Valeur</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Unité</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                <div className="flex flex-wrap items-end gap-3">
                   {/* Intervalle de veille */}
-                  <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">⏰</span>
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Intervalle de veille</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
+                  <div className="flex flex-col gap-1 min-w-[140px]">
+                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                      <span>⏰</span>
+                      <span>Intervalle de veille</span>
+                    </label>
+                    <div className="flex items-center gap-1">
                       <input
                         type="number"
                         min="1"
@@ -1368,36 +1359,20 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                         value={config.sleep_minutes ?? ''}
                         onChange={(e) => setConfig(prev => ({ ...prev, sleep_minutes: e.target.value ? parseInt(e.target.value) : null }))}
                         disabled={saving || (!isConnected && !selectedDeviceId)}
-                        className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder="minutes"
                       />
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">minutes</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault()
-                          handleSave(e)
-                        }}
-                        disabled={isDisabled || saving || (!isConnected && !selectedDeviceId)}
-                        className="px-2 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
-                      >
-                        {saving ? '⏳' : '💾'}
-                      </button>
-                    </td>
-                  </tr>
+                      <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">min</span>
+                    </div>
+                  </div>
 
                   {/* Durée de mesure */}
-                  <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">⏱️</span>
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Durée de mesure</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
+                  <div className="flex flex-col gap-1 min-w-[140px]">
+                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                      <span>⏱️</span>
+                      <span>Durée de mesure</span>
+                    </label>
+                    <div className="flex items-center gap-1">
                       <input
                         type="number"
                         min="100"
@@ -1405,36 +1380,20 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                         value={config.measurement_duration_ms ?? ''}
                         onChange={(e) => setConfig(prev => ({ ...prev, measurement_duration_ms: e.target.value ? parseInt(e.target.value) : null }))}
                         disabled={saving || (!isConnected && !selectedDeviceId)}
-                        className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder="ms"
                       />
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">ms</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault()
-                          handleSave(e)
-                        }}
-                        disabled={isDisabled || saving || (!isConnected && !selectedDeviceId)}
-                        className="px-2 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
-                      >
-                        {saving ? '⏳' : '💾'}
-                      </button>
-                    </td>
-                  </tr>
+                      <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">ms</span>
+                    </div>
+                  </div>
 
                   {/* Envoyer toutes les N réveils */}
-                  <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">📤</span>
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Envoyer toutes les N réveils</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
+                  <div className="flex flex-col gap-1 min-w-[140px]">
+                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                      <span>📤</span>
+                      <span>Envoyer toutes les N réveils</span>
+                    </label>
+                    <div className="flex items-center gap-1">
                       <input
                         type="number"
                         min="1"
@@ -1442,38 +1401,27 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                         value={config.send_every_n_wakeups ?? ''}
                         onChange={(e) => setConfig(prev => ({ ...prev, send_every_n_wakeups: e.target.value ? parseInt(e.target.value) : null }))}
                         disabled={saving || (!isConnected && !selectedDeviceId)}
-                        className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder="réveils"
                       />
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">réveils</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault()
-                          handleSave(e)
-                        }}
-                        disabled={isDisabled || saving || (!isConnected && !selectedDeviceId)}
-                        className="px-2 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
-                      >
-                        {saving ? '⏳' : '💾'}
-                      </button>
-                    </td>
-                  </tr>
+                      <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">réveils</span>
+                    </div>
+                  </div>
 
                   {/* Coefficients de calibration */}
-                  <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">📐</span>
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Calibration (a0, a1, a2)</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex gap-1">
-                        {[0, 1, 2].map((idx) => (
+                  <div className="flex flex-col gap-1 min-w-[200px]">
+                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                      <span>📐</span>
+                      <span>Calibration (a0, a1, a2)</span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                      {[0, 1, 2].map((idx) => {
+                        // Vérifier si les données de calibration ont été reçues depuis USB
+                        const hasUsbCalibration = usbDeviceInfo?.config?.calibration_coefficients && Array.isArray(usbDeviceInfo.config.calibration_coefficients)
+                        // Griser si pas de données USB ET pas de dispositif sélectionné
+                        const isCalibrationDisabled = saving || (!isConnected && !selectedDeviceId) || (isConnected && !hasUsbCalibration && !selectedDeviceId)
+                        
+                        return (
                           <input
                             key={idx}
                             type="number"
@@ -1484,32 +1432,34 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                               newCoeffs[idx] = parseFloat(e.target.value) || 0
                               setConfig(prev => ({ ...prev, calibration_coefficients: newCoeffs }))
                             }}
-                            disabled={saving || (!isConnected && !selectedDeviceId)}
+                            disabled={isCalibrationDisabled}
                             placeholder={`a${idx}`}
                             className="w-20 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                           />
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">-</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault()
-                          handleSave(e)
-                        }}
-                        disabled={isDisabled || saving || (!isConnected && !selectedDeviceId)}
-                        className="px-2 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
-                      >
-                        {saving ? '⏳' : '💾'}
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Bouton de sauvegarde */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300 opacity-0">
+                      Action
+                    </label>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleSave(e)
+                      }}
+                      disabled={isDisabled || saving || (!isConnected && !selectedDeviceId)}
+                      className="px-3 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      title={isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
+                    >
+                      {saving ? '⏳' : '💾 Sauvegarder'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Bouton de sauvegarde globale */}

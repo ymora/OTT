@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { withBasePath } from '@/lib/utils'
 import logger from '@/lib/logger'
+import { useAuth } from '@/contexts/AuthContext'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -39,7 +40,8 @@ const DOCUMENTATION_FILES = {
   presentation: 'DOCUMENTATION_PRESENTATION.html',
   developpeurs: 'DOCUMENTATION_DEVELOPPEURS.html',
   commerciale: 'DOCUMENTATION_COMMERCIALE.html',
-  'suivi-temps': 'SUIVI_TEMPS_FACTURATION.md'
+  'suivi-temps': 'SUIVI_TEMPS_FACTURATION.md',
+  database: null // Géré par un composant spécial
 }
 
 export default function DocumentationPage() {
@@ -67,6 +69,7 @@ export default function DocumentationPage() {
   }, [docType])
 
   const isMarkdownDoc = docType === 'suivi-temps'
+  const isDatabaseDoc = docType === 'database'
 
   // Référence à l'iframe pour envoyer le thème
   const iframeRef = useRef(null)
@@ -119,6 +122,11 @@ export default function DocumentationPage() {
     return <MarkdownViewer fileName="SUIVI_TEMPS_FACTURATION.md" />
   }
 
+  // Si c'est la base de données, on affiche un composant spécial
+  if (isDatabaseDoc) {
+    return <DatabaseViewer />
+  }
+
   return (
     <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 -m-6 overflow-y-auto docs-scrollbar">
       <iframe
@@ -147,10 +155,12 @@ function MarkdownViewer({ fileName }) {
   const [loading, setLoading] = useState(true)
   const [chartData, setChartData] = useState(null)
   const [timeView, setTimeView] = useState('day') // 'day', 'week', 'month'
+  const { fetchWithAuth, API_URL } = useAuth()
   
   // Ref pour éviter les rechargements multiples du même fichier
   const loadedFileNameRef = useRef(null)
   const isLoadingRef = useRef(false)
+  const hasRegeneratedRef = useRef(false)
   
   // Détecter le thème pour le MarkdownViewer (4ème doc - Suivi Temps)
   useEffect(() => {
@@ -190,6 +200,37 @@ function MarkdownViewer({ fileName }) {
     
     const loadMarkdown = async () => {
       try {
+        // Si c'est le fichier de suivi du temps, régénérer automatiquement au chargement
+        if (fileName === 'SUIVI_TEMPS_FACTURATION.md' && !hasRegeneratedRef.current) {
+          try {
+            hasRegeneratedRef.current = true
+            logger.debug('🔄 Régénération automatique du fichier de suivi du temps...')
+            
+            // Essayer d'abord la régénération via l'endpoint admin (si authentifié)
+            try {
+              const regenerateResponse = await fetchWithAuth(
+                `${API_URL}/api.php/docs/regenerate-time-tracking`,
+                { method: 'POST' },
+                { requiresAuth: true }
+              )
+              if (regenerateResponse.ok) {
+                const regenerateData = await regenerateResponse.json()
+                logger.debug('✅ Fichier régénéré avec succès:', regenerateData)
+                // Attendre un peu pour que le fichier soit écrit
+                await new Promise(resolve => setTimeout(resolve, 500))
+              } else {
+                logger.debug('⚠️ Régénération admin non disponible, le fichier sera généré automatiquement au chargement')
+              }
+            } catch (regenerateError) {
+              // Non bloquant : l'API générera automatiquement le fichier au chargement
+              logger.debug('⚠️ Régénération admin non disponible (non bloquant):', regenerateError.message)
+            }
+          } catch (regenerateError) {
+            // Non bloquant : on continue même si la régénération échoue
+            logger.debug('⚠️ Erreur lors de la régénération (non bloquant):', regenerateError.message)
+          }
+        }
+        
         let text = ''
         let lastError = null
         
@@ -887,7 +928,7 @@ function MarkdownViewer({ fileName }) {
                 <div className="h-64">
                   <Bar data={hoursDistributionData} options={barOptions} />
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 text-center">Nombre de jours par tranche d'heures</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 text-center">Nombre de jours par tranche d&apos;heures</p>
               </div>
             )}
           </div>
@@ -953,6 +994,220 @@ function MarkdownViewer({ fileName }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// Composant pour visualiser la base de données
+function DatabaseViewer() {
+  const [databaseInfo, setDatabaseInfo] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [selectedTable, setSelectedTable] = useState(null)
+  const { fetchWithAuth, API_URL } = useAuth()
+  
+  useEffect(() => {
+    const loadDatabaseInfo = async () => {
+      try {
+        setLoading(true)
+        const response = await fetchWithAuth(
+          `${API_URL}/api.php/admin/database-view`,
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${await response.text()}`)
+        }
+        
+        const data = await response.json()
+        if (data.success) {
+          setDatabaseInfo(data.data)
+        } else {
+          throw new Error(data.error || 'Erreur lors du chargement')
+        }
+      } catch (err) {
+        logger.error('Erreur chargement base de données:', err)
+        setError(err.message || 'Impossible de charger les informations de la base de données')
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadDatabaseInfo()
+  }, [fetchWithAuth, API_URL])
+  
+  if (loading) {
+    return (
+      <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Chargement de la base de données...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  if (error) {
+    return (
+      <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="text-red-500 text-4xl mb-4">❌</div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-2">Erreur</h2>
+          <p className="text-gray-600 dark:text-gray-400">{error}</p>
+        </div>
+      </div>
+    )
+  }
+  
+  if (!databaseInfo) {
+    return null
+  }
+  
+  const table = selectedTable ? databaseInfo.tables.find(t => t.name === selectedTable) : null
+  
+  return (
+    <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 overflow-y-auto bg-gradient-to-b from-gray-50 to-white dark:from-[rgb(var(--night-bg-start))] dark:to-[rgb(var(--night-bg-mid))] docs-scrollbar">
+      <div className="max-w-7xl mx-auto p-6">
+        {/* En-tête */}
+        <div className="bg-gradient-to-r from-primary-500 to-secondary-500 rounded-lg shadow-lg p-6 mb-6 text-white">
+          <h1 className="text-3xl font-bold mb-2">🗄️ Base de Données</h1>
+          <p className="text-white/90">Base de données: <strong>{databaseInfo.database_name}</strong></p>
+          <p className="text-white/80 text-sm mt-2">
+            {databaseInfo.tables.length} table{databaseInfo.tables.length > 1 ? 's' : ''} disponible{databaseInfo.tables.length > 1 ? 's' : ''}
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Liste des tables */}
+          <div className="lg:col-span-1">
+            <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-4">
+              <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Tables</h2>
+              <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
+                {databaseInfo.tables.map((table) => (
+                  <button
+                    key={table.name}
+                    onClick={() => setSelectedTable(table.name)}
+                    className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
+                      selectedTable === table.name
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{table.name}</span>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        selectedTable === table.name
+                          ? 'bg-white/20 text-white'
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                      }`}>
+                        {table.row_count}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* Détails de la table sélectionnée */}
+          <div className="lg:col-span-2">
+            {table ? (
+              <div className="space-y-6">
+                {/* Informations de la table */}
+                <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6">
+                  <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-200">
+                    Table: {table.name}
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    <strong>{table.row_count}</strong> ligne{table.row_count > 1 ? 's' : ''}
+                  </p>
+                  
+                  {/* Colonnes */}
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">Colonnes</h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full border-collapse">
+                        <thead>
+                          <tr className="bg-gray-100 dark:bg-gray-800">
+                            <th className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left">Nom</th>
+                            <th className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left">Type</th>
+                            <th className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left">Nullable</th>
+                            <th className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left">Défaut</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {table.columns.map((col, idx) => (
+                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-[rgb(var(--night-surface))]' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                              <td className="px-4 py-2 border border-gray-300 dark:border-gray-600 font-mono text-sm">
+                                {col.column_name}
+                              </td>
+                              <td className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm">
+                                {col.data_type}
+                              </td>
+                              <td className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm">
+                                {col.is_nullable === 'YES' ? '✅' : '❌'}
+                              </td>
+                              <td className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-mono">
+                                {col.column_default || '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  
+                  {/* Échantillon de données */}
+                  {table.sample && table.sample.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">
+                        Échantillon (10 premières lignes)
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse">
+                          <thead>
+                            <tr className="bg-gray-100 dark:bg-gray-800">
+                              {Object.keys(table.sample[0]).map((key) => (
+                                <th key={key} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left text-xs">
+                                  {key}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {table.sample.map((row, idx) => (
+                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-[rgb(var(--night-surface))]' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                                {Object.values(row).map((value, colIdx) => (
+                                  <td key={colIdx} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-xs">
+                                    {value === null ? (
+                                      <span className="text-gray-400 italic">NULL</span>
+                                    ) : typeof value === 'string' && value.length > 50 ? (
+                                      <span title={value}>{value.substring(0, 50)}...</span>
+                                    ) : (
+                                      String(value)
+                                    )}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6">
+                <p className="text-gray-600 dark:text-gray-400 text-center">
+                  Sélectionnez une table pour voir ses détails
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

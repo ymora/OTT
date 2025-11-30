@@ -19,6 +19,7 @@ import { startQueueProcessor, stopQueueProcessor } from '@/lib/measurementSender
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 import { buildUpdateConfigPayload, buildUpdateCalibrationPayload } from '@/lib/deviceCommands'
+import { createDataSourceTracker, getDataSourceBadge } from '@/lib/dataSourceTracker'
 
 // Lazy load des composants lourds pour accélérer Fast Refresh
 const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr: false })
@@ -298,6 +299,14 @@ export default function DevicesPage() {
         // Mettre à jour last_battery si fourni
         if (additionalData.last_battery !== undefined && additionalData.last_battery !== null) {
           updateData.last_battery = additionalData.last_battery
+        }
+        // Mettre à jour last_flowrate si fourni
+        if (additionalData.last_flowrate !== undefined && additionalData.last_flowrate !== null) {
+          updateData.last_flowrate = additionalData.last_flowrate
+        }
+        // Mettre à jour last_rssi si fourni
+        if (additionalData.last_rssi !== undefined && additionalData.last_rssi !== null) {
+          updateData.last_rssi = additionalData.last_rssi
         }
         
         // Si rien à mettre à jour, sortir
@@ -1953,9 +1962,21 @@ export default function DevicesPage() {
                 </tr>
               ) : (
                 filteredDevices.map((device, i) => {
+                  // Créer le tracker de source de données
+                  const dataSource = createDataSourceTracker(
+                    device,
+                    usbConnectedDevice,
+                    { lastMeasurement: usbStreamLastMeasurement }
+                  )
+                  
                   const status = getStatusBadge(device)
-                  const battery = getBatteryBadge(device.last_battery)
-                  const deviceFirmware = device.firmware_version || 'N/A'
+                  const battery = getBatteryBadge(dataSource.battery.value)
+                  const deviceFirmware = dataSource.firmware.value || 'N/A'
+                  
+                  // Badges de source
+                  const batterySource = getDataSourceBadge(dataSource.battery.source)
+                  const firmwareSource = getDataSourceBadge(dataSource.firmware.source)
+                  const lastSeenSource = getDataSourceBadge(dataSource.lastSeen.source)
                   
                   return (
                     <tr 
@@ -1997,20 +2018,48 @@ export default function DevicesPage() {
                         <span className={`badge ${status.color}`}>{status.label}</span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className={battery.color}>{battery.label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={battery.color}>{battery.label}</span>
+                          <span
+                            className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] ${batterySource.bgColor} ${batterySource.color}`}
+                            title={batterySource.tooltip}
+                          >
+                            {batterySource.icon}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">
-                        {device.last_seen 
-                          ? new Date(device.last_seen).toLocaleString('fr-FR', { 
-                              day: '2-digit', 
-                              month: '2-digit', 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })
-                          : 'Jamais'}
+                        <div className="flex items-center gap-1.5">
+                          <span>
+                            {dataSource.lastSeen.value 
+                              ? new Date(dataSource.lastSeen.value).toLocaleString('fr-FR', { 
+                                  day: '2-digit', 
+                                  month: '2-digit', 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })
+                              : 'Jamais'}
+                          </span>
+                          {dataSource.lastSeen.value && (
+                            <span
+                              className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] ${lastSeenSource.bgColor} ${lastSeenSource.color}`}
+                              title={lastSeenSource.tooltip}
+                            >
+                              {lastSeenSource.icon}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="text-sm font-mono">{device.firmware_version || 'N/A'}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-mono">{deviceFirmware}</span>
+                          <span
+                            className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] ${firmwareSource.bgColor} ${firmwareSource.color}`}
+                            title={firmwareSource.tooltip}
+                          >
+                            {firmwareSource.icon}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">

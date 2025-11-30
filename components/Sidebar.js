@@ -90,6 +90,7 @@ export default function Sidebar() {
     { name: 'Développeurs', icon: '💻', doc: 'developpeurs' },
     { name: 'Commerciale', icon: '💼', doc: 'commerciale' },
     { name: 'Suivi Temps', icon: '⏱️', doc: 'suivi-temps' },
+    { name: 'Base de Données', icon: '🗄️', doc: 'database' },
   ]
 
   return (

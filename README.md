@@ -1,6 +1,6 @@
 # 🏥 OTT - Dispositif Médical IoT
 
-**Version 3.7** - Solution Cloud Complète avec Mode Hybride
+**Version 3.9** - Solution Cloud Complète avec Mode Hybride
 
 **HAPPLYZ MEDICAL SAS**
 
@@ -18,16 +18,13 @@ La documentation est divisée en 3 parties accessibles depuis le dashboard :
 - 💻 **Développeurs** : Architecture, API, firmware, déploiement, troubleshooting
 - 💼 **Commerciale** : Analyse marché, business plan, ROI, avantages concurrentiels
 
-### Documentation Technique (Repository)
-📚 **Index complet** : Voir [`docs/INDEX.md`](docs/INDEX.md)
+### Documentation Technique
+📚 **Toute la documentation technique est accessible depuis le dashboard** → Menu latéral → Documentation
 
-**Documentations principales :**
-- 🏗️ [Architecture](./docs/ARCHITECTURE.md) - Structure complète du projet
-- 🛠️ [Développement Local](./docs/UTILITE_DEVELOPPEMENT_LOCAL.md) - Guide développement
-- 🚢 [Déploiement](./docs/DEPLOIEMENT_TROUBLESHOOTING.md) - Guide déploiement
-- 🔌 [Fonctionnalités Firmware](./docs/FIRMWARE_FEATURES.md) - Liste complète des fonctionnalités
-- 🔄 [Synchronisation USB/OTA](./docs/SYNCHRONISATION_USB_OTA.md) - Logique de synchronisation
-- 🔍 [Audits & Vérifications](./docs/AUDIT_COMPLET_PROJET.md) - Rapports d'audit
+**Pour les développeurs :**
+- Code source : Voir les fichiers dans `hardware/firmware/` pour le firmware
+- API : Voir `api.php` et `api/handlers/` pour l'API backend
+- Dashboard : Voir `app/dashboard/` et `components/` pour le frontend
 
 ---
 
@@ -96,9 +93,12 @@ git push origin main
 
 ### Flux global
 
-#### Mode Normal (Production)
-- **Cycle automatique** : Le firmware se réveille toutes les 24h (configurable), capture débit/batterie, ouvre le modem 4G, obtient la position GPS/réseau cellulaire (si disponible), puis poste sur `/api.php/devices/measurements` (JSON avec `latitude`/`longitude` + Bearer token quand auth active). Les logs et alertes utilisent `/api.php/devices/logs` et `/api.php/alerts`.
-- **Deep Sleep** : Après chaque envoi, le dispositif entre en deep sleep pour économiser l'énergie et limiter les coûts réseau (1 envoi par jour par défaut).
+#### Mode Hybride (Production) - v3.8
+- **Envoi au reset hard** : Mesure initiale envoyée au démarrage (`status: "BOOT"`)
+- **Détection de changement** : Surveillance continue du flux d'air (seuil: 0.5 L/min)
+- **Envoi immédiat** : Mesure et envoi dès changement détecté (`status: "EVENT"`)
+- **Light sleep** : Si inactif 30 minutes (économie d'énergie)
+- **Vérification OTA** : Commandes vérifiées toutes les 30 secondes
 
 #### Mode USB (Tests/Diagnostics)
 - **Mode continu automatique** : Détection automatique de la connexion USB, streaming continu de mesures en temps réel
@@ -111,7 +111,7 @@ git push origin main
 - **Dispositifs OTA (Mode Normal)** : le firmware tente d'obtenir la position via GPS (priorité) ou réseau cellulaire (fallback) et l'inclut dans chaque mesure. L'API met à jour automatiquement `latitude`/`longitude` du dispositif.
 - **Dispositifs USB** : la position est déterminée via géolocalisation IP du PC client (service ip-api.com). Mise à jour automatique lors de la réception d'une mesure USB.
 
-📖 **Documentation complète** : Voir [Mode USB vs Mode Normal](./docs/MODE_USB_VS_MODE_NORMAL.md)
+📖 **Documentation complète** : Accessible depuis le dashboard → Documentation
 - **Persisté** : l’API écrit dans PostgreSQL (tables `devices`, `measurements`, `alerts`, `audit_logs`, etc.). Les requêtes utilisent PDO (pgsql) et auditent chaque action.
 - **Descendant** :
   - Dashboard Next.js appelle l’API (`NEXT_PUBLIC_API_URL`) pour charger stats, cartes Leaflet, notifications, OTA…
@@ -284,7 +284,7 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
   - `firmware/vX.X/` - Firmwares compilés (.bin) et uploadés (.ino) par version
   - `lib/` - Bibliothèques Arduino (TinyGSM)
   - `cad/` - Plans CAO
-- `docs/` - Documentation technique complète (voir [INDEX.md](docs/INDEX.md))
+- `public/docs/` - Documentation HTML accessible depuis le dashboard (3 documents)
 
 ---
 
@@ -375,7 +375,7 @@ grep -r "function " api/ | sort | uniq -d
      - Service ott-api → Disks → Add Disk
      - Mount Path: `/opt/render/project/src/hardware/arduino-data`
      - Size: `1 GB` (minimum recommandé)
-     - 📖 **Documentation complète** : `docs/RENDER_PERSISTENT_DISK.md`
+     - 📖 **Documentation complète** : Accessible depuis le dashboard → Documentation → Développeurs
    - **Compilation avec SSE robuste** : La compilation utilise Server-Sent Events (SSE) avec keep-alive toutes les 2 secondes pendant l'installation du core. En cas d'interruption de connexion, le processus PHP continue en arrière-plan et le client vérifie automatiquement le statut du firmware.
    - **Installation manuelle** (si nécessaire) :
      ```bash
@@ -605,7 +605,7 @@ Commandes texte (console) :
 
 ---
 
-**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.3 - React + Next.js + Render Cloud
+**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.8 - React + Next.js + Render Cloud
 
 ---
 

@@ -3,7 +3,6 @@ import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { withBasePath } from '@/lib/utils'
-import logger from '@/lib/logger'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -51,11 +50,7 @@ export default function RootLayout({ children }) {
                     // Désenregistrer tous les service workers en local (port 3000)
                     navigator.serviceWorker.getRegistrations().then(function(registrations) {
                       for(let registration of registrations) {
-                        registration.unregister().then(function(success) {
-                          if (success) {
-                            logger.debug('[SW] Service worker désenregistré (mode local)');
-                          }
-                        });
+                        registration.unregister();
                       }
                     });
                   }
@@ -77,11 +72,8 @@ export default function RootLayout({ children }) {
                     // Enregistrer le service worker uniquement en production (version en ligne)
                     window.addEventListener('load', () => {
                       navigator.serviceWorker.register(swPath)
-                        .then(registration => {
-                          logger.debug('[SW] Service worker enregistré (production):', registration.scope);
-                        })
-                        .catch(err => {
-                          logger.warn('[SW] Échec enregistrement:', err);
+                        .catch(function(err) {
+                          console.warn('[SW] Échec enregistrement:', err);
                         });
                     });
                   }

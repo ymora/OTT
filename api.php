@@ -202,11 +202,55 @@ function handleRunMigration() {
     
     try {
         $migrationFile = $_POST['file'] ?? $_GET['file'] ?? 'schema.sql';
+        
+        // SÉCURITÉ: Validation stricte du nom de fichier pour éviter les injections de chemin
+        // Autoriser uniquement les fichiers SQL dans le répertoire sql/
+        $allowedFiles = ['schema.sql', 'base_seed.sql', 'demo_seed.sql'];
+        
+        // Vérifier si c'est un fichier autorisé
+        if (!in_array($migrationFile, $allowedFiles, true)) {
+            // Vérifier si c'est un fichier de migration valide (migration_*.sql)
+            if (!preg_match('/^migration_[a-z0-9_]+\.sql$/', $migrationFile)) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false, 
+                    'error' => 'Invalid migration file. Only schema.sql, base_seed.sql, demo_seed.sql, or migration_*.sql files are allowed.'
+                ]);
+                return;
+            }
+        }
+        
+        // Vérifier que le fichier existe dans sql/
+        $filePath = SQL_BASE_DIR . '/' . $migrationFile;
+        if (!file_exists($filePath) || !is_readable($filePath)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Migration file not found']);
+            return;
+        }
+        
+        // Protection contre path traversal: vérifier que le chemin réel est dans SQL_BASE_DIR
+        $realPath = realpath($filePath);
+        $basePath = realpath(SQL_BASE_DIR);
+        if ($realPath === false || $basePath === false || strpos($realPath, $basePath) !== 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid file path']);
+            return;
+        }
+        
+        // Vérifier que c'est bien un fichier .sql
+        if (!preg_match('/\.sql$/', $migrationFile)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Only .sql files are allowed']);
+            return;
+        }
+        
         runSqlFile($pdo, $migrationFile);
         echo json_encode(['success' => true, 'message' => 'Migration executed']);
     } catch(Exception $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Migration failed';
+        error_log('[handleRunMigration] Error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 
@@ -301,6 +345,77 @@ function handleClearFirmwares() {
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleDatabaseView() {
+    global $pdo;
+    requireAuth();
+    requireAdmin();
+    
+    try {
+        // Récupérer la liste des tables
+        $tablesQuery = "
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+        ";
+        $tablesStmt = $pdo->query($tablesQuery);
+        $tables = $tablesStmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        $databaseInfo = [
+            'database_name' => $pdo->query("SELECT current_database()")->fetchColumn(),
+            'tables' => []
+        ];
+        
+        // Pour chaque table, récupérer le nombre de lignes et les colonnes
+        foreach ($tables as $table) {
+            try {
+                $countStmt = $pdo->query("SELECT COUNT(*) FROM \"$table\"");
+                $rowCount = intval($countStmt->fetchColumn());
+                
+                // Récupérer les colonnes
+                $columnsQuery = "
+                    SELECT column_name, data_type, is_nullable, column_default
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = ?
+                    ORDER BY ordinal_position
+                ";
+                $columnsStmt = $pdo->prepare($columnsQuery);
+                $columnsStmt->execute([$table]);
+                $columns = $columnsStmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                // Récupérer un échantillon de données (max 10 lignes)
+                $sampleStmt = $pdo->query("SELECT * FROM \"$table\" LIMIT 10");
+                $sample = $sampleStmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                $databaseInfo['tables'][] = [
+                    'name' => $table,
+                    'row_count' => $rowCount,
+                    'columns' => $columns,
+                    'sample' => $sample
+                ];
+            } catch (PDOException $e) {
+                // Ignorer les erreurs pour certaines tables (vues, etc.)
+                if (getenv('DEBUG_ERRORS') === 'true') {
+                    error_log("[handleDatabaseView] Erreur pour table $table: " . $e->getMessage());
+                }
+            }
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'data' => $databaseInfo
+        ]);
+        
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Database error: ' . $e->getMessage()
+        ]);
     }
 }
 
@@ -402,45 +517,180 @@ if ($method !== 'OPTIONS') {
 }
 
 // Documentation / Markdown files (doit être en premier pour éviter les conflits)
-if(preg_match('#^/docs/([^/]+\.md)$#', $path, $m) && $method === 'GET') {
+// Endpoint pour régénérer le fichier de suivi du temps
+if(preg_match('#^/docs/regenerate-time-tracking$#', $path) && $method === 'POST') {
+    requireAuth();
+    requireAdmin();
+    
+    $scriptPath = __DIR__ . '/scripts/generate_time_tracking.ps1';
+    $outputFile = __DIR__ . '/SUIVI_TEMPS_FACTURATION.md';
+    
+    // Détecter l'OS
+    $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+    
+    if ($isWindows && file_exists($scriptPath)) {
+        // Windows : utiliser PowerShell
+        $command = 'powershell.exe -ExecutionPolicy Bypass -File "' . $scriptPath . '"';
+    } else {
+        // Linux/Unix : utiliser git log directement (fallback)
+        // Note: Le script PowerShell pourrait être converti en bash pour une meilleure compatibilité
+        $command = 'git log --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --all --no-merges > /dev/null 2>&1';
+        // Pour l'instant, on retourne une erreur si on n'est pas sur Windows
+        http_response_code(501);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'error' => 'Génération automatique disponible uniquement sur Windows. Veuillez exécuter manuellement scripts/generate_time_tracking.ps1'
+        ]);
+        exit;
+    }
+    
+    // Exécuter le script
+    $output = [];
+    $returnVar = 0;
+    exec($command . ' 2>&1', $output, $returnVar);
+    
+    if ($returnVar === 0 && file_exists($outputFile)) {
+        // Copier aussi dans public/ pour faciliter l'accès frontend
+        $publicPath = __DIR__ . '/../public/SUIVI_TEMPS_FACTURATION.md';
+        $publicDir = dirname($publicPath);
+        if (is_dir($publicDir) || @mkdir($publicDir, 0755, true)) {
+            @copy($outputFile, $publicPath);
+        }
+        
+        auditLog('admin.regenerate_time_tracking', 'admin', null, null, ['file' => 'SUIVI_TEMPS_FACTURATION.md']);
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => true,
+            'message' => 'Fichier SUIVI_TEMPS_FACTURATION.md régénéré avec succès',
+            'file' => 'SUIVI_TEMPS_FACTURATION.md',
+            'output' => implode("\n", $output),
+            'copied_to_public' => file_exists($publicPath)
+        ]);
+    } else {
+        http_response_code(500);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'error' => 'Erreur lors de la génération du fichier',
+            'return_code' => $returnVar,
+            'output' => implode("\n", $output)
+        ]);
+    }
+    exit;
+    
+} elseif(preg_match('#^/docs/([^/]+\.md)$#', $path, $m) && $method === 'GET') {
     $fileName = $m[1];
-    $filePath = __DIR__ . '/' . $fileName;
+    
+    // Chercher le fichier dans plusieurs emplacements possibles
+    $possiblePaths = [
+        __DIR__ . '/' . $fileName,                    // Racine du projet API
+        __DIR__ . '/../' . $fileName,                 // Racine du projet (parent)
+        __DIR__ . '/../public/' . $fileName,          // Dossier public
+    ];
+    
+    $filePath = null;
+    foreach ($possiblePaths as $path) {
+        if (file_exists($path) && is_readable($path)) {
+            $filePath = $path;
+            break;
+        }
+    }
     
     // Debug
     if (getenv('DEBUG_ERRORS') === 'true') {
-        error_log('[ROUTER] Route /docs/ matchée - Path: ' . $path . ' File: ' . $fileName . ' FilePath: ' . $filePath);
+        error_log('[ROUTER] Route /docs/ matchée - Path: ' . $path . ' File: ' . $fileName);
     }
     
-    // Si le fichier n'existe pas, essayer de le générer (pour SUIVI_TEMPS_FACTURATION.md)
-    if (!file_exists($filePath) && $fileName === 'SUIVI_TEMPS_FACTURATION.md') {
+    // Si c'est le fichier de suivi du temps et qu'il n'existe pas, essayer de le générer
+    if (!$filePath && $fileName === 'SUIVI_TEMPS_FACTURATION.md') {
         $scriptPath = __DIR__ . '/scripts/generate_time_tracking.ps1';
-        if (file_exists($scriptPath)) {
-            // Essayer de générer le fichier (si PowerShell est disponible)
-            // Note: Sur Render/Linux, on pourrait utiliser une version bash du script
-            if (getenv('DEBUG_ERRORS') === 'true') {
-                error_log('[ROUTER] Tentative de génération du fichier ' . $fileName);
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        
+        if ($isWindows && file_exists($scriptPath)) {
+            // Essayer de générer le fichier automatiquement
+            $command = 'powershell.exe -ExecutionPolicy Bypass -File "' . $scriptPath . '"';
+            $output = [];
+            $returnVar = 0;
+            exec($command . ' 2>&1', $output, $returnVar);
+            
+            // Chercher à nouveau après génération
+            foreach ($possiblePaths as $path) {
+                if (file_exists($path) && is_readable($path)) {
+                    $filePath = $path;
+                    break;
+                }
+            }
+            
+            if ($filePath) {
+                if (getenv('DEBUG_ERRORS') === 'true') {
+                    error_log('[ROUTER] Fichier SUIVI_TEMPS_FACTURATION.md généré automatiquement: ' . $filePath);
+                }
+                
+                // Essayer de copier dans public/ pour faciliter l'accès frontend
+                $publicPath = __DIR__ . '/../public/' . $fileName;
+                $publicDir = dirname($publicPath);
+                if (is_dir($publicDir) || mkdir($publicDir, 0755, true)) {
+                    @copy($filePath, $publicPath);
+                }
+            } else {
+                if (getenv('DEBUG_ERRORS') === 'true') {
+                    error_log('[ROUTER] Échec génération automatique: ' . implode("\n", $output));
+                }
+            }
+        } else {
+            // Sur Linux/Render, essayer de générer avec git directement
+            $gitCommand = 'cd ' . escapeshellarg(__DIR__) . ' && git log --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --all --no-merges 2>&1';
+            $gitOutput = [];
+            $gitReturnVar = 0;
+            exec($gitCommand, $gitOutput, $gitReturnVar);
+            
+            if ($gitReturnVar === 0 && !empty($gitOutput)) {
+                // Git est disponible, mais on ne peut pas exécuter le script PowerShell
+                // On retourne un message indiquant qu'il faut générer le fichier manuellement
+                if (getenv('DEBUG_ERRORS') === 'true') {
+                    error_log('[ROUTER] Git disponible mais script PowerShell non exécutable sur cette plateforme');
+                }
             }
         }
     }
     
-    // Sécurité : vérifier que le fichier existe et est dans le répertoire autorisé
-    if (file_exists($filePath) && is_readable($filePath)) {
+    // Si le fichier existe maintenant, le servir
+    if ($filePath && file_exists($filePath) && is_readable($filePath)) {
         header('Content-Type: text/plain; charset=utf-8');
         header('Access-Control-Allow-Origin: *');
+        header('Cache-Control: no-cache, must-revalidate');
         readfile($filePath);
         exit;
     } else {
-        if (getenv('DEBUG_ERRORS') === 'true') {
-            error_log('[ROUTER] Fichier non trouvé - Path: ' . $filePath . ' Exists: ' . (file_exists($filePath) ? 'yes' : 'no'));
+        // Si c'est le fichier de suivi du temps, retourner un contenu par défaut ou une erreur explicite
+        if ($fileName === 'SUIVI_TEMPS_FACTURATION.md') {
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[ROUTER] Fichier SUIVI_TEMPS_FACTURATION.md non trouvé après génération');
+            }
+            
+            // Retourner un message d'erreur avec instructions
+            http_response_code(404);
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false, 
+                'error' => 'File not found. The file SUIVI_TEMPS_FACTURATION.md could not be generated automatically.',
+                'fileName' => $fileName,
+                'hint' => 'Please run manually: scripts/generate_time_tracking.ps1 (Windows) or ensure git is available and the script can execute.',
+                'possiblePaths' => $possiblePaths,
+                'os' => PHP_OS,
+                'isWindows' => strtoupper(substr(PHP_OS, 0, 3)) === 'WIN'
+            ]);
+        } else {
+            http_response_code(404);
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false, 
+                'error' => 'File not found.',
+                'fileName' => $fileName
+            ]);
         }
-        http_response_code(404);
-        header('Content-Type: application/json');
-        echo json_encode([
-            'success' => false, 
-            'error' => 'File not found. Please commit and push SUIVI_TEMPS_FACTURATION.md to the repository.',
-            'path' => $filePath, 
-            'fileName' => $fileName
-        ]);
         exit;
     }
 
@@ -552,6 +802,8 @@ if(preg_match('#^/docs/([^/]+\.md)$#', $path, $m) && $method === 'GET') {
 // Admin tools
 } elseif(preg_match('#/admin/reset-demo$#', $path) && $method === 'POST') {
     handleResetDemo();
+} elseif(preg_match('#/admin/database-view$#', $path) && $method === 'GET') {
+    handleDatabaseView();
 
        // Health check
        } elseif(preg_match('#/health$#', $path) && $method === 'GET') {

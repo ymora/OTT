@@ -434,6 +434,8 @@ export function UsbProvider({ children }) {
                 : [0, 1, 0]
             }
             
+            logger.log('✅ Configuration extraite du format unifié:', deviceConfigFromUsb)
+            
             setUsbDeviceInfo(prev => ({
               ...prev,
               config: deviceConfigFromUsb
@@ -441,10 +443,13 @@ export function UsbProvider({ children }) {
             
             // Émettre l'événement pour DeviceConfigSection
             if (typeof window !== 'undefined') {
+              logger.log('📢 Émission événement usb-device-config-received')
               window.dispatchEvent(new CustomEvent('usb-device-config-received', {
                 detail: deviceConfigFromUsb
               }))
             }
+          } else {
+            logger.debug('⚠️ Format unifié sans configuration (sleep_minutes, measurement_duration_ms, calibration_coefficients tous null/undefined)')
           }
           
           // 3. Extraire et stocker les mesures (toujours présentes dans le format unifié, même si certaines valeurs sont null)
@@ -529,6 +534,20 @@ export function UsbProvider({ children }) {
             const currentDevice = usbConnectedDevice || usbVirtualDevice
             if (currentDevice) {
               sendMeasurementToApi(measurement, currentDevice)
+              
+              // Mettre à jour la base de données avec les dernières valeurs (batterie, débit, RSSI)
+              if (updateDeviceFirmwareRef.current) {
+                const identifier = currentDevice.sim_iccid || currentDevice.device_serial || currentDevice.device_name
+                if (identifier) {
+                  updateDeviceFirmwareRef.current(identifier, null, {
+                    last_seen: now,
+                    status: 'usb_connected',
+                    last_battery: measurement.battery !== null && measurement.battery !== undefined ? measurement.battery : undefined,
+                    last_flowrate: measurement.flowrate !== null && measurement.flowrate !== undefined ? measurement.flowrate : undefined,
+                    last_rssi: measurement.rssi !== null && measurement.rssi !== undefined && measurement.rssi !== -999 ? measurement.rssi : undefined
+                  })
+                }
+              }
             }
           }
           
@@ -656,8 +675,18 @@ export function UsbProvider({ children }) {
                   updateData.last_battery = measurement.battery
                 }
                 
+                // Ajouter le débit si disponible
+                if (measurement.flowrate !== null && measurement.flowrate !== undefined) {
+                  updateData.last_flowrate = measurement.flowrate
+                }
+                
+                // Ajouter le RSSI si disponible
+                if (measurement.rssi !== null && measurement.rssi !== undefined && measurement.rssi !== -999) {
+                  updateData.last_rssi = measurement.rssi
+                }
+                
                 // Mettre à jour la base de données avec toutes les informations disponibles
-                // Même si firmwareVersion n'est pas disponible, on met à jour last_seen, status, last_battery
+                // Même si firmwareVersion n'est pas disponible, on met à jour last_seen, status, last_battery, last_flowrate, last_rssi
                 updateDeviceFirmwareRef.current(identifier, firmwareVersion || '', updateData)
                 
                 logger.debug('🔄 Mise à jour base de données demandée:', {
@@ -688,12 +717,8 @@ export function UsbProvider({ children }) {
   // Gestion des chunks de streaming
   const handleUsbStreamChunk = useCallback((chunk) => {
     if (!chunk) {
-      logger.debug('📥 Chunk vide reçu')
       return
     }
-    
-    logger.log('📥 Chunk reçu:', chunk.length, 'caractères')
-    logger.debug('📥 Contenu chunk:', chunk.substring(0, Math.min(100, chunk.length)))
     
     // Accumuler les chunks dans le buffer jusqu'à avoir une ligne complète (terminée par \n)
     usbStreamBufferRef.current += chunk
@@ -703,39 +728,57 @@ export function UsbProvider({ children }) {
     // Garder la dernière partie (incomplète) dans le buffer pour le prochain chunk
     usbStreamBufferRef.current = parts.pop() ?? ''
     
-    logger.debug('📥 Lignes extraites:', parts.length, '| Buffer restant:', usbStreamBufferRef.current.length, 'caractères')
-    
-    // Log le contenu du buffer si aucune ligne complète n'est extraite (JSON en cours de réception)
+    // Vérifier si le buffer contient un JSON complet sans \n (cas spécial)
     if (parts.length === 0 && usbStreamBufferRef.current.length > 0) {
-      // Si le buffer commence par {, c'est probablement un JSON incomplet
-      if (usbStreamBufferRef.current.trim().startsWith('{')) {
-        logger.debug('📥 JSON incomplet en buffer (attente de la fin):', usbStreamBufferRef.current.substring(0, Math.min(200, usbStreamBufferRef.current.length)) + '...')
-      } else {
-        logger.debug('📥 Buffer en cours (pas de ligne complète):', usbStreamBufferRef.current.substring(0, Math.min(200, usbStreamBufferRef.current.length)))
+      const trimmed = usbStreamBufferRef.current.trim()
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        // JSON complet détecté sans \n - le traiter immédiatement
+        try {
+          JSON.parse(trimmed) // Vérifier que c'est valide
+          processUsbStreamLine(trimmed)
+          usbStreamBufferRef.current = ''
+          return
+        } catch (e) {
+          // JSON incomplet, attendre la suite
+        }
       }
     }
     
-    parts.forEach((line, index) => {
+    // Traiter toutes les lignes extraites
+    let jsonCount = 0
+    parts.forEach((line) => {
       if (line || line === '') {
         const trimmed = line.trim()
-        const linePreview = line.substring(0, Math.min(100, line.length))
         
-        // Log spécial pour les lignes JSON (toujours logger)
+        // Log uniquement les JSON (pas les logs du firmware)
         if (trimmed.startsWith('{')) {
-          logger.log(`📥 Ligne JSON détectée (${line.length} caractères):`, linePreview)
-          // Essayer de parser immédiatement pour voir si c'est valide
+          jsonCount++
           try {
             const testPayload = JSON.parse(trimmed)
-            logger.log(`📥 JSON valide - type: ${testPayload.type || testPayload.mode || 'unknown'}, seq: ${testPayload.seq || 'N/A'}`)
+            // Log tous les JSON (mais pas trop verbeux)
+            logger.log(`📥 JSON #${jsonCount} - type: ${testPayload.type || testPayload.mode || 'unknown'}, seq: ${testPayload.seq || 'N/A'}`)
+            
+            // Log détaillé pour la configuration
+            if (testPayload.sleep_minutes != null || testPayload.measurement_duration_ms != null || testPayload.calibration_coefficients) {
+              logger.log(`✅ Configuration détectée dans JSON:`, {
+                sleep_minutes: testPayload.sleep_minutes,
+                measurement_duration_ms: testPayload.measurement_duration_ms,
+                calibration: testPayload.calibration_coefficients
+              })
+            }
           } catch (e) {
-            logger.warn(`📥 JSON invalide ou incomplet:`, e.message)
+            logger.warn(`❌ JSON invalide:`, e.message, `| Ligne: ${trimmed.substring(0, 100)}`)
           }
-        } else if (trimmed.length > 0) {
-          logger.debug(`📥 Ligne non-JSON (${line.length} caractères):`, linePreview)
         }
+        
         processUsbStreamLine(line)
       }
     })
+    
+    // Log un résumé si plusieurs lignes traitées (mais pas de JSON)
+    if (parts.length > 0 && jsonCount === 0) {
+      logger.debug(`📥 ${parts.length} ligne(s) de log du firmware traitée(s)`)
+    }
     
     if (usbStreamStatus === 'waiting') {
       logger.log('✅ Premier chunk reçu, passage à running')

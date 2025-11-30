@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v3.7 - Mode unifié
+ *  OTT Firmware v3.8 - Mode unifié
  * ================================================================
  * 
  * Fonctionnalités principales :
@@ -175,6 +175,7 @@ static const char* regStatusToString(RegStatus status);
 float measureBattery();
 float measureAirflowRaw();
 float airflowToLpm(float raw);
+int8_t csqToRssi(int8_t csq);  // Conversion CSQ (0-31) vers dBm selon 3GPP TS 27.007
 
 bool httpPost(const char* path, const String& body, String* response = nullptr);
 bool httpGet(const char* path, String* response);
@@ -263,8 +264,7 @@ void setup()
     {
       Measurement m = captureSensorSnapshot();
       int8_t csq = modem.getSignalQuality();
-      int8_t rssi = (csq == 99) ? -999 : (csq == 0) ? -113 : (csq == 1) ? -111 : (-110 + (csq * 2));
-      m.rssi = rssi;
+      m.rssi = csqToRssi(csq);
       float latitude = 0.0, longitude = 0.0;
       bool hasLocation = getDeviceLocation(&latitude, &longitude);
       emitDebugMeasurement(m, sequence, intervalMs, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
@@ -284,15 +284,7 @@ void setup()
       
       // Obtenir RSSI
       int8_t csq = modem.getSignalQuality();
-      if (csq == 99) {
-        m.rssi = -999;
-      } else if (csq == 0) {
-        m.rssi = -113;
-      } else if (csq == 1) {
-        m.rssi = -111;
-      } else {
-        m.rssi = -110 + (csq * 2);
-      }
+      m.rssi = csqToRssi(csq);
       
       // Obtenir position GPS (activé par défaut)
       float latitude = 0.0, longitude = 0.0;
@@ -360,15 +352,7 @@ void setup()
   
   // Obtenir RSSI
   int8_t csq = modem.getSignalQuality();
-  if (csq == 99) {
-    mInit.rssi = -999;
-  } else if (csq == 0) {
-    mInit.rssi = -113;
-  } else if (csq == 1) {
-    mInit.rssi = -111;
-  } else {
-    mInit.rssi = -110 + (csq * 2);
-  }
+  mInit.rssi = csqToRssi(csq);
   
   // Obtenir GPS
   float latitudeInit = 0.0, longitudeInit = 0.0;
@@ -434,15 +418,7 @@ void loop()
     // Obtenir RSSI (si modem actif)
     if (modemReady && modem.isNetworkConnected()) {
       int8_t csq = modem.getSignalQuality();
-      if (csq == 99) {
-        m.rssi = -999;
-      } else if (csq == 0) {
-        m.rssi = -113;
-      } else if (csq == 1) {
-        m.rssi = -111;
-      } else {
-        m.rssi = -110 + (csq * 2);
-      }
+      m.rssi = csqToRssi(csq);
     } else {
       m.rssi = -999;
     }
@@ -542,20 +518,31 @@ void initModem()
 
 bool startModem()
 {
-  Serial.println(F("[MODEM] start"));
+  // Vérifier si on est en mode USB pour réduire les logs
+  bool isUsbMode = Serial.availableForWrite() > 0;
+  
+  if (!isUsbMode) {
+    Serial.println(F("[MODEM] start"));
+  }
   uint8_t rebootCount = 0;
   while (true) {
     unsigned long start = millis();
     while (!modem.testAT(1000)) {
-      Serial.print('.');
+      if (!isUsbMode) {
+        Serial.print('.');
+      }
       feedWatchdog();
       if (millis() - start > modemBootTimeoutMs) {
-        Serial.println(F("\n[MODEM] pas de reponse AT"));
+        if (!isUsbMode) {
+          Serial.println(F("\n[MODEM] pas de reponse AT"));
+        }
         if (++rebootCount > modemMaxReboots) {
           sendLog("ERROR", "Modem unresponsive");
           return false;
         }
-        Serial.println(F("[MODEM] toggling PWRKEY"));
+        if (!isUsbMode) {
+          Serial.println(F("[MODEM] toggling PWRKEY"));
+        }
         digitalWrite(BOARD_PWRKEY_PIN, LOW);
         delay(100);
         digitalWrite(BOARD_PWRKEY_PIN, HIGH);
@@ -565,19 +552,25 @@ bool startModem()
       }
     }
     if (modem.testAT()) {
-      Serial.println();
-      Serial.println(F("[MODEM] AT OK"));
+      if (!isUsbMode) {
+        Serial.println();
+        Serial.println(F("[MODEM] AT OK"));
+      }
       break;
     }
     feedWatchdog();
   }
 
   if (!waitForSimReady(simReadyTimeoutMs)) {
-    Serial.println(F("[MODEM] SIM non prête"));
+    if (!isUsbMode) {
+      Serial.println(F("[MODEM] SIM non prête"));
+    }
     sendLog("ERROR", "SIM not ready");
     return false;
   }
-  Serial.println(F("[MODEM] SIM prête"));
+  if (!isUsbMode) {
+    Serial.println(F("[MODEM] SIM prête"));
+  }
   
   // Lire l'ICCID réel de la SIM si disponible (fallback si non configuré)
   String realIccid = modem.getSimCCID();
@@ -602,20 +595,30 @@ bool startModem()
   // Format: +CGDCONT=1,"IP","free" (1=context ID, IP=type internet, free=APN)
   modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), NETWORK_APN.c_str(), "\"");
   modem.waitResponse(2000);
-  Serial.printf("[MODEM] APN=%s (type: IP pour internet)\n", NETWORK_APN.c_str());
+  if (!isUsbMode) {
+    Serial.printf("[MODEM] APN=%s (type: IP pour internet)\n", NETWORK_APN.c_str());
+  }
 
   if (!attachNetwork(networkAttachTimeoutMs)) {
-    Serial.println(F("[MODEM] réseau indisponible"));
+    if (!isUsbMode) {
+      Serial.println(F("[MODEM] réseau indisponible"));
+    }
     sendLog("ERROR", "Network unavailable");
     return false;
   }
-  Serial.println(F("[MODEM] réseau attaché"));
+  if (!isUsbMode) {
+    Serial.println(F("[MODEM] réseau attaché"));
+  }
   if (!connectData(networkAttachTimeoutMs)) {
-    Serial.println(F("[MODEM] GPRS KO"));
+    if (!isUsbMode) {
+      Serial.println(F("[MODEM] GPRS KO"));
+    }
     sendLog("ERROR", "GPRS connection failed");
     return false;
   }
-  Serial.println(F("[MODEM] session data active"));
+  if (!isUsbMode) {
+    Serial.println(F("[MODEM] session data active"));
+  }
 
 #ifdef TINY_GSM_MODEM_SIM7600
   // TLS géré par le modem SIM7600 (certificats chargés côté module)
@@ -733,9 +736,12 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   doc["status"] = "USB_STREAM";
   
   // Envoyer le JSON complet en une seule fois (une seule ligne)
-  serializeJson(doc, Serial);
-  Serial.println();  // Nouvelle ligne pour terminer le JSON
-  Serial.flush();     // Forcer l'envoi immédiat (assure que le JSON complet est envoyé)
+  // Utiliser un buffer String pour envoyer tout d'un coup (plus efficace)
+  String jsonOutput;
+  serializeJson(doc, jsonOutput);
+  jsonOutput += '\n';  // Nouvelle ligne pour terminer le JSON
+  Serial.print(jsonOutput);  // Envoyer tout d'un coup
+  Serial.flush();     // Forcer l'envoi immédiat
   
   // Message de debug simplifié (seulement toutes les 10 mesures pour réduire le bruit)
   if (sequence % 10 == 0) {
@@ -887,7 +893,7 @@ void logRadioSnapshot(const char* stage)
   RegStatus reg = modem.getRegistrationStatus();
   int8_t csq = modem.getSignalQuality();
   // Convertir CSQ en dBm pour affichage
-  int16_t rssi_dbm = (csq == 99) ? -999 : (csq == 0) ? -113 : (csq == 1) ? -111 : (-110 + (csq * 2));
+  int16_t rssi_dbm = csqToRssi(csq);
   String oper = modem.getOperator();
   bool eps = modem.isNetworkConnected();
   bool gprs = modem.isGprsConnected();
@@ -920,8 +926,11 @@ void logRadioSnapshot(const char* stage)
 
 bool waitForSimReady(uint32_t timeoutMs)
 {
+  bool isUsbMode = Serial.availableForWrite() > 0;
   unsigned long start = millis();
-  Serial.println(F("[MODEM] attente SIM"));
+  if (!isUsbMode) {
+    Serial.println(F("[MODEM] attente SIM"));
+  }
   while (millis() - start < timeoutMs) {
     SimStatus sim = modem.getSimStatus();
     feedWatchdog();
@@ -1114,6 +1123,25 @@ bool connectData(uint32_t timeoutMs)
 // ----------------------------------------------------------------------------- //
 // Mesures capteur                                                               //
 // ----------------------------------------------------------------------------- //
+
+/**
+ * Conversion CSQ (0-31) vers dBm selon standard 3GPP TS 27.007
+ * 
+ * @param csq Valeur CSQ du modem (0-31, 99 = non disponible)
+ * @return RSSI en dBm (-113 à -51, -999 si non disponible)
+ */
+int8_t csqToRssi(int8_t csq)
+{
+  if (csq == 99) {
+    return -999;  // Non disponible
+  } else if (csq == 0) {
+    return -113;  // Signal très faible
+  } else if (csq == 1) {
+    return -111;  // Signal très faible
+  } else {
+    return -110 + (csq * 2);  // Formule standard 3GPP TS 27.007
+  }
+}
 
 float measureBattery()
 {

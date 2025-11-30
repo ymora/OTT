@@ -1,10 +1,10 @@
 # Suivi du Temps - Projet OTT
 ## Journal de travail pour facturation (Genere automatiquement)
 
-**PÃ©riode analysÃ©e** : 2025-11-14 - 2025-11-26  
+**PÃ©riode analysÃ©e** : 2025-11-14 - 2025-11-30  
 **DÃ©veloppeur** : ymora  
 **Projet** : OTT - Dispositif MÃ©dical IoT  
-**Total commits analysÃ©s** : 377  
+**Total commits analysÃ©s** : 447  
 **Branches analysÃ©es** : Toutes
 
 ---
@@ -25,8 +25,12 @@
 | 2025-11-23 | ~10h | 60 | 19 | 31 | 0 | 2 | 3 | 0 |
 | 2025-11-24 | ~6h | 28 | 0 | 21 | 0 | 0 | 3 | 0 |
 | 2025-11-25 | ~10h | 45 | 10 | 27 | 0 | 4 | 3 | 1 |
-| 2025-11-26 | ~10h | 55 | 4 | 40 | 0 | 4 | 7 | 0 |
-**Total** | **~96h** | **377** | **31.6** | **36.1** | **0.1** | **5.4** | **11.9** | **0.2**
+| 2025-11-26 | ~10h | 59 | 5 | 43 | 0 | 4 | 7 | 0 |
+| 2025-11-27 | ~10h | 59 | 19 | 31 | 0 | 6 | 3 | 0 |
+| 2025-11-28 | ~1h | 3 | 1 | 0 | 0 | 1 | 0 | 0 |
+| 2025-11-29 | ~0.5h | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| 2025-11-30 | ~1h | 2 | 0 | 1 | 0 | 0 | 0 | 0 |
+**Total** | **~108.5h** | **447** | **35.5** | **42.1** | **0.1** | **6.7** | **12.3** | **0.2**
 
 ---
 
@@ -363,8 +367,8 @@
 
 ### 26 novembre 2025
 **Heures estimÃ©es** : ~10h  
-**PÃ©riode** : 07:03 - 22:53  
-**Nombre de commits** : 55
+**PÃ©riode** : 07:03 - 23:20  
+**Nombre de commits** : 59
 
 #### AvancÃ©es principales
 - [FEAT] debug: ajout logs console pour diagnostiquer upload fichier .ino
@@ -394,24 +398,109 @@
 - [TEST] debug: ajout logs console pour diagnostiquer upload fichier .ino
 - [TEST] fix: mise ├á jour ino_content en DB lors de handleUpdateFirmwareIno + script test upload/├®dition
 - [TEST] debug: ajouter logs d├®taill├®s pour analyser probl├¿me write('usb')
+- [TEST] debug: ajouter logs d├®taill├®s pour voir pourquoi donn├®es n'apparaissent pas
+
+---
+
+### 27 novembre 2025
+**Heures estimÃ©es** : ~10h  
+**PÃ©riode** : 06:05 - 23:06  
+**Nombre de commits** : 59
+
+#### AvancÃ©es principales
+- [FEAT] fix: ajouter import logger manquant dans AuthContext.js
+- [FEAT] fix: ajouter useEffect manquant pour maintenir menu Documentation ouvert
+- [FEAT] feat: garder le menu Documentation ouvert lors de la navigation
+- [FEAT] feat: syst├¿me pause/reprise pour streaming USB
+- [FEAT] feat: inverser ordre logs USB - r├®cents en haut, initiaux en bas
+- [FEAT] feat: ajouter affichage min/max pour batterie, d├®bit et RSSI
+- [FEAT] feat: ajouter support dark mode pour les 3 documentations HTML
+- [FEAT] feat: ajouter min/max en BDD et ascenseur pour documentations
+- [FEAT] feat: ajouter styles dark mode pour images dans toutes les docs
+- [FEAT] docs: ajouter rapport d'optimisation documentation
+#### ProblÃ¨mes rÃ©solus
+- [FIX] fix: ajouter import logger manquant dans AuthContext.js
+- [FIX] fix: ajouter useEffect manquant pour maintenir menu Documentation ouvert
+- [FIX] fix: optimiser MarkdownViewer et am├®liorer menu Documentation
+- [FIX] fix: permettre toggle bouton en ├®tat paused
+- [FIX] fix: comportement menu Documentation - seul triangle toggle, pas de surbrillance menu principal
+- [FIX] fix: simplifier inversion logs - utiliser uniquement reverse() sur tableau
+- [FIX] fix: menu Documentation se d├®ploie vers le haut avec flex-col-reverse
+- [FIX] fix: optimiser menu Documentation - r├®activit├® et d├®ploiement vers le haut
+- [FIX] fix: texte Documentation non cliquable, seul triangle d├®ploie/r├®duit
+- [FIX] fix: triangle menu Documentation fonctionne apr├¿s clic sur une doc
+#### RedÃ©ploiements
+- *Aucun redÃ©ploiement enregistrÃ©*
+#### Tests
+- [TEST] feat: Contr├┤les modem et GPS depuis l'interface USB streaming - Ajout commandes firmware: modem_on, modem_off, test_network, gps - Interface: boutons pour d├®marrer/arr├¬ter modem et tester r├®seau/GPS - D├®tection automatique ├®tat modem depuis les logs - Indicateur modem mis ├á jour en temps r├®el (arr├¬t├®/d├®marrage/d├®marr├®) - Am├®lioration gestion erreurs REG_DENIED avec APN automatique - Retry avec backoff exponentiel pour attache r├®seau - Logs d├®taill├®s avec suggestions APN selon op├®rateur
+- [TEST] fix: Correction boucle d'erreur infinie et am├®lioration UX modem/GPS - Correction boucle d'erreur infinie dans SerialPortManager avec compteur d'erreurs cons├®cutives - Ajout d├®lai entre tentatives pour ├®viter le spam d'erreurs - Arr├¬t automatique apr├¿s 5 erreurs cons├®cutives - Ajout guide d'utilisation pour d├®marrer modem et tester GPS - Instructions claires avec ├®tapes num├®rot├®es dans l'interface
+
+---
+
+### 28 novembre 2025
+**Heures estimÃ©es** : ~1h  
+**PÃ©riode** : 00:28 - 07:18  
+**Nombre de commits** : 3
+
+#### AvancÃ©es principales
+- [FEAT] feat: Interface USB streaming v3.5 - Ic├┤nes cliquables, mode s├®curis├®, connexion automatique
+#### ProblÃ¨mes rÃ©solus
+- *Aucun problÃ¨me rÃ©solu enregistrÃ©*
+#### RedÃ©ploiements
+- *Aucun redÃ©ploiement enregistrÃ©*
+#### Tests
+- *Aucun test enregistrÃ©*
+
+---
+
+### 29 novembre 2025
+**Heures estimÃ©es** : ~0.5h  
+**PÃ©riode** : 19:28 - 19:34  
+**Nombre de commits** : 2
+
+#### AvancÃ©es principales
+- [FEAT] Ajout colonnes last_flowrate et last_rssi dans devices + am├®lioration gestion erreurs framing + affichage donn├®es DB sans USB
+- [FEAT] Ajout migration last_flowrate et last_rssi + script PowerShell + documentation
+#### ProblÃ¨mes rÃ©solus
+- [FIX] Ajout colonnes last_flowrate et last_rssi dans devices + am├®lioration gestion erreurs framing + affichage donn├®es DB sans USB
+#### RedÃ©ploiements
+- [DEPLOY] Ajout migration last_flowrate et last_rssi + script PowerShell + documentation
+#### Tests
+- *Aucun test enregistrÃ©*
+
+---
+
+### 30 novembre 2025
+**Heures estimÃ©es** : ~1h  
+**PÃ©riode** : 04:06 - 06:30  
+**Nombre de commits** : 2
+
+#### AvancÃ©es principales
+- *Aucune avancÃ©e majeure enregistrÃ©e*
+#### ProblÃ¨mes rÃ©solus
+- [FIX] Optimisation firmware et dashboard: correction messages, format unifi├®, s├®lection automatique
+#### RedÃ©ploiements
+- *Aucun redÃ©ploiement enregistrÃ©*
+#### Tests
+- *Aucun test enregistrÃ©*
 
 ---
 
 ## Statistiques Globales
 
 ### RÃ©partition par activitÃ©
-- **Developpement** : ~31.6h (32.9%)
-- **Correction** : ~36.1h (37.6%)
-- **Test** : ~0.1h (0.2%)
-- **Documentation** : ~5.4h (5.6%)
-- **Refactoring** : ~11.9h (12.4%)
+- **Developpement** : ~35.5h (32.7%)
+- **Correction** : ~42.1h (38.8%)
+- **Test** : ~0.1h (0.1%)
+- **Documentation** : ~6.7h (6.2%)
+- **Refactoring** : ~12.3h (11.3%)
 - **Deploiement** : ~0.2h (0.2%)
 
-### Temps total estimÃ© : ~96 heures
+### Temps total estimÃ© : ~108.5 heures
 
-### Nombre de jours travaillÃ©s : 13
+### Nombre de jours travaillÃ©s : 17
 
-### Moyenne par jour : ~7.4h
+### Moyenne par jour : ~6.4h
 
 ---
 
@@ -440,6 +529,6 @@
 
 ---
 
-**Derniere generation** : 26/11/2025 22:58  
+**Derniere generation** : 30/11/2025 12:21  
 **Source** : Analyse automatique des commits Git du projet  
 **Script** : scripts/generate_time_tracking.ps1

@@ -8,6 +8,42 @@
 // HANDLERS - AUTHENTICATION
 // ============================================================================
 
+/**
+ * Vérifie le rate limiting pour les tentatives de connexion
+ * @param string $email Email de l'utilisateur
+ * @param int $maxAttempts Nombre maximum de tentatives
+ * @param int $windowMinutes Fenêtre de temps en minutes
+ * @return bool true si autorisé, false si bloqué
+ */
+function checkRateLimit($email, $maxAttempts = 5, $windowMinutes = 5) {
+    $lockFile = sys_get_temp_dir() . '/ott_login_' . md5($email) . '.lock';
+    $attempts = [];
+    
+    if (file_exists($lockFile)) {
+        $data = file_get_contents($lockFile);
+        if ($data !== false) {
+            $attempts = json_decode($data, true) ?: [];
+        }
+        // Nettoyer les tentatives anciennes (hors de la fenêtre de temps)
+        $now = time();
+        $windowSeconds = $windowMinutes * 60;
+        $attempts = array_filter($attempts, function($timestamp) use ($now, $windowSeconds) {
+            return ($now - $timestamp) < $windowSeconds;
+        });
+    }
+    
+    // Vérifier si le nombre de tentatives dépasse la limite
+    if (count($attempts) >= $maxAttempts) {
+        return false; // Trop de tentatives
+    }
+    
+    // Enregistrer cette tentative
+    $attempts[] = time();
+    file_put_contents($lockFile, json_encode($attempts));
+    
+    return true;
+}
+
 function handleLogin() {
     global $pdo;
     
@@ -19,6 +55,18 @@ function handleLogin() {
         ob_end_clean();
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Email and password required']);
+        return;
+    }
+    
+    // SÉCURITÉ: Rate limiting pour protéger contre les attaques par force brute
+    if (!checkRateLimit($email, 5, 5)) {
+        auditLog('user.login_rate_limited', 'user', null, null, ['email' => $email]);
+        ob_end_clean();
+        http_response_code(429);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Too many login attempts. Please try again in 5 minutes.'
+        ]);
         return;
     }
     

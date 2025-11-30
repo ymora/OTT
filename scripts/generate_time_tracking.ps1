@@ -427,10 +427,21 @@ $mdContent += @"
 "@
 
 # Écrire le fichier avec encodage UTF8 sans BOM
+$projectRoot = (Resolve-Path .).Path
+$outputPath = Join-Path $projectRoot $OutputFile
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllLines((Resolve-Path .).Path + "\" + $OutputFile, $mdContent, $utf8NoBom)
+[System.IO.File]::WriteAllLines($outputPath, $mdContent, $utf8NoBom)
 
-Write-Host "OK: Rapport genere : $OutputFile" -ForegroundColor Green
+# Copier aussi dans public/ pour faciliter l'accès frontend
+$publicPath = Join-Path $projectRoot "public\$OutputFile"
+$publicDir = Split-Path $publicPath -Parent
+if (-not (Test-Path $publicDir)) {
+    New-Item -ItemType Directory -Path $publicDir -Force | Out-Null
+}
+Copy-Item $outputPath -Destination $publicPath -Force
+
+Write-Host "OK: Rapport genere : $outputPath" -ForegroundColor Green
+Write-Host "OK: Copie creee dans : $publicPath" -ForegroundColor Green
 if ($dailyReports.Count -gt 0) {
     Write-Host "Total estime : ~$([Math]::Round($totalHours, 1)) heures sur $($dailyReports.Count) jours" -ForegroundColor Cyan
     Write-Host "Moyenne : ~$([Math]::Round($totalHours / $dailyReports.Count, 1))h/jour" -ForegroundColor Cyan
