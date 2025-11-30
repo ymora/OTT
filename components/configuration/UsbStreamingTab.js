@@ -926,6 +926,7 @@ export default function DebugTab() {
 // Composant de configuration intégré (série + OTA)
 function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDeviceInfo, isDisabled, isConnected, appendUsbStreamLog, sendCommand }) {
   const { fetchWithAuth, API_URL, user } = useAuth()
+  const { usbConnectedDevice, usbVirtualDevice } = useUsb()
   const { data: devicesData, error: devicesError } = useApiData(
     ['/api.php/devices'], 
     { requiresAuth: true, autoLoad: !!user }

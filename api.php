@@ -824,8 +824,6 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     }
     handleDatabaseView();
     exit;
-} elseif(preg_match('#^/admin/reset-demo/?$#', $path) && $method === 'POST') {
-    handleResetDemo();
 
 // Health check
 } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
