@@ -366,6 +366,9 @@ export default function FirmwareFlashTab() {
                         Dispositif
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Patient
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                         Version actuelle
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -421,6 +424,13 @@ export default function FirmwareFlashTab() {
                                 </span>
                               )}
                             </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {device.first_name ? (
+                              <span className="badge badge-success text-xs">{device.first_name} {device.last_name}</span>
+                            ) : (
+                              <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs">Non assigné</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <span className="font-mono text-sm">

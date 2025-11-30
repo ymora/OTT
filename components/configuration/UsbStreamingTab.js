@@ -514,6 +514,7 @@ export default function DebugTab() {
               <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
                 <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État</th>
                 <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Identifiant</th>
+                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
                 <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
                 <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Modem</th>
                 <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">GPS</th>
@@ -569,6 +570,30 @@ export default function DebugTab() {
                         {timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
                             {formatTime(timestamp)}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </td>
+                
+                {/* Patient */}
+                <td className="px-3 py-1.5">
+                  {(() => {
+                    const patientName = dbDeviceData?.first_name && dbDeviceData?.last_name 
+                      ? `${dbDeviceData.first_name} ${dbDeviceData.last_name}` 
+                      : null
+                    const source = patientName ? 'database' : null
+                    return (
+                      <div className="flex items-center gap-1">
+                        {patientName ? (
+                          <span className="badge badge-success text-xs">{patientName}</span>
+                        ) : (
+                          <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs">Non assigné</span>
+                        )}
+                        {source && (
+                          <span className="text-[10px] opacity-60" title="Source: Base de données">
+                            💾
                           </span>
                         )}
                       </div>
