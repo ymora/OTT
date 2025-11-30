@@ -83,11 +83,6 @@ export default function DebugTab() {
   const [showFlashModal, setShowFlashModal] = useState(false)
   const [deviceToFlash, setDeviceToFlash] = useState(null)
   
-  // États pour le flash
-  const [showFlashModal, setShowFlashModal] = useState(false)
-  const [deviceToFlash, setDeviceToFlash] = useState(null)
-  const [flashingDevice, setFlashingDevice] = useState(false)
-  
   const [availablePorts, setAvailablePorts] = useState([])
   const [selectedPortId, setSelectedPortId] = useState('')
   const [loadingPorts, setLoadingPorts] = useState(false)
