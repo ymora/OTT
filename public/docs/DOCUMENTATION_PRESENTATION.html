@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documentation Présentation OTT V3.9 - HAPPLYZ MEDICAL</title>
+    <title>Documentation Présentation OTT V3.11 - HAPPLYZ MEDICAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -506,7 +506,7 @@
 <div class="header">
     <h1>🏥 OTT - Dispositif Médical IoT</h1>
     <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
-    <div class="version-badge">Version 3.9 - Documentation Présentation</div>
+    <div class="version-badge">Version 3.11 - Documentation Présentation</div>
     <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
 </div>
 
@@ -540,18 +540,29 @@
         <li>✅ <strong>Mise à jour OTA</strong> (Over-The-Air) du firmware</li>
     </ul>
     
-    <h3>🆕 Améliorations V3.3</h3>
+    <h3>🆕 Améliorations V3.11</h3>
     <div class="alert alert-info">
-        <strong>Nouvelles fonctionnalités de la version 3.3</strong>
+        <strong>Nouvelles fonctionnalités de la version 3.11</strong>
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li><strong>Pagination complète</strong> : tous les endpoints de liste supportent maintenant la pagination (devices, alerts, commands)</li>
+            <li><strong>Cache Redis</strong> : système de cache avec support Redis optionnel et fallback mémoire automatique</li>
+            <li><strong>Monitoring Sentry</strong> : intégration Sentry pour le monitoring des erreurs en production</li>
+            <li><strong>Documentation API OpenAPI/Swagger</strong> : documentation OpenAPI 3.0 disponible via `/api.php/docs/openapi.json`</li>
+            <li><strong>Suivi du temps amélioré</strong> : script de suivi inclut maintenant les commits locaux (git reflog) et détection automatique</li>
+            <li><strong>Partage USB multi-onglets</strong> : mécanisme de partage du port USB entre plusieurs onglets du navigateur</li>
+            <li><strong>Sécurité renforcée</strong> : validation stricte des noms de tables pour la vue base de données</li>
+        </ul>
+    </div>
+    
+    <h3>📋 Améliorations Précédentes (V3.9-V3.10)</h3>
+    <div class="alert alert-success">
+        <strong>Fonctionnalités déjà disponibles</strong>
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
             <li><strong>Streaming USB en temps réel</strong> : console USB intégrée avec détection automatique (Web Serial API)</li>
             <li><strong>UsbContext global</strong> : détection permanente des dispositifs USB, même lors de la navigation entre pages</li>
-            <li><strong>Menu simplifié</strong> : 4 pages principales avec fonctionnalités regroupées (Vue d'Ensemble, Dispositifs, Patients, Utilisateurs)</li>
-            <li><strong>Vue d'ensemble réorganisée</strong> : section "Actions Requises" pour alertes critiques, batteries faibles, boîtiers non assignés</li>
-            <li><strong>Gestion utilisateurs complète</strong> : création, édition, suppression avec permissions granulaires</li>
-            <li><strong>Gestion dispositifs</strong> : assignation aux patients, filtres (assignés/non assignés), détails complets avec onglets</li>
-            <li><strong>Carte interactive</strong> : visualisation des dispositifs avec statut (batterie, en ligne/hors ligne)</li>
+            <li><strong>Menu simplifié</strong> : 4 pages principales avec fonctionnalités regroupées</li>
             <li><strong>PWA installable</strong> : application progressive web avec manifest.json et service worker</li>
+            <li><strong>Carte interactive</strong> : visualisation des dispositifs avec statut (batterie, en ligne/hors ligne)</li>
         </ul>
     </div>
     
@@ -924,15 +935,20 @@
     <h2>🚀 Roadmap & Améliorations Futures</h2>
     
     <div class="alert alert-success">
-        <strong>✅ Version 3.9 (Actuelle - 2025)</strong><br>
+        <strong>✅ Version 3.11 (Actuelle - Décembre 2025)</strong><br>
         Version actuellement déployée avec les fonctionnalités suivantes :
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li>✅ Pagination complète sur tous les endpoints de liste</li>
+            <li>✅ Cache Redis optionnel avec fallback mémoire</li>
+            <li>✅ Monitoring Sentry intégré</li>
+            <li>✅ Documentation API OpenAPI/Swagger</li>
+            <li>✅ Partage USB multi-onglets</li>
             <li>✅ PWA installable (manifest.json, service worker)</li>
             <li>✅ Streaming USB en temps réel avec UsbContext</li>
             <li>✅ Détection automatique des dispositifs USB (Web Serial API)</li>
             <li>✅ Dashboard React/Next.js complet avec authentification JWT</li>
             <li>✅ Gestion multi-utilisateurs avec permissions granulaires</li>
-            <li>✅ API REST complète avec PostgreSQL</li>
+            <li>✅ API REST complète avec PostgreSQL 15</li>
             <li>✅ Mise à jour OTA (Over-The-Air) du firmware</li>
             <li>✅ Carte interactive Leaflet avec géolocalisation</li>
             <li>✅ Système d'alertes et notifications</li>
@@ -1005,7 +1021,7 @@
 
 <div class="footer">
     <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
-    <p>OTT - Version 3.9 Enterprise | Documentation Présentation</p>
+    <p>OTT - Version 3.11 Enterprise | Documentation Présentation</p>
     <p style="margin-top: 1rem; font-size: 1rem; font-weight: bold;">
         📚 Documentation :
         <a href="DOCUMENTATION_PRESENTATION.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">📸 Présentation</a> | 

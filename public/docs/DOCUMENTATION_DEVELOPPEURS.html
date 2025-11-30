@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documentation Développeurs OTT V3.9 - HAPPLYZ MEDICAL</title>
+    <title>Documentation Développeurs OTT V3.11 - HAPPLYZ MEDICAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -530,7 +530,7 @@
 <div class="header">
     <h1>🏥 OTT - Dispositif Médical IoT</h1>
     <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
-    <div class="version-badge">Version 3.9 - Documentation Développeurs</div>
+    <div class="version-badge">Version 3.11 - Documentation Développeurs</div>
     <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
 </div>
 
@@ -572,10 +572,13 @@
     <h3>🎯 Stack Technique</h3>
     <ul>
         <li><strong>Firmware</strong> : C++ / Arduino IDE / ESP32</li>
-        <li><strong>Backend</strong> : PHP 8.2 / PostgreSQL 14</li>
-        <li><strong>Frontend</strong> : Next.js 14 / React / Tailwind CSS</li>
+        <li><strong>Backend</strong> : PHP 8.2 / PostgreSQL 15</li>
+        <li><strong>Frontend</strong> : Next.js 14 / React 18 / Tailwind CSS</li>
         <li><strong>Infrastructure</strong> : Render.com (API) + GitHub Pages (Dashboard)</li>
         <li><strong>Communication</strong> : 4G/LTE (SIM7600) + HTTPS</li>
+        <li><strong>Cache</strong> : Redis (optionnel) avec fallback mémoire</li>
+        <li><strong>Monitoring</strong> : Sentry (optionnel)</li>
+        <li><strong>Documentation API</strong> : OpenAPI 3.0 / Swagger</li>
     </ul>
 </section>
 
@@ -727,19 +730,51 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     
     
     <h3>📊 Base de Données PostgreSQL</h3>
-    <p>Le schéma comprend <strong>14 tables</strong> : devices, patients, measurements, alerts, device_logs, users, roles, permissions, etc.</p>
+    <p>Le schéma comprend <strong>16 tables</strong> : devices, patients, measurements, alerts, device_logs, users, roles, permissions, device_configurations, firmware_versions, etc.</p>
+    
+    <h3>⚡ Performance & Cache</h3>
+    <ul>
+        <li><strong>Cache Redis</strong> : Système de cache avec support Redis optionnel (variables <code>REDIS_HOST</code>, <code>REDIS_PORT</code>, <code>REDIS_PASSWORD</code>)</li>
+        <li><strong>Fallback mémoire</strong> : Si Redis n'est pas disponible, le système utilise automatiquement un cache en mémoire</li>
+        <li><strong>TTL configurable</strong> : Cache avec TTL de 30 secondes pour les listes de dispositifs</li>
+    </ul>
+    
+    <h3>📊 Monitoring & Observabilité</h3>
+    <ul>
+        <li><strong>Sentry</strong> : Intégration Sentry pour le monitoring des erreurs (variables <code>NEXT_PUBLIC_SENTRY_DSN</code>, <code>SENTRY_ORG</code>, <code>SENTRY_PROJECT</code>)</li>
+        <li><strong>Session Replay</strong> : 10% des sessions en production</li>
+        <li><strong>Performance Monitoring</strong> : 10% des transactions en production</li>
+    </ul>
+    
+    <h3>📚 Documentation API</h3>
+    <ul>
+        <li><strong>OpenAPI 3.0</strong> : Documentation complète disponible via <code>GET /api.php/docs/openapi.json</code></li>
+        <li><strong>Swagger UI</strong> : Compatible avec Swagger UI et Postman pour la visualisation</li>
+    </ul>
     
     <h3>🔐 Authentification JWT</h3>
     <p>L'API utilise <strong>JWT (JSON Web Tokens)</strong> pour l'authentification avec expiration 24h.</p>
     
     <h3>🌐 Endpoints API Principaux</h3>
     <ul>
-        <li><code>GET/POST/PUT/DELETE /api.php/devices</code> - Gestion des dispositifs</li>
-        <li><code>GET/POST/PUT/DELETE /api.php/patients</code> - Gestion des patients</li>
-        <li><code>POST /api.php/measurements</code> - Enregistrement des mesures</li>
-        <li><code>GET/POST /api.php/alerts</code> - Gestion des alertes</li>
-        <li><code>GET/POST/PUT/DELETE /api.php/users</code> - Gestion des utilisateurs (admin only)</li>
+        <li><code>GET/POST/PUT/DELETE /api.php/devices</code> - Gestion des dispositifs (avec pagination)</li>
+        <li><code>GET/POST/PUT/DELETE /api.php/patients</code> - Gestion des patients (avec pagination)</li>
+        <li><code>POST /api.php/devices/measurements</code> - Enregistrement des mesures</li>
+        <li><code>GET /api.php/alerts</code> - Gestion des alertes (avec pagination)</li>
+        <li><code>GET /api.php/commands</code> - Liste des commandes (avec pagination, admin only)</li>
+        <li><code>GET/POST/PUT/DELETE /api.php/users</code> - Gestion des utilisateurs (avec pagination, admin only)</li>
+        <li><code>GET /api.php/docs/openapi.json</code> - Documentation OpenAPI/Swagger</li>
     </ul>
+    
+    <div class="alert alert-info">
+        <strong>ℹ️ Pagination</strong><br>
+        Tous les endpoints de liste supportent maintenant la pagination avec les paramètres :
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li><code>limit</code> : Nombre d'éléments par page (défaut: 100, max: 500)</li>
+            <li><code>offset</code> : Décalage pour la pagination (défaut: 0)</li>
+            <li><code>page</code> : Numéro de page (défaut: 1)</li>
+        </ul>
+    </div>
 </section>
 
 <section id="dashboard" class="section">
@@ -1945,15 +1980,20 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h2>🚀 Roadmap & Améliorations Futures</h2>
     
     <div class="alert alert-success">
-        <strong>✅ Version 3.9 (Actuelle - 2025)</strong><br>
+        <strong>✅ Version 3.11 (Actuelle - Décembre 2025)</strong><br>
         Version actuellement déployée avec les fonctionnalités suivantes :
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li>✅ Pagination complète sur tous les endpoints de liste</li>
+            <li>✅ Cache Redis optionnel avec fallback mémoire</li>
+            <li>✅ Monitoring Sentry intégré</li>
+            <li>✅ Documentation API OpenAPI/Swagger</li>
+            <li>✅ Partage USB multi-onglets</li>
             <li>✅ PWA installable (manifest.json, service worker)</li>
             <li>✅ Streaming USB en temps réel avec UsbContext</li>
             <li>✅ Détection automatique des dispositifs USB (Web Serial API)</li>
             <li>✅ Dashboard React/Next.js complet avec authentification JWT</li>
             <li>✅ Gestion multi-utilisateurs avec permissions granulaires</li>
-            <li>✅ API REST complète avec PostgreSQL</li>
+            <li>✅ API REST complète avec PostgreSQL 15</li>
             <li>✅ Mise à jour OTA (Over-The-Air) du firmware</li>
             <li>✅ Carte interactive Leaflet avec géolocalisation</li>
             <li>✅ Système d'alertes et notifications</li>
@@ -2026,7 +2066,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
 
 <div class="footer">
     <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
-    <p>OTT - Version 3.9 Enterprise | Documentation Développeurs</p>
+    <p>OTT - Version 3.11 Enterprise | Documentation Développeurs</p>
     <p style="margin-top: 1rem; font-size: 1rem; font-weight: bold;">
         📚 Documentation :
         <a href="DOCUMENTATION_PRESENTATION.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">📸 Présentation</a> | 
