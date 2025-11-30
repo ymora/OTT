@@ -816,16 +816,16 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 } elseif(preg_match('#/notifications/process$#', $path) && $method === 'POST') {
     handleProcessNotificationsQueue();
 
-// Admin tools
-} elseif(preg_match('#^/admin/reset-demo/?$#', $path) && $method === 'POST') {
-    handleResetDemo();
-} elseif($method === 'GET' && (preg_match('#^/admin/database-view/?$#', $path) || preg_match('#/admin/database-view#', $path))) {
+// Admin tools - IMPORTANT: Routes spécifiques avant routes génériques
+} elseif($method === 'GET' && (preg_match('#^/admin/database-view/?$#', $path) || preg_match('#^/admin/database-view#', $path))) {
     // Route pour la visualisation de la base de données
     if (getenv('DEBUG_ERRORS') === 'true') {
         error_log('[ROUTER] Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
     }
     handleDatabaseView();
     exit;
+} elseif(preg_match('#^/admin/reset-demo/?$#', $path) && $method === 'POST') {
+    handleResetDemo();
 
 // Health check
 } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
