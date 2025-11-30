@@ -43,16 +43,6 @@ export default function OutilsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">🔌 Dispositifs OTT</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Gestion des firmwares, flash USB et streaming
-          </p>
-        </div>
-      </div>
-
       {/* Onglets */}
       <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="flex space-x-8">
