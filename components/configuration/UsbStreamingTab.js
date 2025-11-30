@@ -1158,12 +1158,23 @@ export default function DebugTab() {
                     const firmwareVersion = deviceUsbMeasurement?.raw?.firmware_version || deviceUsbMeasurement?.firmware_version || deviceUsbInfo?.firmware_version || deviceDbData?.firmware_version
                     const source = deviceUsbMeasurement?.firmware_version || deviceUsbInfo?.firmware_version ? 'usb' : (deviceDbData?.firmware_version ? 'database' : null)
                     const timestamp = deviceUsbMeasurement?.timestamp || deviceUsbInfo?.last_seen || deviceDbData?.last_seen
+                    const canFlash = compiledFirmwares.length > 0
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
-                          <span className={`text-xs font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
-                            {firmwareVersion || 'N/A'}
-                          </span>
+                          {canFlash ? (
+                            <button
+                              onClick={() => handleOpenFlashModal(device)}
+                              className={`text-xs font-semibold hover:underline transition-colors ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300' : 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 cursor-pointer'}`}
+                              title="Cliquer pour flasher un firmware"
+                            >
+                              {firmwareVersion || 'N/A'}
+                            </button>
+                          ) : (
+                            <span className={`text-xs font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
+                              {firmwareVersion || 'N/A'}
+                            </span>
+                          )}
                         </div>
                         {firmwareVersion && timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
