@@ -102,6 +102,33 @@ export default function OutilsPage() {
     }
   }
 
+  // États pour les filtres
+  const [searchTerm, setSearchTerm] = useState('')
+  const [assignmentFilter, setAssignmentFilter] = useState('all')
+
+  // Filtrer les dispositifs
+  const filteredDevices = useMemo(() => {
+    const needle = searchTerm.toLowerCase()
+    return allDevices.filter(d => {
+      const isVirtualUSB = d.isVirtual && d.status === 'usb_connected'
+      
+      const matchesSearch = searchTerm === '' || 
+        d.device_name?.toLowerCase().includes(needle) ||
+        d.sim_iccid?.includes(searchTerm) ||
+        `${d.first_name || ''} ${d.last_name || ''}`.toLowerCase().includes(needle) ||
+        (isVirtualUSB && (d.device_name?.toLowerCase().includes(needle) || 'usb'.includes(needle)))
+
+      const isAssigned = Boolean(d.patient_id)
+      const matchesAssignment =
+        assignmentFilter === 'all' ||
+        (assignmentFilter === 'assigned' && isAssigned) ||
+        (assignmentFilter === 'unassigned' && !isAssigned) ||
+        (isVirtualUSB && assignmentFilter === 'unassigned')
+
+      return matchesSearch && matchesAssignment
+    })
+  }, [allDevices, searchTerm, assignmentFilter])
+
   // Vérifier les permissions (admin ou technicien)
   const canAccess = user?.role_name === 'admin' || user?.role_name === 'technicien'
 
@@ -136,6 +163,39 @@ export default function OutilsPage() {
         </div>
       </div>
 
+      {/* Filtres et recherche */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex gap-2">
+          {[
+            { id: 'all', label: 'Tous' },
+            { id: 'assigned', label: 'Assignés' },
+            { id: 'unassigned', label: 'Non assignés' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setAssignmentFilter(tab.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                assignmentFilter === tab.id
+                  ? 'bg-primary-600 text-white shadow-md dark:bg-primary-500'
+                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 max-w-md">
+          <input
+            type="text"
+            placeholder="🔍 Rechercher par nom, patient, ou ICCID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+      </div>
+
       {/* Tableau des dispositifs - Visible en permanence */}
       <div className="card overflow-x-auto">
         {loading ? (
@@ -155,14 +215,16 @@ export default function OutilsPage() {
               </tr>
             </thead>
             <tbody>
-              {allDevices.length === 0 ? (
+              {filteredDevices.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-gray-500 dark:text-gray-400">
-                    Aucun dispositif trouvé
+                    {searchTerm || assignmentFilter !== 'all' 
+                      ? 'Aucun dispositif ne correspond aux filtres' 
+                      : 'Aucun dispositif trouvé'}
                   </td>
                 </tr>
               ) : (
-                allDevices.map((device) => {
+                filteredDevices.map((device) => {
                   const dataSource = createDataSourceTracker(
                     device,
                     usbConnectedDevice,
