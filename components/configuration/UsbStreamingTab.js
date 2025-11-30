@@ -507,18 +507,6 @@ export default function DebugTab() {
           </div>
         )}
 
-        {/* Message informatif si aucun dispositif */}
-        {!isConnected && !dbDeviceData && (
-          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-              ⚠️ Aucun dispositif connecté ou sélectionné
-            </p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-              Ou sélectionnez un dispositif de la base de données
-            </p>
-          </div>
-        )}
-
         {/* Tableau des données - Layout en colonnes pour réduire la hauteur */}
         <div className="mb-6 overflow-x-auto">
           <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
