@@ -751,7 +751,7 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 // Devices (API V1 compatible + V2)
 } elseif(preg_match('#/devices$#', $path) && $method === 'GET') {
     handleGetDevices();
-} elseif(preg_match('#/devices/test/create$#', $path) && $method === 'POST') {
+} elseif(preg_match('#^/devices/test/create/?$#', $path) && $method === 'POST') {
     handleCreateTestDevices();
 } elseif(preg_match('#/devices$#', $path) && $method === 'POST') {
     handleCreateDevice();
