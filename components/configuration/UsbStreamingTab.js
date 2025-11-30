@@ -1156,7 +1156,7 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
     
     // Vérifier que le dispositif est bien reconnu
     if (!isDeviceRecognized) {
-      setError('Aucun dispositif reconnu. Connectez un dispositif USB ou sélectionnez un dispositif de la base de données.')
+      setError('Connectez un dispositif USB ou sélectionnez un dispositif de la base de données.')
       return
     }
 
@@ -1477,7 +1477,7 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                       }}
                       disabled={isDisabled || saving || !isDeviceRecognized}
                       className="px-3 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      title={!isDeviceRecognized ? 'Aucun dispositif reconnu' : isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
+                      title={!isDeviceRecognized ? 'Connectez un dispositif USB ou sélectionnez un dispositif' : isConnected ? 'Appliquer via USB' : selectedDeviceId ? 'Appliquer via OTA' : 'Connectez un dispositif USB'}
                     >
                       {saving ? '⏳' : '💾 Sauvegarder'}
                     </button>
@@ -1495,9 +1495,9 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
                 }}
                 disabled={isDisabled || saving || !isDeviceRecognized}
                 className="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={!isDeviceRecognized ? 'Aucun dispositif reconnu. Connectez un dispositif USB ou sélectionnez un dispositif de la base de données.' : ''}
+                title={!isDeviceRecognized ? 'Connectez un dispositif USB ou sélectionnez un dispositif de la base de données' : ''}
               >
-                {saving ? '⏳ Sauvegarde en cours...' : !isDeviceRecognized ? '⚠️ Aucun dispositif reconnu' : isConnected ? '💾 Sauvegarder et appliquer via USB' : selectedDeviceId ? '📡 Sauvegarder et envoyer via OTA' : '⚠️ Connectez un dispositif USB'}
+                {saving ? '⏳ Sauvegarde en cours...' : isConnected ? '💾 Sauvegarder et appliquer via USB' : selectedDeviceId ? '📡 Sauvegarder et envoyer via OTA' : '⚠️ Connectez un dispositif USB'}
               </button>
             </div>
           </>
