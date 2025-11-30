@@ -703,18 +703,18 @@ export default function DebugTab() {
                   
                   return (
                     <tr key={device.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                {/* Streaming - Cliquable pour pause/reprise */}
+                {/* Streaming - Cliquable pour pause/reprise (uniquement pour le dispositif connecté) */}
                 <td 
-                  className={`px-3 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${isDisabled || isToggling ? 'cursor-not-allowed opacity-50' : ''}`}
-                  onClick={!isDisabled && !isToggling ? handleToggleStreaming : undefined}
-                  title={isDisabled ? 'Non disponible' : isToggling ? 'En cours...' : isStreaming ? 'Cliquer pour mettre en pause' : isPaused ? 'Cliquer pour reprendre' : 'Cliquer pour démarrer'}
+                  className={`px-3 py-1.5 ${isDeviceUsbConnected ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors' : ''} ${(isDisabled || isToggling) && isDeviceUsbConnected ? 'cursor-not-allowed opacity-50' : ''}`}
+                  onClick={isDeviceUsbConnected && !isDisabled && !isToggling ? handleToggleStreaming : undefined}
+                  title={isDeviceUsbConnected ? (isDisabled ? 'Non disponible' : isToggling ? 'En cours...' : isStreaming ? 'Cliquer pour mettre en pause' : isPaused ? 'Cliquer pour reprendre' : 'Cliquer pour démarrer') : 'Non connecté'}
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="text-base">
-                      {isToggling ? '⏳' : isStreaming ? '▶️' : isPaused ? '⏸️' : '⏹️'}
+                      {isDeviceUsbConnected ? (isToggling ? '⏳' : isStreaming ? '▶️' : isPaused ? '⏸️' : '⏹️') : '—'}
                     </span>
-                    <span className={`text-xs font-semibold ${isToggling ? 'text-gray-400 dark:text-gray-500' : isStreaming ? 'text-blue-600 dark:text-blue-400' : isPaused ? 'text-yellow-600 dark:text-yellow-400' : isConnected ? 'text-gray-400 dark:text-gray-500' : 'text-gray-400 dark:text-gray-500'}`}>
-                      {isToggling ? 'Chargement...' : isStreaming ? 'En cours' : isPaused ? 'En pause' : isConnected ? (usbStreamStatus === 'connecting' ? 'Connexion...' : usbStreamStatus === 'waiting' ? 'En attente...' : 'Arrêté') : 'Non connecté'}
+                    <span className={`text-xs font-semibold ${isDeviceUsbConnected ? (isToggling ? 'text-gray-400 dark:text-gray-500' : isStreaming ? 'text-blue-600 dark:text-blue-400' : isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400 dark:text-gray-500') : 'text-gray-400 dark:text-gray-500'}`}>
+                      {isDeviceUsbConnected ? (isToggling ? 'Chargement...' : isStreaming ? 'En cours' : isPaused ? 'En pause' : 'Arrêté') : '—'}
                     </span>
                   </div>
                 </td>
