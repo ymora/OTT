@@ -47,6 +47,18 @@ export default function DebugTab() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   
+  // États pour le formulaire de création
+  const [showCreateDeviceModal, setShowCreateDeviceModal] = useState(false)
+  const [creatingDevice, setCreatingDevice] = useState(false)
+  const [deviceFormData, setDeviceFormData] = useState({
+    sim_iccid: '',
+    device_serial: '',
+    device_name: '',
+    status: 'inactive',
+    patient_id: null
+  })
+  const [deviceFormError, setDeviceFormError] = useState(null)
+  
   const [availablePorts, setAvailablePorts] = useState([])
   const [selectedPortId, setSelectedPortId] = useState('')
   const [loadingPorts, setLoadingPorts] = useState(false)
@@ -568,6 +580,48 @@ export default function DebugTab() {
       setCreatingTestDevices(false)
     }
   }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
+  
+  // Gérer la création d'un dispositif
+  const handleCreateDevice = useCallback(async () => {
+    setCreatingDevice(true)
+    setDeviceFormError(null)
+    try {
+      const url = `${API_URL}/api.php/devices`
+      const response = await fetchWithAuth(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deviceFormData)
+      }, { requiresAuth: true })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
+      }
+      
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.error || 'Erreur API')
+      }
+      
+      logger.log(`✅ Dispositif créé: ${data.device?.device_name || data.device?.sim_iccid}`)
+      appendUsbStreamLog(`✅ Dispositif créé: ${data.device?.device_name || data.device?.sim_iccid}`, 'dashboard')
+      setShowCreateDeviceModal(false)
+      setDeviceFormData({
+        sim_iccid: '',
+        device_serial: '',
+        device_name: '',
+        status: 'inactive',
+        patient_id: null
+      })
+      refetchDevices()
+    } catch (err) {
+      logger.error('Erreur création dispositif:', err)
+      setDeviceFormError(err.message || 'Erreur lors de la création du dispositif')
+      appendUsbStreamLog(`❌ Erreur création dispositif: ${err.message || err}`, 'dashboard')
+    } finally {
+      setCreatingDevice(false)
+    }
+  }, [fetchWithAuth, API_URL, deviceFormData, appendUsbStreamLog, refetchDevices])
 
   return (
     <div className="space-y-6">
