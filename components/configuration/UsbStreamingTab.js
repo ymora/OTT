@@ -538,7 +538,7 @@ export default function DebugTab() {
       const response = await fetchJson(
         fetchWithAuth,
         API_URL,
-        '/api.php/devices/test/create',
+        '/devices/test/create',
         { method: 'POST' },
         { requiresAuth: true }
       )
@@ -1111,34 +1111,47 @@ export default function DebugTab() {
           />
         </div>
 
-        {/* Console de logs */}
-        <div 
-          className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 p-4 shadow-inner overflow-y-auto" 
-          style={{ minHeight: '500px', maxHeight: '600px' }}
-        >
-          {usbStreamLogs.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-gray-500">
-              <span className="text-4xl">📡</span>
-              <p className="font-medium">En attente de logs USB...</p>
-            </div>
-          ) : (
-            <div className="space-y-1 font-mono text-sm tracking-tight">
-              {[...usbStreamLogs].reverse().map((log) => {
-                const isDashboard = log.source === 'dashboard'
-                return (
-                <div key={log.id} className="whitespace-pre-wrap">
-                  <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
-                    <span className={isDashboard 
-                      ? 'text-blue-400 dark:text-blue-300' 
-                      : 'text-green-400 dark:text-green-300'
-                    }>
-                      {log.line}
-                    </span>
-                </div>
-                )
-              })}
-            </div>
-          )}
+        {/* Console de logs USB */}
+        <div className="mb-6">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              📡 Console de Logs USB
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Logs en temps réel du streaming USB et des actions du dashboard
+            </p>
+          </div>
+          <div 
+            className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 p-4 shadow-inner overflow-y-auto" 
+            style={{ minHeight: '500px', maxHeight: '600px' }}
+          >
+            {usbStreamLogs.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-gray-500">
+                <span className="text-4xl">📡</span>
+                <p className="font-medium">En attente de logs USB...</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Connectez un dispositif USB et démarrez le streaming pour voir les logs
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1 font-mono text-sm tracking-tight">
+                {[...usbStreamLogs].reverse().map((log) => {
+                  const isDashboard = log.source === 'dashboard'
+                  return (
+                  <div key={log.id} className="whitespace-pre-wrap">
+                    <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
+                      <span className={isDashboard 
+                        ? 'text-blue-400 dark:text-blue-300' 
+                        : 'text-green-400 dark:text-green-300'
+                      }>
+                        {log.line}
+                      </span>
+                  </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
       </div>
