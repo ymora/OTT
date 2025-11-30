@@ -2,24 +2,24 @@
 
 /**
  * Composant Modal réutilisable avec style unifié
- * Utilise le même style que les modaux de la page patients
+ * Style cohérent pour tous les modals de l'application
  */
 export default function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' }) {
   if (!isOpen) return null
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div 
-        className={`bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg p-6 ${maxWidth} w-full mx-4`}
+        className={`bg-white dark:bg-slate-800 rounded-xl shadow-2xl ${maxWidth} w-full mx-4 p-6`}
         onClick={(e) => e.stopPropagation()}
       >
         {(title || onClose) && (
           <div className="flex items-center justify-between mb-4">
             {title && (
-              <h2 className="text-xl font-bold">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                 {title}
               </h2>
             )}
@@ -35,7 +35,9 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = 'ma
             )}
           </div>
         )}
-        {children}
+        <div className="text-gray-700 dark:text-gray-300">
+          {children}
+        </div>
       </div>
     </div>
   )

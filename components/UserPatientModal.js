@@ -537,17 +537,25 @@ export default function UserPatientModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 dark:bg-black/60 z-[100] flex items-center justify-center p-4 overflow-y-auto backdrop-blur-sm">
-      <div className="bg-gradient-to-br from-white to-gray-50/80 dark:from-slate-800/95 dark:to-slate-800/80 rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 animate-scale-in my-8 backdrop-blur-md border border-gray-200/50 dark:border-slate-700/50">
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 overflow-y-auto backdrop-blur-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 my-8">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
               {editingItem ? `Modifier le ${type === 'user' ? 'utilisateur' : 'patient'}` : `Nouveau ${type === 'user' ? 'utilisateur' : 'patient'}`}
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               {editingItem ? (editingItem.email || `${editingItem.first_name} ${editingItem.last_name}`) : `Créer un ${type === 'user' ? 'accès avec un rôle défini' : 'nouveau patient'}`}
             </p>
           </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            title="Fermer"
+            aria-label="Fermer"
+          >
+            <span className="text-2xl font-bold leading-none">×</span>
+          </button>
           <button 
             className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" 
             onClick={onClose} 
