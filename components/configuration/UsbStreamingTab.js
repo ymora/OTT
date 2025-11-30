@@ -572,6 +572,120 @@ export default function DebugTab() {
   return (
     <div className="space-y-6">
       {/* Modal de confirmation de suppression */}
+      {/* Modal de création de dispositif */}
+      <Modal
+        isOpen={showCreateDeviceModal}
+        onClose={() => {
+          setShowCreateDeviceModal(false)
+          setDeviceFormData({
+            sim_iccid: '',
+            device_serial: '',
+            device_name: '',
+            status: 'inactive',
+            patient_id: null
+          })
+          setDeviceFormError(null)
+        }}
+        title="➕ Créer un nouveau dispositif"
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-4">
+          {deviceFormError && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-800 dark:text-red-300">{deviceFormError}</p>
+            </div>
+          )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Nom du dispositif *
+              </label>
+              <input
+                type="text"
+                value={deviceFormData.device_name}
+                onChange={(e) => setDeviceFormData({ ...deviceFormData, device_name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Ex: Dispositif OTT-001"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                SIM ICCID
+              </label>
+              <input
+                type="text"
+                value={deviceFormData.sim_iccid}
+                onChange={(e) => setDeviceFormData({ ...deviceFormData, sim_iccid: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Ex: 89314404000012345678"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Minimum 10 caractères si renseigné
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Numéro de série
+              </label>
+              <input
+                type="text"
+                value={deviceFormData.device_serial}
+                onChange={(e) => setDeviceFormData({ ...deviceFormData, device_serial: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Ex: ESP32-001"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Statut
+              </label>
+              <select
+                value={deviceFormData.status}
+                onChange={(e) => setDeviceFormData({ ...deviceFormData, status: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="inactive">Inactif</option>
+                <option value="active">Actif</option>
+                <option value="maintenance">Maintenance</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => {
+                setShowCreateDeviceModal(false)
+                setDeviceFormData({
+                  sim_iccid: '',
+                  device_serial: '',
+                  device_name: '',
+                  status: 'inactive',
+                  patient_id: null
+                })
+                setDeviceFormError(null)
+              }}
+              className="btn-secondary"
+              disabled={creatingDevice}
+            >
+              Annuler
+            </button>
+            <button
+              onClick={handleCreateDevice}
+              disabled={creatingDevice || !deviceFormData.device_name.trim()}
+              className="btn-primary"
+            >
+              {creatingDevice ? '⏳ Création...' : '✅ Créer'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+      
+      {/* Modal de confirmation de suppression */}
       <Modal
         isOpen={showDeleteModal}
         onClose={() => {
@@ -658,18 +772,27 @@ export default function DebugTab() {
 
         {/* Tableau des données - Affiche tous les dispositifs - TOUJOURS VISIBLE */}
         <div className="mb-6">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-              📊 Tableau des Dispositifs
-              {!devicesLoading && allDevices.length === 0 && (
-                <span className="ml-3 text-base font-normal text-gray-500 dark:text-gray-400">
-                  (Aucun dispositif trouvé dans la base de données)
-                </span>
-              )}
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Tous les dispositifs de la base de données avec leurs données en temps réel (USB) ou depuis la base de données
-            </p>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                📊 Tableau des Dispositifs
+                {!devicesLoading && allDevices.length === 0 && (
+                  <span className="ml-3 text-base font-normal text-gray-500 dark:text-gray-400">
+                    (Aucun dispositif trouvé dans la base de données)
+                  </span>
+                )}
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Tous les dispositifs de la base de données avec leurs données en temps réel (USB) ou depuis la base de données
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCreateDeviceModal(true)}
+              className="btn-primary"
+              title="Créer un nouveau dispositif"
+            >
+              ➕ Nouveau Dispositif
+            </button>
           </div>
           <div className="overflow-x-auto">
             {devicesLoading ? (
@@ -1126,37 +1249,35 @@ export default function DebugTab() {
         <div className="mb-6">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  📡 Console de Logs USB
-                </h2>
-                {/* Statut USB à droite du titre */}
-                <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-semibold text-gray-700 dark:text-gray-300">Statut USB:</span>
-                    <span className={`px-2 py-0.5 rounded font-medium ${
-                      isConnected 
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'
-                    }`}>
-                      {isConnected ? '🔌 Connecté' : '⚪ Non connecté'}
-                    </span>
-                    {usbDeviceInfo && (
-                      <span className="text-gray-600 dark:text-gray-400">
-                        {usbDeviceInfo.device_name || usbDeviceInfo.sim_iccid || usbDeviceInfo.device_serial || 'Dispositif USB'}
-                      </span>
-                    )}
-                    {usbVirtualDevice && !usbDeviceInfo && (
-                      <span className="text-orange-600 dark:text-orange-400">
-                        Dispositif virtuel: {usbVirtualDevice.device_name || usbVirtualDevice.sim_iccid || usbVirtualDevice.device_serial}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                📡 Console de Logs USB
+              </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Logs en temps réel du streaming USB et des actions du dashboard
               </p>
+            </div>
+            {/* Statut USB aligné à droite */}
+            <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-semibold text-gray-700 dark:text-gray-300">Statut USB:</span>
+                <span className={`px-2 py-0.5 rounded font-medium ${
+                  isConnected 
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'
+                }`}>
+                  {isConnected ? '🔌 Connecté' : '⚪ Non connecté'}
+                </span>
+                {usbDeviceInfo && (
+                  <span className="text-gray-600 dark:text-gray-400">
+                    {usbDeviceInfo.device_name || usbDeviceInfo.sim_iccid || usbDeviceInfo.device_serial || 'Dispositif USB'}
+                  </span>
+                )}
+                {usbVirtualDevice && !usbDeviceInfo && (
+                  <span className="text-orange-600 dark:text-orange-400">
+                    Dispositif virtuel: {usbVirtualDevice.device_name || usbVirtualDevice.sim_iccid || usbVirtualDevice.device_serial}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div 
