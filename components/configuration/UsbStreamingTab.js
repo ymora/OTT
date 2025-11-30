@@ -548,18 +548,18 @@ export default function DebugTab() {
       }
       
       if (response.success) {
-        logger.log(`✅ ${response.message}`)
-        appendUsbStreamLog(`✅ ${response.message}`, 'dashboard')
-        if (response.errors && response.errors.length > 0) {
-          response.errors.forEach(err => {
+        logger.log(`✅ ${data.message}`)
+        appendUsbStreamLog(`✅ ${data.message}`, 'dashboard')
+        if (data.errors && data.errors.length > 0) {
+          data.errors.forEach(err => {
             appendUsbStreamLog(`⚠️ ${err}`, 'dashboard')
           })
         }
         // Recharger la liste des dispositifs
         refetchDevices()
       } else {
-        logger.error('Erreur création dispositifs fictifs:', response.error)
-        appendUsbStreamLog(`❌ Erreur: ${response.error}`, 'dashboard')
+        logger.error('Erreur création dispositifs fictifs:', data.error)
+        appendUsbStreamLog(`❌ Erreur: ${data.error}`, 'dashboard')
       }
     } catch (err) {
       logger.error('Erreur création dispositifs fictifs:', err)
