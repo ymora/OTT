@@ -687,73 +687,87 @@ export default function DebugTab() {
           setShowAssignPatientModal(false)
           setDeviceToAssign(null)
         }}
-        title="Assigner un patient au dispositif"
+        title={deviceToAssign ? `🔗 Assigner un patient à ${deviceToAssign.device_name || deviceToAssign.sim_iccid || deviceToAssign.device_serial || `Dispositif #${deviceToAssign.id}`}` : 'Assigner un patient au dispositif'}
         maxWidth="max-w-md"
       >
-        <div className="space-y-4">
-          {deviceToAssign && (
-            <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                <strong>Dispositif:</strong> {deviceToAssign.device_name || deviceToAssign.sim_iccid || deviceToAssign.device_serial || `Dispositif #${deviceToAssign.id}`}
-              </p>
-            </div>
-          )}
-          
-          {patientsLoading ? (
-            <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-              Chargement des patients...
-            </div>
-          ) : availablePatients.length === 0 ? (
-            <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-              <p className="text-sm">Aucun patient disponible</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Tous les patients ont déjà un dispositif assigné
-              </p>
-            </div>
-          ) : (
-            <div className="max-h-64 overflow-y-auto space-y-2">
-              {availablePatients.map((patient) => (
+        {deviceToAssign && (
+          <>
+            {patientsLoading ? (
+              <div className="text-center py-4">
+                <p className="text-gray-600 dark:text-gray-400">
+                  Chargement des patients...
+                </p>
+              </div>
+            ) : availablePatients.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-gray-600 dark:text-gray-400 mb-4">
+                  Aucun patient disponible
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-500 mb-4">
+                  Tous les patients ont déjà un dispositif assigné
+                </p>
                 <button
-                  key={patient.id}
-                  onClick={() => handleAssignPatient(patient.id)}
-                  disabled={assigningPatient}
-                  className="w-full text-left px-4 py-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowAssignPatientModal(false)
+                    setDeviceToAssign(null)
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {patient.first_name} {patient.last_name}
-                      </p>
-                      {patient.email && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                          {patient.email}
-                        </p>
-                      )}
-                    </div>
-                    {assigningPatient ? (
-                      <span className="text-gray-400">⏳</span>
-                    ) : (
-                      <span className="text-primary-500">→</span>
-                    )}
-                  </div>
+                  Fermer
                 </button>
-              ))}
-            </div>
-          )}
-          
-          <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => {
-                setShowAssignPatientModal(false)
-                setDeviceToAssign(null)
-              }}
-              className="btn-secondary"
-              disabled={assigningPatient}
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    Sélectionner un patient libre :
+                  </label>
+                  <select
+                    id="patient-select"
+                    className="input w-full"
+                    defaultValue=""
+                  >
+                    <option value="">— Sélectionner un patient —</option>
+                    {availablePatients.map(patient => (
+                      <option key={patient.id} value={patient.id}>
+                        {patient.first_name} {patient.last_name} {patient.email ? `(${patient.email})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <button
+                    className="btn-secondary"
+                    onClick={() => {
+                      setShowAssignPatientModal(false)
+                      setDeviceToAssign(null)
+                    }}
+                    disabled={assigningPatient}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      const select = document.getElementById('patient-select')
+                      const patientId = select ? parseInt(select.value, 10) : null
+                      if (patientId) {
+                        handleAssignPatient(patientId)
+                      } else {
+                        logger.warn('Veuillez sélectionner un patient')
+                        appendUsbStreamLog('⚠️ Veuillez sélectionner un patient', 'dashboard')
+                      }
+                    }}
+                    disabled={assigningPatient}
+                  >
+                    {assigningPatient ? '⏳ Assignation...' : '🔗 Assigner'}
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        )}
       </Modal>
       
       {/* Modal de confirmation de suppression */}
