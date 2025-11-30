@@ -484,8 +484,221 @@ export default function DebugTab() {
     </tr>
   )
 
+  // Fonction pour supprimer un dispositif
+  const handleDeleteDevice = useCallback(async (device, skipConfirm = false) => {
+    // Si le dispositif est assigné et qu'on ne skip pas la confirmation, afficher la modal
+    if (device.patient_id && !skipConfirm) {
+      setDeviceToDelete(device)
+      setShowDeleteModal(true)
+      return
+    }
+    
+    // Suppression directe si non assigné ou confirmation validée
+    setDeleting(true)
+    try {
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${device.id}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      
+      if (response.success) {
+        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé avec succès`)
+        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé`, 'dashboard')
+        // Recharger la liste des dispositifs
+        refetchDevices()
+        setShowDeleteModal(false)
+        setDeviceToDelete(null)
+      } else {
+        logger.error('Erreur suppression dispositif:', response.error)
+        appendUsbStreamLog(`❌ Erreur suppression: ${response.error}`, 'dashboard')
+      }
+    } catch (err) {
+      logger.error('Erreur suppression dispositif:', err)
+      appendUsbStreamLog(`❌ Erreur suppression: ${err.message || err}`, 'dashboard')
+    } finally {
+      setDeleting(false)
+    }
+  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
+  
+  // Confirmer la suppression depuis la modal
+  const confirmDelete = useCallback(() => {
+    if (deviceToDelete) {
+      handleDeleteDevice(deviceToDelete, true)
+    }
+  }, [deviceToDelete, handleDeleteDevice])
+
   return (
     <div className="space-y-6">
+      {/* Tableau de tous les dispositifs en haut */}
+      <div className="card">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <span>📱</span>
+            Tous les dispositifs
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Sélectionnez un dispositif pour le mettre à jour via OTA ou supprimez-le
+          </p>
+        </div>
+        
+        {devicesLoading ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            Chargement des dispositifs...
+          </div>
+        ) : allDevices.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            Aucun dispositif trouvé
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dispositif</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Statut</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dernier contact</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allDevices.map((device) => {
+                  const isUsbConnected = isConnected && (
+                    usbDeviceInfo?.sim_iccid === device.sim_iccid ||
+                    usbDeviceInfo?.device_serial === device.device_serial
+                  )
+                  const isUsbVirtual = usbVirtualDevice && (
+                    usbVirtualDevice.sim_iccid === device.sim_iccid ||
+                    usbVirtualDevice.device_serial === device.device_serial
+                  )
+                  
+                  return (
+                    <tr 
+                      key={device.id} 
+                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
+                            {device.device_name || device.sim_iccid || device.device_serial || `Dispositif #${device.id}`}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                            {device.sim_iccid || device.device_serial || 'N/A'}
+                          </span>
+                          {(isUsbConnected || isUsbVirtual) && (
+                            <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
+                              isUsbConnected 
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
+                            }`}>
+                              {isUsbConnected ? '🔌 USB connecté' : '🔌 USB - Non enregistré'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {device.first_name && device.last_name ? (
+                          <span className="badge badge-success text-xs">
+                            {device.first_name} {device.last_name}
+                          </span>
+                        ) : (
+                          <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs">
+                            Non assigné
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-sm text-gray-700 dark:text-gray-300">
+                          {device.firmware_version || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`badge ${
+                          device.status === 'active' 
+                            ? 'badge-success' 
+                            : device.status === 'maintenance'
+                            ? 'badge-warning'
+                            : 'badge-error'
+                        } text-xs`}>
+                          {device.status || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {device.last_seen ? formatTime(device.last_seen) : 'Jamais'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => handleDeleteDevice(device)}
+                          disabled={deleting}
+                          className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
+                        >
+                          {deleting ? '⏳' : '🗑️ Supprimer'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal de confirmation de suppression */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setDeviceToDelete(null)
+        }}
+        title="Confirmer la suppression"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700 dark:text-gray-300">
+            Êtes-vous sûr de vouloir supprimer le dispositif <strong>{deviceToDelete?.device_name || deviceToDelete?.sim_iccid}</strong> ?
+          </p>
+          
+          {deviceToDelete?.patient_id && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                ⚠️ <strong>Attention :</strong> Ce dispositif est assigné au patient <strong>{deviceToDelete?.first_name} {deviceToDelete?.last_name}</strong>.
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-400 mt-2">
+                Le dispositif sera désassigné automatiquement avant suppression.
+              </p>
+            </div>
+          )}
+          
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => {
+                setShowDeleteModal(false)
+                setDeviceToDelete(null)
+              }}
+              disabled={deleting}
+              className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deleting ? '⏳ Suppression...' : '🗑️ Supprimer'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <div className="card">
         {!isSupported && (
           <div className="alert alert-warning mb-4">
