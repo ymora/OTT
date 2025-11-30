@@ -90,7 +90,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.7-debug-mode"
+#define FIRMWARE_VERSION_STR "3.8-unified"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
