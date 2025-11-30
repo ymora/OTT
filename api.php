@@ -508,8 +508,10 @@ function parseRequestPath() {
         $path = parse_url($requestUri, PHP_URL_PATH);
     }
     
-    // Normaliser le path
+    // Normaliser le path : supprimer les espaces, normaliser les slashes
+    $path = trim($path);
     $path = '/' . ltrim($path, '/');
+    $path = rtrim($path, '/'); // Supprimer trailing slash sauf pour la racine
     if ($path === '/') {
         $path = '';
     }
@@ -824,7 +826,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleProcessNotificationsQueue();
 
 // Admin tools - IMPORTANT: Routes spécifiques avant routes génériques
-} elseif($method === 'GET' && preg_match('#^/admin/database-view#', $path)) {
+// Route database-view - doit être très tôt pour éviter les conflits
+} elseif($method === 'GET' && ($path === '/admin/database-view' || preg_match('#^/admin/database-view/?$#', $path))) {
     // Route pour la visualisation de la base de données
     error_log('[ROUTER] ✅ Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
     handleDatabaseView();
