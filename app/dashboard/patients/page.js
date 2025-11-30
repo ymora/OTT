@@ -570,6 +570,54 @@ export default function PatientsPage() {
           </>
         )}
       </Modal>
+
+      {/* Modal de confirmation de suppression de patient avec dispositif assigné */}
+      <Modal
+        isOpen={showDeletePatientModal}
+        onClose={() => {
+          setShowDeletePatientModal(false)
+          setPatientToDelete(null)
+        }}
+        title="Confirmer la suppression"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700 dark:text-gray-300">
+            Êtes-vous sûr de vouloir supprimer le patient <strong>{patientToDelete?.first_name} {patientToDelete?.last_name}</strong> ?
+          </p>
+          
+          {patientToDelete && devices.some(d => d.patient_id === patientToDelete.id) && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                ⚠️ <strong>Attention :</strong> Ce patient a un dispositif assigné.
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-400 mt-2">
+                Le dispositif sera désassigné automatiquement avant suppression.
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              onClick={() => {
+                setShowDeletePatientModal(false)
+                setPatientToDelete(null)
+              }}
+              className="btn-secondary"
+              disabled={deleteLoading}
+            >
+              Annuler
+            </button>
+            <button
+              onClick={confirmDeletePatient}
+              className="btn-danger"
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? '⏳ Suppression...' : '🗑️ Supprimer'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
