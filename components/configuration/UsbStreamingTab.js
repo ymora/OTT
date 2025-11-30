@@ -1410,15 +1410,14 @@ export default function DebugTab() {
                 {/* Actions */}
                 <td className="px-3 py-1.5">
                   <div className="flex items-center justify-end gap-2">
-                    {compiledFirmwares.length > 0 && (
-                      <button
-                        onClick={() => handleOpenFlashModal(device)}
-                        className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
-                        title="Flasher le firmware"
-                      >
-                        <span className="text-lg">🚀</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleOpenFlashModal(device)}
+                      disabled={compiledFirmwares.length === 0}
+                      className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={compiledFirmwares.length === 0 ? 'Aucun firmware compilé disponible. Compilez d\'abord un firmware dans l\'onglet "Upload INO".' : 'Flasher le firmware'}
+                    >
+                      <span className="text-lg">🚀</span>
+                    </button>
                     <button
                       onClick={() => handleDeleteDevice(device)}
                       disabled={deleting}
