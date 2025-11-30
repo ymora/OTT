@@ -532,125 +532,6 @@ export default function DebugTab() {
 
   return (
     <div className="space-y-6">
-      {/* Tableau de tous les dispositifs en haut */}
-      <div className="card">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <span>📱</span>
-            Tous les dispositifs
-          </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Sélectionnez un dispositif pour le mettre à jour via OTA ou supprimez-le
-          </p>
-        </div>
-        
-        {devicesLoading ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            Chargement des dispositifs...
-          </div>
-        ) : allDevices.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            Aucun dispositif trouvé
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dispositif</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Statut</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dernier contact</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allDevices.map((device) => {
-                  const isUsbConnected = isConnected && (
-                    usbDeviceInfo?.sim_iccid === device.sim_iccid ||
-                    usbDeviceInfo?.device_serial === device.device_serial
-                  )
-                  const isUsbVirtual = usbVirtualDevice && (
-                    usbVirtualDevice.sim_iccid === device.sim_iccid ||
-                    usbVirtualDevice.device_serial === device.device_serial
-                  )
-                  
-                  return (
-                    <tr 
-                      key={device.id} 
-                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-semibold text-gray-900 dark:text-gray-100">
-                            {device.device_name || device.sim_iccid || device.device_serial || `Dispositif #${device.id}`}
-                          </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                            {device.sim_iccid || device.device_serial || 'N/A'}
-                          </span>
-                          {(isUsbConnected || isUsbVirtual) && (
-                            <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
-                              isUsbConnected 
-                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                                : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
-                            }`}>
-                              {isUsbConnected ? '🔌 USB connecté' : '🔌 USB - Non enregistré'}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {device.first_name && device.last_name ? (
-                          <span className="badge badge-success text-xs">
-                            {device.first_name} {device.last_name}
-                          </span>
-                        ) : (
-                          <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs">
-                            Non assigné
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-sm text-gray-700 dark:text-gray-300">
-                          {device.firmware_version || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`badge ${
-                          device.status === 'active' 
-                            ? 'badge-success' 
-                            : device.status === 'maintenance'
-                            ? 'badge-warning'
-                            : 'badge-error'
-                        } text-xs`}>
-                          {device.status || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {device.last_seen ? formatTime(device.last_seen) : 'Jamais'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleDeleteDevice(device)}
-                          disabled={deleting}
-                          className="px-3 py-1.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
-                        >
-                          {deleting ? '⏳' : '🗑️ Supprimer'}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
       {/* Modal de confirmation de suppression */}
       <Modal
         isOpen={showDeleteModal}
@@ -733,26 +614,53 @@ export default function DebugTab() {
           </div>
         )}
 
-        {/* Tableau des données - Layout en colonnes pour réduire la hauteur */}
+        {/* Tableau des données - Affiche tous les dispositifs */}
         <div className="mb-6 overflow-x-auto">
-          <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Identifiant</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Modem</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">GPS</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Débit</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Batterie</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">RSSI</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Mesures</th>
-                <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dernière mise à jour</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+          {devicesLoading ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              Chargement des dispositifs...
+            </div>
+          ) : allDevices.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              Aucun dispositif trouvé
+            </div>
+          ) : (
+            <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Identifiant</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Modem</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">GPS</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Débit</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Batterie</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">RSSI</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Mesures</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dernière mise à jour</th>
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allDevices.map((device) => {
+                  // Vérifier si ce dispositif est connecté en USB
+                  const isDeviceUsbConnected = isConnected && (
+                    usbDeviceInfo?.sim_iccid === device.sim_iccid ||
+                    usbDeviceInfo?.device_serial === device.device_serial
+                  )
+                  const isDeviceUsbVirtual = usbVirtualDevice && (
+                    usbVirtualDevice.sim_iccid === device.sim_iccid ||
+                    usbVirtualDevice.device_serial === device.device_serial
+                  )
+                  
+                  // Utiliser les données USB si ce dispositif est connecté, sinon DB
+                  const deviceUsbInfo = isDeviceUsbConnected ? usbDeviceInfo : null
+                  const deviceUsbMeasurement = isDeviceUsbConnected ? usbStreamLastMeasurement : null
+                  const deviceDbData = device
+                  
+                  return (
+                    <tr key={device.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                 {/* Streaming - Cliquable pour pause/reprise */}
                 <td 
                   className={`px-3 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${isDisabled || isToggling ? 'cursor-not-allowed opacity-50' : ''}`}
