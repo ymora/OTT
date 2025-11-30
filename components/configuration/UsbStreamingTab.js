@@ -689,6 +689,12 @@ export default function DebugTab() {
     const assignedPatientIds = new Set(allDevices.filter(d => d.patient_id).map(d => d.patient_id))
     return allPatients.filter(p => !assignedPatientIds.has(p.id))
   }, [allPatients, allDevices])
+  
+  // Gérer l'ouverture du modal de flash
+  const handleOpenFlashModal = useCallback((device) => {
+    setDeviceToFlash(device)
+    setShowFlashModal(true)
+  }, [])
 
   return (
     <div className="space-y-6">
