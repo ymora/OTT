@@ -185,6 +185,94 @@ function handleCreateDevice() {
     }
 }
 
+function handleCreateTestDevices() {
+    global $pdo;
+    requirePermission('devices.edit');
+    
+    try {
+        $testDevices = [
+            [
+                'sim_iccid' => 'TEST-ICCID-001',
+                'device_serial' => 'TEST-SERIAL-001',
+                'device_name' => 'Dispositif Test 1',
+                'firmware_version' => 'v3.0-rebuild',
+                'status' => 'active'
+            ],
+            [
+                'sim_iccid' => 'TEST-ICCID-002',
+                'device_serial' => 'TEST-SERIAL-002',
+                'device_name' => 'Dispositif Test 2',
+                'firmware_version' => 'v3.0-rebuild',
+                'status' => 'active'
+            ]
+        ];
+        
+        $created = [];
+        $errors = [];
+        
+        foreach ($testDevices as $testDevice) {
+            try {
+                // Vérifier si le dispositif existe déjà
+                $checkStmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :sim_iccid AND deleted_at IS NULL");
+                $checkStmt->execute(['sim_iccid' => $testDevice['sim_iccid']]);
+                if ($checkStmt->fetch()) {
+                    $errors[] = "Dispositif {$testDevice['sim_iccid']} existe déjà";
+                    continue;
+                }
+                
+                // Créer le dispositif
+                $stmt = $pdo->prepare("
+                    INSERT INTO devices (sim_iccid, device_serial, device_name, firmware_version, status, patient_id, installation_date, first_use_date)
+                    VALUES (:sim_iccid, :device_serial, :device_name, :firmware_version, :status, NULL, NULL, NULL)
+                    RETURNING *
+                ");
+                $stmt->execute([
+                    'sim_iccid' => $testDevice['sim_iccid'],
+                    'device_serial' => $testDevice['device_serial'],
+                    'device_name' => $testDevice['device_name'],
+                    'firmware_version' => $testDevice['firmware_version'],
+                    'status' => $testDevice['status']
+                ]);
+                $device = $stmt->fetch();
+                
+                // Créer la configuration par défaut
+                $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id) ON CONFLICT (device_id) DO NOTHING")
+                    ->execute(['device_id' => $device['id']]);
+                
+                auditLog('device.created', 'device', $device['id'], null, $device);
+                $created[] = $device;
+            } catch(PDOException $e) {
+                if ($e->getCode() === '23505') {
+                    $errors[] = "Dispositif {$testDevice['sim_iccid']} existe déjà (contrainte unique)";
+                } else {
+                    $errors[] = "Erreur création {$testDevice['sim_iccid']}: " . $e->getMessage();
+                }
+            }
+        }
+        
+        if (count($created) > 0) {
+            echo json_encode([
+                'success' => true,
+                'message' => count($created) . ' dispositif(s) fictif(s) créé(s)',
+                'devices' => $created,
+                'errors' => count($errors) > 0 ? $errors : null
+            ]);
+        } else {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Aucun dispositif créé',
+                'errors' => $errors
+            ]);
+        }
+    } catch(Exception $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleCreateTestDevices] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
 function handleUpdateDevice($device_id) {
     global $pdo;
     requirePermission('devices.edit');

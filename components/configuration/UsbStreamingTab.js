@@ -529,6 +529,41 @@ export default function DebugTab() {
       handleDeleteDevice(deviceToDelete, true)
     }
   }, [deviceToDelete, handleDeleteDevice])
+  
+  // Créer les dispositifs fictifs
+  const [creatingTestDevices, setCreatingTestDevices] = useState(false)
+  const handleCreateTestDevices = useCallback(async () => {
+    setCreatingTestDevices(true)
+    try {
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        '/api.php/devices/test/create',
+        { method: 'POST' },
+        { requiresAuth: true }
+      )
+      
+      if (response.success) {
+        logger.log(`✅ ${response.message}`)
+        appendUsbStreamLog(`✅ ${response.message}`, 'dashboard')
+        if (response.errors && response.errors.length > 0) {
+          response.errors.forEach(err => {
+            appendUsbStreamLog(`⚠️ ${err}`, 'dashboard')
+          })
+        }
+        // Recharger la liste des dispositifs
+        refetchDevices()
+      } else {
+        logger.error('Erreur création dispositifs fictifs:', response.error)
+        appendUsbStreamLog(`❌ Erreur: ${response.error}`, 'dashboard')
+      }
+    } catch (err) {
+      logger.error('Erreur création dispositifs fictifs:', err)
+      appendUsbStreamLog(`❌ Erreur: ${err.message || err}`, 'dashboard')
+    } finally {
+      setCreatingTestDevices(false)
+    }
+  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
 
   return (
     <div className="space-y-6">
@@ -614,6 +649,28 @@ export default function DebugTab() {
           </div>
         )}
 
+        {/* Bouton pour créer les dispositifs fictifs */}
+        <div className="mb-4 flex justify-end">
+          <button
+            onClick={handleCreateTestDevices}
+            disabled={creatingTestDevices}
+            className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            title="Créer deux dispositifs fictifs pour les tests (TEST-ICCID-001 et TEST-ICCID-002)"
+          >
+            {creatingTestDevices ? (
+              <>
+                <span>⏳</span>
+                <span>Création...</span>
+              </>
+            ) : (
+              <>
+                <span>➕</span>
+                <span>Créer dispositifs fictifs</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Tableau des données - Affiche tous les dispositifs */}
         <div className="mb-6 overflow-x-auto">
           {devicesLoading ? (
@@ -622,7 +679,14 @@ export default function DebugTab() {
             </div>
           ) : allDevices.length === 0 ? (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              Aucun dispositif trouvé
+              <p className="mb-4">Aucun dispositif trouvé</p>
+              <button
+                onClick={handleCreateTestDevices}
+                disabled={creatingTestDevices}
+                className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creatingTestDevices ? '⏳ Création...' : '➕ Créer dispositifs fictifs'}
+              </button>
             </div>
           ) : (
             <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
