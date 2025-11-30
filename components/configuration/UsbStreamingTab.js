@@ -1124,37 +1124,39 @@ export default function DebugTab() {
 
         {/* Console de logs USB */}
         <div className="mb-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                📡 Console de Logs USB
-              </h2>
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  📡 Console de Logs USB
+                </h2>
+                {/* Statut USB à droite du titre */}
+                <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Statut USB:</span>
+                    <span className={`px-2 py-0.5 rounded font-medium ${
+                      isConnected 
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'
+                    }`}>
+                      {isConnected ? '🔌 Connecté' : '⚪ Non connecté'}
+                    </span>
+                    {usbDeviceInfo && (
+                      <span className="text-gray-600 dark:text-gray-400">
+                        {usbDeviceInfo.device_name || usbDeviceInfo.sim_iccid || usbDeviceInfo.device_serial || 'Dispositif USB'}
+                      </span>
+                    )}
+                    {usbVirtualDevice && !usbDeviceInfo && (
+                      <span className="text-orange-600 dark:text-orange-400">
+                        Dispositif virtuel: {usbVirtualDevice.device_name || usbVirtualDevice.sim_iccid || usbVirtualDevice.device_serial}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Logs en temps réel du streaming USB et des actions du dashboard
               </p>
-            </div>
-            {/* Statut USB à droite */}
-            <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-semibold text-gray-700 dark:text-gray-300">Statut USB:</span>
-                <span className={`px-2 py-0.5 rounded font-medium ${
-                  isConnected 
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'
-                }`}>
-                  {isConnected ? '🔌 Connecté' : '⚪ Non connecté'}
-                </span>
-                {usbDeviceInfo && (
-                  <span className="text-gray-600 dark:text-gray-400">
-                    {usbDeviceInfo.device_name || usbDeviceInfo.sim_iccid || usbDeviceInfo.device_serial || 'Dispositif USB'}
-                  </span>
-                )}
-                {usbVirtualDevice && !usbDeviceInfo && (
-                  <span className="text-orange-600 dark:text-orange-400">
-                    Dispositif virtuel: {usbVirtualDevice.device_name || usbVirtualDevice.sim_iccid || usbVirtualDevice.device_serial}
-                  </span>
-                )}
-              </div>
             </div>
           </div>
           <div 
