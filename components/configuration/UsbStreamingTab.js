@@ -858,7 +858,7 @@ export default function DebugTab() {
                 <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Source</th>
                       <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Identifiant</th>
                       <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
                       <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
@@ -903,19 +903,18 @@ export default function DebugTab() {
                   
                   return (
                     <tr key={device.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                {/* Streaming - Cliquable pour pause/reprise (uniquement pour le dispositif connecté) */}
-                <td 
-                  className={`px-3 py-1.5 ${isDeviceUsbConnected ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors' : ''} ${(isDisabled || isToggling) && isDeviceUsbConnected ? 'cursor-not-allowed opacity-50' : ''}`}
-                  onClick={isDeviceUsbConnected && !isDisabled && !isToggling ? handleToggleStreaming : undefined}
-                  title={isDeviceUsbConnected ? (isDisabled ? 'Non disponible' : isToggling ? 'En cours...' : isStreaming ? 'Cliquer pour mettre en pause' : isPaused ? 'Cliquer pour reprendre' : 'Cliquer pour démarrer') : 'Non connecté'}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-base">
-                      {isDeviceUsbConnected ? (isToggling ? '⏳' : isStreaming ? '▶️' : isPaused ? '⏸️' : '⏹️') : '—'}
-                    </span>
-                    <span className={`text-xs font-semibold ${isDeviceUsbConnected ? (isToggling ? 'text-gray-400 dark:text-gray-500' : isStreaming ? 'text-blue-600 dark:text-blue-400' : isPaused ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400 dark:text-gray-500') : 'text-gray-400 dark:text-gray-500'}`}>
-                      {isDeviceUsbConnected ? (isToggling ? 'Chargement...' : isStreaming ? 'En cours' : isPaused ? 'En pause' : 'Arrêté') : '—'}
-                    </span>
+                {/* Source - USB ou Base de données */}
+                <td className="px-3 py-1.5">
+                  <div className="flex items-center gap-1">
+                    {isDeviceUsbConnected ? (
+                      <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                        USB
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                        Base de données
+                      </span>
+                    )}
                   </div>
                 </td>
                 
@@ -932,11 +931,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${!deviceName ? 'text-gray-400 dark:text-gray-500' : 'text-orange-600 dark:text-orange-400'}`}>
                             {deviceName || 'N/A'}
                           </span>
-                          {deviceName && source && (
-                            <span className="text-[10px] opacity-60" title={source === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {source === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {identifier && (
                           <span className={`text-xs font-mono text-gray-600 dark:text-gray-400`}>
@@ -967,11 +961,6 @@ export default function DebugTab() {
                         ) : (
                           <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs">Non assigné</span>
                         )}
-                        {source && (
-                          <span className="text-[10px] opacity-60" title="Source: Base de données">
-                            💾
-                          </span>
-                        )}
                       </div>
                     )
                   })()}
@@ -989,11 +978,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
                             {firmwareVersion || 'N/A'}
                           </span>
-                          {firmwareVersion && source && (
-                            <span className="text-[10px] opacity-60" title={source === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {source === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {firmwareVersion && timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1022,11 +1006,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${deviceModemStatus === 'running' ? 'text-green-600 dark:text-green-400' : deviceModemStatus === 'starting' ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400 dark:text-gray-500'}`}>
                             {deviceModemStatus === 'running' ? 'Actif' : deviceModemStatus === 'starting' ? 'Démarrage...' : 'Arrêté'}
                           </span>
-                          {hasModemData && source && (
-                            <span className="text-[10px] opacity-60" title={source === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {source === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {hasModemData && timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1067,11 +1046,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${!hasGps || isNaN(lat) || isNaN(lon) ? 'text-gray-400 dark:text-gray-500' : 'text-green-600 dark:text-green-400'}`}>
                             {hasGps && !isNaN(lat) && !isNaN(lon) ? `${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}` : 'N/A'}
                           </span>
-                          {hasGps && source && (
-                            <span className="text-[10px] opacity-60" title={source === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {source === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {hasGps && timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1101,11 +1075,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${flowrate == null || isNaN(flowrate) ? 'text-gray-400 dark:text-gray-500' : 'text-blue-600 dark:text-blue-400'}`}>
                             {flowrate != null && !isNaN(flowrate) ? `${Number(flowrate).toFixed(2)} L/min` : 'N/A'}
                           </span>
-                          {flowrate != null && !isNaN(flowrate) && (flowrateInfo.source || (usbFlowrate != null ? 'usb' : (deviceDbData?.last_flowrate != null ? 'database' : null))) && (
-                            <span className="text-[10px] opacity-60" title={(flowrateInfo.source || (usbFlowrate != null ? 'usb' : 'database')) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {(flowrateInfo.source || (usbFlowrate != null ? 'usb' : 'database')) === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {flowrate != null && !isNaN(flowrate) && (flowrateInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen) && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1143,11 +1112,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${colorClass}`}>
                             {battery != null && !isNaN(battery) ? `${Number(batteryValue).toFixed(0)}%` : 'N/A'}
                           </span>
-                          {battery != null && !isNaN(battery) && (batteryInfo.source || (usbBattery != null ? 'usb' : (deviceDbData?.last_battery != null ? 'database' : null))) && (
-                            <span className="text-[10px] opacity-60" title={(batteryInfo.source || (usbBattery != null ? 'usb' : 'database')) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {(batteryInfo.source || (usbBattery != null ? 'usb' : 'database')) === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {battery != null && !isNaN(battery) && (batteryInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen) && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1185,11 +1149,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${colorClass}`}>
                             {hasRssi ? `${Number(rssi)} dBm` : 'N/A'}
                           </span>
-                          {hasRssi && (rssiInfo.source || (usbRssi != null ? 'usb' : (deviceDbData?.last_rssi != null ? 'database' : null))) && (
-                            <span className="text-[10px] opacity-60" title={(rssiInfo.source || (usbRssi != null ? 'usb' : 'database')) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {(rssiInfo.source || (usbRssi != null ? 'usb' : 'database')) === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {hasRssi && (rssiInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen) && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1214,11 +1173,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${count === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-purple-600 dark:text-purple-400'}`}>
                             {count}
                           </span>
-                          {count > 0 && source && (
-                            <span className="text-[10px] opacity-60" title={source === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {source === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {isDeviceUsbConnected && deviceUsbMeasurement?.timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1245,11 +1199,6 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${!isRecent ? 'text-gray-400 dark:text-gray-500' : 'text-green-600 dark:text-green-400'}`}>
                             {timeDiff != null ? `${timeDiff}s` : 'Jamais'}
                           </span>
-                          {timestamp && source && (
-                            <span className="text-[10px] opacity-60" title={source === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {source === 'usb' ? '🔌' : '💾'}
-                            </span>
-                          )}
                         </div>
                         {timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
