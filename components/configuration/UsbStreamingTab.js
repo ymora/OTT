@@ -722,10 +722,10 @@ export default function DebugTab() {
                 {/* Identifiant */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    const deviceName = usbDeviceInfo?.device_name || dbDeviceData?.device_name
-                    const identifier = usbDeviceInfo?.sim_iccid || usbDeviceInfo?.device_serial || dbDeviceData?.sim_iccid || dbDeviceData?.device_serial
-                    const source = usbDeviceInfo?.device_name ? 'usb' : (dbDeviceData?.device_name ? 'database' : null)
-                    const timestamp = usbDeviceInfo?.last_seen || dbDeviceData?.last_seen
+                    const deviceName = deviceUsbInfo?.device_name || deviceDbData?.device_name
+                    const identifier = deviceUsbInfo?.sim_iccid || deviceUsbInfo?.device_serial || deviceDbData?.sim_iccid || deviceDbData?.device_serial
+                    const source = deviceUsbInfo?.device_name ? 'usb' : (deviceDbData?.device_name ? 'database' : null)
+                    const timestamp = deviceUsbInfo?.last_seen || deviceDbData?.last_seen
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
@@ -756,8 +756,8 @@ export default function DebugTab() {
                 {/* Patient */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    const patientName = dbDeviceData?.first_name && dbDeviceData?.last_name 
-                      ? `${dbDeviceData.first_name} ${dbDeviceData.last_name}` 
+                    const patientName = deviceDbData?.first_name && deviceDbData?.last_name 
+                      ? `${deviceDbData.first_name} ${deviceDbData.last_name}` 
                       : null
                     const source = patientName ? 'database' : null
                     return (
@@ -780,9 +780,9 @@ export default function DebugTab() {
                 {/* Firmware - USB en priorité, puis DB */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    const firmwareVersion = usbStreamLastMeasurement?.raw?.firmware_version || usbStreamLastMeasurement?.firmware_version || usbDeviceInfo?.firmware_version || dbDeviceData?.firmware_version
-                    const source = usbStreamLastMeasurement?.firmware_version || usbDeviceInfo?.firmware_version ? 'usb' : (dbDeviceData?.firmware_version ? 'database' : null)
-                    const timestamp = usbStreamLastMeasurement?.timestamp || usbDeviceInfo?.last_seen || dbDeviceData?.last_seen
+                    const firmwareVersion = deviceUsbMeasurement?.raw?.firmware_version || deviceUsbMeasurement?.firmware_version || deviceUsbInfo?.firmware_version || deviceDbData?.firmware_version
+                    const source = deviceUsbMeasurement?.firmware_version || deviceUsbInfo?.firmware_version ? 'usb' : (deviceDbData?.firmware_version ? 'database' : null)
+                    const timestamp = deviceUsbMeasurement?.timestamp || deviceUsbInfo?.last_seen || deviceDbData?.last_seen
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
@@ -808,18 +808,19 @@ export default function DebugTab() {
                 {/* Modem */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    const hasModemData = (usbStreamLastMeasurement?.rssi != null && usbStreamLastMeasurement?.rssi !== -999) || 
-                                        (usbDeviceInfo?.rssi != null && usbDeviceInfo?.rssi !== -999) ||
-                                        (usbStreamLastMeasurement?.latitude != null) ||
-                                        (usbDeviceInfo?.latitude != null) ||
-                                        (dbDeviceData?.last_rssi != null && dbDeviceData?.last_rssi !== -999)
-                    const source = (usbStreamLastMeasurement?.rssi != null || usbDeviceInfo?.rssi != null || usbStreamLastMeasurement?.latitude != null || usbDeviceInfo?.latitude != null) ? 'usb' : (dbDeviceData?.last_rssi != null ? 'database' : null)
-                    const timestamp = usbStreamLastMeasurement?.timestamp || usbDeviceInfo?.last_seen || dbDeviceData?.last_seen
+                    const hasModemData = (deviceUsbMeasurement?.rssi != null && deviceUsbMeasurement?.rssi !== -999) || 
+                                        (deviceUsbInfo?.rssi != null && deviceUsbInfo?.rssi !== -999) ||
+                                        (deviceUsbMeasurement?.latitude != null) ||
+                                        (deviceUsbInfo?.latitude != null) ||
+                                        (deviceDbData?.last_rssi != null && deviceDbData?.last_rssi !== -999)
+                    const source = (deviceUsbMeasurement?.rssi != null || deviceUsbInfo?.rssi != null || deviceUsbMeasurement?.latitude != null || deviceUsbInfo?.latitude != null) ? 'usb' : (deviceDbData?.last_rssi != null ? 'database' : null)
+                    const timestamp = deviceUsbMeasurement?.timestamp || deviceUsbInfo?.last_seen || deviceDbData?.last_seen
+                    const deviceModemStatus = isDeviceUsbConnected && hasModemData ? 'running' : (isDeviceUsbConnected ? 'starting' : 'stopped')
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
-                          <span className={`text-xs font-semibold ${modemStatus === 'running' ? 'text-green-600 dark:text-green-400' : modemStatus === 'starting' ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400 dark:text-gray-500'}`}>
-                            {modemStatus === 'running' ? 'Actif' : modemStatus === 'starting' ? 'Démarrage...' : 'Arrêté'}
+                          <span className={`text-xs font-semibold ${deviceModemStatus === 'running' ? 'text-green-600 dark:text-green-400' : deviceModemStatus === 'starting' ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                            {deviceModemStatus === 'running' ? 'Actif' : deviceModemStatus === 'starting' ? 'Démarrage...' : 'Arrêté'}
                           </span>
                           {hasModemData && source && (
                             <span className="text-[10px] opacity-60" title={source === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
@@ -840,26 +841,26 @@ export default function DebugTab() {
                 {/* GPS - USB en priorité, puis DB */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    // Priorité : usbStreamLastMeasurement > usbDeviceInfo > dbDeviceData
-                    const usbLat = usbStreamLastMeasurement?.latitude ?? usbDeviceInfo?.latitude
-                    const usbLon = usbStreamLastMeasurement?.longitude ?? usbDeviceInfo?.longitude
+                    // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
+                    const usbLat = deviceUsbMeasurement?.latitude ?? deviceUsbInfo?.latitude
+                    const usbLon = deviceUsbMeasurement?.longitude ?? deviceUsbInfo?.longitude
                     const latInfo = getDataInfo(
                       usbLat,
-                      usbStreamLastMeasurement?.timestamp,
-                      dbDeviceData?.last_latitude,
-                      dbDeviceData?.last_seen
+                      deviceUsbMeasurement?.timestamp,
+                      deviceDbData?.latitude,
+                      deviceDbData?.last_seen
                     )
                     const lonInfo = getDataInfo(
                       usbLon,
-                      usbStreamLastMeasurement?.timestamp,
-                      dbDeviceData?.last_longitude,
-                      dbDeviceData?.last_seen
+                      deviceUsbMeasurement?.timestamp,
+                      deviceDbData?.longitude,
+                      deviceDbData?.last_seen
                     )
-                    const lat = latInfo.value ?? usbLat ?? dbDeviceData?.last_latitude ?? null
-                    const lon = lonInfo.value ?? usbLon ?? dbDeviceData?.last_longitude ?? null
+                    const lat = latInfo.value ?? usbLat ?? deviceDbData?.latitude ?? null
+                    const lon = lonInfo.value ?? usbLon ?? deviceDbData?.longitude ?? null
                     const hasGps = lat != null && lon != null && lat !== 0 && lon !== 0 && !isNaN(lat) && !isNaN(lon)
                     const source = latInfo.source || lonInfo.source || (usbLat != null ? 'usb' : null)
-                    const timestamp = latInfo.timestamp || lonInfo.timestamp || usbStreamLastMeasurement?.timestamp
+                    const timestamp = latInfo.timestamp || lonInfo.timestamp || deviceUsbMeasurement?.timestamp
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
@@ -885,30 +886,30 @@ export default function DebugTab() {
                 {/* Débit - USB en priorité */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    // Priorité : usbStreamLastMeasurement > usbDeviceInfo > dbDeviceData
-                    const usbFlowrate = usbStreamLastMeasurement?.flowrate ?? usbDeviceInfo?.flowrate
+                    // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
+                    const usbFlowrate = deviceUsbMeasurement?.flowrate ?? deviceUsbInfo?.flowrate
                     const flowrateInfo = getDataInfo(
                       usbFlowrate,
-                      usbStreamLastMeasurement?.timestamp,
-                      dbDeviceData?.last_flowrate,
-                      dbDeviceData?.last_seen
+                      deviceUsbMeasurement?.timestamp,
+                      deviceDbData?.last_flowrate,
+                      deviceDbData?.last_seen
                     )
-                    const flowrate = flowrateInfo.value ?? usbFlowrate ?? null
+                    const flowrate = flowrateInfo.value ?? usbFlowrate ?? deviceDbData?.last_flowrate ?? null
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
                           <span className={`text-xs font-semibold ${flowrate == null || isNaN(flowrate) ? 'text-gray-400 dark:text-gray-500' : 'text-blue-600 dark:text-blue-400'}`}>
                             {flowrate != null && !isNaN(flowrate) ? `${Number(flowrate).toFixed(2)} L/min` : 'N/A'}
                           </span>
-                          {flowrate != null && !isNaN(flowrate) && (flowrateInfo.source || (usbFlowrate != null ? 'usb' : null)) && (
-                            <span className="text-[10px] opacity-60" title={(flowrateInfo.source || (usbFlowrate != null ? 'usb' : null)) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {(flowrateInfo.source || (usbFlowrate != null ? 'usb' : null)) === 'usb' ? '🔌' : '💾'}
+                          {flowrate != null && !isNaN(flowrate) && (flowrateInfo.source || (usbFlowrate != null ? 'usb' : (deviceDbData?.last_flowrate != null ? 'database' : null))) && (
+                            <span className="text-[10px] opacity-60" title={(flowrateInfo.source || (usbFlowrate != null ? 'usb' : 'database')) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
+                              {(flowrateInfo.source || (usbFlowrate != null ? 'usb' : 'database')) === 'usb' ? '🔌' : '💾'}
                             </span>
                           )}
                         </div>
-                        {flowrate != null && !isNaN(flowrate) && (flowrateInfo.timestamp || usbStreamLastMeasurement?.timestamp) && (
+                        {flowrate != null && !isNaN(flowrate) && (flowrateInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen) && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                            {formatTime(flowrateInfo.timestamp || usbStreamLastMeasurement?.timestamp)}
+                            {formatTime(flowrateInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen)}
                           </span>
                         )}
                       </div>
@@ -919,15 +920,15 @@ export default function DebugTab() {
                 {/* Batterie - USB en priorité */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    // Priorité : usbStreamLastMeasurement > usbDeviceInfo > dbDeviceData
-                    const usbBattery = usbStreamLastMeasurement?.battery ?? usbDeviceInfo?.last_battery
+                    // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
+                    const usbBattery = deviceUsbMeasurement?.battery ?? deviceUsbInfo?.last_battery
                     const batteryInfo = getDataInfo(
                       usbBattery,
-                      usbStreamLastMeasurement?.timestamp,
-                      dbDeviceData?.last_battery,
-                      dbDeviceData?.last_seen
+                      deviceUsbMeasurement?.timestamp,
+                      deviceDbData?.last_battery,
+                      deviceDbData?.last_seen
                     )
-                    const battery = batteryInfo.value ?? usbBattery ?? null
+                    const battery = batteryInfo.value ?? usbBattery ?? deviceDbData?.last_battery ?? null
                     const batteryValue = (battery != null && !isNaN(battery)) ? battery : 0
                     const colorClass = battery == null || isNaN(battery) 
                       ? 'text-gray-400 dark:text-gray-500'
@@ -942,15 +943,15 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${colorClass}`}>
                             {battery != null && !isNaN(battery) ? `${Number(batteryValue).toFixed(0)}%` : 'N/A'}
                           </span>
-                          {battery != null && !isNaN(battery) && (batteryInfo.source || (usbBattery != null ? 'usb' : null)) && (
-                            <span className="text-[10px] opacity-60" title={(batteryInfo.source || (usbBattery != null ? 'usb' : null)) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {(batteryInfo.source || (usbBattery != null ? 'usb' : null)) === 'usb' ? '🔌' : '💾'}
+                          {battery != null && !isNaN(battery) && (batteryInfo.source || (usbBattery != null ? 'usb' : (deviceDbData?.last_battery != null ? 'database' : null))) && (
+                            <span className="text-[10px] opacity-60" title={(batteryInfo.source || (usbBattery != null ? 'usb' : 'database')) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
+                              {(batteryInfo.source || (usbBattery != null ? 'usb' : 'database')) === 'usb' ? '🔌' : '💾'}
                             </span>
                           )}
                         </div>
-                        {battery != null && !isNaN(battery) && (batteryInfo.timestamp || usbStreamLastMeasurement?.timestamp) && (
+                        {battery != null && !isNaN(battery) && (batteryInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen) && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                            {formatTime(batteryInfo.timestamp || usbStreamLastMeasurement?.timestamp)}
+                            {formatTime(batteryInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen)}
                           </span>
                         )}
                       </div>
@@ -961,15 +962,15 @@ export default function DebugTab() {
                 {/* RSSI - USB en priorité */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    // Priorité : usbStreamLastMeasurement > usbDeviceInfo > dbDeviceData
-                    const usbRssi = usbStreamLastMeasurement?.rssi ?? usbDeviceInfo?.rssi
+                    // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
+                    const usbRssi = deviceUsbMeasurement?.rssi ?? deviceUsbInfo?.rssi
                     const rssiInfo = getDataInfo(
                       usbRssi,
-                      usbStreamLastMeasurement?.timestamp,
-                      dbDeviceData?.last_rssi,
-                      dbDeviceData?.last_seen
+                      deviceUsbMeasurement?.timestamp,
+                      deviceDbData?.last_rssi,
+                      deviceDbData?.last_seen
                     )
-                    const rssi = rssiInfo.value ?? usbRssi ?? null
+                    const rssi = rssiInfo.value ?? usbRssi ?? deviceDbData?.last_rssi ?? null
                     const hasRssi = rssi != null && rssi !== -999 && !isNaN(rssi)
                     const colorClass = !hasRssi
                       ? 'text-gray-400 dark:text-gray-500'
@@ -984,15 +985,15 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${colorClass}`}>
                             {hasRssi ? `${Number(rssi)} dBm` : 'N/A'}
                           </span>
-                          {hasRssi && (rssiInfo.source || (usbRssi != null ? 'usb' : null)) && (
-                            <span className="text-[10px] opacity-60" title={(rssiInfo.source || (usbRssi != null ? 'usb' : null)) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
-                              {(rssiInfo.source || (usbRssi != null ? 'usb' : null)) === 'usb' ? '🔌' : '💾'}
+                          {hasRssi && (rssiInfo.source || (usbRssi != null ? 'usb' : (deviceDbData?.last_rssi != null ? 'database' : null))) && (
+                            <span className="text-[10px] opacity-60" title={(rssiInfo.source || (usbRssi != null ? 'usb' : 'database')) === 'usb' ? 'Source: USB' : 'Source: Base de données'}>
+                              {(rssiInfo.source || (usbRssi != null ? 'usb' : 'database')) === 'usb' ? '🔌' : '💾'}
                             </span>
                           )}
                         </div>
-                        {hasRssi && (rssiInfo.timestamp || usbStreamLastMeasurement?.timestamp) && (
+                        {hasRssi && (rssiInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen) && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                            {formatTime(rssiInfo.timestamp || usbStreamLastMeasurement?.timestamp)}
+                            {formatTime(rssiInfo.timestamp || deviceUsbMeasurement?.timestamp || deviceDbData?.last_seen)}
                           </span>
                         )}
                       </div>
@@ -1003,8 +1004,8 @@ export default function DebugTab() {
                 {/* Mesures reçues */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    const usbCount = usbStreamMeasurements?.length || 0
-                    const dbCount = dbDeviceData ? 1 : 0  // Si données DB, au moins 1 mesure
+                    const usbCount = isDeviceUsbConnected ? (usbStreamMeasurements?.length || 0) : 0
+                    const dbCount = deviceDbData ? 1 : 0  // Si données DB, au moins 1 mesure
                     const count = usbCount || dbCount
                     const source = usbCount > 0 ? 'usb' : (dbCount > 0 ? 'database' : null)
                     return (
@@ -1019,9 +1020,9 @@ export default function DebugTab() {
                             </span>
                           )}
                         </div>
-                        {usbStreamLastMeasurement?.timestamp && (
+                        {isDeviceUsbConnected && deviceUsbMeasurement?.timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                            {formatTime(usbStreamLastMeasurement.timestamp)}
+                            {formatTime(deviceUsbMeasurement.timestamp)}
                           </span>
                         )}
                       </div>
@@ -1032,8 +1033,8 @@ export default function DebugTab() {
                 {/* Dernière mise à jour */}
                 <td className="px-3 py-1.5">
                   {(() => {
-                    const usbTimestamp = usbStreamLastUpdate || usbStreamLastMeasurement?.timestamp || usbDeviceInfo?.last_seen
-                    const dbTimestamp = dbDeviceData?.last_seen
+                    const usbTimestamp = isDeviceUsbConnected ? (usbStreamLastUpdate || deviceUsbMeasurement?.timestamp || deviceUsbInfo?.last_seen) : null
+                    const dbTimestamp = deviceDbData?.last_seen
                     const timestamp = usbTimestamp || dbTimestamp
                     const source = usbTimestamp ? 'usb' : (dbTimestamp ? 'database' : null)
                     const timeDiff = timestamp ? Math.floor((currentTime - timestamp) / 1000) : null
