@@ -1308,6 +1308,33 @@ function DeviceConfigSection({ connectedSimIccid, connectedDeviceSerial, usbDevi
           </h3>
         </div>
 
+        {/* Sélection de dispositif depuis la base de données */}
+        {!isConnected && (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+              📱 Sélectionner un dispositif (base de données)
+            </label>
+            <select
+              value={selectedDeviceId || ''}
+              onChange={(e) => setSelectedDeviceId(e.target.value || null)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            >
+              <option value="">-- Aucun dispositif sélectionné --</option>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id.toString()}>
+                  {device.device_name || device.sim_iccid || device.device_serial || `Dispositif #${device.id}`}
+                  {device.patient_id && ` (${device.first_name} ${device.last_name})`}
+                </option>
+              ))}
+            </select>
+            {devicesError && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                Erreur chargement dispositifs: {devicesError.message}
+              </p>
+            )}
+          </div>
+        )}
+
         <>
             {!isConnected && selectedDeviceId && (
               <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
