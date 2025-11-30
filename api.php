@@ -7,6 +7,7 @@
 require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
 require_once __DIR__ . '/api/helpers.php';
+require_once __DIR__ . '/api/cache.php';
 require_once __DIR__ . '/api/handlers/auth.php';
 require_once __DIR__ . '/api/handlers/devices.php';
 require_once __DIR__ . '/api/handlers/firmwares.php';
@@ -876,7 +877,17 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
        } elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
            // Alias pour handleMigrateFirmwareStatus (même fonctionnalité)
            handleMigrateFirmwareStatus();
-
+       } elseif(preg_match('#/docs/openapi\.json$#', $path) && $method === 'GET') {
+           // Endpoint OpenAPI/Swagger
+           header('Content-Type: application/json');
+           $openapiFile = __DIR__ . '/api/openapi.json';
+           if (file_exists($openapiFile)) {
+               readfile($openapiFile);
+           } else {
+               http_response_code(404);
+               echo json_encode(['success' => false, 'error' => 'OpenAPI spec not found']);
+           }
+           exit;
        } else {
     // Debug: logger le chemin et la méthode pour comprendre pourquoi l'endpoint n'est pas trouvé
     $debugInfo = [

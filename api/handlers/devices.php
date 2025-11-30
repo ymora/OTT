@@ -11,7 +11,40 @@ function handleGetDevices() {
     // OU avec auth JWT pour dashboard
     $user = getCurrentUser();
     
+    // Pagination
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    
+    // Si page est fourni, calculer offset
+    if ($page > 1 && $offset === 0) {
+        $offset = ($page - 1) * $limit;
+    }
+    
+    // Cache: générer une clé basée sur les paramètres
+    $cacheKey = SimpleCache::key('devices', [
+        'limit' => $limit,
+        'offset' => $offset,
+        'user_id' => $user ? $user['id'] : null
+    ]);
+    
+    // Essayer de récupérer depuis le cache
+    $cached = SimpleCache::get($cacheKey);
+    if ($cached !== null) {
+        echo json_encode($cached);
+        return;
+    }
+    
     try {
+        // Compter le total
+        $countStmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM devices d
+            WHERE d.deleted_at IS NULL
+        ");
+        $countStmt->execute();
+        $total = intval($countStmt->fetchColumn());
+        
         // Requête simplifiée et robuste - éviter duplication firmware_version
         $stmt = $pdo->prepare("
             SELECT 
@@ -40,10 +73,33 @@ function handleGetDevices() {
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
             WHERE d.deleted_at IS NULL
             ORDER BY d.last_seen DESC NULLS LAST, d.created_at DESC
+            LIMIT :limit OFFSET :offset
         ");
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         $devices = $stmt->fetchAll();
-        echo json_encode(['success' => true, 'devices' => $devices]);
+        
+        $totalPages = ceil($total / $limit);
+        
+        $response = [
+            'success' => true, 
+            'devices' => $devices,
+            'pagination' => [
+                'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => $offset + $limit < $total,
+                'has_prev' => $offset > 0
+            ]
+        ];
+        
+        // Mettre en cache (TTL: 30 secondes pour les listes)
+        SimpleCache::set($cacheKey, $response, 30);
+        
+        echo json_encode($response);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
@@ -934,10 +990,59 @@ function handleListAllCommands() {
     
     $statusFilter = isset($_GET['status']) ? normalizeCommandStatus($_GET['status']) : null;
     $iccidFilter = $_GET['iccid'] ?? null;
-    $limit = min(intval($_GET['limit'] ?? 200), 500);
+    
+    // Pagination
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    
+    // Si page est fourni, calculer offset
+    if ($page > 1 && $offset === 0) {
+        $offset = ($page - 1) * $limit;
+    }
+    
+    // Cache: générer une clé basée sur les paramètres
+    $cacheKey = SimpleCache::key('devices', [
+        'limit' => $limit,
+        'offset' => $offset,
+        'user_id' => $user ? $user['id'] : null
+    ]);
+    
+    // Essayer de récupérer depuis le cache
+    $cached = SimpleCache::get($cacheKey);
+    if ($cached !== null) {
+        echo json_encode($cached);
+        return;
+    }
     
     try {
         expireDeviceCommands();
+        
+        // Requête pour compter le total
+        $countSql = "
+            SELECT COUNT(*)
+            FROM device_commands dc
+            JOIN devices d ON dc.device_id = d.id
+            WHERE d.deleted_at IS NULL
+        ";
+        $countParams = [];
+        if ($statusFilter) {
+            $countSql .= " AND dc.status = :status";
+            $countParams['status'] = $statusFilter;
+        }
+        if ($iccidFilter) {
+            $countSql .= " AND d.sim_iccid = :iccid";
+            $countParams['iccid'] = $iccidFilter;
+        }
+        
+        $countStmt = $pdo->prepare($countSql);
+        foreach ($countParams as $key => $value) {
+            $countStmt->bindValue(':' . $key, $value);
+        }
+        $countStmt->execute();
+        $total = intval($countStmt->fetchColumn());
+        
+        // Requête principale avec pagination
         $sql = "
             SELECT dc.*, d.sim_iccid, d.device_name,
                    p.first_name AS patient_first_name,
@@ -956,7 +1061,7 @@ function handleListAllCommands() {
             $sql .= " AND d.sim_iccid = :iccid";
             $params['iccid'] = $iccidFilter;
         }
-        $sql .= " ORDER BY dc.created_at DESC LIMIT :limit";
+        $sql .= " ORDER BY dc.created_at DESC LIMIT :limit OFFSET :offset";
         
         $stmt = $pdo->prepare($sql);
         foreach ($params as $key => $value) {

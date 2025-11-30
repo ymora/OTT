@@ -8,7 +8,9 @@ param(
 
 Write-Host "Analyse des commits Git..." -ForegroundColor Cyan
 
-# Récupérer tous les commits de toutes les branches
+# Récupérer tous les commits de toutes les branches (y compris locaux)
+Write-Host "Recherche des commits Git (branches distantes et locales)..." -ForegroundColor Cyan
+
 $gitCmd = if ($IncludeAllBranches) {
     'git log --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --all --no-merges'
 } else {
@@ -17,36 +19,91 @@ $gitCmd = if ($IncludeAllBranches) {
 
 $commits = Invoke-Expression $gitCmd
 
-if (-not $commits -or $commits.Count -eq 0) {
+# Récupérer aussi les commits locaux non pushés (reflog)
+Write-Host "Recherche des commits locaux (reflog)..." -ForegroundColor Cyan
+$reflogCmd = 'git reflog --pretty=format:"%gd|%an|%gs|%h" --date=format:"%Y-%m-%d %H:%M" --all'
+$reflogCommits = Invoke-Expression $reflogCmd
+
+# Parser les commits du reflog (format différent)
+$localCommits = @()
+foreach ($reflogCommit in $reflogCommits) {
+    if ($reflogCommit -match '^([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)$') {
+        $ref = $matches[1]
+        $author = $matches[2]
+        $message = $matches[3]
+        $hash = $matches[4]
+        
+        # Extraire la date du reflog (format: HEAD@{2025-12-01 10:30:00})
+        if ($ref -match '@\{([^}]+)\}') {
+            $dateTimeStr = $matches[1]
+            try {
+                $dateTime = [DateTime]::Parse($dateTimeStr)
+                $datePart = $dateTime.ToString("yyyy-MM-dd")
+                $timePart = $dateTime.ToString("HH:mm")
+                
+                $localCommits += [PSCustomObject]@{
+                    Date = $datePart
+                    Time = $timePart
+                    DateTime = "$datePart $timePart"
+                    Author = $author
+                    Message = $message
+                    Hash = $hash
+                    Source = "local"
+                }
+            } catch {
+                # Ignorer les entrées invalides
+            }
+        }
+    }
+}
+
+# Combiner les commits distants et locaux
+$allCommits = @()
+if ($commits) {
+    foreach ($commit in $commits) {
+        $parts = $commit -split '\|'
+        if ($parts.Count -ge 4) {
+            $dateTime = $parts[0]
+            $author = $parts[1]
+            $message = $parts[2]
+            $hash = $parts[3]
+            
+            $datePart = $dateTime -split ' ' | Select-Object -First 1
+            $timePart = $dateTime -split ' ' | Select-Object -Last 1
+            
+            $allCommits += [PSCustomObject]@{
+                Date = $datePart
+                Time = $timePart
+                DateTime = $dateTime
+                Author = $author
+                Message = $message
+                Hash = $hash
+                Source = "remote"
+            }
+        }
+    }
+}
+
+# Ajouter les commits locaux (éviter les doublons)
+foreach ($localCommit in $localCommits) {
+    $isDuplicate = $allCommits | Where-Object { 
+        $_.Hash -eq $localCommit.Hash -or 
+        ($_.DateTime -eq $localCommit.DateTime -and $_.Message -eq $localCommit.Message)
+    }
+    if (-not $isDuplicate) {
+        $allCommits += $localCommit
+    }
+}
+
+if ($allCommits.Count -eq 0) {
     Write-Host "ERREUR: Aucun commit trouve" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "OK: $($commits.Count) commits trouves" -ForegroundColor Green
+Write-Host "OK: $($allCommits.Count) commits trouves ($($commits.Count) distants, $($localCommits.Count) locaux)" -ForegroundColor Green
 
-# Parser les commits
-$parsedCommits = @()
-foreach ($commit in $commits) {
-    $parts = $commit -split '\|'
-    if ($parts.Count -ge 4) {
-        $dateTime = $parts[0]
-        $author = $parts[1]
-        $message = $parts[2]
-        $hash = $parts[3]
-        
-        $datePart = $dateTime -split ' ' | Select-Object -First 1
-        $timePart = $dateTime -split ' ' | Select-Object -Last 1
-        
-        $parsedCommits += [PSCustomObject]@{
-            Date = $datePart
-            Time = $timePart
-            DateTime = $dateTime
-            Author = $author
-            Message = $message
-            Hash = $hash
-        }
-    }
-}
+# Utiliser les commits déjà parsés
+$parsedCommits = $allCommits
 
 # Grouper par jour (trier par date croissante pour avoir le premier jour en premier)
 $commitsByDay = $parsedCommits | Group-Object -Property Date | Sort-Object Name

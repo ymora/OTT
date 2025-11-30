@@ -13,9 +13,11 @@
     "lint": "next lint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org $SENTRY_ORG --project $SENTRY_PROJECT ./docs"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.27.0",
     "chart.js": "^4.4.0",
     "esptool-js": "^0.5.7",
     "jspdf": "^3.0.3",
