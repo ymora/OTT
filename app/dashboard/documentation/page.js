@@ -63,12 +63,13 @@ export default function DocumentationPage() {
       presentation: 'Documentation Présentation - OTT Dashboard',
       developpeurs: 'Documentation Développeurs - OTT Dashboard',
       commerciale: 'Documentation Commerciale - OTT Dashboard',
-      'suivi-temps': 'Suivi Temps - OTT Dashboard'
+      'suivi-temps': 'Suivi Temps - OTT Dashboard',
+      audit: 'Audit Consolidé - OTT Dashboard'
     }
     document.title = titles[docType] || titles.presentation
   }, [docType])
 
-  const isMarkdownDoc = docType === 'suivi-temps'
+  const isMarkdownDoc = docType === 'suivi-temps' || docType === 'audit'
   const isDatabaseDoc = docType === 'database'
 
   // Référence à l'iframe pour envoyer le thème
@@ -303,13 +304,25 @@ function MarkdownViewer({ fileName }) {
         // Recharger le contenu après régénération
         await reloadContent()
       } else {
+        // Vérifier si c'est une erreur 501 (non disponible sur cette plateforme)
+        if (regenerateResponse.status === 501) {
+          const errorData = await regenerateResponse.json().catch(() => ({}))
+          logger.debug('ℹ️ Régénération automatique non disponible sur ce serveur (non-Windows). Le fichier existant sera utilisé.')
+          // Ne pas lancer d'erreur, simplement ignorer et continuer avec le fichier existant
+          return
+        }
+        
+        // Autre erreur
         const errorData = await regenerateResponse.json().catch(() => ({}))
-        logger.error('❌ Erreur lors de la régénération:', errorData)
-        throw new Error(errorData.error || 'Erreur lors de la régénération')
+        logger.warn('⚠️ Erreur lors de la régénération:', errorData)
+        // Ne pas bloquer : on continue avec le fichier existant
+        return
       }
     } catch (error) {
-      logger.error('❌ Erreur lors de la régénération:', error)
-      throw error
+      // Erreur réseau ou autre : ne pas bloquer, simplement logger
+      logger.debug('ℹ️ Régénération non disponible (non bloquant):', error.message)
+      // Ne pas lancer l'erreur, continuer avec le fichier existant
+      return
     } finally {
       setRegenerating(false)
     }
@@ -336,17 +349,16 @@ function MarkdownViewer({ fileName }) {
         const timeSinceLastRegen = now - lastRegenerationTimeRef.current
         const MIN_REGENERATION_INTERVAL = 15 * 60 * 1000 // 15 minutes
         
-        // Régénérer si c'est la première fois ou si ça fait plus de 2 minutes
+        // Régénérer si c'est la première fois ou si ça fait plus de 15 minutes
         if (!hasRegeneratedRef.current || timeSinceLastRegen > MIN_REGENERATION_INTERVAL) {
-          try {
-            hasRegeneratedRef.current = true
-            lastRegenerationTimeRef.current = now
-            logger.debug('🔄 Régénération automatique du suivi de temps au chargement de la page...')
-            await regenerateTimeTracking()
-          } catch (regenerateError) {
+          hasRegeneratedRef.current = true
+          lastRegenerationTimeRef.current = now
+          logger.debug('🔄 Tentative de régénération automatique du suivi de temps au chargement de la page...')
+          // Ne pas attendre le résultat, continuer le chargement en parallèle
+          regenerateTimeTracking().catch((regenerateError) => {
             // Non bloquant : on continue même si la régénération échoue
-            logger.debug('⚠️ Erreur lors de la régénération automatique (non bloquant):', regenerateError.message)
-          }
+            logger.debug('ℹ️ Régénération automatique non disponible ou échouée (non bloquant):', regenerateError?.message || 'Erreur inconnue')
+          })
         } else {
           logger.debug(`⏭️ Régénération ignorée (dernière régénération il y a ${Math.round(timeSinceLastRegen / 1000)}s)`)
         }
@@ -1092,10 +1104,33 @@ function DatabaseViewer() {
         )
         
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${await response.text()}`)
+          const text = await response.text()
+          throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`)
         }
         
-        const data = await response.json()
+        // Vérifier le Content-Type avant de parser
+        const contentType = response.headers.get('content-type') || ''
+        if (!contentType.includes('application/json')) {
+          const text = await response.text()
+          throw new Error(`Réponse non-JSON: ${text.substring(0, 200)}`)
+        }
+        
+        // Lire le texte d'abord pour vérifier qu'il n'est pas vide
+        const text = await response.text()
+        if (!text || !text.trim()) {
+          throw new Error('Réponse vide du serveur')
+        }
+        
+        // Parser le JSON
+        let data
+        try {
+          data = JSON.parse(text)
+        } catch (parseError) {
+          logger.error('Erreur parsing JSON:', parseError)
+          logger.error('Texte reçu:', text.substring(0, 500))
+          throw new Error(`Erreur parsing JSON: ${parseError.message}`)
+        }
+        
         if (data.success) {
           setDatabaseInfo(data.data)
         } else {
