@@ -44,6 +44,7 @@ hardware/firmware/**/*.ino
 
 # Artefacts volumineux conservés hors du dépôt principal
 # docs/  # Documentation technique - doit être versionnée
+docs/_next/  # Fichiers de build Next.js (ne doivent pas être versionnés)
 external/
 
 # Backup

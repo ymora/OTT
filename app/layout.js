@@ -74,7 +74,10 @@ export default function RootLayout({ children }) {
                       navigator.serviceWorker.register(swPath)
                         .catch(function(err) {
                           // Logger l'erreur sans polluer la console en production
+                          // Note: logger n'est pas disponible dans ce contexte (script inline)
+                          // Le warning est conditionnel à NODE_ENV === 'development'
                           if (process.env.NODE_ENV === 'development') {
+                            // Utilisation de console.warn acceptable ici (script inline, pas de logger disponible)
                             console.warn('[SW] Échec enregistrement:', err);
                           }
                         });
