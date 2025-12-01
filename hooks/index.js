@@ -4,9 +4,7 @@
  */
 
 export { useApiData } from './useApiData'
-// useForm et useModal ne sont pas utilisés actuellement - peuvent être supprimés si nécessaire
-// export { useForm } from './useForm'
-// export { useModal } from './useModal'
+// useForm et useModal ont été supprimés car non utilisés
 export { useDebounce } from './useDebounce'
 export { useFilter } from './useFilter'
 export { useUsbAutoDetection } from './useUsbAutoDetection'
