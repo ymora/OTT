@@ -72,7 +72,12 @@ export function useApiData(endpoints, options = {}) {
           fetchJson(fetchWithAuth, API_URL, endpoint, memoizedFetchOptions, { requiresAuth })
             .catch(err => {
               logger.error(`Erreur chargement ${endpoint}:`, err)
-              return null // Retourner null en cas d'erreur pour ne pas bloquer les autres
+              // Retourner un objet avec success: false pour indiquer l'erreur
+              return { 
+                success: false, 
+                error: err.message || 'Erreur lors du chargement',
+                data: null 
+              }
             })
         )
 
@@ -83,6 +88,7 @@ export function useApiData(endpoints, options = {}) {
           // Gérer les endpoints avec query params (ex: /api.php/logs?limit=200 -> logs)
           const endpointPath = endpoint.split('?')[0] // Enlever les query params
           const key = endpointPath.split('/').pop() || 'data'
+          // Stocker le résultat même s'il y a une erreur (pour permettre l'affichage d'erreurs partielles)
           dataMap[key] = results[index]
         })
         

@@ -351,6 +351,18 @@ function handleClearFirmwares() {
 
 function handleDatabaseView() {
     global $pdo;
+    
+    // Nettoyer tout output précédent (comme les autres handlers)
+    // Utiliser ob_clean() au lieu de ob_end_clean() pour ne pas fermer le buffer
+    if (ob_get_level() > 0) {
+        ob_clean();
+    }
+    
+    // Définir le Content-Type JSON AVANT tout output
+    header('Content-Type: application/json; charset=utf-8');
+    
+    // Vérifier l'authentification et les droits admin
+    // requireAuth et requireAdmin font leur propre exit si échec
     requireAuth();
     requireAdmin();
     
@@ -419,17 +431,44 @@ function handleDatabaseView() {
             }
         }
         
-        echo json_encode([
+        $response = [
             'success' => true,
             'data' => $databaseInfo
-        ]);
+        ];
+        
+        // S'assurer que le JSON est bien encodé et envoyé
+        $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            throw new Exception('Erreur encodage JSON: ' . json_last_error_msg());
+        }
+        
+        echo $json;
+        exit;
         
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode([
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleDatabaseView] ' . $e->getMessage());
+        $errorResponse = json_encode([
             'success' => false,
-            'error' => 'Database error: ' . $e->getMessage()
-        ]);
+            'error' => $errorMsg
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($errorResponse !== false) {
+            echo $errorResponse;
+        }
+        exit;
+    } catch (Exception $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Server error';
+        error_log('[handleDatabaseView] ' . $e->getMessage());
+        $errorResponse = json_encode([
+            'success' => false,
+            'error' => $errorMsg
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($errorResponse !== false) {
+            echo $errorResponse;
+        }
+        exit;
     }
 }
 
