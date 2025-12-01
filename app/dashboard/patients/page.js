@@ -31,6 +31,7 @@ export default function PatientsPage() {
   const [selectedDeviceForUnassign, setSelectedDeviceForUnassign] = useState(null)
   const [showDeletePatientModal, setShowDeletePatientModal] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -224,6 +225,7 @@ export default function PatientsPage() {
 
     // Utiliser la fonction de suppression de base du hook
     try {
+      setDeleteLoading(true)
       setActionError(null)
       setSuccess(null)
       const response = await fetchJson(
