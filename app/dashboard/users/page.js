@@ -5,8 +5,7 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { fetchJson } from '@/lib/api'
-import { useApiData, useFilter } from '@/hooks'
+import { useApiData, useFilter, useEntityModal, useEntityDelete } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -19,9 +18,9 @@ export default function UsersPage() {
   const { fetchWithAuth, API_URL, user: currentUser } = useAuth()
   const [actionError, setActionError] = useState(null)
   const [success, setSuccess] = useState(null)
-  const [showModal, setShowModal] = useState(false)
-  const [editingItem, setEditingItem] = useState(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
+  
+  // Utiliser le hook useEntityModal pour gérer le modal
+  const { isOpen: showModal, editingItem, openCreate: openCreateModal, openEdit: openEditModal, close: closeModal } = useEntityModal()
 
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -54,19 +53,23 @@ export default function UsersPage() {
     // viewer supprimé
   }
 
-  const openCreateModal = () => {
-    setEditingItem(null)
-    setShowModal(true)
-  }
+  // Utiliser le hook useEntityDelete pour gérer la suppression
+  const { deleteLoading, deleteError, handleDelete } = useEntityDelete({
+    fetchWithAuth,
+    API_URL,
+    refetch,
+    entityName: 'utilisateur',
+    getEntityName: (user) => `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'cet utilisateur',
+    onCloseModal: (deletedId) => {
+      if (showModal && editingItem && editingItem.id === deletedId) {
+        closeModal()
+      }
+    }
+  })
 
-  const openEditModal = (user) => {
-    setEditingItem(user)
-    setShowModal(true)
-  }
-
-  const closeModal = () => {
-    setShowModal(false)
-    setEditingItem(null)
+  // Utiliser deleteError pour actionError
+  if (deleteError && !actionError) {
+    setActionError(deleteError)
   }
 
   const handleModalSave = async () => {
@@ -75,45 +78,6 @@ export default function UsersPage() {
     // puis refetch pour recharger les données avec les notifications mises à jour
     await new Promise(resolve => setTimeout(resolve, 100))
     await refetch()
-  }
-
-  const handleDelete = async (userToDelete) => {
-    if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer l'utilisateur "${userToDelete.first_name} ${userToDelete.last_name}" ?\n\nCette action est irréversible.`)) {
-      return
-    }
-
-    try {
-      setDeleteLoading(true)
-      setActionError(null)
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/users/${userToDelete.id}`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      if (response.success) {
-        setSuccess('Utilisateur supprimé avec succès')
-        refetch()
-        if (showModal && editingItem && editingItem.id === userToDelete.id) {
-          closeModal()
-        }
-      } else {
-        setActionError(response.error || 'Erreur lors de la suppression')
-      }
-    } catch (err) {
-      // Extraire le message d'erreur de la réponse si disponible
-      let errorMessage = 'Erreur lors de la suppression de l\'utilisateur'
-      if (err.message) {
-        errorMessage = err.message
-      } else if (err.error) {
-        errorMessage = err.error
-      }
-      setActionError(errorMessage)
-      logger.error('Erreur suppression utilisateur:', err)
-    } finally {
-      setDeleteLoading(false)
-    }
   }
 
 

@@ -119,7 +119,7 @@ export default function DocumentationPage() {
 
   // Si c'est un fichier markdown, on affiche un composant spécial
   if (isMarkdownDoc) {
-    return <MarkdownViewer fileName="SUIVI_TEMPS_FACTURATION.md" />
+    return <MarkdownViewer key={docType} fileName="SUIVI_TEMPS_FACTURATION.md" />
   }
 
   // Si c'est la base de données, on affiche un composant spécial
@@ -155,12 +155,14 @@ function MarkdownViewer({ fileName }) {
   const [loading, setLoading] = useState(true)
   const [chartData, setChartData] = useState(null)
   const [timeView, setTimeView] = useState('day') // 'day', 'week', 'month'
+  const [regenerating, setRegenerating] = useState(false)
   const { fetchWithAuth, API_URL } = useAuth()
   
   // Ref pour éviter les rechargements multiples du même fichier
   const loadedFileNameRef = useRef(null)
   const isLoadingRef = useRef(false)
   const hasRegeneratedRef = useRef(false)
+  const lastRegenerationTimeRef = useRef(0)
   
   // Détecter le thème pour le MarkdownViewer (4ème doc - Suivi Temps)
   useEffect(() => {
@@ -189,120 +191,173 @@ function MarkdownViewer({ fileName }) {
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    // Ne charger que si le fichier a changé ou n'a jamais été chargé
-    if (loadedFileNameRef.current === fileName || isLoadingRef.current) {
+  // Fonction pour recharger le contenu
+  const reloadContent = useCallback(async () => {
+    if (isLoadingRef.current) {
       return
     }
     
     isLoadingRef.current = true
-    loadedFileNameRef.current = fileName
+    setLoading(true)
+    
+    try {
+      let text = ''
+      let lastError = null
+      
+      // Essayer plusieurs méthodes de chargement
+      const methods = [
+        // 1. Essayer depuis public/ avec basePath
+        async () => {
+          const url = withBasePath(`/${fileName}`)
+          const response = await fetch(url + '?t=' + Date.now()) // Cache busting
+          if (response.ok) {
+            return await response.text()
+          }
+          throw new Error(`HTTP ${response.status}`)
+        },
+        // 2. Essayer depuis public/ sans basePath (fallback)
+        async () => {
+          const response = await fetch(`/${fileName}?t=${Date.now()}`) // Cache busting
+          if (response.ok) {
+            return await response.text()
+          }
+          throw new Error(`HTTP ${response.status}`)
+        },
+        // 3. Essayer depuis l'API
+        async () => {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
+            (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+              ? 'http://localhost:8000' 
+              : 'https://ott-jbln.onrender.com')
+          const response = await fetch(`${apiUrl}/api.php/docs/${fileName}?t=${Date.now()}`) // Cache busting
+          if (response.ok) {
+            return await response.text()
+          }
+          throw new Error(`API HTTP ${response.status}`)
+        }
+      ]
+      
+      // Essayer chaque méthode jusqu'à ce qu'une fonctionne
+      for (const method of methods) {
+        try {
+          text = await method()
+          if (text) {
+            break // Succès, sortir de la boucle
+          }
+        } catch (err) {
+          lastError = err
+          logger.debug(`Méthode de chargement échouée: ${err.message}`)
+          continue // Essayer la méthode suivante
+        }
+      }
+      
+      if (!text) {
+        throw new Error(
+          `Impossible de charger ${fileName}. ` +
+          `Vérifiez que le fichier existe dans public/ ou que l'API est accessible. ` +
+          `Dernière erreur: ${lastError?.message || 'Inconnue'}`
+        )
+      }
+      
+      setContent(text)
+      // Parser les données pour les graphiques
+      const parsed = parseMarkdownForCharts(text)
+      setChartData(parsed)
+    } catch (error) {
+      logger.error('Erreur chargement markdown:', error)
+      setContent(`# Erreur de chargement\n\nImpossible de charger le document **${fileName}**.\n\n**Détails :** ${error.message}\n\n**Solutions possibles :**\n- Vérifiez que le fichier existe dans le dossier \`public/\`\n- Vérifiez que l'API backend est accessible\n- Vérifiez votre connexion réseau`)
+    } finally {
+      setLoading(false)
+      isLoadingRef.current = false
+    }
+  }, [fileName])
+
+  // Fonction pour régénérer le fichier de suivi du temps
+  const regenerateTimeTracking = useCallback(async (force = false) => {
+    if (fileName !== 'SUIVI_TEMPS_FACTURATION.md') {
+      return
+    }
+    
+    if (regenerating && !force) {
+      return
+    }
+    
+    setRegenerating(true)
+    try {
+      logger.debug('🔄 Régénération du fichier de suivi du temps...')
+      
+      const regenerateResponse = await fetchWithAuth(
+        `${API_URL}/api.php/docs/regenerate-time-tracking`,
+        { method: 'POST' },
+        { requiresAuth: true }
+      )
+      
+      if (regenerateResponse.ok) {
+        const regenerateData = await regenerateResponse.json()
+        logger.debug('✅ Fichier régénéré avec succès:', regenerateData)
+        // Mettre à jour le timestamp de dernière régénération
+        lastRegenerationTimeRef.current = Date.now()
+        // Attendre un peu pour que le fichier soit écrit
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Recharger le contenu après régénération
+        await reloadContent()
+      } else {
+        const errorData = await regenerateResponse.json().catch(() => ({}))
+        logger.error('❌ Erreur lors de la régénération:', errorData)
+        throw new Error(errorData.error || 'Erreur lors de la régénération')
+      }
+    } catch (error) {
+      logger.error('❌ Erreur lors de la régénération:', error)
+      throw error
+    } finally {
+      setRegenerating(false)
+    }
+  }, [fileName, API_URL, fetchWithAuth, regenerating, reloadContent])
+
+  useEffect(() => {
+    // Réinitialiser les refs quand le fileName change (nouveau composant monté)
+    if (loadedFileNameRef.current !== fileName) {
+      loadedFileNameRef.current = fileName
+      hasRegeneratedRef.current = false
+      lastRegenerationTimeRef.current = 0
+    }
+    
+    // Ne charger que si on n'est pas déjà en train de charger
+    if (isLoadingRef.current) {
+      return
+    }
     
     const loadMarkdown = async () => {
-      try {
-        // Si c'est le fichier de suivi du temps, régénérer automatiquement au chargement
-        if (fileName === 'SUIVI_TEMPS_FACTURATION.md' && !hasRegeneratedRef.current) {
+      // Si c'est le fichier de suivi du temps, régénérer automatiquement au chargement
+      // Mais seulement si ça fait plus de 15 minutes depuis la dernière régénération
+      if (fileName === 'SUIVI_TEMPS_FACTURATION.md') {
+        const now = Date.now()
+        const timeSinceLastRegen = now - lastRegenerationTimeRef.current
+        const MIN_REGENERATION_INTERVAL = 15 * 60 * 1000 // 15 minutes
+        
+        // Régénérer si c'est la première fois ou si ça fait plus de 2 minutes
+        if (!hasRegeneratedRef.current || timeSinceLastRegen > MIN_REGENERATION_INTERVAL) {
           try {
             hasRegeneratedRef.current = true
-            logger.debug('🔄 Régénération automatique du fichier de suivi du temps...')
-            
-            // Essayer d'abord la régénération via l'endpoint admin (si authentifié)
-            try {
-              const regenerateResponse = await fetchWithAuth(
-                `${API_URL}/api.php/docs/regenerate-time-tracking`,
-                { method: 'POST' },
-                { requiresAuth: true }
-              )
-              if (regenerateResponse.ok) {
-                const regenerateData = await regenerateResponse.json()
-                logger.debug('✅ Fichier régénéré avec succès:', regenerateData)
-                // Attendre un peu pour que le fichier soit écrit
-                await new Promise(resolve => setTimeout(resolve, 500))
-              } else {
-                logger.debug('⚠️ Régénération admin non disponible, le fichier sera généré automatiquement au chargement')
-              }
-            } catch (regenerateError) {
-              // Non bloquant : l'API générera automatiquement le fichier au chargement
-              logger.debug('⚠️ Régénération admin non disponible (non bloquant):', regenerateError.message)
-            }
+            lastRegenerationTimeRef.current = now
+            logger.debug('🔄 Régénération automatique du suivi de temps au chargement de la page...')
+            await regenerateTimeTracking()
           } catch (regenerateError) {
             // Non bloquant : on continue même si la régénération échoue
-            logger.debug('⚠️ Erreur lors de la régénération (non bloquant):', regenerateError.message)
+            logger.debug('⚠️ Erreur lors de la régénération automatique (non bloquant):', regenerateError.message)
           }
+        } else {
+          logger.debug(`⏭️ Régénération ignorée (dernière régénération il y a ${Math.round(timeSinceLastRegen / 1000)}s)`)
         }
-        
-        let text = ''
-        let lastError = null
-        
-        // Essayer plusieurs méthodes de chargement
-        const methods = [
-          // 1. Essayer depuis public/ avec basePath
-          async () => {
-            const url = withBasePath(`/${fileName}`)
-            const response = await fetch(url)
-            if (response.ok) {
-              return await response.text()
-            }
-            throw new Error(`HTTP ${response.status}`)
-          },
-          // 2. Essayer depuis public/ sans basePath (fallback)
-          async () => {
-            const response = await fetch(`/${fileName}`)
-            if (response.ok) {
-              return await response.text()
-            }
-            throw new Error(`HTTP ${response.status}`)
-          },
-          // 3. Essayer depuis l'API
-          async () => {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
-              (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-                ? 'http://localhost:8000' 
-                : 'https://ott-jbln.onrender.com')
-            const response = await fetch(`${apiUrl}/api.php/docs/${fileName}`)
-            if (response.ok) {
-              return await response.text()
-            }
-            throw new Error(`API HTTP ${response.status}`)
-          }
-        ]
-        
-        // Essayer chaque méthode jusqu'à ce qu'une fonctionne
-        for (const method of methods) {
-          try {
-            text = await method()
-            if (text) {
-              break // Succès, sortir de la boucle
-            }
-          } catch (err) {
-            lastError = err
-            logger.debug(`Méthode de chargement échouée: ${err.message}`)
-            continue // Essayer la méthode suivante
-          }
-        }
-        
-        if (!text) {
-          throw new Error(
-            `Impossible de charger ${fileName}. ` +
-            `Vérifiez que le fichier existe dans public/ ou que l'API est accessible. ` +
-            `Dernière erreur: ${lastError?.message || 'Inconnue'}`
-          )
-        }
-        
-        setContent(text)
-        // Parser les données pour les graphiques
-        const parsed = parseMarkdownForCharts(text)
-        setChartData(parsed)
-      } catch (error) {
-        logger.error('Erreur chargement markdown:', error)
-        setContent(`# Erreur de chargement\n\nImpossible de charger le document **${fileName}**.\n\n**Détails :** ${error.message}\n\n**Solutions possibles :**\n- Vérifiez que le fichier existe dans le dossier \`public/\`\n- Vérifiez que l'API backend est accessible\n- Vérifiez votre connexion réseau`)
-      } finally {
-        setLoading(false)
-        isLoadingRef.current = false
       }
+      
+      // Charger le contenu
+      await reloadContent()
     }
+    
     loadMarkdown()
-  }, [fileName])
+  }, [fileName, regenerateTimeTracking, reloadContent])
 
   // Fonction pour parser le markdown et extraire les données pour les graphiques
   function parseMarkdownForCharts(md) {
@@ -782,7 +837,7 @@ function MarkdownViewer({ fileName }) {
       {chartData && (
         <nav className="sticky top-0 z-50 bg-gradient-to-r from-primary-600 to-secondary-600 shadow-lg">
           <div className="max-w-7xl mx-auto px-6 py-3">
-            <div className="flex flex-wrap gap-2 justify-center">
+            <div className="flex flex-wrap gap-2 justify-center items-center">
               <a href="#stats" className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
                 📊 Statistiques
               </a>
@@ -795,6 +850,25 @@ function MarkdownViewer({ fileName }) {
               <a href="#tableau" className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
                 📋 Tableau
               </a>
+              {fileName === 'SUIVI_TEMPS_FACTURATION.md' && (
+                <button
+                  onClick={() => regenerateTimeTracking(true)}
+                  disabled={regenerating}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm flex items-center gap-2"
+                  title="Mettre à jour les données avec les derniers commits Git"
+                >
+                  {regenerating ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      Mise à jour...
+                    </>
+                  ) : (
+                    <>
+                      🔄 Mettre à jour
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </nav>

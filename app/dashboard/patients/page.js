@@ -3,10 +3,10 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useFilter } from '@/hooks'
+import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -20,9 +20,9 @@ export default function PatientsPage() {
   const { fetchWithAuth, API_URL } = useAuth()
   const [success, setSuccess] = useState(null)
   const [actionError, setActionError] = useState(null)
-  const [showModal, setShowModal] = useState(false)
-  const [editingItem, setEditingItem] = useState(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
+  
+  // Utiliser le hook useEntityModal pour gérer le modal
+  const { isOpen: showModal, editingItem, openCreate: openCreateModal, openEdit: openEditModal, close: closeModal } = useEntityModal()
   const [unassigningDevice, setUnassigningDevice] = useState(null)
   const [assigningDevice, setAssigningDevice] = useState(null)
   const [showAssignModal, setShowAssignModal] = useState(false)
@@ -38,38 +38,11 @@ export default function PatientsPage() {
     { requiresAuth: true }
   )
 
-  // Rafraîchissement automatique toutes les 30 secondes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refetch()
-    }, 30000) // 30 secondes
-    
-    return () => clearInterval(interval)
-  }, [refetch])
+  // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
+  useAutoRefresh(refetch, 30000)
 
-  useEffect(() => {
-    const handleDevicesUpdated = () => {
-      refetch()
-    }
-
-    const handleStorageUpdate = (event) => {
-      if (event.key === 'ott-devices-last-update') {
-        refetch()
-      }
-    }
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('ott-devices-updated', handleDevicesUpdated)
-      window.addEventListener('storage', handleStorageUpdate)
-    }
-
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('ott-devices-updated', handleDevicesUpdated)
-        window.removeEventListener('storage', handleStorageUpdate)
-      }
-    }
-  }, [refetch])
+  // Utiliser le hook useDevicesUpdateListener pour écouter les événements
+  useDevicesUpdateListener(refetch)
 
   const patients = data?.patients?.patients || []
   const allDevices = data?.devices?.devices || []
@@ -221,20 +194,7 @@ export default function PatientsPage() {
     setActionError(null)
   }
 
-  const openCreateModal = () => {
-    setEditingItem(null)
-    setShowModal(true)
-  }
-
-  const openEditModal = (patient) => {
-    setEditingItem(patient)
-    setShowModal(true)
-  }
-
-  const closeModal = () => {
-    setShowModal(false)
-    setEditingItem(null)
-  }
+  // Les fonctions openCreateModal, openEditModal, closeModal sont maintenant gérées par useEntityModal
 
   const handleModalSave = async () => {
     setSuccess(editingItem ? 'Patient modifié avec succès' : 'Patient créé avec succès')
@@ -262,8 +222,8 @@ export default function PatientsPage() {
       }
     }
 
+    // Utiliser la fonction de suppression de base du hook
     try {
-      setDeleteLoading(true)
       setActionError(null)
       setSuccess(null)
       const response = await fetchJson(

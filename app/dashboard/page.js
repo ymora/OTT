@@ -3,11 +3,11 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useEffect } from 'react'
+import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import StatsCard from '@/components/StatsCard'
 import AlertCard from '@/components/AlertCard'
-import { useApiData } from '@/hooks'
+import { useApiData, useAutoRefresh } from '@/hooks'
 import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
@@ -22,14 +22,8 @@ export default function DashboardPage() {
     { requiresAuth: false }
   )
 
-  // Rafraîchissement automatique toutes les 30 secondes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refetch()
-    }, 30000) // 30 secondes
-    
-    return () => clearInterval(interval)
-  }, [refetch])
+  // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
+  useAutoRefresh(refetch, 30000)
 
   const devices = data?.devices?.devices || []
   const alerts = useMemo(() => {
