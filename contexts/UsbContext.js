@@ -399,14 +399,31 @@ export function UsbProvider({ children }) {
               last_seen: now
             }
             
-            setUsbDeviceInfo(prev => ({
-              ...prev,
-              sim_iccid: deviceInfoFromUsb.sim_iccid || prev?.sim_iccid || null,
-              device_serial: deviceInfoFromUsb.device_serial || prev?.device_serial || null,
-              firmware_version: deviceInfoFromUsb.firmware_version || prev?.firmware_version || null,
-              device_name: deviceInfoFromUsb.device_name || prev?.device_name || null,
-              last_seen: now
-            }))
+            setUsbDeviceInfo(prev => {
+              const next = {
+                ...prev,
+                sim_iccid: deviceInfoFromUsb.sim_iccid || prev?.sim_iccid || null,
+                device_serial: deviceInfoFromUsb.device_serial || prev?.device_serial || null,
+                firmware_version: deviceInfoFromUsb.firmware_version || prev?.firmware_version || null,
+                device_name: deviceInfoFromUsb.device_name || prev?.device_name || null,
+                last_seen: now
+              }
+              
+              // Log uniquement si les identifiants sont présents et différents
+              if ((next.sim_iccid || next.device_serial) && 
+                  (next.sim_iccid !== prev?.sim_iccid || next.device_serial !== prev?.device_serial)) {
+                logger.log('📝 [USB] Mise à jour usbDeviceInfo avec identifiants:', {
+                  sim_iccid: next.sim_iccid,
+                  device_serial: next.device_serial,
+                  device_name: next.device_name,
+                  firmware_version: next.firmware_version,
+                  had_prev_sim_iccid: !!prev?.sim_iccid,
+                  had_prev_device_serial: !!prev?.device_serial
+                })
+              }
+              
+              return next
+            })
             
             // Créer ou mettre à jour un dispositif virtuel
             const deviceInfo = {

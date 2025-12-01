@@ -8,11 +8,13 @@ import { useRouter } from 'next/navigation'
 import StatsCard from '@/components/StatsCard'
 import AlertCard from '@/components/AlertCard'
 import { useApiData } from '@/hooks'
+import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { isConnected, usbConnectedDevice, usbDeviceInfo } = useUsb()
   
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -35,9 +37,9 @@ export default function DashboardPage() {
   }, [data])
 
   // Mémoriser les calculs coûteux pour éviter les recalculs inutiles
-  const stats = useMemo(() => ({
-    totalDevices: devices.length,
-    activeDevices: devices.filter(d => {
+  const stats = useMemo(() => {
+    // Compter les dispositifs en ligne depuis la base de données (last_seen < 2h)
+    const onlineFromDb = devices.filter(d => {
       // Gérer les valeurs null, undefined ou invalides
       if (!d.last_seen) return false
       const lastSeen = new Date(d.last_seen)
@@ -45,13 +47,35 @@ export default function DashboardPage() {
       if (isNaN(lastSeen.getTime())) return false
       const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
       return hoursSince < 2
-    }).length,
-    criticalAlerts: alerts.filter(a => a.severity === 'critical').length,
-    lowBatteryDevices: devices.filter(d => {
-      const battery = d.last_battery
-      return battery !== null && battery !== undefined && battery < 30
-    }).length
-  }), [devices, alerts])
+    })
+    
+    // Vérifier si un dispositif USB est connecté et n'est pas déjà compté
+    const usbDeviceOnline = isConnected && usbDeviceInfo && (
+      usbDeviceInfo.sim_iccid || usbDeviceInfo.device_serial
+    )
+    
+    // Si un dispositif USB est connecté, vérifier s'il est déjà dans la liste des dispositifs en ligne
+    let usbDeviceAlreadyCounted = false
+    if (usbDeviceOnline) {
+      usbDeviceAlreadyCounted = onlineFromDb.some(d => 
+        (usbDeviceInfo.sim_iccid && d.sim_iccid === usbDeviceInfo.sim_iccid) ||
+        (usbDeviceInfo.device_serial && d.device_serial === usbDeviceInfo.device_serial)
+      )
+    }
+    
+    // Ajouter 1 si un dispositif USB est connecté et pas déjà compté
+    const activeDevices = onlineFromDb.length + (usbDeviceOnline && !usbDeviceAlreadyCounted ? 1 : 0)
+    
+    return {
+      totalDevices: devices.length,
+      activeDevices,
+      criticalAlerts: alerts.filter(a => a.severity === 'critical').length,
+      lowBatteryDevices: devices.filter(d => {
+        const battery = d.last_battery
+        return battery !== null && battery !== undefined && battery < 30
+      }).length
+    }
+  }, [devices, alerts, isConnected, usbDeviceInfo])
 
   const unassignedDevices = useMemo(() => 
     devices.filter(d => !d.first_name && !d.last_name),

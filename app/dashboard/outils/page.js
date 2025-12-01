@@ -21,8 +21,8 @@ export default function OutilsPage() {
   // Vérifier les permissions (admin ou technicien)
   const canAccess = user?.role_name === 'admin' || user?.role_name === 'technicien'
 
-  // Onglet actif
-  const [activeTab, setActiveTab] = useState('ino')
+  // Onglet actif (Dispositifs par défaut)
+  const [activeTab, setActiveTab] = useState('streaming')
 
   if (!canAccess) {
     return (

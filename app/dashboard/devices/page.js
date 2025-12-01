@@ -1279,7 +1279,315 @@ export default function DevicesPage() {
     }
   }, [isSupported, detectDeviceOnPort, setAutoDetecting])
 
-
+  // Créer/mettre à jour automatiquement le dispositif dans la base quand usbDeviceInfo contient des identifiants
+  // Utilise la même logique que DeviceModal qui fonctionne bien
+  const processedIdentifiersRef = useRef(new Set())
+  const creatingDeviceRef = useRef(false) // Éviter les créations simultanées
+  
+  useEffect(() => {
+    // Log de déclenchement du useEffect
+    logger.log('🔍 [USB] useEffect déclenché:', { 
+      hasUsbDeviceInfo: !!usbDeviceInfo, 
+      isConnected,
+      usbDeviceInfo: usbDeviceInfo ? {
+        sim_iccid: usbDeviceInfo.sim_iccid,
+        device_serial: usbDeviceInfo.device_serial,
+        device_name: usbDeviceInfo.device_name,
+        firmware_version: usbDeviceInfo.firmware_version
+      } : null
+    })
+    
+    // Vérifier si usbDeviceInfo contient des identifiants valides
+    if (!usbDeviceInfo || !isConnected) {
+      logger.debug('🔍 [USB] Pas de usbDeviceInfo ou pas connecté:', { hasUsbDeviceInfo: !!usbDeviceInfo, isConnected })
+      return
+    }
+    
+    const simIccid = usbDeviceInfo.sim_iccid
+    const deviceSerial = usbDeviceInfo.device_serial
+    
+    logger.log('🔍 [USB] Vérification identifiants:', { simIccid, deviceSerial, usbDeviceInfoKeys: Object.keys(usbDeviceInfo) })
+    
+    // Vérifier que les identifiants sont valides (même validation que DeviceModal)
+    const validIccid = simIccid && simIccid !== 'N/A' && simIccid.trim().length >= 4 && /^\d+$/.test(simIccid.trim())
+    const validSerial = deviceSerial && deviceSerial !== 'N/A' && deviceSerial.trim().length >= 4 && /^[A-Z0-9\-]+$/i.test(deviceSerial.trim())
+    
+    if (!validIccid && !validSerial) {
+      logger.debug('🔍 [USB] Identifiants invalides:', { validIccid, validSerial, simIccid, deviceSerial })
+      return
+    }
+    
+    // Créer une clé unique pour éviter de traiter plusieurs fois les mêmes identifiants
+    const identifierKey = `${simIccid || ''}_${deviceSerial || ''}`
+    if (processedIdentifiersRef.current.has(identifierKey)) {
+      return // Déjà traité
+    }
+    
+    // Ne pas créer si une création est déjà en cours
+    if (creatingDeviceRef.current) {
+      return
+    }
+    
+    // Ne pas créer si un dispositif est déjà connecté et n'est pas virtuel
+    if (usbConnectedDevice && !usbConnectedDevice.isVirtual) {
+      // Vérifier si c'est le même dispositif
+      const isSameDevice = 
+        (validIccid && usbConnectedDevice.sim_iccid && usbConnectedDevice.sim_iccid === simIccid) ||
+        (validSerial && usbConnectedDevice.device_serial && usbConnectedDevice.device_serial === deviceSerial)
+      
+      if (isSameDevice) {
+        processedIdentifiersRef.current.add(identifierKey)
+        return // Déjà associé
+      }
+    }
+    
+    // Marquer comme en cours de traitement
+    processedIdentifiersRef.current.add(identifierKey)
+    creatingDeviceRef.current = true
+    
+    logger.log('🔍 [USB] Vérification/création dispositif USB:', { simIccid, deviceSerial, devicesCount: devices.length })
+    
+    // Construire la liste complète des dispositifs (comme allDevices) pour vérifier l'existence
+    // Inclut les dispositifs de la base + les dispositifs USB temporaires
+    const allDevicesList = (() => {
+      const realDevices = [...devices]
+      if (usbConnectedDevice && !usbConnectedDevice.isVirtual) {
+        const isInList = realDevices.some(d => 
+          d.id === usbConnectedDevice.id ||
+          (usbConnectedDevice.sim_iccid && d.sim_iccid === usbConnectedDevice.sim_iccid) ||
+          (usbConnectedDevice.device_serial && d.device_serial === usbConnectedDevice.device_serial)
+        )
+        if (!isInList) {
+          logger.log('📋 [USB] Ajout temporaire usbConnectedDevice à allDevicesList')
+          return [...realDevices, usbConnectedDevice]
+        }
+      }
+      return realDevices
+    })()
+    
+    logger.log('📋 [USB] Liste complète pour recherche:', { allDevicesListCount: allDevicesList.length, devicesCount: devices.length })
+    
+    // Chercher dans allDevicesList (comme DeviceModal)
+    const existingDevice = allDevicesList.find(d =>
+      (validIccid && d.sim_iccid && d.sim_iccid === simIccid) ||
+      (validSerial && d.device_serial && d.device_serial === deviceSerial)
+    )
+    
+    logger.log('🔍 [USB] Résultat recherche:', { existingDevice: existingDevice ? (existingDevice.device_name || existingDevice.sim_iccid) : 'NON TROUVÉ' })
+    
+    const createOrUpdateDevice = async () => {
+      try {
+        if (existingDevice) {
+          // Dispositif existe déjà - mettre à jour (comme DeviceModal)
+          logger.log('✅ [USB] Dispositif existant trouvé, mise à jour:', existingDevice.device_name || existingDevice.sim_iccid)
+          
+          const devicePayload = {
+            device_name: usbDeviceInfo.device_name || existingDevice.device_name,
+            // Ne pas modifier sim_iccid (vient de la SIM)
+            device_serial: validSerial ? deviceSerial : existingDevice.device_serial,
+            firmware_version: usbDeviceInfo.firmware_version || existingDevice.firmware_version,
+            status: 'usb_connected'
+          }
+          
+          await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${existingDevice.id}`,
+            { method: 'PUT', body: JSON.stringify(devicePayload) },
+            { requiresAuth: true }
+          )
+          
+          // Mettre à jour la configuration si disponible depuis USB
+          if (usbDeviceInfo.config) {
+            const configPayload = {}
+            if (usbDeviceInfo.config.sleep_minutes != null) {
+              configPayload.sleep_minutes = parseInt(usbDeviceInfo.config.sleep_minutes)
+            }
+            if (usbDeviceInfo.config.measurement_duration_ms != null) {
+              configPayload.measurement_duration_ms = parseInt(usbDeviceInfo.config.measurement_duration_ms)
+            }
+            if (usbDeviceInfo.config.calibration_coefficients && Array.isArray(usbDeviceInfo.config.calibration_coefficients)) {
+              configPayload.calibration_coefficients = usbDeviceInfo.config.calibration_coefficients
+            }
+            
+            if (Object.keys(configPayload).length > 0) {
+              try {
+                await fetchJson(
+                  fetchWithAuth,
+                  API_URL,
+                  `/api.php/devices/${existingDevice.id}/config`,
+                  { method: 'PUT', body: JSON.stringify(configPayload) },
+                  { requiresAuth: true }
+                )
+              } catch (configErr) {
+                logger.warn('⚠️ [USB] Erreur mise à jour configuration:', configErr)
+              }
+            }
+          }
+          
+          // Recharger depuis l'API pour avoir les données à jour
+          const devicesResponse = await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            '/api.php/devices',
+            { method: 'GET' },
+            { requiresAuth: true }
+          )
+          const updatedDevice = (devicesResponse.devices || []).find(d => d.id === existingDevice.id)
+          
+          if (updatedDevice) {
+            setUsbConnectedDevice(updatedDevice)
+            setUsbVirtualDevice(null)
+            await refetch()
+            notifyDevicesUpdated()
+            logger.log('✅ [USB] Dispositif mis à jour et associé')
+          }
+        } else {
+          // Dispositif n'existe pas - créer (comme DeviceModal)
+          logger.log('📝 [USB] Création du dispositif USB dans la base...')
+          
+          const deviceName = usbDeviceInfo.device_name || 
+                            (validIccid ? `OTT-${simIccid.slice(-4)}` : 
+                             validSerial ? deviceSerial : 
+                             `USB-${Date.now()}`)
+          
+          const devicePayload = {
+            device_name: deviceName,
+            sim_iccid: validIccid ? simIccid : null,
+            device_serial: validSerial ? deviceSerial : null,
+            firmware_version: usbDeviceInfo.firmware_version || null,
+            status: 'usb_connected'
+          }
+          
+          // Créer le dispositif
+          const response = await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            '/api.php/devices',
+            { method: 'POST', body: JSON.stringify(devicePayload) },
+            { requiresAuth: true }
+          )
+          
+          if (response.device) {
+            logger.log('✅ [USB] Dispositif créé:', response.device.id)
+            
+            // Mettre à jour la configuration si disponible depuis USB
+            if (usbDeviceInfo.config && response.device.id) {
+              const configPayload = {}
+              if (usbDeviceInfo.config.sleep_minutes != null) {
+                configPayload.sleep_minutes = parseInt(usbDeviceInfo.config.sleep_minutes)
+              }
+              if (usbDeviceInfo.config.measurement_duration_ms != null) {
+                configPayload.measurement_duration_ms = parseInt(usbDeviceInfo.config.measurement_duration_ms)
+              }
+              if (usbDeviceInfo.config.calibration_coefficients && Array.isArray(usbDeviceInfo.config.calibration_coefficients)) {
+                configPayload.calibration_coefficients = usbDeviceInfo.config.calibration_coefficients
+              }
+              
+              if (Object.keys(configPayload).length > 0) {
+                try {
+                  await fetchJson(
+                    fetchWithAuth,
+                    API_URL,
+                    `/api.php/devices/${response.device.id}/config`,
+                    { method: 'PUT', body: JSON.stringify(configPayload) },
+                    { requiresAuth: true }
+                  )
+                  logger.log('✅ [USB] Configuration créée/mise à jour')
+                } catch (configErr) {
+                  logger.warn('⚠️ [USB] Erreur création configuration:', configErr)
+                }
+              }
+            }
+            
+            // Associer et mettre à jour le tableau
+            logger.log('✅ [USB] Dispositif créé, association et mise à jour tableau...', response.device)
+            setUsbConnectedDevice(response.device)
+            setUsbVirtualDevice(null)
+            
+            // Forcer le rafraîchissement immédiat
+            await refetch()
+            notifyDevicesUpdated()
+            
+            // Vérifier que le dispositif est bien dans la liste après refetch
+            setTimeout(async () => {
+              try {
+                const checkResponse = await fetchJson(
+                  fetchWithAuth,
+                  API_URL,
+                  '/api.php/devices',
+                  { method: 'GET' },
+                  { requiresAuth: true }
+                )
+                const checkDevices = checkResponse.devices || []
+                const found = checkDevices.find(d => d.id === response.device.id)
+                logger.log('🔍 [USB] Vérification après création:', { 
+                  deviceId: response.device.id, 
+                  found: !!found,
+                  totalDevices: checkDevices.length 
+                })
+              } catch (checkErr) {
+                logger.warn('⚠️ [USB] Erreur vérification:', checkErr)
+              }
+            }, 1000)
+            
+            logger.log('✅ [USB] Dispositif créé et associé, tableau mis à jour')
+          }
+        }
+      } catch (err) {
+        logger.error('❌ [USB] Erreur création/mise à jour dispositif:', err)
+        // Si l'erreur indique que le dispositif existe déjà, chercher à nouveau
+        if (err.error && (err.error.includes('déjà utilisé') || err.error.includes('déjà existant'))) {
+          try {
+            const devicesResponse = await fetchJson(
+              fetchWithAuth,
+              API_URL,
+              '/api.php/devices',
+              { method: 'GET' },
+              { requiresAuth: true }
+            )
+            const allDevicesFromApi = devicesResponse.devices || []
+            const foundDevice = allDevicesFromApi.find(d => {
+              if (validIccid && d.sim_iccid && d.sim_iccid === simIccid) return true
+              if (validSerial && d.device_serial && d.device_serial === deviceSerial) return true
+              return false
+            })
+            
+            if (foundDevice) {
+              logger.log('✅ [USB] Dispositif existant trouvé après erreur:', foundDevice.device_name || foundDevice.sim_iccid)
+              setUsbConnectedDevice(foundDevice)
+              setUsbVirtualDevice(null)
+              await refetch()
+              notifyDevicesUpdated()
+            }
+          } catch (searchErr) {
+            logger.error('❌ [USB] Erreur recherche après création échouée:', searchErr)
+          }
+        }
+        // Retirer de processedIdentifiersRef pour permettre un nouvel essai
+        processedIdentifiersRef.current.delete(identifierKey)
+      } finally {
+        creatingDeviceRef.current = false
+      }
+    }
+    
+    createOrUpdateDevice()
+  }, [
+    usbDeviceInfo?.sim_iccid, 
+    usbDeviceInfo?.device_serial, 
+    usbDeviceInfo?.device_name,
+    usbDeviceInfo?.firmware_version,
+    usbDeviceInfo?.config,
+    isConnected, 
+    devices, 
+    usbConnectedDevice, 
+    fetchWithAuth, 
+    API_URL, 
+    refetch, 
+    notifyDevicesUpdated, 
+    setUsbConnectedDevice, 
+    setUsbVirtualDevice
+  ])
 
   // Fonction pour ouvrir le modal de suppression
   const openDeleteModal = (device) => {
@@ -1345,9 +1653,29 @@ export default function DevicesPage() {
   const allDevices = useMemo(() => {
     const realDevices = [...devices]
     
-    // Si un dispositif USB est connecté et trouvé en base, ne pas ajouter de virtuel
-    if (usbConnectedDevice) {
-      // Le dispositif est déjà dans la liste (devices), pas besoin d'ajouter de virtuel
+    // Si un dispositif USB est connecté et trouvé en base, vérifier qu'il est dans la liste
+    if (usbConnectedDevice && !usbConnectedDevice.isVirtual) {
+      // Vérifier si le dispositif est déjà dans la liste
+      const isInList = realDevices.some(d => 
+        d.id === usbConnectedDevice.id ||
+        (usbConnectedDevice.sim_iccid && d.sim_iccid === usbConnectedDevice.sim_iccid) ||
+        (usbConnectedDevice.device_serial && d.device_serial === usbConnectedDevice.device_serial)
+      )
+      
+      // Si le dispositif n'est pas encore dans la liste (ex: juste créé), l'ajouter temporairement
+      if (!isInList) {
+        logger.log('📋 [allDevices] Ajout temporaire du dispositif USB créé:', {
+          device: usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid,
+          id: usbConnectedDevice.id,
+          sim_iccid: usbConnectedDevice.sim_iccid,
+          device_serial: usbConnectedDevice.device_serial,
+          devicesCount: realDevices.length,
+          willBeCount: realDevices.length + 1
+        })
+        return [...realDevices, usbConnectedDevice]
+      }
+      
+      logger.debug('📋 [allDevices] Dispositif USB déjà dans la liste:', usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid)
       return realDevices
     }
     
