@@ -10,6 +10,7 @@ import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 import FlashModal from '@/components/FlashModal'
+import DeviceModal from '@/components/DeviceModal'
 
 export default function DebugTab() {
   const {
@@ -62,17 +63,7 @@ export default function DebugTab() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   
-  // États pour le formulaire de création
-  const [showCreateDeviceModal, setShowCreateDeviceModal] = useState(false)
-  const [creatingDevice, setCreatingDevice] = useState(false)
-  const [deviceFormData, setDeviceFormData] = useState({
-    sim_iccid: '',
-    device_serial: '',
-    device_name: '',
-    status: 'inactive',
-    patient_id: null
-  })
-  const [deviceFormError, setDeviceFormError] = useState(null)
+  // États unifiés pour création et modification (comme pour patients et utilisateurs)
   
   // États pour l'assignation de patient
   const [showAssignPatientModal, setShowAssignPatientModal] = useState(false)
@@ -82,6 +73,10 @@ export default function DebugTab() {
   // États pour le flash
   const [showFlashModal, setShowFlashModal] = useState(false)
   const [deviceToFlash, setDeviceToFlash] = useState(null)
+  
+  // États unifiés pour création et modification (comme pour patients et utilisateurs)
+  const [showDeviceModal, setShowDeviceModal] = useState(false)
+  const [editingDevice, setEditingDevice] = useState(null) // null = création, objet = modification
   
   const [availablePorts, setAvailablePorts] = useState([])
   const [selectedPortId, setSelectedPortId] = useState('')
@@ -606,46 +601,6 @@ export default function DebugTab() {
   }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
   
   // Gérer la création d'un dispositif
-  const handleCreateDevice = useCallback(async () => {
-    setCreatingDevice(true)
-    setDeviceFormError(null)
-    try {
-      const url = `${API_URL}/api.php/devices`
-      const response = await fetchWithAuth(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(deviceFormData)
-      }, { requiresAuth: true })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
-      }
-      
-      const data = await response.json()
-      if (!data.success) {
-        throw new Error(data.error || 'Erreur API')
-      }
-      
-      logger.log(`✅ Dispositif créé: ${data.device?.device_name || data.device?.sim_iccid}`)
-      appendUsbStreamLog(`✅ Dispositif créé: ${data.device?.device_name || data.device?.sim_iccid}`, 'dashboard')
-      setShowCreateDeviceModal(false)
-      setDeviceFormData({
-        sim_iccid: '',
-        device_serial: '',
-        device_name: '',
-        status: 'inactive',
-        patient_id: null
-      })
-      refetchDevices()
-    } catch (err) {
-      logger.error('Erreur création dispositif:', err)
-      setDeviceFormError(err.message || 'Erreur lors de la création du dispositif')
-      appendUsbStreamLog(`❌ Erreur création dispositif: ${err.message || err}`, 'dashboard')
-    } finally {
-      setCreatingDevice(false)
-    }
-  }, [fetchWithAuth, API_URL, deviceFormData, appendUsbStreamLog, refetchDevices])
   
   // Gérer l'assignation d'un patient à un dispositif
   const handleAssignPatient = useCallback(async (patientId) => {
@@ -789,119 +744,6 @@ export default function DebugTab() {
       </Modal>
       
       {/* Modal de confirmation de suppression */}
-      {/* Modal de création de dispositif */}
-      <Modal
-        isOpen={showCreateDeviceModal}
-        onClose={() => {
-          setShowCreateDeviceModal(false)
-          setDeviceFormData({
-            sim_iccid: '',
-            device_serial: '',
-            device_name: '',
-            status: 'inactive',
-            patient_id: null
-          })
-          setDeviceFormError(null)
-        }}
-        title="➕ Créer un nouveau dispositif"
-        maxWidth="max-w-2xl"
-      >
-        <div className="space-y-4">
-          {deviceFormError && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-800 dark:text-red-300">{deviceFormError}</p>
-            </div>
-          )}
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Nom du dispositif *
-              </label>
-              <input
-                type="text"
-                value={deviceFormData.device_name}
-                onChange={(e) => setDeviceFormData({ ...deviceFormData, device_name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                placeholder="Ex: Dispositif OTT-001"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                SIM ICCID
-              </label>
-              <input
-                type="text"
-                value={deviceFormData.sim_iccid}
-                onChange={(e) => setDeviceFormData({ ...deviceFormData, sim_iccid: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                placeholder="Ex: 89314404000012345678"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Minimum 10 caractères si renseigné
-              </p>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Numéro de série
-              </label>
-              <input
-                type="text"
-                value={deviceFormData.device_serial}
-                onChange={(e) => setDeviceFormData({ ...deviceFormData, device_serial: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                placeholder="Ex: ESP32-001"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Statut
-              </label>
-              <select
-                value={deviceFormData.status}
-                onChange={(e) => setDeviceFormData({ ...deviceFormData, status: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                <option value="inactive">Inactif</option>
-                <option value="active">Actif</option>
-                <option value="maintenance">Maintenance</option>
-              </select>
-            </div>
-          </div>
-          
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => {
-                setShowCreateDeviceModal(false)
-                setDeviceFormData({
-                  sim_iccid: '',
-                  device_serial: '',
-                  device_name: '',
-                  status: 'inactive',
-                  patient_id: null
-                })
-                setDeviceFormError(null)
-              }}
-              className="btn-secondary"
-              disabled={creatingDevice}
-            >
-              Annuler
-            </button>
-            <button
-              onClick={handleCreateDevice}
-              disabled={creatingDevice || !deviceFormData.device_name.trim()}
-              className="btn-primary"
-            >
-              {creatingDevice ? '⏳ Création...' : '✅ Créer'}
-            </button>
-          </div>
-        </div>
-      </Modal>
-      
       {/* Modal de flash */}
       <FlashModal
         isOpen={showFlashModal}
@@ -914,6 +756,35 @@ export default function DebugTab() {
           usbDeviceInfo?.sim_iccid === deviceToFlash.sim_iccid ||
           usbDeviceInfo?.device_serial === deviceToFlash.device_serial
         ) ? 'usb' : 'ota'}
+      />
+      
+      {/* Modal unifié pour création et modification (comme pour patients et utilisateurs) */}
+      {/* Modal unifié pour création et modification (comme pour patients et utilisateurs) */}
+      <DeviceModal
+        isOpen={showDeviceModal}
+        onClose={() => {
+          setShowDeviceModal(false)
+          setEditingDevice(null)
+        }}
+        editingItem={editingDevice || (usbDeviceInfo && !editingDevice ? {
+          // Pré-remplir depuis USB si création et données USB disponibles (sans id = pré-remplissage)
+          sim_iccid: usbDeviceInfo.sim_iccid || '',
+          device_serial: usbDeviceInfo.device_serial || '',
+          device_name: usbDeviceInfo.device_name || '',
+          firmware_version: usbDeviceInfo.firmware_version || ''
+        } : null)} // null = création vide, objet sans id = pré-remplissage USB, objet avec id = modification
+        onSave={() => {
+          setShowDeviceModal(false)
+          const action = editingDevice ? 'mis à jour' : 'créé'
+          const name = editingDevice?.device_name || editingDevice?.sim_iccid || usbDeviceInfo?.device_name || usbDeviceInfo?.sim_iccid || 'nouveau dispositif'
+          refetchDevices()
+          appendUsbStreamLog(`✅ Dispositif "${name}" ${action}`, 'dashboard')
+          setEditingDevice(null)
+        }}
+        fetchWithAuth={fetchWithAuth}
+        API_URL={API_URL}
+        patients={allPatients}
+        allDevices={allDevices}
       />
       
       {/* Modal de confirmation de suppression */}
@@ -1019,7 +890,10 @@ export default function DebugTab() {
               </p>
             </div>
             <button
-              onClick={() => setShowCreateDeviceModal(true)}
+              onClick={() => {
+                setEditingDevice(null) // null = création
+                setShowDeviceModal(true)
+              }}
               className="btn-primary"
               title="Créer un nouveau dispositif"
             >
@@ -1411,6 +1285,16 @@ export default function DebugTab() {
                 {/* Actions */}
                 <td className="px-3 py-1.5">
                   <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingDevice(device)
+                        setShowDeviceModal(true)
+                      }}
+                      className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                      title="Modifier le dispositif (données et configuration)"
+                    >
+                      <span className="text-lg">✏️</span>
+                    </button>
                     <button
                       onClick={() => handleOpenFlashModal(device)}
                       disabled={compiledFirmwares.length === 0}

@@ -5,6 +5,29 @@ import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
 import logger from '@/lib/logger'
 
+// Composant Accordéon simple
+function Accordion({ title, children, defaultOpen = false }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  
+  return (
+    <div className="border border-gray-200 dark:border-slate-700 rounded-lg">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+      >
+        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{title}</span>
+        <span className="text-gray-500 dark:text-gray-400">{isOpen ? '▼' : '▶'}</span>
+      </button>
+      {isOpen && (
+        <div className="px-4 pb-4 pt-2">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * Composant modal réutilisable pour créer/modifier des dispositifs
  * @param {Object} props
@@ -66,12 +89,14 @@ export default function DeviceModal({
       // Charger la configuration si disponible
       loadDeviceConfig(editingItem.id)
     } else {
-      // Mode création - réinitialiser
+      // Mode création - réinitialiser ou pré-remplir depuis editingItem si fourni (ex: données USB)
+      // Si editingItem est fourni mais n'a pas d'id, c'est un pré-remplissage (ex: depuis USB)
+      const hasPrefill = editingItem && !editingItem.id
       setFormData({
-        device_name: '',
-        sim_iccid: '',
-        device_serial: '',
-        firmware_version: '',
+        device_name: hasPrefill ? (editingItem.device_name || '') : '',
+        sim_iccid: hasPrefill ? (editingItem.sim_iccid || '') : '', // Pré-rempli depuis USB si disponible (mais reste en lecture seule)
+        device_serial: hasPrefill ? (editingItem.device_serial || '') : '',
+        firmware_version: hasPrefill ? (editingItem.firmware_version || '') : '',
         status: 'inactive',
         patient_id: null,
         sleep_minutes: null,
@@ -182,11 +207,21 @@ export default function DeviceModal({
       // Préparer les données du dispositif
       const devicePayload = {
         device_name: formData.device_name.trim(),
-        sim_iccid: formData.sim_iccid && formData.sim_iccid.trim().length > 0 ? formData.sim_iccid.trim() : null,
+        // SIM ICCID ne peut pas être modifié - il vient de la SIM
+        // En création, on peut le fournir s'il est disponible (ex: depuis USB)
+        // En modification, on ne l'envoie pas pour ne pas le modifier
+        sim_iccid: (!editingItem && formData.sim_iccid && formData.sim_iccid.trim().length > 0 && formData.sim_iccid !== 'N/A') 
+          ? formData.sim_iccid.trim() 
+          : undefined,
         device_serial: formData.device_serial && formData.device_serial.trim().length > 0 ? formData.device_serial.trim() : null,
-        firmware_version: formData.firmware_version && formData.firmware_version.trim().length > 0 ? formData.firmware_version.trim() : null,
+        // Ne pas modifier firmware_version - il est en lecture seule
         status: formData.status || 'inactive',
         patient_id: formData.patient_id || null
+      }
+      
+      // Ajouter firmware_version uniquement en création (pas en modification)
+      if (!editingItem && formData.firmware_version && formData.firmware_version.trim().length > 0 && formData.firmware_version !== 'N/A') {
+        devicePayload.firmware_version = formData.firmware_version.trim()
       }
 
       // Préparer la configuration
@@ -346,7 +381,7 @@ export default function DeviceModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             {editingItem ? '✏️ Modifier le dispositif' : '➕ Créer un nouveau dispositif'}
@@ -362,188 +397,198 @@ export default function DeviceModal({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {formError && <ErrorMessage message={formError} />}
 
-          {/* Nom du dispositif */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-              Nom du dispositif <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="device_name"
-              value={formData.device_name}
-              onChange={handleInputChange}
-              className={`input w-full ${formErrors.device_name ? 'border-red-500' : ''}`}
-              placeholder="Ex: Dispositif OTT-001"
-              required
-            />
-            {formErrors.device_name && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_name}</p>
-            )}
-          </div>
-
-          {/* SIM ICCID */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-              SIM ICCID
-            </label>
-            <input
-              type="text"
-              name="sim_iccid"
-              value={formData.sim_iccid}
-              onChange={handleInputChange}
-              className={`input w-full ${formErrors.sim_iccid ? 'border-red-500' : ''}`}
-              placeholder="Ex: 89314404000012345678"
-              pattern="[0-9]{4,20}"
-              title="4 à 20 chiffres"
-            />
-            {formErrors.sim_iccid && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.sim_iccid}</p>
-            )}
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Minimum 4 caractères si renseigné</p>
-          </div>
-
-          {/* Numéro de série */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-              Numéro de série
-            </label>
-            <input
-              type="text"
-              name="device_serial"
-              value={formData.device_serial}
-              onChange={handleInputChange}
-              className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''}`}
-              placeholder="Ex: ESP32-001"
-            />
-            {formErrors.device_serial && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_serial}</p>
-            )}
-          </div>
-
-          {/* Version du firmware */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-              Version du firmware
-            </label>
-            <input
-              type="text"
-              name="firmware_version"
-              value={formData.firmware_version}
-              onChange={handleInputChange}
-              className="input w-full"
-              placeholder="Ex: 3.8-unified"
-            />
-          </div>
-
-          {/* Statut */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-              Statut
-            </label>
-            <select
-              name="status"
-              value={formData.status}
-              onChange={handleInputChange}
-              className="input w-full"
-            >
-              <option value="inactive">Inactif</option>
-              <option value="active">Actif</option>
-              <option value="usb_connected">Connecté USB</option>
-              <option value="maintenance">Maintenance</option>
-            </select>
-          </div>
-
-          {/* Patient */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-              Patient
-            </label>
-            <select
-              name="patient_id"
-              value={formData.patient_id || ''}
-              onChange={handleInputChange}
-              className="input w-full"
-            >
-              <option value="">— Aucun patient —</option>
-              {patients.map(patient => (
-                <option key={patient.id} value={patient.id}>
-                  {patient.first_name} {patient.last_name} {patient.email ? `(${patient.email})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Configuration */}
-          <div className="border-t border-gray-200 dark:border-slate-700 pt-4 mt-4">
-            <h3 className="text-sm font-semibold mb-4 text-gray-700 dark:text-gray-300">Configuration</h3>
-
-            {/* Intervalle de veille */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                ⏰ Intervalle de veille (minutes)
-              </label>
-              <input
-                type="number"
-                name="sleep_minutes"
-                value={formData.sleep_minutes || ''}
-                onChange={handleInputChange}
-                className="input w-full"
-                placeholder="Ex: 5"
-                min="1"
-              />
-            </div>
-
-            {/* Durée de mesure */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                ⏱️ Durée de mesure (ms)
-              </label>
-              <input
-                type="number"
-                name="measurement_duration_ms"
-                value={formData.measurement_duration_ms || ''}
-                onChange={handleInputChange}
-                className="input w-full"
-                placeholder="Ex: 5000"
-                min="1"
-              />
-            </div>
-
-            {/* Envoyer toutes les N réveils */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                📤 Envoyer toutes les N réveils
-              </label>
-              <input
-                type="number"
-                name="send_every_n_wakeups"
-                value={formData.send_every_n_wakeups || 1}
-                onChange={handleInputChange}
-                className="input w-full"
-                min="1"
-              />
-            </div>
-
-            {/* Calibration */}
+          {/* Première ligne : Nom et Statut */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Nom du dispositif */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                📐 Calibration (a0, a1, a2)
+                Nom du dispositif <span className="text-red-500">*</span>
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[0, 1, 2].map(index => (
-                  <input
-                    key={index}
-                    type="number"
-                    step="any"
-                    value={formData.calibration_coefficients[index] || 0}
-                    onChange={(e) => handleCalibrationChange(index, e.target.value)}
-                    className="input w-full"
-                    placeholder={`a${index}`}
-                  />
-                ))}
-              </div>
+              <input
+                type="text"
+                name="device_name"
+                value={formData.device_name}
+                onChange={handleInputChange}
+                className={`input w-full ${formErrors.device_name ? 'border-red-500' : ''}`}
+                placeholder="Ex: Dispositif OTT-001"
+                required
+              />
+              {formErrors.device_name && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_name}</p>
+              )}
+            </div>
+
+            {/* Statut */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                Statut
+              </label>
+              <select
+                name="status"
+                value={formData.status}
+                onChange={handleInputChange}
+                className="input w-full"
+              >
+                <option value="inactive">Inactif</option>
+                <option value="active">Actif</option>
+                <option value="usb_connected">Connecté USB</option>
+                <option value="maintenance">Maintenance</option>
+              </select>
             </div>
           </div>
+
+          {/* Deuxième ligne : SIM ICCID et Numéro de série */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* SIM ICCID - Lecture seule (vient de la SIM) */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                SIM ICCID
+              </label>
+              <input
+                type="text"
+                name="sim_iccid"
+                value={formData.sim_iccid || 'N/A'}
+                readOnly
+                disabled
+                className="input w-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
+                placeholder="Ex: 89314404000012345678"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Lecture seule (vient de la SIM)</p>
+            </div>
+
+            {/* Numéro de série */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                Numéro de série
+              </label>
+              <input
+                type="text"
+                name="device_serial"
+                value={formData.device_serial}
+                onChange={handleInputChange}
+                className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''}`}
+                placeholder="Ex: ESP32-001"
+              />
+              {formErrors.device_serial && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_serial}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Troisième ligne : Version firmware (lecture seule) et Patient */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Version du firmware - Lecture seule */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                Version du firmware
+              </label>
+              <input
+                type="text"
+                name="firmware_version"
+                value={formData.firmware_version || 'N/A'}
+                readOnly
+                disabled
+                className="input w-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
+                placeholder="Ex: 3.8-unified"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Lecture seule</p>
+            </div>
+
+            {/* Patient */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                Patient
+              </label>
+              <select
+                name="patient_id"
+                value={formData.patient_id || ''}
+                onChange={handleInputChange}
+                className="input w-full"
+              >
+                <option value="">— Aucun patient —</option>
+                {patients.map(patient => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.first_name} {patient.last_name} {patient.email ? `(${patient.email})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Configuration - Accordéon */}
+          <Accordion title="⚙️ Configuration" defaultOpen={editingItem ? true : false}>
+            <div className="space-y-4">
+              {/* Première ligne : Intervalle de veille et Durée de mesure */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Intervalle de veille */}
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    ⏰ Intervalle de veille (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    name="sleep_minutes"
+                    value={formData.sleep_minutes || ''}
+                    onChange={handleInputChange}
+                    className="input w-full"
+                    placeholder="Ex: 5"
+                    min="1"
+                  />
+                </div>
+
+                {/* Durée de mesure */}
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    ⏱️ Durée de mesure (ms)
+                  </label>
+                  <input
+                    type="number"
+                    name="measurement_duration_ms"
+                    value={formData.measurement_duration_ms || ''}
+                    onChange={handleInputChange}
+                    className="input w-full"
+                    placeholder="Ex: 5000"
+                    min="1"
+                  />
+                </div>
+              </div>
+
+              {/* Deuxième ligne : Envoyer toutes les N réveils */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                  📤 Envoyer toutes les N réveils
+                </label>
+                <input
+                  type="number"
+                  name="send_every_n_wakeups"
+                  value={formData.send_every_n_wakeups || 1}
+                  onChange={handleInputChange}
+                  className="input w-full"
+                  min="1"
+                />
+              </div>
+
+              {/* Calibration */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                  📐 Calibration (a0, a1, a2)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[0, 1, 2].map(index => (
+                    <input
+                      key={index}
+                      type="number"
+                      step="any"
+                      value={formData.calibration_coefficients[index] || 0}
+                      onChange={(e) => handleCalibrationChange(index, e.target.value)}
+                      className="input w-full"
+                      placeholder={`a${index}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Accordion>
 
           {/* Boutons */}
           <div className="flex gap-2 justify-end pt-4 border-t border-gray-200 dark:border-slate-700">

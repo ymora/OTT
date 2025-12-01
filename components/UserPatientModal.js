@@ -6,6 +6,29 @@ import ErrorMessage from '@/components/ErrorMessage'
 import { isValidEmail, isValidPhone } from '@/lib/utils'
 import logger from '@/lib/logger'
 
+// Composant Accordéon simple (réutilisé depuis DeviceModal)
+function Accordion({ title, children, defaultOpen = false }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  
+  return (
+    <div className="border border-gray-200 dark:border-slate-700 rounded-lg">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+      >
+        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{title}</span>
+        <span className="text-gray-500 dark:text-gray-400">{isOpen ? '▼' : '▶'}</span>
+      </button>
+      {isOpen && (
+        <div className="px-4 pb-4 pt-2">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * Composant modal réutilisable pour créer/modifier des utilisateurs ou patients
  * @param {Object} props
@@ -553,15 +576,9 @@ export default function UserPatientModal({
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             title="Fermer"
             aria-label="Fermer"
-          >
-            <span className="text-2xl font-bold leading-none">×</span>
-          </button>
-          <button 
-            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" 
-            onClick={onClose} 
             disabled={saving}
           >
-            ✕
+            <span className="text-2xl font-bold leading-none">×</span>
           </button>
         </div>
 
@@ -727,28 +744,6 @@ export default function UserPatientModal({
                     <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.passwordConfirm}</p>
                   )}
                 </div>
-
-                <div className="flex items-end">
-                  <label className="flex items-center gap-3 text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-                    <input
-                      type="checkbox"
-                      name="is_active"
-                      checked={formData.is_active !== undefined ? formData.is_active : true}
-                      onChange={handleInputChange}
-                      disabled={editingItem && currentUser && editingItem.id === currentUser.id}
-                      className="form-checkbox h-4 w-4 text-primary-600 dark:text-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                    <span className={editingItem && currentUser && editingItem.id === currentUser.id ? 'opacity-50' : ''}>
-                      Compte actif
-                      {editingItem && currentUser && editingItem.id === currentUser.id && (
-                        <span className="text-xs text-gray-500 ml-2">(Vous ne pouvez pas désactiver votre propre compte)</span>
-                      )}
-                    </span>
-                  </label>
-                  {formErrors.is_active && (
-                    <p className="text-red-600 dark:text-red-400 text-xs mt-1 ml-4">{formErrors.is_active}</p>
-                  )}
-                </div>
               </div>
             </>
           )}
@@ -756,6 +751,36 @@ export default function UserPatientModal({
           {/* Champs spécifiques patient */}
           {type === 'patient' && (
             <>
+              {/* Email et Téléphone sur la même ligne */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Email
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email || ''}
+                      onChange={handleInputChange}
+                      className="input mt-1"
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Téléphone
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone || ''}
+                      onChange={handleInputChange}
+                      className="input mt-1"
+                      placeholder="+33..."
+                    />
+                  </label>
+                </div>
+              </div>
+              
+              {/* Date de naissance */}
               <div>
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Date de naissance
@@ -768,69 +793,84 @@ export default function UserPatientModal({
                   />
                 </label>
               </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Email
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email || ''}
-                    onChange={handleInputChange}
-                    className="input mt-1"
-                  />
-                </label>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Ville
-                  <input
-                    type="text"
-                    name="city"
-                    value={formData.city || ''}
-                    onChange={handleInputChange}
-                    className="input mt-1"
-                  />
-                </label>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Code postal
-                  <input
-                    type="text"
-                    name="postal_code"
-                    value={formData.postal_code || ''}
-                    onChange={handleInputChange}
-                    className={`input mt-1 ${formErrors.postal_code ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
-                  />
-                </label>
-                {formErrors.postal_code && (
-                  <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.postal_code}</p>
-                )}
+              
+              {/* Code postal et Ville sur la même ligne (code postal en premier) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Code postal
+                    <input
+                      type="text"
+                      name="postal_code"
+                      value={formData.postal_code || ''}
+                      onChange={handleInputChange}
+                      className={`input mt-1 ${formErrors.postal_code ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''}`}
+                    />
+                  </label>
+                  {formErrors.postal_code && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{formErrors.postal_code}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Ville
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city || ''}
+                      onChange={handleInputChange}
+                      className="input mt-1"
+                    />
+                  </label>
+                </div>
               </div>
             </>
           )}
 
-          {/* Téléphone (commun) */}
-          <div>
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
-              Téléphone {type === 'user' ? '(optionnel, pour SMS)' : ''}
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone || ''}
-                onChange={handleInputChange}
-                className="input mt-1"
-                placeholder={type === 'user' ? '+33612345678' : '+33...'}
-              />
-            </label>
-          </div>
+          {/* Téléphone (uniquement pour utilisateur) */}
+          {type === 'user' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                  Téléphone (optionnel, pour SMS)
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={formData.phone || ''}
+                    onChange={handleInputChange}
+                    className="input mt-1"
+                    placeholder="+33612345678"
+                  />
+                </label>
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-3 text-sm font-medium text-gray-700 dark:text-gray-300 w-full">
+                  <input
+                    type="checkbox"
+                    name="is_active"
+                    checked={formData.is_active !== undefined ? formData.is_active : true}
+                    onChange={handleInputChange}
+                    disabled={editingItem && currentUser && editingItem.id === currentUser.id}
+                    className="form-checkbox h-4 w-4 text-primary-600 dark:text-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <span className={editingItem && currentUser && editingItem.id === currentUser.id ? 'opacity-50' : ''}>
+                    Compte actif
+                    {editingItem && currentUser && editingItem.id === currentUser.id && (
+                      <span className="text-xs text-gray-500 ml-2">(Vous ne pouvez pas désactiver votre propre compte)</span>
+                    )}
+                  </span>
+                </label>
+                {formErrors.is_active && (
+                  <p className="text-red-600 dark:text-red-400 text-xs mt-1 ml-4">{formErrors.is_active}</p>
+                )}
+              </div>
+            </div>
+          )}
 
           <ErrorMessage error={formError} onClose={() => setFormError(null)} />
 
-          {/* Section Notifications */}
-          <div className="border-t border-gray-200/80 dark:border-slate-700/50 pt-4 mt-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">📧 Notifications</h3>
-            
+          {/* Section Notifications - Accordéon */}
+          <Accordion title="📧 Notifications" defaultOpen={editingItem ? true : false}>
             {editingItem && loadingNotifPrefs ? (
               <div className="text-sm text-gray-500 dark:text-gray-400">Chargement des préférences...</div>
             ) : (
@@ -1154,7 +1194,7 @@ export default function UserPatientModal({
                   </div>
                 </div>
             )}
-          </div>
+          </Accordion>
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
