@@ -18,6 +18,7 @@ import { decorateUsbInfo } from '@/lib/usbDevices'
 import { startQueueProcessor, stopQueueProcessor } from '@/lib/measurementSender'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
+import DeviceModal from '@/components/DeviceModal'
 import { buildUpdateConfigPayload, buildUpdateCalibrationPayload } from '@/lib/deviceCommands'
 import { createDataSourceTracker, getDataSourceBadge } from '@/lib/dataSourceTracker'
 
@@ -99,6 +100,10 @@ export default function DevicesPage() {
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [modalActiveTab, setModalActiveTab] = useState('details') // 'details', 'alerts', 'logs', 'commands'
+  
+  // Modal de modification de dispositif
+  const [showDeviceModal, setShowDeviceModal] = useState(false)
+  const [editingDevice, setEditingDevice] = useState(null)
   
   // Modal Upload Firmware
   const [showUploadFirmwareModal, setShowUploadFirmwareModal] = useState(false)
@@ -1051,13 +1056,13 @@ export default function DevicesPage() {
   }, [selectedDevice, usbConnectedDevice, usbVirtualDevice, usbPortInfo])
 
   // Détection automatique au chargement et périodiquement (ports déjà autorisés)
+  // eslint-disable-next-line react/no-unescaped-entities
   useEffect(() => {
     if (!isSupported) {
       setAutoDetecting(false)
       return
     }
 
-    // eslint-disable-next-line react/no-unescaped-entities
     // Ne pas détecter si déjà un dispositif connecté
     if (usbConnectedDevice || usbVirtualDevice) {
       // Ne pas désactiver autoDetecting ici, juste ne pas lancer la détection
@@ -2085,9 +2090,13 @@ export default function DevicesPage() {
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => handleShowDetails(device)}
+                            onClick={() => {
+                              setEditingDevice(device)
+                              setShowDeviceModal(true)
+                            }}
+                            disabled={device.isVirtual}
                             className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                            title="Voir les détails du dispositif"
+                            title={device.isVirtual ? "Impossible de modifier un dispositif virtuel USB" : "Modifier le dispositif"}
                           >
                             <span className="text-lg">✏️</span>
                           </button>
@@ -2586,6 +2595,25 @@ export default function DevicesPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de modification de dispositif */}
+      <DeviceModal
+        isOpen={showDeviceModal}
+        onClose={() => {
+          setShowDeviceModal(false)
+          setEditingDevice(null)
+        }}
+        editingItem={editingDevice}
+        onSave={async () => {
+          await refetch()
+          setShowDeviceModal(false)
+          setEditingDevice(null)
+        }}
+        fetchWithAuth={fetchWithAuth}
+        API_URL={API_URL}
+        patients={patients}
+        allDevices={devices}
+      />
     </div>
   )
 }

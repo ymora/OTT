@@ -30,10 +30,27 @@ if (-not $DATABASE_URL) {
 }
 
     # Vérifier que les fichiers SQL existent
-    $SCHEMA_FILE = Join-Path $PSScriptRoot "..\sql\schema.sql"
-    $MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_optimisations.sql"
-    $PHONE_MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_add_phone_users.sql"
-    $LAST_VALUES_MIGRATION_FILE = Join-Path $PSScriptRoot "..\sql\migration_add_last_values.sql"
+    # Résoudre le chemin depuis le répertoire du script vers le répertoire racine
+    # $PSScriptRoot = scripts\db, donc on remonte 2 niveaux pour arriver à la racine
+    $rootDir = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+    $SCHEMA_FILE = Join-Path $rootDir "sql\schema.sql"
+    $MIGRATION_FILE = Join-Path $rootDir "sql\migration_optimisations.sql"
+    $PHONE_MIGRATION_FILE = Join-Path $rootDir "sql\migration_add_phone_users.sql"
+    $LAST_VALUES_MIGRATION_FILE = Join-Path $rootDir "sql\migration_add_last_values.sql"
+    
+    # Résoudre les chemins absolus si les fichiers existent
+    if (Test-Path $SCHEMA_FILE) {
+        $SCHEMA_FILE = Resolve-Path $SCHEMA_FILE
+    }
+    if (Test-Path $MIGRATION_FILE) {
+        $MIGRATION_FILE = Resolve-Path $MIGRATION_FILE
+    }
+    if (Test-Path $PHONE_MIGRATION_FILE) {
+        $PHONE_MIGRATION_FILE = Resolve-Path $PHONE_MIGRATION_FILE
+    }
+    if (Test-Path $LAST_VALUES_MIGRATION_FILE) {
+        $LAST_VALUES_MIGRATION_FILE = Resolve-Path $LAST_VALUES_MIGRATION_FILE
+    }
 
 if (-not (Test-Path $SCHEMA_FILE)) {
     Write-Host "❌ Fichier SQL introuvable: $SCHEMA_FILE" -ForegroundColor Red

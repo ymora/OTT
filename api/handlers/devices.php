@@ -58,8 +58,8 @@ function handleGetDevices() {
                 d.first_use_date,
                 d.last_seen,
                 d.last_battery,
-                d.last_flowrate,
-                d.last_rssi,
+                NULL as last_flowrate,
+                NULL as last_rssi,
                 d.latitude,
                 d.longitude,
                 d.created_at,
@@ -299,6 +299,20 @@ function handleUpdateDevice($device_id) {
             $updates[] = "last_seen = :last_seen";
             $params['last_seen'] = $input['last_seen'];
         }
+        
+        // Permettre la mise à jour de last_battery, last_flowrate et last_rssi via PUT (pour mesures USB/OTA)
+        if (array_key_exists('last_battery', $input) && $input['last_battery'] !== null) {
+            $updates[] = "last_battery = :last_battery";
+            $params['last_battery'] = $input['last_battery'];
+        }
+        if (array_key_exists('last_flowrate', $input) && $input['last_flowrate'] !== null) {
+            $updates[] = "last_flowrate = :last_flowrate";
+            $params['last_flowrate'] = $input['last_flowrate'];
+        }
+        if (array_key_exists('last_rssi', $input) && $input['last_rssi'] !== null) {
+            $updates[] = "last_rssi = :last_rssi";
+            $params['last_rssi'] = $input['last_rssi'];
+        }
 
         foreach ($fields as $field) {
             if (array_key_exists($field, $input)) {
@@ -510,14 +524,12 @@ function handlePostMeasurement() {
                 $updateParams = ['battery' => $battery, 'id' => $device_id, 'timestamp' => $timestampValue];
                 $updateFields = ['last_seen = :timestamp', 'last_battery = :battery'];
                 
-                // Mettre à jour last_flowrate si fourni
-                if ($flowrate !== null && $flowrate > 0) {
+                // Mettre à jour last_flowrate et last_rssi si fournis
+                if ($flowrate !== null && $flowrate !== 0) {
                     $updateFields[] = 'last_flowrate = :flowrate';
                     $updateParams['flowrate'] = $flowrate;
                 }
-                
-                // Mettre à jour last_rssi si fourni (et valide, pas -999)
-                if ($rssi !== null && $rssi !== -999) {
+                if ($rssi !== null && $rssi !== 0) {
                     $updateFields[] = 'last_rssi = :rssi';
                     $updateParams['rssi'] = $rssi;
                 }
@@ -653,14 +665,12 @@ function handlePostMeasurement() {
                         $updateParams = ['battery' => $battery, 'id' => $device_id, 'timestamp' => $timestampValue];
                         $updateFields = ['last_seen = :timestamp', 'last_battery = :battery'];
                         
-                        // Mettre à jour last_flowrate si fourni
-                        if ($flowrate !== null && $flowrate > 0) {
+                        // Mettre à jour last_flowrate et last_rssi si fournis
+                        if ($flowrate !== null && $flowrate !== 0) {
                             $updateFields[] = 'last_flowrate = :flowrate';
                             $updateParams['flowrate'] = $flowrate;
                         }
-                        
-                        // Mettre à jour last_rssi si fourni (et valide, pas -999)
-                        if ($rssi !== null && $rssi !== -999) {
+                        if ($rssi !== null && $rssi !== 0) {
                             $updateFields[] = 'last_rssi = :rssi';
                             $updateParams['rssi'] = $rssi;
                         }
