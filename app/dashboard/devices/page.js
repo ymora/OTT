@@ -465,7 +465,7 @@ export default function DevicesPage() {
         const iccidMatch2 = receivedData.match(/CCID[:\s]+(\d{19,20})/i)
         // Format brut: 89330123456789012345 (19-20 chiffres consécutifs)
         const iccidMatch3 = receivedData.match(/(\d{19,20})/)
-        // Format JSON: "iccid":"89330123456789012345"
+        // Format JSON: iccid:89330123456789012345
         const iccidMatch4 = receivedData.match(/["']iccid["'][:\s]+["']?(\d{19,20})["']?/i)
         // Format sim_iccid dans JSON
         const iccidMatch5 = receivedData.match(/["']sim_iccid["'][:\s]+["']?(\d{19,20})["']?/i)
@@ -796,7 +796,7 @@ export default function DevicesPage() {
             return createdDevice.device
           }
         } catch (createErr) {
-          // Si la création échoue avec "déjà utilisé", chercher à nouveau dans l'API
+          // Si la création échoue avec déjà utilisé, chercher à nouveau dans l'API
           if (createErr.error && (createErr.error.includes('déjà utilisé') || createErr.error.includes('déjà existant'))) {
             logger.log('⚠️ Dispositif déjà existant (ICCID/Serial utilisé), recherche dans l\'API...')
             try {
@@ -848,7 +848,7 @@ export default function DevicesPage() {
                 })
                 return existingDevice
               } else {
-                logger.warn('⚠️ Dispositif non trouvé malgré l\'erreur "déjà utilisé". Création d\'un virtuel.')
+                logger.warn('⚠️ Dispositif non trouvé malgré l\'erreur déjà utilisé. Création d\'un virtuel.')
               }
             } catch (searchErr) {
               logger.error('Erreur lors de la recherche après création échouée:', searchErr)
@@ -1057,6 +1057,7 @@ export default function DevicesPage() {
       return
     }
 
+    // eslint-disable-next-line react/no-unescaped-entities
     // Ne pas détecter si déjà un dispositif connecté
     if (usbConnectedDevice || usbVirtualDevice) {
       // Ne pas désactiver autoDetecting ici, juste ne pas lancer la détection
@@ -1091,7 +1092,7 @@ export default function DevicesPage() {
             logger.log('🔍 Détection automatique USB...')
             logger.log(`📡 Ports trouvés: ${ports.length}`)
             logger.log('💡 Aucun port USB autorisé.')
-            logger.log('   🔌 Connectez votre dispositif USB, puis cliquez sur "🔍 Détecter USB" pour autoriser le port.')
+            logger.log('   🔌 Connectez votre dispositif USB, puis cliquez sur 🔍 Détecter USB pour autoriser le port.')
             logger.log('   📱 Une fois autorisé, la détection et le streaming seront automatiques.')
             detectionRef.current.noPortsWarningShown = true
             // Réafficher le message après 30 secondes au cas où l'utilisateur connecte le dispositif
@@ -1200,7 +1201,7 @@ export default function DevicesPage() {
     }
   }, [isSupported, detectDeviceOnPort, usbConnectedDevice, usbVirtualDevice, devices.length, loading, setAutoDetecting])
 
-  // Rediriger vers l'onglet "details" si l'utilisateur est sur "usb-stream" 
+  // Rediriger vers l'onglet details si l'utilisateur est sur usb-stream 
   // mais que le dispositif sélectionné ne correspond pas au dispositif USB connecté
   useEffect(() => {
     if (modalActiveTab === 'usb-stream' && !isSelectedDeviceUsbConnected()) {
@@ -1411,7 +1412,7 @@ export default function DevicesPage() {
       const versionA = a.version || '0.0.0'
       const versionB = b.version || '0.0.0'
       
-      // Comparer les versions (ex: "1.2.3" -> [1, 2, 3])
+      // Comparer les versions (ex: 1.2.3 -> [1, 2, 3])
       const partsA = versionA.split('.').map(Number)
       const partsB = versionB.split('.').map(Number)
       
@@ -1738,7 +1739,7 @@ export default function DevicesPage() {
       usbVirtualDevice.device_name === device.device_name
     ))
     
-    // Si connecté en USB et streaming actif, toujours "En ligne"
+    // Si connecté en USB et streaming actif, toujours En ligne
     if (isUsbConnected && (usbStreamStatus === 'running' || usbStreamStatus === 'paused')) {
       return { label: 'En ligne (USB)', color: 'bg-green-100 text-green-700' }
     }
@@ -2002,8 +2003,7 @@ export default function DevicesPage() {
                   return (
                     <tr 
                       key={device.id} 
-                      className="table-row cursor-pointer"
-                      onClick={() => handleShowDetails(device)}
+                      className="table-row"
                     >
                       <td className="py-3 px-4">
                         <div>
@@ -2082,13 +2082,17 @@ export default function DevicesPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openDeleteModal(device)
-                            }}
+                            onClick={() => handleShowDetails(device)}
+                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            title="Voir les détails du dispositif"
+                          >
+                            <span className="text-lg">✏️</span>
+                          </button>
+                          <button
+                            onClick={() => openDeleteModal(device)}
                             disabled={deletingDevice === device.id || device.isVirtual}
                             className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                             title={device.isVirtual ? "Impossible de supprimer un dispositif virtuel USB" : "Supprimer le dispositif"}

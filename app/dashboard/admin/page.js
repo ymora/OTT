@@ -12,7 +12,7 @@ export default function AdminToolsPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="animate-slide-up">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Administration</h1>
-        <p className="text-gray-600">Outils d'administration du système OTT.</p>
+        <p className="text-gray-600">Outils d&apos;administration du système OTT.</p>
       </div>
 
       <div className="card space-y-4">

@@ -173,9 +173,8 @@ export default function UsersPage() {
                   filteredUsers.map((user, i) => (
                     <tr 
                       key={user.id} 
-                      className="table-row animate-slide-up cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                      className="table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800"
                       style={{animationDelay: `${i * 0.05}s`}}
-                      onClick={() => openEditModal(user)}
                     >
                       <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
                       <td className="py-3 px-4">
@@ -203,7 +202,14 @@ export default function UsersPage() {
                         }) : 'Jamais'}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            onClick={() => openEditModal(user)}
+                            title="Modifier l'utilisateur"
+                          >
+                            <span className="text-lg">✏️</span>
+                          </button>
                           <button
                             className={`p-2 rounded-lg transition-colors ${
                               user.id === currentUser?.id 

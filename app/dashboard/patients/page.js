@@ -361,9 +361,8 @@ export default function PatientsPage() {
                   filteredPatients.map((p, i) => (
                     <tr 
                       key={p.id} 
-                      className="table-row animate-slide-up cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800" 
+                      className="table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800" 
                       style={{animationDelay: `${i * 0.05}s`}}
-                      onClick={() => openEditModal(p)}
                     >
                       <td className="py-3 px-4 font-medium text-primary">{p.first_name} {p.last_name}</td>
                       <td className="table-cell">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
@@ -413,7 +412,14 @@ export default function PatientsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            onClick={() => openEditModal(p)}
+                            title="Modifier le patient"
+                          >
+                            <span className="text-lg">✏️</span>
+                          </button>
                           <button
                             className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                             onClick={() => handleDelete(p)}
