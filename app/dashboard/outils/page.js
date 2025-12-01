@@ -35,8 +35,8 @@ export default function OutilsPage() {
   }
 
   const tabs = [
-    { id: 'ino', label: 'Upload INO', icon: '📝' },
-    { id: 'streaming', label: 'Debug & Config', icon: '🔧' }
+    { id: 'streaming', label: 'Dispositifs', icon: '🔧' },
+    { id: 'ino', label: 'Upload INO', icon: '📝' }
   ]
 
   return (
