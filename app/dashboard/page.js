@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamicImport from 'next/dynamic'
 import StatsCard from '@/components/StatsCard'
 import AlertCard from '@/components/AlertCard'
 import { useApiData, useAutoRefresh } from '@/hooks'
@@ -12,6 +13,9 @@ import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import { formatDate } from '@/lib/dateUtils'
+
+// Lazy load de la carte pour accélérer le chargement
+const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr: false })
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -30,6 +34,7 @@ export default function DashboardPage() {
   )
   
   const [databaseTab, setDatabaseTab] = useState('devices')
+  const [selectedDeviceOnMap, setSelectedDeviceOnMap] = useState(null)
 
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
   useAutoRefresh(refetch, 30000)
@@ -160,36 +165,75 @@ export default function DashboardPage() {
 
       <ErrorMessage error={error} onRetry={refetch} />
 
-      {/* Stats Cards - Indicateurs clés (KPIs uniquement) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Dispositifs Totaux"
-          value={stats.totalDevices}
-          icon="🔌"
-          color="primary"
-          delay={0}
-        />
-        <StatsCard
-          title="En Ligne"
-          value={stats.activeDevices}
-          icon="✅"
-          color="green"
-          delay={0.1}
-        />
-        <StatsCard
-          title="Alertes Critiques"
-          value={stats.criticalAlerts}
-          icon="⚠️"
-          color="red"
-          delay={0.2}
-        />
-        <StatsCard
-          title={stats.lowBatteryDevices > 0 ? "Batteries Faibles" : "Batteries OK"}
-          value={stats.lowBatteryDevices > 0 ? stats.lowBatteryDevices : stats.okBatteryDevices}
-          icon="🔋"
-          color={stats.lowBatteryDevices > 0 ? "orange" : "green"}
-          delay={0.3}
-        />
+      {/* Carte des dispositifs */}
+      {!loading && devices.length > 0 && (
+        <div className="card p-0 overflow-hidden">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              {devices.filter(d => d.latitude && d.longitude).length} dispositif(s) géolocalisé(s)
+            </p>
+          </div>
+          <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
+            <LeafletMap
+              devices={devices}
+              focusDeviceId={null}
+              onSelect={(device) => {
+                setSelectedDeviceOnMap(device)
+                // Changer l'onglet pour afficher le dispositif sélectionné
+                setDatabaseTab('devices')
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Stats Cards - Indicateurs clés (KPIs uniquement) - TAILLE RÉDUITE */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Cards plus compactes */}
+        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 animate-slide-up">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Dispositifs</p>
+              <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">{stats.totalDevices}</p>
+            </div>
+            <span className="text-3xl">🔌</span>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 animate-slide-up" style={{animationDelay: '0.1s'}}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">En Ligne</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activeDevices}</p>
+            </div>
+            <span className="text-3xl">✅</span>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 animate-slide-up" style={{animationDelay: '0.2s'}}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Alertes</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.criticalAlerts}</p>
+            </div>
+            <span className="text-3xl">⚠️</span>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 animate-slide-up" style={{animationDelay: '0.3s'}}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                {stats.lowBatteryDevices > 0 ? "🔋 Faibles" : "🔋 OK"}
+              </p>
+              <p className={`text-2xl font-bold ${stats.lowBatteryDevices > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
+                {stats.lowBatteryDevices > 0 ? stats.lowBatteryDevices : stats.okBatteryDevices}
+              </p>
+            </div>
+            <span className="text-3xl">🔋</span>
+          </div>
+        </div>
       </div>
 
       {/* Section Actions Requises - Consolidée avec toutes les alertes */}
