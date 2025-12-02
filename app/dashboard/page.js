@@ -207,8 +207,8 @@ export default function DashboardPage() {
               onSelect={(device) => {
                 setSelectedDeviceOnMap(device)
               }}
-            />
-          </div>
+        />
+      </div>
         </div>
       )}
 
@@ -255,7 +255,7 @@ export default function DashboardPage() {
             onClick={() => toggleAccordion('online')}
             className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            <div>
+              <div>
               <p className="text-xs text-gray-600 dark:text-gray-400">En Ligne</p>
               <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activeDevices}</p>
             </div>
@@ -281,10 +281,10 @@ export default function DashboardPage() {
                   >
                     🟢 {device.device_name || device.sim_iccid}
                   </button>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
         
         {/* Card Alertes Critiques */}
@@ -296,11 +296,11 @@ export default function DashboardPage() {
             <div>
               <p className="text-xs text-gray-600 dark:text-gray-400">Alertes</p>
               <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.criticalAlerts}</p>
-            </div>
+                          </div>
             <div className="flex items-center gap-2">
               <span className="text-3xl">⚠️</span>
               <span className="text-lg">{kpiAccordions.alerts ? '▼' : '▶'}</span>
-            </div>
+                    </div>
           </button>
           {kpiAccordions.alerts && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
@@ -318,8 +318,8 @@ export default function DashboardPage() {
                   ) : null
                 })}
               </div>
-            </div>
-          )}
+                  </div>
+                )}
         </div>
         
         {/* Card Batteries */}
@@ -329,17 +329,15 @@ export default function DashboardPage() {
             className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <div>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                {stats.lowBatteryDevices > 0 ? "🔋 Faibles" : "🔋 OK"}
-              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Batterie</p>
               <p className={`text-2xl font-bold ${stats.lowBatteryDevices > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
                 {stats.lowBatteryDevices > 0 ? stats.lowBatteryDevices : stats.okBatteryDevices}
-              </p>
-            </div>
+                          </p>
+                        </div>
             <div className="flex items-center gap-2">
-              <span className="text-3xl">🔋</span>
+              <span className="text-3xl">{stats.lowBatteryDevices > 0 ? '🔴' : '🟢'}</span>
               <span className="text-lg">{kpiAccordions.battery ? '▼' : '▶'}</span>
-            </div>
+                    </div>
           </button>
           {kpiAccordions.battery && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
@@ -360,8 +358,8 @@ export default function DashboardPage() {
                   )
                 })}
               </div>
-            </div>
-          )}
+                  </div>
+                )}
         </div>
         
         {/* Card Non Assignés - alignée avec les KPIs */}
@@ -400,7 +398,7 @@ export default function DashboardPage() {
             )}
           </div>
         )}
-      </div>
+        </div>
 
       {/* Actions Requises - Alertes et Batteries uniquement */}
       {(alerts.length > 0 || lowBatteryList.length > 0) && (
@@ -408,7 +406,7 @@ export default function DashboardPage() {
           {/* Card Alertes Actives */}
           {alerts.length > 0 && (
             <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border-2 border-red-300 dark:border-red-700 animate-slide-up overflow-hidden">
-              <button 
+              <button
                 onClick={() => toggleAccordion('alertsAction')}
                 className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
@@ -439,8 +437,8 @@ export default function DashboardPage() {
                     {alerts.length > 10 && (
                       <div className="text-xs text-gray-500 italic px-2">+{alerts.length - 10} autres...</div>
                     )}
-                  </div>
-                </div>
+          </div>
+        </div>
               )}
             </div>
           )}
