@@ -335,9 +335,9 @@ export default function DashboardPage() {
                           </p>
                         </div>
             <div className="flex items-center gap-2">
-              <span className="text-3xl">{stats.lowBatteryDevices > 0 ? '🔴' : '🟢'}</span>
+              <span className="text-3xl">🔋</span>
               <span className="text-lg">{kpiAccordions.battery ? '▼' : '▶'}</span>
-                    </div>
+            </div>
           </button>
           {kpiAccordions.battery && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
