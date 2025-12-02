@@ -4,7 +4,7 @@
 **Période analysée** : 2025-11-14 - 2025-12-02  
 **Développeur** : ymora  
 **Projet** : OTT - Dispositif Médical IoT  
-**Total commits analysés** : 550  
+**Total commits analysés** : 572  
 **Branches analysées** : Toutes
 **Auteur filtré** : ymora  
 
@@ -14,28 +14,28 @@
 
 ## Tableau Récapitulatif
 
-| Date | Heures | Commits | Développement | Correction | Test | Documentation | Refactoring | Déploiement |
-|------|--------|---------|---------------|------------|------|----------------|-------------|-------------|
-| 2025-11-14 | ~6h | 9 | 2 | 0 | 0 | 0 | 0 | 1 |
-| 2025-11-15 | ~10h | 23 | 13 | 3 | 1 | 2 | 0 | 0 |
-| 2025-11-16 | ~9h | 27 | 18 | 3 | 0 | 1 | 3 | 0 |
-| 2025-11-17 | ~5h | 14 | 7 | 3 | 0 | 0 | 2 | 0 |
-| 2025-11-18 | ~8h | 25 | 8 | 9 | 0 | 1 | 6 | 0 |
-| 2025-11-19 | ~5h | 7 | 2 | 1 | 0 | 0 | 4 | 0 |
-| 2025-11-20 | ~1h | 3 | 1 | 1 | 0 | 0 | 1 | 0 |
-| 2025-11-21 | ~6h | 12 | 10 | 1 | 0 | 1 | 0 | 0 |
-| 2025-11-22 | ~10h | 69 | 13 | 37 | 1 | 1 | 11 | 1 |
-| 2025-11-23 | ~10h | 60 | 19 | 31 | 0 | 2 | 3 | 0 |
-| 2025-11-24 | ~6h | 28 | 0 | 20 | 1 | 0 | 3 | 0 |
-| 2025-11-25 | ~10h | 45 | 10 | 27 | 0 | 4 | 3 | 0 |
-| 2025-11-26 | ~10h | 59 | 5 | 43 | 0 | 4 | 7 | 0 |
-| 2025-11-27 | ~10h | 59 | 19 | 31 | 0 | 6 | 3 | 0 |
-| 2025-11-28 | ~1h | 3 | 1 | 0 | 0 | 1 | 0 | 0 |
-| 2025-11-29 | ~0.5h | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
-| 2025-11-30 | ~8h | 77 | 11 | 48 | 0 | 3 | 8 | 0 |
-| 2025-12-01 | ~5h | 14 | 5 | 1 | 0 | 2 | 4 | 0 |
-| 2025-12-02 | ~6h | 14 | 0 | 5 | 0 | 1 | 3 | 0 |
-**Total** | **~126.5h** | **550** | **39.7** | **48.9** | **0.8** | **6.9** | **15.5** | **0.8**
+| Date | Heures | Commits | Développement | Correction | Test | Documentation | Refactoring | Déploiement | UI/UX | Optimisation |
+|------|--------|---------|---------------|------------|------|----------------|-------------|-------------|-------|--------------|
+| 2025-11-14 | ~6h | 9 | 2 | 0 | 0 | 0 | 0 | 1 | 2 | 0 |
+| 2025-11-15 | ~10h | 23 | 9 | 3 | 1 | 2 | 0 | 0 | 4 | 0 |
+| 2025-11-16 | ~9h | 27 | 8 | 3 | 0 | 0 | 2 | 0 | 12 | 0 |
+| 2025-11-17 | ~5h | 14 | 2 | 3 | 0 | 0 | 1 | 0 | 6 | 1 |
+| 2025-11-18 | ~8h | 25 | 7 | 9 | 0 | 1 | 5 | 0 | 1 | 1 |
+| 2025-11-19 | ~5h | 7 | 2 | 0 | 0 | 0 | 4 | 0 | 0 | 1 |
+| 2025-11-20 | ~1h | 3 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 |
+| 2025-11-21 | ~6h | 12 | 9 | 1 | 0 | 1 | 0 | 0 | 0 | 1 |
+| 2025-11-22 | ~10h | 69 | 11 | 31 | 0 | 1 | 6 | 1 | 5 | 9 |
+| 2025-11-23 | ~10h | 60 | 15 | 26 | 0 | 0 | 1 | 0 | 5 | 9 |
+| 2025-11-24 | ~6h | 28 | 0 | 16 | 0 | 0 | 2 | 0 | 0 | 6 |
+| 2025-11-25 | ~10h | 45 | 7 | 24 | 0 | 1 | 0 | 0 | 3 | 10 |
+| 2025-11-26 | ~10h | 59 | 5 | 42 | 0 | 3 | 5 | 0 | 2 | 2 |
+| 2025-11-27 | ~10h | 59 | 12 | 28 | 0 | 2 | 2 | 0 | 8 | 7 |
+| 2025-11-28 | ~1h | 3 | 0 | 0 | 0 | 1 | 0 | 0 | 2 | 0 |
+| 2025-11-29 | ~0.5h | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 2025-11-30 | ~8h | 77 | 5 | 32 | 0 | 1 | 1 | 0 | 8 | 26 |
+| 2025-12-01 | ~5h | 14 | 1 | 1 | 0 | 1 | 0 | 0 | 2 | 8 |
+| 2025-12-02 | ~8h | 36 | 1 | 4 | 0 | 3 | 0 | 0 | 7 | 15 |
+**Total** | **~128.5h** | **572** | **27** | **41.4** | **0.4** | **4.4** | **8.6** | **0.8** | **17.2** | **18.6**
 
 ---
 
@@ -536,18 +536,20 @@
 ---
 
 ### 02 décembre 2025
-**Heures estimées** : ~6h  
-**Période** : 07:22 - 22:05  
-**Nombre de commits** : 14
+**Heures estimées** : ~8h  
+**Période** : 07:22 - 22:48  
+**Nombre de commits** : 36
 
 #### Avancées principales
-- *Aucune avancée majeure enregistrée*
+- [FEAT] ­ƒù║´©Å Ajout carte dispositifs + r├®duction taille boutons vue d'ensemble
+- [FEAT] ­ƒùä´©Å Base de donn├®es sortie de la vue d'ensemble + ajout├®e au menu (admin uniquement)
 #### Problèmes résolus
 - [FIX] Corrections: tableau base de donn├®es dans Vue d'ensemble, suppression page Audit Consolid├®, correction bug audit/suivi temps
-- [FIX] Fix: Dispositif USB appara├«t imm├®diatement dans le tableau apr├¿s cr├®ation
 - [FIX] Audit complet: s├®curit├®, consolidation, documentation + Fix dispositif USB non visible
+- [FIX] Fix: Dispositif USB appara├«t imm├®diatement dans le tableau apr├¿s cr├®ation
 - [FIX] Documentation: Fix dispositif USB visible imm├®diatement
 - [FIX] Simplification: Correction affichage dispositif USB cr├®├® automatiquement
+- [FIX] ­ƒöº Fix default tab Base de Donn├®es
 #### Redéploiements
 - *Aucun redéploiement enregistré*
 #### Tests
@@ -558,18 +560,20 @@
 ## Statistiques Globales
 
 ### Répartition par activité
-- **Développement** : ~39.7h (31.4%)
-- **Correction** : ~48.9h (38.7%)
-- **Test** : ~0.8h (0.6%)
-- **Documentation** : ~6.9h (5.4%)
-- **Refactoring** : ~15.5h (12.2%)
+- **Développement** : ~27h (21%)
+- **Correction** : ~41.4h (32.2%)
+- **Test** : ~0.4h (0.3%)
+- **Documentation** : ~4.4h (3.4%)
+- **Refactoring** : ~8.6h (6.7%)
 - **Déploiement** : ~0.8h (0.6%)
+- **UI/UX** : ~17.2h (13.4%)
+- **Optimisation** : ~18.6h (14.5%)
 
-### Temps total estimé : ~126.5 heures
+### Temps total estimé : ~128.5 heures
 
 ### Nombre de jours travaillés : 19
 
-### Moyenne par jour : ~6.7h
+### Moyenne par jour : ~6.8h
 
 ---
 
@@ -583,12 +587,14 @@
 - Catégorisation automatique des commits
 
 ### Catégories de travail
-1. **Développement** : Nouvelles fonctionnalités (feat, ajout, nouveau)
-2. **Correction** : Bug fixes, résolution problèmes (fix, bug, erreur)
-3. **Test** : Tests unitaires, tests d'intégration (test, debug)
-4. **Documentation** : Rédaction, mise à jour docs (doc, documentation)
-5. **Refactoring** : Restructuration code (refactor, nettoyage)
-6. **Déploiement** : Configuration, migrations, redéploiements (deploy, migration)
+1. **Développement** : Nouvelles fonctionnalités (feat, ajout, nouveau, ✨🚀)
+2. **Correction** : Bug fixes, résolution problèmes (fix, bug, erreur, 🔧🐛)
+3. **Test** : Tests unitaires, tests d'intégration (test, debug, 🧪🔍)
+4. **Documentation** : Rédaction, mise à jour docs (doc, documentation, 📝📚)
+5. **Refactoring** : Restructuration code (refactor, nettoyage, ♻️🔨)
+6. **Déploiement** : Configuration, migrations, redéploiements (deploy, migration, 🚀📦)
+7. **UI/UX** : Améliorations visuelles, design (carte, accordéons, icônes, 🎨🗺️📊)
+8. **Optimisation** : Nettoyage code, audit, performance (🗑️🧹✨)
 
 ### Recommandations
 - Ce document est généré automatiquement à partir des commits Git
@@ -598,6 +604,6 @@
 
 ---
 
-**Dernière génération** : 02/12/2025 22:05  
+**Dernière génération** : 02/12/2025 22:51  
 **Source** : Analyse automatique des commits Git du projet  
 **Script** : scripts/generate_time_tracking.ps1

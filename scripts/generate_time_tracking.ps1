@@ -467,28 +467,42 @@ function Estimate-TimeSpent {
     }
 }
 
-# Fonction pour catégoriser les commits (version améliorée)
+# Fonction pour catégoriser les commits (version améliorée V2 avec UI/UX et emojis)
 function Categorize-Commit {
     param([string]$Message)
     
     $messageLower = $Message.ToLower()
     
     # Ordre important : vérifier les patterns les plus spécifiques en premier
-    if ($messageLower -match "(fix|bug|correction|résol|erreur|problème|patch|hotfix|resolve|issue)" -and 
+    
+    # UI/UX - Priorité haute pour les modifications visuelles (emojis 🎨🗺️📊🔋etc)
+    if ($messageLower -match "(🎨|🗺️|📊|🔋|🟢|🔴|🟠|ui|ux|interface|design|visuel|carte|accordéon|card|icon|amélioration.*vue|réorganisation|agencement)" -and
+        $messageLower -notmatch "(fix|bug|test)") {
+        return "UI/UX"
+    # Nettoyage/Optimisation - Audit, code mort, suppression (emojis 🗑️🧹✨)
+    } elseif ($messageLower -match "(🗑️|🧹|✨|nettoyage|cleanup|suppression|audit|code.*mort|optimis|optimize|performance|amélioration.*perf)") {
+        return "Optimisation"
+    # Corrections - Bugs et problèmes (emojis 🔧🐛)
+    } elseif ($messageLower -match "(🔧|🐛|fix|bug|correction|résol|erreur|problème|patch|hotfix|resolve|issue)" -and 
         $messageLower -notmatch "test.*fix") {
         return "Correction"
-    } elseif ($messageLower -match "(feat|feature|ajout|nouveau|add|implement|création|create|new)" -and
+    # Développement - Nouvelles fonctionnalités (emojis ✨🚀⚡)
+    } elseif ($messageLower -match "(✨|🚀|⚡|feat|feature|ajout|nouveau|add|implement|création|create|new)" -and
               $messageLower -notmatch "test.*feat") {
         return "Développement"
-    } elseif ($messageLower -match "(test|spec|unittest|integration|e2e|debug|testing)" -and
+    # Tests - Debug et tests (emojis 🧪🔍)
+    } elseif ($messageLower -match "(🧪|🔍|test|spec|unittest|integration|e2e|debug|testing)" -and
               $messageLower -notmatch "(feat|fix).*test") {
         return "Test"
-    } elseif ($messageLower -match "(doc|documentation|readme|guide|comment|changelog|md$)" -and
+    # Documentation - Docs et commentaires (emojis 📝📚)
+    } elseif ($messageLower -match "(📝|📚|doc|documentation|readme|guide|comment|changelog|rapport|md$)" -and
               $messageLower -notmatch "test.*doc") {
         return "Documentation"
-    } elseif ($messageLower -match "(refactor|refactoring|nettoyage|cleanup|optimis|optimize|restructure|reorganize)") {
+    # Refactoring - Restructuration (emojis ♻️🔨)
+    } elseif ($messageLower -match "(♻️|🔨|refactor|refactoring|restructure|reorganize|consolidation)") {
         return "Refactoring"
-    } elseif ($messageLower -match "(deploy|déploiement|migration|chore.*deploy|release|build|ci|cd|pipeline)") {
+    # Déploiement - CI/CD et releases (emojis 🚀📦)
+    } elseif ($messageLower -match "(🚀|📦|deploy|déploiement|migration|chore.*deploy|release|build|ci|cd|pipeline)") {
         return "Déploiement"
     } else {
         return "Autre"
@@ -505,6 +519,8 @@ $categoryStats = @{
     "Documentation" = 0
     "Refactoring" = 0
     "Déploiement" = 0
+    "UI/UX" = 0
+    "Optimisation" = 0
     "Autre" = 0
 }
 
@@ -587,8 +603,8 @@ $(if ($Until) { "**Jusqu'à** : $Until  " })
 
 ## Tableau Récapitulatif
 
-| Date | Heures | Commits | Développement | Correction | Test | Documentation | Refactoring | Déploiement |
-|------|--------|---------|---------------|------------|------|----------------|-------------|-------------|
+| Date | Heures | Commits | Développement | Correction | Test | Documentation | Refactoring | Déploiement | UI/UX | Optimisation |
+|------|--------|---------|---------------|------------|------|----------------|-------------|-------------|-------|--------------|
 "@
 
 foreach ($report in $dailyReports) {
@@ -598,13 +614,15 @@ foreach ($report in $dailyReports) {
     $doc = if ($report.Categories.ContainsKey("Documentation")) { $report.Categories["Documentation"] } else { 0 }
     $ref = if ($report.Categories.ContainsKey("Refactoring")) { $report.Categories["Refactoring"] } else { 0 }
     $dep = if ($report.Categories.ContainsKey("Déploiement")) { $report.Categories["Déploiement"] } else { 0 }
+    $uiux = if ($report.Categories.ContainsKey("UI/UX")) { $report.Categories["UI/UX"] } else { 0 }
+    $optim = if ($report.Categories.ContainsKey("Optimisation")) { $report.Categories["Optimisation"] } else { 0 }
     
-    $mdContent += "`n| $($report.Date) | ~$($report.EstimatedHours)h | $($report.CommitCount) | $dev | $fix | $test | $doc | $ref | $dep |"
+    $mdContent += "`n| $($report.Date) | ~$($report.EstimatedHours)h | $($report.CommitCount) | $dev | $fix | $test | $doc | $ref | $dep | $uiux | $optim |"
 }
 
 $mdContent += @"
 
-**Total** | **~$([Math]::Round($totalHours, 1))h** | **$($parsedCommits.Count)** | **$([Math]::Round($categoryStats['Développement'], 1))** | **$([Math]::Round($categoryStats['Correction'], 1))** | **$([Math]::Round($categoryStats['Test'], 1))** | **$([Math]::Round($categoryStats['Documentation'], 1))** | **$([Math]::Round($categoryStats['Refactoring'], 1))** | **$([Math]::Round($categoryStats['Déploiement'], 1))**
+**Total** | **~$([Math]::Round($totalHours, 1))h** | **$($parsedCommits.Count)** | **$([Math]::Round($categoryStats['Développement'], 1))** | **$([Math]::Round($categoryStats['Correction'], 1))** | **$([Math]::Round($categoryStats['Test'], 1))** | **$([Math]::Round($categoryStats['Documentation'], 1))** | **$([Math]::Round($categoryStats['Refactoring'], 1))** | **$([Math]::Round($categoryStats['Déploiement'], 1))** | **$([Math]::Round($categoryStats['UI/UX'], 1))** | **$([Math]::Round($categoryStats['Optimisation'], 1))**
 
 ---
 
@@ -692,6 +710,8 @@ $mdContent += @"
 - **Documentation** : ~$([Math]::Round($categoryStats['Documentation'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Documentation'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
 - **Refactoring** : ~$([Math]::Round($categoryStats['Refactoring'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Refactoring'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
 - **Déploiement** : ~$([Math]::Round($categoryStats['Déploiement'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Déploiement'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
+- **UI/UX** : ~$([Math]::Round($categoryStats['UI/UX'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['UI/UX'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
+- **Optimisation** : ~$([Math]::Round($categoryStats['Optimisation'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Optimisation'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
 
 ### Temps total estimé : ~$([Math]::Round($totalHours, 1)) heures
 
@@ -711,12 +731,14 @@ $mdContent += @"
 - Catégorisation automatique des commits
 
 ### Catégories de travail
-1. **Développement** : Nouvelles fonctionnalités (feat, ajout, nouveau)
-2. **Correction** : Bug fixes, résolution problèmes (fix, bug, erreur)
-3. **Test** : Tests unitaires, tests d'intégration (test, debug)
-4. **Documentation** : Rédaction, mise à jour docs (doc, documentation)
-5. **Refactoring** : Restructuration code (refactor, nettoyage)
-6. **Déploiement** : Configuration, migrations, redéploiements (deploy, migration)
+1. **Développement** : Nouvelles fonctionnalités (feat, ajout, nouveau, ✨🚀)
+2. **Correction** : Bug fixes, résolution problèmes (fix, bug, erreur, 🔧🐛)
+3. **Test** : Tests unitaires, tests d'intégration (test, debug, 🧪🔍)
+4. **Documentation** : Rédaction, mise à jour docs (doc, documentation, 📝📚)
+5. **Refactoring** : Restructuration code (refactor, nettoyage, ♻️🔨)
+6. **Déploiement** : Configuration, migrations, redéploiements (deploy, migration, 🚀📦)
+7. **UI/UX** : Améliorations visuelles, design (carte, accordéons, icônes, 🎨🗺️📊)
+8. **Optimisation** : Nettoyage code, audit, performance (🗑️🧹✨)
 
 ### Recommandations
 - Ce document est généré automatiquement à partir des commits Git
@@ -751,7 +773,7 @@ Write-Log "✅ Copie créée dans : $publicPath" "Success"
 # Export CSV si demandé
 if ($ExportCsv) {
     $csvPath = $outputPath -replace '\.md$', '.csv'
-    $csvLines = @("Date,Heures,Commits,Développement,Correction,Test,Documentation,Refactoring,Déploiement")
+    $csvLines = @("Date,Heures,Commits,Développement,Correction,Test,Documentation,Refactoring,Déploiement,UI/UX,Optimisation")
     foreach ($report in $dailyReports) {
         $dev = if ($report.Categories.ContainsKey("Développement")) { $report.Categories["Développement"] } else { 0 }
         $fix = if ($report.Categories.ContainsKey("Correction")) { $report.Categories["Correction"] } else { 0 }
@@ -759,7 +781,9 @@ if ($ExportCsv) {
         $doc = if ($report.Categories.ContainsKey("Documentation")) { $report.Categories["Documentation"] } else { 0 }
         $ref = if ($report.Categories.ContainsKey("Refactoring")) { $report.Categories["Refactoring"] } else { 0 }
         $dep = if ($report.Categories.ContainsKey("Déploiement")) { $report.Categories["Déploiement"] } else { 0 }
-        $csvLines += "$($report.Date),$($report.EstimatedHours),$($report.CommitCount),$dev,$fix,$test,$doc,$ref,$dep"
+        $uiux = if ($report.Categories.ContainsKey("UI/UX")) { $report.Categories["UI/UX"] } else { 0 }
+        $optim = if ($report.Categories.ContainsKey("Optimisation")) { $report.Categories["Optimisation"] } else { 0 }
+        $csvLines += "$($report.Date),$($report.EstimatedHours),$($report.CommitCount),$dev,$fix,$test,$doc,$ref,$dep,$uiux,$optim"
     }
     [System.IO.File]::WriteAllLines($csvPath, $csvLines, $utf8NoBom)
     Write-Log "✅ Export CSV créé : $csvPath" "Success"
