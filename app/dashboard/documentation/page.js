@@ -414,7 +414,9 @@ function MarkdownViewer({ fileName }) {
         'Test': 0,
         'Documentation': 0,
         'Refactoring': 0,
-        'Déploiement': 0
+        'Déploiement': 0,
+        'UI/UX': 0,
+        'Optimisation': 0
       },
       totalHours: 0,
       totalCommits: 0,
@@ -493,9 +495,9 @@ function MarkdownViewer({ fileName }) {
     }
 
     // ============================================
-    // PHASE 1.2 : Parsing robuste du tableau
+    // PHASE 1.2 : Parsing robuste du tableau (avec UI/UX et Optimisation)
     // ============================================
-    const tableRegex = /\| (\d{4}-\d{2}-\d{2}) \| ~?([\d.]+)h? \| (\d+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \|/g
+    const tableRegex = /\| (\d{4}-\d{2}-\d{2}) \| ~?([\d.]+)h? \| (\d+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \|/g
     let match
     while ((match = tableRegex.exec(md)) !== null) {
       const date = match[1]
@@ -507,11 +509,13 @@ function MarkdownViewer({ fileName }) {
       const doc = safeParseFloat(match[7])
       const refactor = safeParseFloat(match[8])
       const deploy = safeParseFloat(match[9])
+      const uiux = safeParseFloat(match[10])
+      const optim = safeParseFloat(match[11])
 
       // Ignorer la ligne de séparation (---) ou lignes invalides
       if (date.includes('---') || !date.match(/^\d{4}-\d{2}-\d{2}$/)) continue
 
-      data.dailyData.push({
+      data.      dailyData.push({
         date,
         hours,
         commits,
@@ -521,6 +525,8 @@ function MarkdownViewer({ fileName }) {
         doc,
         refactor,
         deploy,
+        uiux,
+        optim,
         details: null // Sera rempli par la phase 1.3
       })
 
@@ -529,9 +535,9 @@ function MarkdownViewer({ fileName }) {
     }
 
     // ============================================
-    // PHASE 3 : Utiliser les totaux du markdown comme source unique
+    // PHASE 3 : Utiliser les totaux du markdown comme source unique (avec UI/UX et Optimisation)
     // ============================================
-    const totalMatch = md.match(/(?:\*\*)?Total(?:\*\*)? \| (?:\*\*)?~?([\d.]+)h?(?:\*\*)? \| (?:\*\*)?(\d+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)?/)
+    const totalMatch = md.match(/(?:\*\*)?Total(?:\*\*)? \| (?:\*\*)?~?([\d.]+)h?(?:\*\*)? \| (?:\*\*)?(\d+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)?/)
     if (totalMatch) {
       // Utiliser les totaux du markdown comme source de vérité
       data.totalHoursFromMarkdown = safeParseFloat(totalMatch[1])
@@ -541,13 +547,15 @@ function MarkdownViewer({ fileName }) {
       data.totalHours = data.totalHoursFromMarkdown
       data.totalCommits = data.totalCommitsFromMarkdown
 
-      // Catégories depuis le markdown
+      // Catégories depuis le markdown (8 catégories au lieu de 6)
       data.categories['Développement'] = safeParseFloat(totalMatch[3])
       data.categories['Correction'] = safeParseFloat(totalMatch[4])
       data.categories['Test'] = safeParseFloat(totalMatch[5])
       data.categories['Documentation'] = safeParseFloat(totalMatch[6])
       data.categories['Refactoring'] = safeParseFloat(totalMatch[7])
       data.categories['Déploiement'] = safeParseFloat(totalMatch[8])
+      data.categories['UI/UX'] = safeParseFloat(totalMatch[9])
+      data.categories['Optimisation'] = safeParseFloat(totalMatch[10])
 
       // Validation : comparer calculé vs parsé
       const calculatedHours = data.dailyData.reduce((sum, d) => sum + d.hours, 0)
@@ -1261,6 +1269,8 @@ function MarkdownViewer({ fileName }) {
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Documentation</th>
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Refactoring</th>
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Déploiement</th>
+                    <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">UI/UX</th>
+                    <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Optimisation</th>
                     {chartData.dailyData.some(d => d.details && (
                       (d.details.advances && d.details.advances.length > 0) ||
                       (d.details.fixes && d.details.fixes.length > 0) ||
@@ -1306,6 +1316,8 @@ function MarkdownViewer({ fileName }) {
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.doc > 0 ? day.doc : '-'}</td>
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.refactor > 0 ? day.refactor : '-'}</td>
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.deploy > 0 ? day.deploy : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.uiux > 0 ? day.uiux : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.optim > 0 ? day.optim : '-'}</td>
                         {hasDetails && (
                           <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">
                             <button
@@ -1329,12 +1341,14 @@ function MarkdownViewer({ fileName }) {
                       ~{chartData.totalHours.toFixed(1)}h
                     </td>
                     <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.totalCommits}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Développement'].toFixed(1)}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Correction'].toFixed(1)}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Test'].toFixed(1)}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Documentation'].toFixed(1)}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Refactoring'].toFixed(1)}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Déploiement'].toFixed(1)}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Développement']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Correction']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Test']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Documentation']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Refactoring']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Déploiement']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['UI/UX']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Optimisation']?.toFixed(1) || '0'}</td>
                     {chartData.dailyData.some(d => d.details && (
                       (d.details.advances && d.details.advances.length > 0) ||
                       (d.details.fixes && d.details.fixes.length > 0) ||
