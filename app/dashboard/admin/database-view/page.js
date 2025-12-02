@@ -657,12 +657,6 @@ export default function DatabaseViewPage() {
     </div>
   )
 
-  const renderOverview = () => (
-    <div className="space-y-6">
-      {renderUsersTable()}
-    </div>
-  )
-
   const renderContent = () => {
     switch (activeTab) {
       case 'users':
