@@ -660,14 +660,7 @@ export default function DatabaseViewPage() {
 
   const renderOverview = () => (
     <div className="space-y-6">
-      <div className="card">
-        <p className="text-gray-600 dark:text-gray-400">
-          La vue d'ensemble des statistiques et actions requises est disponible sur la page principale (🏠 Vue d'Ensemble).
-        </p>
-        <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
-          Utilisez les onglets ci-dessus pour explorer les différentes tables de la base de données.
-        </p>
-      </div>
+      {renderUsersTable()}
     </div>
   )
 
