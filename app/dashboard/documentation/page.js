@@ -887,17 +887,28 @@ function MarkdownViewer({ fileName }) {
         })(),
         // Distribution par jour de la semaine
         byDayOfWeek: (() => {
-          const byDay = {}
+          const byDay = {
+            'lundi': { hours: 0, commits: 0, days: 0 },
+            'mardi': { hours: 0, commits: 0, days: 0 },
+            'mercredi': { hours: 0, commits: 0, days: 0 },
+            'jeudi': { hours: 0, commits: 0, days: 0 },
+            'vendredi': { hours: 0, commits: 0, days: 0 },
+            'samedi': { hours: 0, commits: 0, days: 0 },
+            'dimanche': { hours: 0, commits: 0, days: 0 }
+          }
+          
           chartData.dailyData.forEach(d => {
             const date = new Date(d.date)
-            const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' })
-            if (!byDay[dayName]) {
-              byDay[dayName] = { hours: 0, commits: 0, days: 0 }
+            const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' }).toLowerCase()
+            
+            if (byDay[dayName]) {
+              byDay[dayName].hours += d.hours
+              byDay[dayName].commits += d.commits
+              byDay[dayName].days += 1
             }
-            byDay[dayName].hours += d.hours
-            byDay[dayName].commits += d.commits
-            byDay[dayName].days += 1
           })
+          
+          console.log('📊 byDayOfWeek calculé:', byDay)
           return byDay
         })()
       }
@@ -978,7 +989,7 @@ function MarkdownViewer({ fileName }) {
   // Graphique par jour de la semaine
   const dayOfWeekChartData = useMemo(() => {
     if (!stats || !stats.byDayOfWeek) {
-      console.log('Stats ou byDayOfWeek manquant:', { hasStats: !!stats, byDayOfWeek: stats?.byDayOfWeek })
+      console.log('⚠️ Stats ou byDayOfWeek manquant:', { hasStats: !!stats, byDayOfWeek: stats?.byDayOfWeek })
       return null
     }
     
@@ -987,12 +998,9 @@ function MarkdownViewer({ fileName }) {
       const labels = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
       
       const data = daysOrder.map(day => {
-        // Capitaliser le premier caractère pour correspondre à la clé dans byDayOfWeek
-        const dayKey = day.charAt(0).toUpperCase() + day.slice(1)
-        const dayData = stats.byDayOfWeek[dayKey]
+        const dayData = stats.byDayOfWeek[day]
         
-        if (!dayData) {
-          console.log(`Pas de données pour ${dayKey}`, Object.keys(stats.byDayOfWeek))
+        if (!dayData || dayData.days === 0) {
           return 0
         }
         
@@ -1000,7 +1008,7 @@ function MarkdownViewer({ fileName }) {
         return parseFloat(average.toFixed(1))
       })
       
-      console.log('Day of week chart data:', { labels, data, byDayOfWeek: stats.byDayOfWeek })
+      console.log('📊 Day of week chart data:', { labels, data, byDayOfWeek: stats.byDayOfWeek })
       
       return {
         labels: labels,
