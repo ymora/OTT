@@ -1533,24 +1533,36 @@ export default function DevicesPage() {
               last_seen: response.device.last_seen || new Date().toISOString()
             }
             
-            // Mettre à jour immédiatement le dispositif connecté pour qu'il soit visible
+            logger.log('📝 [USB] Dispositif créé en BDD, mise à jour de l\'affichage...', {
+              id: deviceCreated.id,
+              name: deviceCreated.device_name,
+              iccid: deviceCreated.sim_iccid
+            })
+            
+            // Mettre à jour immédiatement le dispositif connecté
             setUsbConnectedDevice(deviceCreated)
             setUsbVirtualDevice(null)
             
-            // Notifier les autres composants
-            notifyDevicesUpdated()
+            logger.log('✅ [USB] usbConnectedDevice mis à jour')
             
-            // IMPORTANT: Utiliser exactement le même pattern que DeviceModal (onSave)
-            // pour garantir que le dispositif apparaît dans le tableau
+            // IMPORTANT: Utiliser EXACTEMENT le même pattern que DeviceModal (onSave)
+            // 1. Invalider le cache
             invalidateCache?.()
-            // Attendre un peu pour s'assurer que la base de données est bien mise à jour
-            await new Promise(resolve => setTimeout(resolve, 100))
-            // Puis refetch pour recharger les données (AWAIT pour attendre la fin)
-            await refetch()
-            // Notifier à nouveau après le refetch
-            notifyDevicesUpdated()
+            logger.log('🔄 [USB] Cache invalidé')
             
-            logger.log('✅ [USB] Dispositif créé et visible immédiatement')
+            // 2. Attendre 100ms pour la BDD
+            await new Promise(resolve => setTimeout(resolve, 100))
+            logger.log('⏳ [USB] Attente 100ms terminée')
+            
+            // 3. Refetch et ATTENDRE la fin
+            await refetch()
+            logger.log('✅ [USB] Refetch terminé, devices mis à jour')
+            
+            // 4. Notifier après refetch
+            notifyDevicesUpdated()
+            logger.log('📢 [USB] Notification envoyée')
+            
+            logger.log('✅ [USB] Dispositif créé et devrait être visible dans le tableau maintenant')
           }
         }
       } catch (err) {
