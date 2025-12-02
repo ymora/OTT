@@ -63,13 +63,12 @@ export default function DocumentationPage() {
       presentation: 'Documentation Présentation - OTT Dashboard',
       developpeurs: 'Documentation Développeurs - OTT Dashboard',
       commerciale: 'Documentation Commerciale - OTT Dashboard',
-      'suivi-temps': 'Suivi Temps - OTT Dashboard',
-      audit: 'Audit Consolidé - OTT Dashboard'
+      'suivi-temps': 'Suivi Temps - OTT Dashboard'
     }
     document.title = titles[docType] || titles.presentation
   }, [docType])
 
-  const isMarkdownDoc = docType === 'suivi-temps' || docType === 'audit'
+  const isMarkdownDoc = docType === 'suivi-temps'
   const isDatabaseDoc = docType === 'database'
 
   // Référence à l'iframe pour envoyer le thème

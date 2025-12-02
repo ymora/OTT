@@ -930,7 +930,7 @@ export default function DebugTab() {
                           <div className="flex flex-col items-center gap-3">
                             <p className="text-sm">Aucun dispositif dans la base de données</p>
                             <p className="text-xs text-gray-400 dark:text-gray-500">
-                              Utilisez le bouton "➕ Nouveau Dispositif" ci-dessus pour créer un dispositif
+                              Utilisez le bouton &quot;➕ Nouveau Dispositif&quot; ci-dessus pour créer un dispositif
                             </p>
                           </div>
                         </td>
