@@ -237,29 +237,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Accès rapide à la Base de Données */}
-      {user?.role_name === 'admin' && (
-        <div className="card bg-gradient-to-r from-primary-50 to-secondary-50 dark:from-primary-900/20 dark:to-secondary-900/20 border-2 border-primary-200 dark:border-primary-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <span>🗄️</span>
-                Base de Données Complète
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Accédez à la vue détaillée de toutes les tables ({devices.length} dispositifs, {users.length} utilisateurs, {patients.length} patients, {firmwares.length} firmwares)
-              </p>
-            </div>
-            <button 
-              onClick={() => router.push('/dashboard/admin/database-view')}
-              className="btn-primary whitespace-nowrap"
-            >
-              Ouvrir →
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Section Actions Requises - Consolidée avec toutes les alertes */}
       {(alerts.length > 0 || unassignedDevices.length > 0 || lowBatteryList.length > 0) && (
         <div className="card">
