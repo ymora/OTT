@@ -237,75 +237,81 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Section Actions Requises - Consolidée avec toutes les alertes */}
+      {/* Actions Requises - Même format que les KPIs */}
       {(alerts.length > 0 || unassignedDevices.length > 0 || lowBatteryList.length > 0) && (
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <span className="text-red-500">⚡</span>
-            Actions Requises
-          </h2>
-          
-          <div className="space-y-6">
-            {/* Toutes les alertes */}
-            {alerts.length > 0 && (
-              <div>
-                <h3 className="font-semibold text-primary mb-3 flex items-center justify-between">
-                  <span>🔔 Toutes les Alertes ({alerts.length})</span>
-                </h3>
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {alerts.map((alert, i) => (
-                    <AlertCard key={alert.id} alert={alert} delay={i * 0.05} />
-                  ))}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {/* Alertes */}
+          {alerts.length > 0 && (
+            <div 
+              className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border-2 border-red-300 dark:border-red-700 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => router.push('/dashboard/outils')}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">Alertes Actives</p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">{alerts.length}</p>
                 </div>
+                <span className="text-3xl">🔔</span>
               </div>
-            )}
-
-            {/* Autres actions (batteries faibles, non assignés) */}
-            {(lowBatteryList.length > 0 || unassignedDevices.length > 0) && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-                {/* Batteries faibles */}
-                {lowBatteryList.length > 0 && (
-                  <div className="border-l-4 border-orange-500 pl-4">
-                    <h3 className="font-semibold text-orange-600 dark:text-orange-400 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
-                    <div className="space-y-2">
-                      {lowBatteryListDisplay.map(device => {
-                        const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
-                        return (
-                          <div key={device.id} className="text-sm">
-                            <p className="font-semibold text-primary">{device.device_name || device.sim_iccid}</p>
-                            <p className="text-xs text-muted">{battery.toFixed(0)}% restant</p>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/outils')}>
-                      Voir tous →
-                    </button>
-                  </div>
-                )}
-
-                {/* Boîtiers non assignés */}
-                {unassignedDevices.length > 0 && (
-                  <div className="border-l-4 border-amber-500 pl-4">
-                    <h3 className="font-semibold text-amber-600 dark:text-amber-400 mb-2">Non Assignés ({unassignedDevices.length})</h3>
-                    <div className="space-y-2">
-                      {unassignedDevices.slice(0, 5).map(device => (
-                        <div key={device.id} className="text-sm">
-                          <p className="font-semibold text-primary">{device.device_name || device.sim_iccid}</p>
-                          <p className="text-xs text-muted">
-                            {device.last_seen ? new Date(device.last_seen).toLocaleDateString('fr-FR') : 'Jamais connecté'}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                    <button className="btn-primary text-xs mt-2" onClick={() => router.push('/dashboard/outils')}>
-                      Assigner →
-                    </button>
-                  </div>
-                )}
+              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1 max-h-16 overflow-y-auto">
+                {alerts.slice(0, 2).map(alert => (
+                  <div key={alert.id} className="truncate">• {alert.message}</div>
+                ))}
+                {alerts.length > 2 && <div className="font-semibold">+{alerts.length - 2} autres...</div>}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Batteries faibles */}
+          {lowBatteryList.length > 0 && (
+            <div 
+              className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border-2 border-orange-300 dark:border-orange-700 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => router.push('/dashboard/outils')}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">Batteries Faibles</p>
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{lowBatteryList.length}</p>
+                </div>
+                <span className="text-3xl">🔋</span>
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1 max-h-16 overflow-y-auto">
+                {lowBatteryListDisplay.map(device => {
+                  const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
+                  return (
+                    <div key={device.id} className="truncate">
+                      • {device.device_name || device.sim_iccid}: {battery.toFixed(0)}%
+                    </div>
+                  )
+                })}
+                {lowBatteryList.length > 5 && <div className="font-semibold">+{lowBatteryList.length - 5} autres...</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Boîtiers non assignés */}
+          {unassignedDevices.length > 0 && (
+            <div 
+              className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border-2 border-amber-300 dark:border-amber-700 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => router.push('/dashboard/outils')}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">Non Assignés</p>
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{unassignedDevices.length}</p>
+                </div>
+                <span className="text-3xl">📦</span>
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1 max-h-16 overflow-y-auto">
+                {unassignedDevices.slice(0, 2).map(device => (
+                  <div key={device.id} className="truncate">
+                    • {device.device_name || device.sim_iccid}
+                  </div>
+                ))}
+                {unassignedDevices.length > 2 && <div className="font-semibold">+{unassignedDevices.length - 2} autres...</div>}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
