@@ -1281,14 +1281,22 @@ export default function DevicesPage() {
 
   // Créer/mettre à jour automatiquement le dispositif dans la base quand usbDeviceInfo contient des identifiants
   // Utilise la même logique que DeviceModal qui fonctionne bien
+  // IMPORTANT : Cette création est EN ARRIÈRE-PLAN, sans modal
   const processedIdentifiersRef = useRef(new Set())
   const creatingDeviceRef = useRef(false) // Éviter les créations simultanées
   
   useEffect(() => {
+    // NE PAS créer automatiquement si le modal est ouvert (pour éviter les conflits)
+    if (showDeviceModal) {
+      logger.debug('🔍 [USB] Modal ouvert, création automatique désactivée temporairement')
+      return
+    }
+    
     // Log de déclenchement du useEffect
     logger.log('🔍 [USB] useEffect déclenché:', { 
       hasUsbDeviceInfo: !!usbDeviceInfo, 
       isConnected,
+      showDeviceModal,
       usbDeviceInfo: usbDeviceInfo ? {
         sim_iccid: usbDeviceInfo.sim_iccid,
         device_serial: usbDeviceInfo.device_serial,
@@ -1504,7 +1512,18 @@ export default function DevicesPage() {
             }
             
             // Associer le dispositif créé au contexte USB
-            logger.log('✅ [USB] Dispositif créé, association au contexte USB...', response.device)
+            logger.log('✅ [USB] Dispositif créé:', {
+              id: response.device.id,
+              device_name: response.device.device_name,
+              sim_iccid: response.device.sim_iccid,
+              device_serial: response.device.device_serial
+            })
+            
+            // Vérifier que le dispositif créé a bien un ID (sinon il ne pourra pas être affiché)
+            if (!response.device.id) {
+              logger.error('❌ [USB] Le dispositif créé n\'a pas d\'ID!', response.device)
+              throw new Error('Le dispositif créé n\'a pas d\'ID')
+            }
             
             // Préparer le dispositif avec toutes les propriétés nécessaires
             const deviceCreated = {
@@ -1514,22 +1533,24 @@ export default function DevicesPage() {
               last_seen: response.device.last_seen || new Date().toISOString()
             }
             
-            // Mettre à jour immédiatement le dispositif connecté
-            // allDevices vérifiera automatiquement et l'ajoutera à la liste si nécessaire
+            // Mettre à jour immédiatement le dispositif connecté pour qu'il soit visible
             setUsbConnectedDevice(deviceCreated)
             setUsbVirtualDevice(null)
             
             // Notifier les autres composants
             notifyDevicesUpdated()
             
-            // Rafraîchir les données en arrière-plan (sans bloquer l'affichage)
-            // Le dispositif est déjà visible via usbConnectedDevice et allDevices
+            // Rafraîchir les données pour synchroniser avec l'API
             invalidateCache?.()
-            refetch().catch(err => {
-              logger.warn('⚠️ [USB] Erreur lors du refetch en arrière-plan:', err)
+            refetch().then(() => {
+              // Après refetch, mettre à jour avec les données fraîches si disponible
+              // Cela se fera automatiquement via les dépendances de useMemo
+              logger.log('✅ [USB] Refetch terminé, dispositif devrait être visible')
+            }).catch(err => {
+              logger.warn('⚠️ [USB] Erreur lors du refetch:', err)
             })
             
-            logger.log('✅ [USB] Dispositif créé et visible immédiatement dans le tableau')
+            logger.log('✅ [USB] Dispositif créé et devrait être visible immédiatement')
           }
         }
       } catch (err) {
@@ -1579,6 +1600,7 @@ export default function DevicesPage() {
     isConnected, 
     devices, 
     usbConnectedDevice, 
+    showDeviceModal, // Désactiver quand le modal est ouvert
     fetchWithAuth, 
     API_URL, 
     refetch, 
@@ -1655,19 +1677,24 @@ export default function DevicesPage() {
     // Si un dispositif USB est connecté et trouvé en base, vérifier qu'il est dans la liste
     if (usbConnectedDevice && !usbConnectedDevice.isVirtual && usbConnectedDevice.id) {
       // Vérifier si le dispositif est déjà dans la liste (par ID, ICCID ou Serial)
+      // Utiliser des comparaisons normalisées pour être plus robuste
+      const normalize = (str) => str ? String(str).trim().toLowerCase() : ''
+      
       const isInList = realDevices.some(d => {
         // Correspondance par ID (le plus fiable)
         if (d.id && usbConnectedDevice.id && d.id === usbConnectedDevice.id) {
           return true
         }
-        // Correspondance par ICCID
-        if (usbConnectedDevice.sim_iccid && d.sim_iccid && 
-            d.sim_iccid === usbConnectedDevice.sim_iccid) {
+        // Correspondance par ICCID (normalisé)
+        const usbIccid = normalize(usbConnectedDevice.sim_iccid)
+        const deviceIccid = normalize(d.sim_iccid)
+        if (usbIccid && deviceIccid && usbIccid === deviceIccid) {
           return true
         }
-        // Correspondance par Serial
-        if (usbConnectedDevice.device_serial && d.device_serial && 
-            d.device_serial === usbConnectedDevice.device_serial) {
+        // Correspondance par Serial (normalisé)
+        const usbSerial = normalize(usbConnectedDevice.device_serial)
+        const deviceSerial = normalize(d.device_serial)
+        if (usbSerial && deviceSerial && usbSerial === deviceSerial) {
           return true
         }
         return false
@@ -2947,9 +2974,13 @@ export default function DevicesPage() {
         }}
         editingItem={editingDevice}
         onSave={async () => {
+          // Invalider le cache avant le refetch pour forcer un rafraîchissement complet
+          invalidateCache()
+          // Attendre un peu pour s'assurer que la base de données est bien mise à jour
+          // puis refetch pour recharger les données (comme pour patients/utilisateurs)
+          await new Promise(resolve => setTimeout(resolve, 100))
           await refetch()
-          setShowDeviceModal(false)
-          setEditingDevice(null)
+          notifyDevicesUpdated()
         }}
         fetchWithAuth={fetchWithAuth}
         API_URL={API_URL}

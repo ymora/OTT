@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
 import logger from '@/lib/logger'
@@ -67,48 +67,64 @@ export default function DeviceModal({
   const [saving, setSaving] = useState(false)
   const [loadingConfig, setLoadingConfig] = useState(false)
 
-  // Initialiser le formulaire
+  // Initialiser le formulaire UNIQUEMENT lors de l'ouverture du modal
+  // Utiliser un ref pour éviter les réinitialisations lors de changements
+  const lastOpenStateRef = useRef(false)
+  
   useEffect(() => {
-    if (!isOpen) return
+    // Ne réinitialiser QUE quand le modal passe de fermé à ouvert
+    // Pas quand le modal est déjà ouvert
+    if (isOpen && !lastOpenStateRef.current) {
+      // Modal vient de s'ouvrir - initialiser le formulaire
+      lastOpenStateRef.current = true
 
-    if (editingItem) {
-      // Mode édition - charger les données du dispositif
-      setFormData({
-        device_name: editingItem.device_name || '',
-        sim_iccid: editingItem.sim_iccid || '',
-        device_serial: editingItem.device_serial || '',
-        firmware_version: editingItem.firmware_version || '',
-        status: editingItem.status || 'inactive',
-        patient_id: editingItem.patient_id || null,
-        sleep_minutes: null,
-        measurement_duration_ms: null,
-        send_every_n_wakeups: 1,
-        calibration_coefficients: [0, 1, 0]
-      })
+      // Mode création - FORMULAIRE TOUJOURS VIDE pour création manuelle
+      // Le modal d'ajout sert UNIQUEMENT à créer des dispositifs fictifs manuellement
+      // La création automatique USB se fait en arrière-plan sans modal
+      // NE JAMAIS pré-remplir avec les données USB, même en mode édition si c'est un dispositif USB virtuel
+      if (editingItem && editingItem.id && !editingItem.isVirtual) {
+        // Mode édition - charger les données du dispositif EXISTANT en base (pas virtuel)
+        setFormData({
+          device_name: editingItem.device_name || '',
+          sim_iccid: editingItem.sim_iccid || '',
+          device_serial: editingItem.device_serial || '',
+          firmware_version: editingItem.firmware_version || '',
+          status: editingItem.status || 'inactive',
+          patient_id: editingItem.patient_id || null,
+          sleep_minutes: null,
+          measurement_duration_ms: null,
+          send_every_n_wakeups: 1,
+          calibration_coefficients: [0, 1, 0]
+        })
 
-      // Charger la configuration si disponible
-      loadDeviceConfig(editingItem.id)
-    } else {
-      // Mode création - réinitialiser ou pré-remplir depuis editingItem si fourni (ex: données USB)
-      // Si editingItem est fourni mais n'a pas d'id, c'est un pré-remplissage (ex: depuis USB)
-      const hasPrefill = editingItem && !editingItem.id
-      setFormData({
-        device_name: hasPrefill ? (editingItem.device_name || '') : '',
-        sim_iccid: hasPrefill ? (editingItem.sim_iccid || '') : '', // Pré-rempli depuis USB si disponible (mais reste en lecture seule)
-        device_serial: hasPrefill ? (editingItem.device_serial || '') : '',
-        firmware_version: hasPrefill ? (editingItem.firmware_version || '') : '',
-        status: 'inactive',
-        patient_id: null,
-        sleep_minutes: null,
-        measurement_duration_ms: null,
-        send_every_n_wakeups: 1,
-        calibration_coefficients: [0, 1, 0]
-      })
+        // Charger la configuration si disponible
+        loadDeviceConfig(editingItem.id)
+      } else {
+        // Mode création OU dispositif virtuel - FORMULAIRE TOUJOURS VIDE
+        // Ne JAMAIS pré-remplir avec les données USB
+        setFormData({
+          device_name: '',
+          sim_iccid: '',
+          device_serial: '',
+          firmware_version: '',
+          status: 'inactive',
+          patient_id: null,
+          sleep_minutes: null,
+          measurement_duration_ms: null,
+          send_every_n_wakeups: 1,
+          calibration_coefficients: [0, 1, 0]
+        })
+      }
+
+      setFormErrors({})
+      setFormError(null)
+    } else if (!isOpen && lastOpenStateRef.current) {
+      // Modal vient de se fermer - réinitialiser le flag
+      lastOpenStateRef.current = false
     }
-
-    setFormErrors({})
-    setFormError(null)
-  }, [isOpen, editingItem])
+    // Si le modal est déjà ouvert, ne rien faire (pas de réinitialisation)
+    // NE JAMAIS réinitialiser le formulaire après l'ouverture, même si editingItem change
+  }, [isOpen]) // SEULEMENT déclencher quand isOpen change - pas editingItem !
 
   const loadDeviceConfig = async (deviceId) => {
     if (!deviceId) return
@@ -330,8 +346,8 @@ export default function DeviceModal({
             // Si l'erreur indique que le dispositif existe déjà, forcer un refetch et réessayer
             if (errorMessage.includes('déjà') || errorMessage.includes('existe') || errorMessage.includes('already') || errorMessage.includes('utilisé')) {
               logger.log('⚠️ API indique "déjà utilisé", le dispositif devrait apparaître après rafraîchissement')
-              // Fermer le modal et laisser onSave gérer le refetch
-              onSave()
+              // Attendre que onSave termine le refetch, puis fermer le modal
+              await onSave()
               onClose()
               return
             }
@@ -366,8 +382,8 @@ export default function DeviceModal({
         }
       }
 
-      // Appeler onSave pour rafraîchir les données
-      onSave()
+      // Appeler onSave pour rafraîchir les données et attendre qu'il se termine
+      await onSave()
       onClose()
     } catch (err) {
       logger.error('Erreur sauvegarde dispositif:', err)

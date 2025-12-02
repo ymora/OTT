@@ -14,7 +14,7 @@ import ErrorMessage from '@/components/ErrorMessage'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { isConnected, usbConnectedDevice, usbDeviceInfo } = useUsb()
+  const { isConnected, usbConnectedDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
   
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -82,16 +82,46 @@ export default function DashboardPage() {
     // Ajouter 1 si un dispositif USB est connecté et pas déjà compté
     const activeDevices = onlineFromDb.length + (usbDeviceOnline && !usbDeviceAlreadyCounted ? 1 : 0)
     
+    // Calculer les batteries faibles depuis la base de données
+    const lowBatteryFromDb = devices.filter(d => {
+      const battery = d.last_battery
+      return battery !== null && battery !== undefined && battery < 30
+    }).length
+    
+    // Vérifier si le dispositif USB connecté a une batterie faible
+    let usbBatteryLow = false
+    let usbBatteryOk = false
+    if (usbDeviceOnline && usbDeviceInfo) {
+      // Priorité : usbStreamLastMeasurement (le plus récent) > usbDeviceInfo
+      const usbBattery = usbStreamLastMeasurement?.battery ?? usbDeviceInfo.battery ?? usbDeviceInfo.last_battery
+      if (usbBattery !== null && usbBattery !== undefined) {
+        usbBatteryLow = usbBattery < 30
+        usbBatteryOk = usbBattery >= 30
+      }
+    }
+    
+    // Compter le dispositif USB seulement s'il n'est pas déjà dans la base de données
+    const lowBatteryDevices = lowBatteryFromDb + (usbBatteryLow && !usbDeviceAlreadyCounted ? 1 : 0)
+    
+    // Calculer le nombre total de dispositifs avec batterie OK (>= 30%)
+    const devicesWithBattery = devices.filter(d => {
+      const battery = d.last_battery
+      return battery !== null && battery !== undefined
+    })
+    const okBatteryFromDb = devicesWithBattery.filter(d => d.last_battery >= 30).length
+    const okBatteryDevices = okBatteryFromDb + (usbBatteryOk && !usbDeviceAlreadyCounted ? 1 : 0)
+    
+    // Total dispositifs : base de données + USB si pas déjà compté
+    const totalDevices = devices.length + (usbDeviceOnline && !usbDeviceAlreadyCounted ? 1 : 0)
+    
     return {
-      totalDevices: devices.length,
+      totalDevices,
       activeDevices,
       criticalAlerts: alerts.filter(a => a.severity === 'critical').length,
-      lowBatteryDevices: devices.filter(d => {
-        const battery = d.last_battery
-        return battery !== null && battery !== undefined && battery < 30
-      }).length
+      lowBatteryDevices,
+      okBatteryDevices
     }
-  }, [devices, alerts, isConnected, usbDeviceInfo])
+  }, [devices, alerts, isConnected, usbDeviceInfo, usbStreamLastMeasurement])
 
   const unassignedDevices = useMemo(() => 
     devices.filter(d => !d.first_name && !d.last_name),
@@ -164,8 +194,8 @@ export default function DashboardPage() {
           delay={0.2}
         />
         <StatsCard
-          title={stats.lowBatteryDevices > 0 ? "Batterie Faible" : "Batterie OK"}
-          value={stats.lowBatteryDevices}
+          title={stats.lowBatteryDevices > 0 ? "Batteries Faibles" : "Batteries OK"}
+          value={stats.lowBatteryDevices > 0 ? stats.lowBatteryDevices : stats.okBatteryDevices}
           icon="🔋"
           color={stats.lowBatteryDevices > 0 ? "orange" : "green"}
           delay={0.3}
