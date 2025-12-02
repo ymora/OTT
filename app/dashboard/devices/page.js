@@ -196,7 +196,7 @@ export default function DevicesPage() {
   }, [])
 
   // Charger les données initiales avec useApiData
-  const { data, loading, error, refetch, invalidateCache } = useApiData(
+  const { data, loading, error, refetch, invalidateCache, setData } = useApiData(
     ['/api.php/devices', '/api.php/patients', '/api.php/firmwares'],
     { requiresAuth: true }
   )
@@ -1515,6 +1515,25 @@ export default function DevicesPage() {
             setUsbConnectedDevice(deviceToAdd)
             setUsbVirtualDevice(null)
             
+            // FORCER l'ajout immédiat du dispositif à la liste affichée
+            // Cela permet de voir le dispositif immédiatement sans attendre le refetch
+            if (setData && data) {
+              const currentDevices = data.devices?.devices || []
+              // Vérifier que le dispositif n'est pas déjà dans la liste
+              const alreadyExists = currentDevices.some(d => d.id === response.device.id)
+              
+              if (!alreadyExists) {
+                logger.log('📋 [USB] Ajout immédiat du dispositif créé à la liste affichée')
+                setData({
+                  ...data,
+                  devices: {
+                    ...data.devices,
+                    devices: [deviceToAdd, ...currentDevices]
+                  }
+                })
+              }
+            }
+            
             // Invalider le cache pour forcer un rafraîchissement complet
             if (invalidateCache) {
               invalidateCache()
@@ -1526,7 +1545,6 @@ export default function DevicesPage() {
             await refetch()
             
             // Vérifier que le dispositif est bien dans la liste après refetch
-            // et forcer une nouvelle récupération si nécessaire
             setTimeout(async () => {
               try {
                 const checkResponse = await fetchJson(
@@ -1552,8 +1570,7 @@ export default function DevicesPage() {
                     ...found,
                     isVirtual: false
                   })
-                  // Forcer un nouveau refetch pour s'assurer que la liste est à jour
-                  await refetch()
+                  // Le refetch a déjà été fait, le dispositif devrait être dans la liste
                 } else {
                   logger.warn('⚠️ [USB] Dispositif créé mais non trouvé dans la liste après refetch')
                 }
@@ -1563,28 +1580,6 @@ export default function DevicesPage() {
             }, 1000)
             
             notifyDevicesUpdated()
-            
-            // Vérifier que le dispositif est bien dans la liste après refetch
-            setTimeout(async () => {
-              try {
-                const checkResponse = await fetchJson(
-                  fetchWithAuth,
-                  API_URL,
-                  '/api.php/devices',
-                  { method: 'GET' },
-                  { requiresAuth: true }
-                )
-                const checkDevices = checkResponse.devices || []
-                const found = checkDevices.find(d => d.id === response.device.id)
-                logger.log('🔍 [USB] Vérification après création:', { 
-                  deviceId: response.device.id, 
-                  found: !!found,
-                  totalDevices: checkDevices.length 
-                })
-              } catch (checkErr) {
-                logger.warn('⚠️ [USB] Erreur vérification:', checkErr)
-              }
-            }, 1000)
             
             logger.log('✅ [USB] Dispositif créé et associé, tableau mis à jour')
           }
