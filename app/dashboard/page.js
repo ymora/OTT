@@ -255,12 +255,12 @@ export default function DashboardPage() {
             onClick={() => toggleAccordion('online')}
             className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-              <div>
+            <div>
               <p className="text-xs text-gray-600 dark:text-gray-400">En Ligne</p>
               <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activeDevices}</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-3xl">✅</span>
+              <span className="text-3xl">🟢</span>
               <span className="text-lg">{kpiAccordions.online ? '▼' : '▶'}</span>
             </div>
           </button>
