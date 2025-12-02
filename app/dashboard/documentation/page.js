@@ -977,22 +977,41 @@ function MarkdownViewer({ fileName }) {
 
   // Graphique par jour de la semaine
   const dayOfWeekChartData = useMemo(() => {
-    if (!stats || !stats.byDayOfWeek) return null
+    if (!stats || !stats.byDayOfWeek) {
+      console.log('Stats ou byDayOfWeek manquant:', { hasStats: !!stats, byDayOfWeek: stats?.byDayOfWeek })
+      return null
+    }
     
     try {
+      const daysOrder = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+      const labels = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+      
+      const data = daysOrder.map(day => {
+        // Capitaliser le premier caractère pour correspondre à la clé dans byDayOfWeek
+        const dayKey = day.charAt(0).toUpperCase() + day.slice(1)
+        const dayData = stats.byDayOfWeek[dayKey]
+        
+        if (!dayData) {
+          console.log(`Pas de données pour ${dayKey}`, Object.keys(stats.byDayOfWeek))
+          return 0
+        }
+        
+        const average = dayData.hours / dayData.days
+        return parseFloat(average.toFixed(1))
+      })
+      
+      console.log('Day of week chart data:', { labels, data, byDayOfWeek: stats.byDayOfWeek })
+      
       return {
-    labels: ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'],
-    datasets: [{
-      label: 'Heures moyennes',
-      data: ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'].map(day => {
-        const dayData = stats.byDayOfWeek[day.charAt(0).toUpperCase() + day.slice(1)]
-        return dayData ? (dayData.hours / dayData.days).toFixed(1) : 0
-      }),
-      backgroundColor: 'rgba(81, 207, 102, 0.8)',
-      borderColor: 'rgb(81, 207, 102)',
-      borderWidth: 2,
-      borderRadius: 4
-    }]
+        labels: labels,
+        datasets: [{
+          label: 'Heures moyennes',
+          data: data,
+          backgroundColor: 'rgba(81, 207, 102, 0.8)',
+          borderColor: 'rgb(81, 207, 102)',
+          borderWidth: 2,
+          borderRadius: 4
+        }]
       }
     } catch (error) {
       logger.error('Erreur calcul dayOfWeekChartData:', error)
