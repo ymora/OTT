@@ -11,6 +11,7 @@ import { useApiData, useAutoRefresh } from '@/hooks'
 import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
+import { formatDate } from '@/lib/dateUtils'
 
 export default function DashboardPage() {
   const router = useRouter()
