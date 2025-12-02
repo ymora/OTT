@@ -1684,10 +1684,25 @@ export default function DevicesPage() {
   // Combiner les dispositifs réels avec le dispositif virtuel USB
   // MAIS éviter les doublons si le dispositif USB est déjà enregistré
   const allDevices = useMemo(() => {
+    logger.log('📋 [allDevices] Recalcul de la liste:', {
+      devicesCount: devices.length,
+      hasUsbConnected: !!usbConnectedDevice,
+      usbConnectedId: usbConnectedDevice?.id,
+      usbConnectedName: usbConnectedDevice?.device_name || usbConnectedDevice?.sim_iccid,
+      isVirtual: usbConnectedDevice?.isVirtual
+    })
+    
     const realDevices = [...devices]
     
     // Si un dispositif USB est connecté et trouvé en base, vérifier qu'il est dans la liste
     if (usbConnectedDevice && !usbConnectedDevice.isVirtual && usbConnectedDevice.id) {
+      logger.log('🔍 [allDevices] Vérification dispositif USB:', {
+        id: usbConnectedDevice.id,
+        name: usbConnectedDevice.device_name,
+        iccid: usbConnectedDevice.sim_iccid,
+        serial: usbConnectedDevice.device_serial
+      })
+      
       // Vérifier si le dispositif est déjà dans la liste (par ID, ICCID ou Serial)
       // Utiliser des comparaisons normalisées pour être plus robuste
       const normalize = (str) => str ? String(str).trim().toLowerCase() : ''
@@ -1695,18 +1710,21 @@ export default function DevicesPage() {
       const isInList = realDevices.some(d => {
         // Correspondance par ID (le plus fiable)
         if (d.id && usbConnectedDevice.id && d.id === usbConnectedDevice.id) {
+          logger.log('✅ [allDevices] Correspondance par ID trouvée:', d.id)
           return true
         }
         // Correspondance par ICCID (normalisé)
         const usbIccid = normalize(usbConnectedDevice.sim_iccid)
         const deviceIccid = normalize(d.sim_iccid)
         if (usbIccid && deviceIccid && usbIccid === deviceIccid) {
+          logger.log('✅ [allDevices] Correspondance par ICCID trouvée:', deviceIccid)
           return true
         }
         // Correspondance par Serial (normalisé)
         const usbSerial = normalize(usbConnectedDevice.device_serial)
         const deviceSerial = normalize(d.device_serial)
         if (usbSerial && deviceSerial && usbSerial === deviceSerial) {
+          logger.log('✅ [allDevices] Correspondance par Serial trouvée:', deviceSerial)
           return true
         }
         return false
@@ -1714,7 +1732,7 @@ export default function DevicesPage() {
       
       // Si le dispositif n'est pas encore dans la liste (ex: juste créé), l'ajouter temporairement
       if (!isInList) {
-        logger.log('📋 [allDevices] Ajout temporaire du dispositif USB créé:', {
+        logger.log('📋 [allDevices] ⚠️ AJOUT TEMPORAIRE du dispositif USB:', {
           device: usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid,
           id: usbConnectedDevice.id,
           sim_iccid: usbConnectedDevice.sim_iccid,
@@ -1728,7 +1746,7 @@ export default function DevicesPage() {
         return [usbConnectedDevice, ...realDevices]
       }
       
-      logger.debug('📋 [allDevices] Dispositif USB déjà dans la liste:', usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid)
+      logger.log('✅ [allDevices] Dispositif USB déjà dans devices (pas besoin d\'ajout):', usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid)
       return realDevices
     }
     
