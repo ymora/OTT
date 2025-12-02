@@ -17,7 +17,7 @@ export default function DatabaseViewPage() {
   const { user } = useAuth()
   const router = useRouter()
   const { isConnected, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('users')
 
   // Charger toutes les données nécessaires
   const { data, loading, error, refetch } = useApiData(
@@ -150,7 +150,6 @@ export default function DatabaseViewPage() {
   )
 
   const tabs = [
-    { id: 'overview', label: '🏠 Vue d\'Ensemble', count: null },
     { id: 'users', label: '👥 Utilisateurs', count: stats.totalUsers },
     { id: 'devices', label: '📱 Dispositifs', count: stats.totalDevices },
     { id: 'patients', label: '🏥 Patients', count: stats.totalPatients },
