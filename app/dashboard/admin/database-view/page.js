@@ -665,8 +665,6 @@ export default function DatabaseViewPage() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'overview':
-        return renderOverview()
       case 'users':
         return renderUsersTable()
       case 'devices':
@@ -682,7 +680,7 @@ export default function DatabaseViewPage() {
       case 'audit':
         return renderAuditTable()
       default:
-        return renderOverview()
+        return renderUsersTable()
     }
   }
 
