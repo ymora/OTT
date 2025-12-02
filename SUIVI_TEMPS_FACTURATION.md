@@ -4,7 +4,7 @@
 **Période analysée** : 2025-11-14 - 2025-12-02  
 **Développeur** : ymora  
 **Projet** : OTT - Dispositif Médical IoT  
-**Total commits analysés** : 572  
+**Total commits analysés** : 576  
 **Branches analysées** : Toutes
 **Auteur filtré** : ymora  
 
@@ -34,8 +34,8 @@
 | 2025-11-29 | ~0.5h | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
 | 2025-11-30 | ~8h | 77 | 5 | 32 | 0 | 1 | 1 | 0 | 8 | 26 |
 | 2025-12-01 | ~5h | 14 | 1 | 1 | 0 | 1 | 0 | 0 | 2 | 8 |
-| 2025-12-02 | ~8h | 36 | 1 | 4 | 0 | 3 | 0 | 0 | 7 | 15 |
-**Total** | **~128.5h** | **572** | **27** | **41.4** | **0.4** | **4.4** | **8.6** | **0.8** | **17.2** | **18.6**
+| 2025-12-02 | ~8h | 40 | 1 | 4 | 0 | 4 | 0 | 0 | 10 | 15 |
+**Total** | **~128.5h** | **576** | **27** | **41.3** | **0.4** | **4.5** | **8.6** | **0.8** | **17.7** | **18.3**
 
 ---
 
@@ -537,8 +537,8 @@
 
 ### 02 décembre 2025
 **Heures estimées** : ~8h  
-**Période** : 07:22 - 22:48  
-**Nombre de commits** : 36
+**Période** : 07:22 - 22:57  
+**Nombre de commits** : 40
 
 #### Avancées principales
 - [FEAT] ­ƒù║´©Å Ajout carte dispositifs + r├®duction taille boutons vue d'ensemble
@@ -561,13 +561,13 @@
 
 ### Répartition par activité
 - **Développement** : ~27h (21%)
-- **Correction** : ~41.4h (32.2%)
+- **Correction** : ~41.3h (32.1%)
 - **Test** : ~0.4h (0.3%)
-- **Documentation** : ~4.4h (3.4%)
+- **Documentation** : ~4.5h (3.5%)
 - **Refactoring** : ~8.6h (6.7%)
 - **Déploiement** : ~0.8h (0.6%)
-- **UI/UX** : ~17.2h (13.4%)
-- **Optimisation** : ~18.6h (14.5%)
+- **UI/UX** : ~17.7h (13.7%)
+- **Optimisation** : ~18.3h (14.2%)
 
 ### Temps total estimé : ~128.5 heures
 
@@ -604,6 +604,6 @@
 
 ---
 
-**Dernière génération** : 02/12/2025 22:51  
+**Dernière génération** : 02/12/2025 22:58  
 **Source** : Analyse automatique des commits Git du projet  
 **Script** : scripts/generate_time_tracking.ps1
