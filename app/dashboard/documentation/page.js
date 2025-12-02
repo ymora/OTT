@@ -1205,26 +1205,15 @@ function MarkdownViewer({ fileName }) {
           </div>
         )}
 
-        {/* Graphiques */}
+        {/* Graphique principal unique avec basculement */}
         {chartData && (
-          <div id="regularite" className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 scroll-mt-20">
-            {/* Graphique commits par jour */}
-            <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6">
-              <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Régularité du Travail</h3>
-              <div className="h-64">
-                <Bar data={commitsChartData} options={barOptions} />
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 text-center">
-                {timeView === 'day' ? 'Nombre de commits par jour' : timeView === 'week' ? 'Nombre de commits par semaine' : 'Nombre de commits par mois'}
-              </p>
-            </div>
-
-            {/* Graphique heures */}
+          <div id="regularite" className="space-y-6 mb-6 scroll-mt-20">
+            {/* Graphique heures principal */}
             <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6">
               <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">
                 {timeView === 'day' ? 'Temps Passé par Jour' : timeView === 'week' ? 'Temps Passé par Semaine' : 'Temps Passé par Mois'}
               </h3>
-              <div className="h-64">
+              <div className="h-80">
                 <Line data={hoursChartData} options={lineOptions} />
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 text-center">
@@ -1232,35 +1221,26 @@ function MarkdownViewer({ fileName }) {
               </p>
             </div>
 
-            {/* Camembert répartition */}
-            <div id="repartition" className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6 scroll-mt-20">
-              <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Répartition par Activité</h3>
-              <div className="h-64 flex items-center justify-center">
-                <Doughnut data={pieChartData} options={chartOptions} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Camembert répartition */}
+              <div id="repartition" className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6 scroll-mt-20">
+                <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Répartition par Activité</h3>
+                <div className="h-64 flex items-center justify-center">
+                  <Doughnut data={pieChartData} options={chartOptions} />
+                </div>
               </div>
+
+              {/* Graphique par jour de la semaine */}
+              {dayOfWeekChartData && (
+                <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6">
+                  <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Temps par Jour de la Semaine</h3>
+                  <div className="h-64">
+                    <Bar data={dayOfWeekChartData} options={barOptions} />
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 text-center">Heures moyennes par jour de la semaine</p>
+                </div>
+              )}
             </div>
-
-            {/* Graphique par jour de la semaine */}
-            {dayOfWeekChartData && (
-              <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6">
-                <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Temps par Jour de la Semaine</h3>
-                <div className="h-64">
-                  <Bar data={dayOfWeekChartData} options={barOptions} />
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 text-center">Heures moyennes par jour de la semaine</p>
-              </div>
-            )}
-
-            {/* Histogramme distribution des heures */}
-            {hoursDistributionData && (
-              <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6 lg:col-span-2">
-                <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Distribution du Temps de Travail</h3>
-                <div className="h-64">
-                  <Bar data={hoursDistributionData} options={barOptions} />
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 text-center">Nombre de jours par tranche d&apos;heures</p>
-              </div>
-            )}
           </div>
         )}
 
