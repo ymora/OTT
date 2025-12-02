@@ -36,6 +36,31 @@ export default function DashboardPage() {
   )
   
   const [selectedDeviceOnMap, setSelectedDeviceOnMap] = useState(null)
+  const [focusDeviceId, setFocusDeviceId] = useState(null)
+  
+  // États pour les accordéons des KPIs
+  const [kpiAccordions, setKpiAccordions] = useState({
+    devices: false,
+    online: false,
+    alerts: false,
+    battery: false,
+    alertsAction: false,
+    batteryAction: false,
+    unassigned: false
+  })
+  
+  const toggleAccordion = (key) => {
+    setKpiAccordions(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+  
+  const zoomToDevice = (deviceId) => {
+    setFocusDeviceId(deviceId)
+    // Scroll vers la carte
+    document.querySelector('#map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
   useAutoRefresh(refetch, 30000)
@@ -168,7 +193,7 @@ export default function DashboardPage() {
 
       {/* Carte des dispositifs */}
       {!loading && devices.length > 0 && (
-        <div className="card p-0 overflow-hidden">
+        <div id="map-container" className="card p-0 overflow-hidden">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -178,52 +203,131 @@ export default function DashboardPage() {
           <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
             <LeafletMap
               devices={devices}
-              focusDeviceId={null}
+              focusDeviceId={focusDeviceId}
               onSelect={(device) => {
                 setSelectedDeviceOnMap(device)
-                // Changer l'onglet pour afficher le dispositif sélectionné
-                setDatabaseTab('devices')
               }}
             />
           </div>
         </div>
       )}
 
-      {/* Stats Cards - Indicateurs clés (KPIs uniquement) - TAILLE RÉDUITE */}
+      {/* Stats Cards - Indicateurs clés (KPIs uniquement) - TAILLE RÉDUITE avec accordéons */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Cards plus compactes */}
-        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 animate-slide-up">
-          <div className="flex items-center justify-between">
+        {/* Card Dispositifs Totaux */}
+        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 animate-slide-up overflow-hidden">
+          <button 
+            onClick={() => toggleAccordion('devices')}
+            className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
             <div>
               <p className="text-xs text-gray-600 dark:text-gray-400">Dispositifs</p>
               <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">{stats.totalDevices}</p>
             </div>
-            <span className="text-3xl">🔌</span>
-          </div>
+            <div className="flex items-center gap-2">
+              <span className="text-3xl">🔌</span>
+              <span className="text-lg">{kpiAccordions.devices ? '▼' : '▶'}</span>
+            </div>
+          </button>
+          {kpiAccordions.devices && (
+            <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
+              <div className="space-y-1 mt-2">
+                {devices.slice(0, 10).map(device => (
+                  <button
+                    key={device.id}
+                    onClick={() => zoomToDevice(device.id)}
+                    className="w-full text-left text-xs px-2 py-1 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition-colors"
+                  >
+                    📍 {device.device_name || device.sim_iccid}
+                  </button>
+                ))}
+                {devices.length > 10 && (
+                  <div className="text-xs text-gray-500 italic px-2">+{devices.length - 10} autres...</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         
-        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 animate-slide-up" style={{animationDelay: '0.1s'}}>
-              <div className="flex items-center justify-between">
+        {/* Card En Ligne */}
+        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 animate-slide-up overflow-hidden" style={{animationDelay: '0.1s'}}>
+          <button 
+            onClick={() => toggleAccordion('online')}
+            className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
             <div>
               <p className="text-xs text-gray-600 dark:text-gray-400">En Ligne</p>
               <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activeDevices}</p>
             </div>
-            <span className="text-3xl">✅</span>
-          </div>
+            <div className="flex items-center gap-2">
+              <span className="text-3xl">✅</span>
+              <span className="text-lg">{kpiAccordions.online ? '▼' : '▶'}</span>
+            </div>
+          </button>
+          {kpiAccordions.online && (
+            <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
+              <div className="space-y-1 mt-2">
+                {devices.filter(d => {
+                  if (!d.last_seen) return false
+                  const lastSeen = new Date(d.last_seen)
+                  if (isNaN(lastSeen.getTime())) return false
+                  const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
+                  return hoursSince < 2
+                }).map(device => (
+                  <button
+                    key={device.id}
+                    onClick={() => zoomToDevice(device.id)}
+                    className="w-full text-left text-xs px-2 py-1 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
+                  >
+                    🟢 {device.device_name || device.sim_iccid}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         
-        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 animate-slide-up" style={{animationDelay: '0.2s'}}>
-          <div className="flex items-center justify-between">
+        {/* Card Alertes Critiques */}
+        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 animate-slide-up overflow-hidden" style={{animationDelay: '0.2s'}}>
+          <button 
+            onClick={() => toggleAccordion('alerts')}
+            className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
             <div>
               <p className="text-xs text-gray-600 dark:text-gray-400">Alertes</p>
               <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.criticalAlerts}</p>
             </div>
-            <span className="text-3xl">⚠️</span>
-          </div>
+            <div className="flex items-center gap-2">
+              <span className="text-3xl">⚠️</span>
+              <span className="text-lg">{kpiAccordions.alerts ? '▼' : '▶'}</span>
+            </div>
+          </button>
+          {kpiAccordions.alerts && (
+            <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
+              <div className="space-y-1 mt-2">
+                {alerts.filter(a => a.severity === 'critical').map(alert => {
+                  const device = devices.find(d => d.id === alert.device_id)
+                  return device ? (
+                    <button
+                      key={alert.id}
+                      onClick={() => zoomToDevice(device.id)}
+                      className="w-full text-left text-xs px-2 py-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                    >
+                      🔴 {device.device_name || device.sim_iccid}
+                    </button>
+                  ) : null
+                })}
+              </div>
+            </div>
+          )}
         </div>
         
-        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border border-gray-200 dark:border-gray-700 animate-slide-up" style={{animationDelay: '0.3s'}}>
-          <div className="flex items-center justify-between">
+        {/* Card Batteries */}
+        <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 animate-slide-up overflow-hidden" style={{animationDelay: '0.3s'}}>
+          <button 
+            onClick={() => toggleAccordion('battery')}
+            className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
             <div>
               <p className="text-xs text-gray-600 dark:text-gray-400">
                 {stats.lowBatteryDevices > 0 ? "🔋 Faibles" : "🔋 OK"}
@@ -232,84 +336,152 @@ export default function DashboardPage() {
                 {stats.lowBatteryDevices > 0 ? stats.lowBatteryDevices : stats.okBatteryDevices}
               </p>
             </div>
-            <span className="text-3xl">🔋</span>
-          </div>
+            <div className="flex items-center gap-2">
+              <span className="text-3xl">🔋</span>
+              <span className="text-lg">{kpiAccordions.battery ? '▼' : '▶'}</span>
+            </div>
+          </button>
+          {kpiAccordions.battery && (
+            <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
+              <div className="space-y-1 mt-2">
+                {(stats.lowBatteryDevices > 0 ? lowBatteryList : devices.filter(d => {
+                  const battery = d.last_battery
+                  return battery !== null && battery !== undefined && battery >= 30
+                })).map(device => {
+                  const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
+                  return (
+                    <button
+                      key={device.id}
+                      onClick={() => zoomToDevice(device.id)}
+                      className={`w-full text-left text-xs px-2 py-1 hover:bg-${battery < 30 ? 'orange' : 'green'}-50 dark:hover:bg-${battery < 30 ? 'orange' : 'green'}-900/30 rounded transition-colors`}
+                    >
+                      {battery < 20 ? '🔴' : battery < 30 ? '🟠' : '🟢'} {device.device_name || device.sim_iccid} ({battery.toFixed(0)}%)
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Actions Requises - Même format que les KPIs */}
+      {/* Actions Requises - Accordéons avec zoom carte */}
       {(alerts.length > 0 || unassignedDevices.length > 0 || lowBatteryList.length > 0) && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {/* Alertes */}
+          {/* Card Alertes Actives */}
           {alerts.length > 0 && (
-            <div 
-              className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border-2 border-red-300 dark:border-red-700 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => router.push('/dashboard/outils')}
-            >
-              <div className="flex items-center justify-between mb-2">
+            <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border-2 border-red-300 dark:border-red-700 animate-slide-up overflow-hidden">
+              <button 
+                onClick={() => toggleAccordion('alertsAction')}
+                className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
                 <div>
                   <p className="text-xs text-gray-600 dark:text-gray-400">Alertes Actives</p>
                   <p className="text-2xl font-bold text-red-600 dark:text-red-400">{alerts.length}</p>
                 </div>
-                <span className="text-3xl">🔔</span>
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1 max-h-16 overflow-y-auto">
-                {alerts.slice(0, 2).map(alert => (
-                  <div key={alert.id} className="truncate">• {alert.message}</div>
-                ))}
-                {alerts.length > 2 && <div className="font-semibold">+{alerts.length - 2} autres...</div>}
-              </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-3xl">🔔</span>
+                  <span className="text-lg">{kpiAccordions.alertsAction ? '▼' : '▶'}</span>
+                </div>
+              </button>
+              {kpiAccordions.alertsAction && (
+                <div className="px-3 pb-3 border-t border-red-200 dark:border-red-800 max-h-40 overflow-y-auto">
+                  <div className="space-y-1 mt-2">
+                    {alerts.slice(0, 10).map(alert => {
+                      const device = devices.find(d => d.id === alert.device_id)
+                      return device ? (
+                        <button
+                          key={alert.id}
+                          onClick={() => zoomToDevice(device.id)}
+                          className="w-full text-left text-xs px-2 py-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                        >
+                          {alert.severity === 'critical' ? '🔴' : '🟠'} {device.device_name || device.sim_iccid}
+                        </button>
+                      ) : null
+                    })}
+                    {alerts.length > 10 && (
+                      <div className="text-xs text-gray-500 italic px-2">+{alerts.length - 10} autres...</div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Batteries faibles */}
+          {/* Card Batteries Faibles */}
           {lowBatteryList.length > 0 && (
-            <div 
-              className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border-2 border-orange-300 dark:border-orange-700 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => router.push('/dashboard/outils')}
-            >
-              <div className="flex items-center justify-between mb-2">
+            <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border-2 border-orange-300 dark:border-orange-700 animate-slide-up overflow-hidden">
+              <button 
+                onClick={() => toggleAccordion('batteryAction')}
+                className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
                 <div>
                   <p className="text-xs text-gray-600 dark:text-gray-400">Batteries Faibles</p>
                   <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{lowBatteryList.length}</p>
                 </div>
-                <span className="text-3xl">🔋</span>
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1 max-h-16 overflow-y-auto">
-                {lowBatteryListDisplay.map(device => {
-                  const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
-                  return (
-                    <div key={device.id} className="truncate">
-                      • {device.device_name || device.sim_iccid}: {battery.toFixed(0)}%
-                    </div>
-                  )
-                })}
-                {lowBatteryList.length > 5 && <div className="font-semibold">+{lowBatteryList.length - 5} autres...</div>}
-              </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-3xl">🔋</span>
+                  <span className="text-lg">{kpiAccordions.batteryAction ? '▼' : '▶'}</span>
+                </div>
+              </button>
+              {kpiAccordions.batteryAction && (
+                <div className="px-3 pb-3 border-t border-orange-200 dark:border-orange-800 max-h-40 overflow-y-auto">
+                  <div className="space-y-1 mt-2">
+                    {lowBatteryListDisplay.map(device => {
+                      const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
+                      return (
+                        <button
+                          key={device.id}
+                          onClick={() => zoomToDevice(device.id)}
+                          className="w-full text-left text-xs px-2 py-1 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded transition-colors"
+                        >
+                          {battery < 20 ? '🔴' : '🟠'} {device.device_name || device.sim_iccid}: {battery.toFixed(0)}%
+                        </button>
+                      )
+                    })}
+                    {lowBatteryList.length > 5 && (
+                      <div className="text-xs text-gray-500 italic px-2">+{lowBatteryList.length - 5} autres...</div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Boîtiers non assignés */}
+          {/* Card Boîtiers Non Assignés */}
           {unassignedDevices.length > 0 && (
-            <div 
-              className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm p-3 border-2 border-amber-300 dark:border-amber-700 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => router.push('/dashboard/outils')}
-            >
-              <div className="flex items-center justify-between mb-2">
+            <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border-2 border-amber-300 dark:border-amber-700 animate-slide-up overflow-hidden">
+              <button 
+                onClick={() => toggleAccordion('unassigned')}
+                className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
                 <div>
                   <p className="text-xs text-gray-600 dark:text-gray-400">Non Assignés</p>
                   <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{unassignedDevices.length}</p>
                 </div>
-                <span className="text-3xl">📦</span>
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1 max-h-16 overflow-y-auto">
-                {unassignedDevices.slice(0, 2).map(device => (
-                  <div key={device.id} className="truncate">
-                    • {device.device_name || device.sim_iccid}
+                <div className="flex items-center gap-2">
+                  <span className="text-3xl">📦</span>
+                  <span className="text-lg">{kpiAccordions.unassigned ? '▼' : '▶'}</span>
+                </div>
+              </button>
+              {kpiAccordions.unassigned && (
+                <div className="px-3 pb-3 border-t border-amber-200 dark:border-amber-800 max-h-40 overflow-y-auto">
+                  <div className="space-y-1 mt-2">
+                    {unassignedDevices.slice(0, 10).map(device => (
+                      <button
+                        key={device.id}
+                        onClick={() => zoomToDevice(device.id)}
+                        className="w-full text-left text-xs px-2 py-1 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded transition-colors"
+                      >
+                        📦 {device.device_name || device.sim_iccid}
+                      </button>
+                    ))}
+                    {unassignedDevices.length > 10 && (
+                      <div className="text-xs text-gray-500 italic px-2">+{unassignedDevices.length - 10} autres...</div>
+                    )}
                   </div>
-                ))}
-                {unassignedDevices.length > 2 && <div className="font-semibold">+{unassignedDevices.length - 2} autres...</div>}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
