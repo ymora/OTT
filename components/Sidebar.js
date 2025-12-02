@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { withBasePath } from '@/lib/utils'
 
-// Menu simplifié - 4 pages principales avec fonctionnalités regroupées
+// Menu simplifié - 5 pages principales avec fonctionnalités regroupées
 const menuStructure = [
   {
     name: 'Vue d\'Ensemble',
@@ -33,7 +33,14 @@ const menuStructure = [
     icon: '👨‍💼',
     path: '/dashboard/users',
     permission: 'users.view',
-    description: 'Gestion des utilisateurs (audit, notifications, paramètres)'
+    description: 'Gestion des utilisateurs'
+  },
+  {
+    name: 'Base de Données',
+    icon: '🗄️',
+    path: '/dashboard/admin/database-view',
+    permission: null, // Vérifié dans la page (admin uniquement)
+    description: 'Vue complète de la base de données'
   },
 ]
 
@@ -94,6 +101,13 @@ export default function Sidebar() {
           // Vérification spéciale pour le menu Dispositifs OTT (admin ou technicien uniquement)
           if (item.path === '/dashboard/outils') {
             if (user?.role_name !== 'admin' && user?.role_name !== 'technicien') {
+              return null
+            }
+          }
+          
+          // Vérification spéciale pour Base de Données (admin uniquement)
+          if (item.path === '/dashboard/admin/database-view') {
+            if (user?.role_name !== 'admin') {
               return null
             }
           }
