@@ -1051,6 +1051,7 @@ function MarkdownViewer({ fileName }) {
     scales: {
       y: {
         beginAtZero: true,
+        grace: '10%', // Ajoute 10% au-dessus de la valeur max
         ticks: {
           stepSize: 5
         }
@@ -1063,6 +1064,7 @@ function MarkdownViewer({ fileName }) {
     scales: {
       y: {
         beginAtZero: true,
+        grace: '15%', // Ajoute 15% au-dessus de la valeur max pour meilleure lisibilité
         ticks: {
           stepSize: 2
         }
