@@ -196,7 +196,7 @@ export default function DevicesPage() {
   }, [])
 
   // Charger les données initiales avec useApiData
-  const { data, loading, error, refetch } = useApiData(
+  const { data, loading, error, refetch, invalidateCache } = useApiData(
     ['/api.php/devices', '/api.php/patients', '/api.php/firmwares'],
     { requiresAuth: true }
   )
@@ -1502,11 +1502,66 @@ export default function DevicesPage() {
             
             // Associer et mettre à jour le tableau
             logger.log('✅ [USB] Dispositif créé, association et mise à jour tableau...', response.device)
-            setUsbConnectedDevice(response.device)
+            
+            // S'assurer que le dispositif créé n'a pas le flag isVirtual et a toutes les propriétés nécessaires
+            const deviceToAdd = {
+              ...response.device,
+              isVirtual: false,
+              status: response.device.status || 'usb_connected',
+              last_seen: response.device.last_seen || new Date().toISOString()
+            }
+            
+            // Mettre à jour immédiatement le dispositif connecté
+            setUsbConnectedDevice(deviceToAdd)
             setUsbVirtualDevice(null)
             
+            // Invalider le cache pour forcer un rafraîchissement complet
+            if (invalidateCache) {
+              invalidateCache()
+            }
+            
             // Forcer le rafraîchissement immédiat
+            // Attendre un peu pour s'assurer que la base de données a bien enregistré
+            await new Promise(resolve => setTimeout(resolve, 500))
             await refetch()
+            
+            // Vérifier que le dispositif est bien dans la liste après refetch
+            // et forcer une nouvelle récupération si nécessaire
+            setTimeout(async () => {
+              try {
+                const checkResponse = await fetchJson(
+                  fetchWithAuth,
+                  API_URL,
+                  '/api.php/devices',
+                  { method: 'GET' },
+                  { requiresAuth: true }
+                )
+                const checkDevices = checkResponse.devices || []
+                const found = checkDevices.find(d => d.id === response.device.id)
+                
+                logger.log('🔍 [USB] Vérification après création:', { 
+                  deviceId: response.device.id, 
+                  found: !!found,
+                  totalDevices: checkDevices.length,
+                  deviceName: found?.device_name || 'N/A'
+                })
+                
+                if (found) {
+                  // Mettre à jour avec les données complètes de l'API
+                  setUsbConnectedDevice({
+                    ...found,
+                    isVirtual: false
+                  })
+                  // Forcer un nouveau refetch pour s'assurer que la liste est à jour
+                  await refetch()
+                } else {
+                  logger.warn('⚠️ [USB] Dispositif créé mais non trouvé dans la liste après refetch')
+                }
+              } catch (checkErr) {
+                logger.warn('⚠️ [USB] Erreur vérification:', checkErr)
+              }
+            }, 1000)
+            
             notifyDevicesUpdated()
             
             // Vérifier que le dispositif est bien dans la liste après refetch
@@ -1654,13 +1709,25 @@ export default function DevicesPage() {
     const realDevices = [...devices]
     
     // Si un dispositif USB est connecté et trouvé en base, vérifier qu'il est dans la liste
-    if (usbConnectedDevice && !usbConnectedDevice.isVirtual) {
-      // Vérifier si le dispositif est déjà dans la liste
-      const isInList = realDevices.some(d => 
-        d.id === usbConnectedDevice.id ||
-        (usbConnectedDevice.sim_iccid && d.sim_iccid === usbConnectedDevice.sim_iccid) ||
-        (usbConnectedDevice.device_serial && d.device_serial === usbConnectedDevice.device_serial)
-      )
+    if (usbConnectedDevice && !usbConnectedDevice.isVirtual && usbConnectedDevice.id) {
+      // Vérifier si le dispositif est déjà dans la liste (par ID, ICCID ou Serial)
+      const isInList = realDevices.some(d => {
+        // Correspondance par ID (le plus fiable)
+        if (d.id && usbConnectedDevice.id && d.id === usbConnectedDevice.id) {
+          return true
+        }
+        // Correspondance par ICCID
+        if (usbConnectedDevice.sim_iccid && d.sim_iccid && 
+            d.sim_iccid === usbConnectedDevice.sim_iccid) {
+          return true
+        }
+        // Correspondance par Serial
+        if (usbConnectedDevice.device_serial && d.device_serial && 
+            d.device_serial === usbConnectedDevice.device_serial) {
+          return true
+        }
+        return false
+      })
       
       // Si le dispositif n'est pas encore dans la liste (ex: juste créé), l'ajouter temporairement
       if (!isInList) {
@@ -1670,9 +1737,12 @@ export default function DevicesPage() {
           sim_iccid: usbConnectedDevice.sim_iccid,
           device_serial: usbConnectedDevice.device_serial,
           devicesCount: realDevices.length,
-          willBeCount: realDevices.length + 1
+          willBeCount: realDevices.length + 1,
+          hasId: !!usbConnectedDevice.id,
+          isVirtual: usbConnectedDevice.isVirtual
         })
-        return [...realDevices, usbConnectedDevice]
+        // Ajouter le dispositif créé en premier pour qu'il soit visible immédiatement
+        return [usbConnectedDevice, ...realDevices]
       }
       
       logger.debug('📋 [allDevices] Dispositif USB déjà dans la liste:', usbConnectedDevice.device_name || usbConnectedDevice.sim_iccid)

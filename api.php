@@ -7,6 +7,8 @@
 require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
 require_once __DIR__ . '/api/helpers.php';
+require_once __DIR__ . '/api/helpers_sql.php';
+require_once __DIR__ . '/api/validators.php';
 require_once __DIR__ . '/api/cache.php';
 require_once __DIR__ . '/api/handlers/auth.php';
 require_once __DIR__ . '/api/handlers/devices.php';
@@ -48,6 +50,17 @@ header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCID, X-Requested-With, Cache-Control, Accept');
 header('Access-Control-Max-Age: 86400');
 // Content-Type sera défini par chaque handler (JSON par défaut, SSE pour compilation)
+
+// Headers de sécurité (Phase 1 - Audit de Sécurité)
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('X-XSS-Protection: 1; mode=block');
+// Content-Security-Policy - À adapter selon les besoins (permet les requêtes vers l'API)
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: http:; font-src 'self' data:;");
+// Referrer-Policy
+header('Referrer-Policy: strict-origin-when-cross-origin');
+// Permissions-Policy
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
 // Debug mode activable via variable d'environnement
 // IMPORTANT: En production, désactiver display_errors pour éviter les erreurs HTML dans les réponses JSON
@@ -120,6 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     // Mais s'assurer que les headers CORS sont corrects
     http_response_code(204);
     // Ne pas définir Content-Type pour OPTIONS (pas de body)
+    // Les headers de sécurité sont déjà définis avant ce point
     exit();
 }
 

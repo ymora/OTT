@@ -1,65 +1,232 @@
 # Script de génération automatique du suivi de temps
 # Analyse tous les commits Git et génère un rapport de facturation
+# Version améliorée avec validation, filtrage et export
 
 param(
     [string]$OutputFile = "SUIVI_TEMPS_FACTURATION.md",
-    [switch]$IncludeAllBranches = $true
+    [switch]$IncludeAllBranches = $true,
+    [string]$Author = "",  # Filtrer par auteur (optionnel)
+    [string]$Since = "",   # Date de début (format: YYYY-MM-DD ou "30 days ago")
+    [string]$Until = "",   # Date de fin (format: YYYY-MM-DD)
+    [string[]]$Branches = @(),  # Branches spécifiques (vide = toutes)
+    [switch]$ExportCsv = $false,  # Exporter aussi en CSV
+    [switch]$ExportJson = $false,  # Exporter aussi en JSON
+    [switch]$Verbose = $false
 )
 
-Write-Host "Analyse des commits Git..." -ForegroundColor Cyan
-
-# Récupérer tous les commits de toutes les branches (distants)
-Write-Host "Recherche des commits Git (branches distantes)..." -ForegroundColor Cyan
-
-$gitCmd = if ($IncludeAllBranches) {
-    'git log --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --all --no-merges'
-} else {
-    'git log --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --no-merges'
+# Fonction pour logger avec niveau
+function Write-Log {
+    param(
+        [string]$Message,
+        [string]$Level = "Info"
+    )
+    $color = switch ($Level) {
+        "Error" { "Red" }
+        "Warning" { "Yellow" }
+        "Success" { "Green" }
+        "Info" { "Cyan" }
+        default { "White" }
+    }
+    if ($Verbose -or $Level -eq "Error" -or $Level -eq "Success") {
+        Write-Host $Message -ForegroundColor $color
+    }
 }
 
-$commits = Invoke-Expression $gitCmd
+# Validation : Vérifier que Git est disponible
+function Test-GitAvailable {
+    try {
+        $null = git --version 2>&1
+        return $true
+    } catch {
+        return $false
+    }
+}
 
-# Récupérer les commits locaux non pushés (méthode plus fiable que reflog)
-Write-Host "Recherche des commits locaux non pushés..." -ForegroundColor Cyan
-$localCommitsCmd = 'git log --branches --not --remotes --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --no-merges'
-$localCommitsRaw = Invoke-Expression $localCommitsCmd
+# Validation : Vérifier que nous sommes dans un dépôt Git
+function Test-GitRepository {
+    try {
+        $null = git rev-parse --git-dir 2>&1
+        return $true
+    } catch {
+        return $false
+    }
+}
 
-# Parser les commits locaux (même format que les commits distants)
+# Fonction pour parser un commit (factorisation du code)
+function Parse-Commit {
+    param(
+        [string]$CommitLine,
+        [string]$Source = "remote"
+    )
+    
+    $parts = $CommitLine -split '\|'
+    if ($parts.Count -lt 4) {
+        return $null
+    }
+    
+    $dateTime = $parts[0]
+    $author = $parts[1]
+    $message = $parts[2]
+    $hash = $parts[3]
+    
+    # Extraire date et heure
+    $datePart = $dateTime -split ' ' | Select-Object -First 1
+    $timePart = $dateTime -split ' ' | Select-Object -Last 1
+    
+    # Validation de la date
+    try {
+        $testDate = [DateTime]::ParseExact("$datePart $timePart", "yyyy-MM-dd HH:mm", $null)
+    } catch {
+        Write-Log "⚠️ Date invalide ignorée: $dateTime" "Warning"
+        return $null
+    }
+    
+    return [PSCustomObject]@{
+        Date = $datePart
+        Time = $timePart
+        DateTime = $dateTime
+        Author = $author
+        Message = $message
+        Hash = $hash
+        Source = $Source
+    }
+}
+
+# Fonction pour construire la commande Git avec filtres
+function Build-GitCommand {
+    param(
+        [string]$BaseCommand,
+        [string]$AuthorFilter = "",
+        [string]$SinceFilter = "",
+        [string]$UntilFilter = "",
+        [string[]]$BranchFilter = @()
+    )
+    
+    $cmd = $BaseCommand
+    
+    # Ajouter filtre auteur
+    if ($AuthorFilter) {
+        $cmd += " --author=`"$AuthorFilter`""
+    }
+    
+    # Ajouter filtre date début
+    if ($SinceFilter) {
+        $cmd += " --since=`"$SinceFilter`""
+    }
+    
+    # Ajouter filtre date fin
+    if ($UntilFilter) {
+        $cmd += " --until=`"$UntilFilter`""
+    }
+    
+    # Ajouter filtres de branches
+    if ($BranchFilter.Count -gt 0) {
+        $cmd = $cmd -replace '--all', ''
+        $cmd = $cmd -replace '--branches', ''
+        foreach ($branch in $BranchFilter) {
+            $cmd += " $branch"
+        }
+    }
+    
+    return $cmd
+}
+
+# ============================================
+# VALIDATION INITIALE
+# ============================================
+
+Write-Log "🔍 Validation de l'environnement..." "Info"
+
+if (-not (Test-GitAvailable)) {
+    Write-Log "❌ ERREUR: Git n'est pas disponible sur ce système" "Error"
+    Write-Log "   Veuillez installer Git: https://git-scm.com/downloads" "Error"
+    exit 1
+}
+
+if (-not (Test-GitRepository)) {
+    Write-Log "❌ ERREUR: Ce répertoire n'est pas un dépôt Git" "Error"
+    Write-Log "   Veuillez exécuter ce script depuis la racine du projet" "Error"
+    exit 1
+}
+
+Write-Log "✅ Git disponible et dépôt valide" "Success"
+
+# ============================================
+# RÉCUPÉRATION DES COMMITS
+# ============================================
+
+Write-Log "📊 Analyse des commits Git..." "Info"
+
+# Construire la commande de base
+$baseFormat = '--pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --no-merges'
+$baseCmd = if ($IncludeAllBranches) {
+    "git log $baseFormat --all"
+} else {
+    "git log $baseFormat"
+}
+
+# Récupérer tous les commits de toutes les branches (distants)
+Write-Log "🔍 Recherche des commits Git (branches distantes)..." "Info"
+$gitCmd = Build-GitCommand -BaseCommand $baseCmd -AuthorFilter $Author -SinceFilter $Since -UntilFilter $Until -BranchFilter $Branches
+
+try {
+    $commits = Invoke-Expression $gitCmd 2>&1
+    if ($LASTEXITCODE -ne 0 -and $commits -match "fatal:") {
+        Write-Log "⚠️ Aucun commit trouvé avec les filtres spécifiés" "Warning"
+        $commits = @()
+    }
+} catch {
+    Write-Log "⚠️ Erreur lors de la récupération des commits distants: $_" "Warning"
+    $commits = @()
+}
+
+# Récupérer les commits locaux non pushés
+Write-Log "🔍 Recherche des commits locaux non pushés..." "Info"
+$localBaseCmd = "git log $baseFormat --branches --not --remotes"
+$localCommitsCmd = Build-GitCommand -BaseCommand $localBaseCmd -AuthorFilter $Author -SinceFilter $Since -UntilFilter $Until -BranchFilter $Branches
+
+try {
+    $localCommitsRaw = Invoke-Expression $localCommitsCmd 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $localCommitsRaw = @()
+    }
+} catch {
+    Write-Log "⚠️ Erreur lors de la récupération des commits locaux: $_" "Warning"
+    $localCommitsRaw = @()
+}
+
+# Parser les commits locaux
 $localCommits = @()
 if ($localCommitsRaw) {
     foreach ($commit in $localCommitsRaw) {
-        $parts = $commit -split '\|'
-        if ($parts.Count -ge 4) {
-            $dateTime = $parts[0]
-            $author = $parts[1]
-            $message = $parts[2]
-            $hash = $parts[3]
-            
-            $datePart = $dateTime -split ' ' | Select-Object -First 1
-            $timePart = $dateTime -split ' ' | Select-Object -Last 1
-            
-            $localCommits += [PSCustomObject]@{
-                Date = $datePart
-                Time = $timePart
-                DateTime = $dateTime
-                Author = $author
-                Message = $message
-                Hash = $hash
-                Source = "local"
-            }
+        if ($commit -match "fatal:") { continue }
+        $parsed = Parse-Commit -CommitLine $commit -Source "local"
+        if ($parsed) {
+            $localCommits += $parsed
         }
     }
 }
 
 # Récupérer aussi les commits du reflog (pour les commits qui ne sont plus dans aucune branche)
-Write-Host "Recherche des commits orphelins (reflog)..." -ForegroundColor Cyan
+Write-Log "🔍 Recherche des commits orphelins (reflog)..." "Info"
 $reflogCmd = 'git reflog --pretty=format:"%gd|%an|%gs|%h" --date=format:"%Y-%m-%d %H:%M" --all'
-$reflogCommits = Invoke-Expression $reflogCmd
+
+try {
+    $reflogCommits = Invoke-Expression $reflogCmd 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $reflogCommits = @()
+    }
+} catch {
+    Write-Log "⚠️ Erreur lors de la récupération du reflog: $_" "Warning"
+    $reflogCommits = @()
+}
 
 # Parser les commits du reflog (format différent)
 $orphanCommits = @()
 $processedHashes = @{}
 foreach ($reflogCommit in $reflogCommits) {
+    if ($reflogCommit -match "fatal:") { continue }
+    
     if ($reflogCommit -match '^([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)$') {
         $ref = $matches[1]
         $author = $matches[2]
@@ -77,16 +244,42 @@ foreach ($reflogCommit in $reflogCommits) {
                 $datePart = $dateTime.ToString("yyyy-MM-dd")
                 $timePart = $dateTime.ToString("HH:mm")
                 
-                $orphanCommits += [PSCustomObject]@{
-                    Date = $datePart
-                    Time = $timePart
-                    DateTime = "$datePart $timePart"
-                    Author = $author
-                    Message = $message
-                    Hash = $hash
-                    Source = "orphan"
+                # Appliquer les filtres de date si spécifiés
+                $commitDate = [DateTime]::ParseExact("$datePart $timePart", "yyyy-MM-dd HH:mm", $null)
+                $shouldInclude = $true
+                
+                if ($Since) {
+                    $sinceDate = if ($Since -match "^\d{4}-\d{2}-\d{2}$") {
+                        [DateTime]::ParseExact($Since, "yyyy-MM-dd", $null)
+                    } else {
+                        # Format relatif comme "30 days ago"
+                        $null = git log --since="$Since" --format="%ad" --date=format:"%Y-%m-%d" -1
+                        [DateTime]::Now.AddDays(-30)  # Fallback
+                    }
+                    if ($commitDate -lt $sinceDate) { $shouldInclude = $false }
                 }
-                $processedHashes[$hash] = $true
+                
+                if ($Until -and $shouldInclude) {
+                    $untilDate = [DateTime]::ParseExact($Until, "yyyy-MM-dd", $null)
+                    if ($commitDate -gt $untilDate) { $shouldInclude = $false }
+                }
+                
+                if ($Author -and $shouldInclude) {
+                    if ($author -notmatch $Author) { $shouldInclude = $false }
+                }
+                
+                if ($shouldInclude) {
+                    $orphanCommits += [PSCustomObject]@{
+                        Date = $datePart
+                        Time = $timePart
+                        DateTime = "$datePart $timePart"
+                        Author = $author
+                        Message = $message
+                        Hash = $hash
+                        Source = "orphan"
+                    }
+                    $processedHashes[$hash] = $true
+                }
             } catch {
                 # Ignorer les entrées invalides
             }
@@ -101,28 +294,11 @@ $allHashes = @{}
 # Ajouter les commits distants
 if ($commits) {
     foreach ($commit in $commits) {
-        $parts = $commit -split '\|'
-        if ($parts.Count -ge 4) {
-            $dateTime = $parts[0]
-            $author = $parts[1]
-            $message = $parts[2]
-            $hash = $parts[3]
-            
-            if ($allHashes.ContainsKey($hash)) { continue }
-            
-            $datePart = $dateTime -split ' ' | Select-Object -First 1
-            $timePart = $dateTime -split ' ' | Select-Object -Last 1
-            
-            $allCommits += [PSCustomObject]@{
-                Date = $datePart
-                Time = $timePart
-                DateTime = $dateTime
-                Author = $author
-                Message = $message
-                Hash = $hash
-                Source = "remote"
-            }
-            $allHashes[$hash] = $true
+        if ($commit -match "fatal:") { continue }
+        $parsed = Parse-Commit -CommitLine $commit -Source "remote"
+        if ($parsed -and -not $allHashes.ContainsKey($parsed.Hash)) {
+            $allCommits += $parsed
+            $allHashes[$parsed.Hash] = $true
         }
     }
 }
@@ -144,14 +320,17 @@ foreach ($orphanCommit in $orphanCommits) {
 }
 
 if ($allCommits.Count -eq 0) {
-    Write-Host "ERREUR: Aucun commit trouve" -ForegroundColor Red
+    Write-Log "❌ ERREUR: Aucun commit trouvé avec les critères spécifiés" "Error"
+    if ($Author) { Write-Log "   Auteur filtré: $Author" "Info" }
+    if ($Since) { Write-Log "   Depuis: $Since" "Info" }
+    if ($Until) { Write-Log "   Jusqu'à: $Until" "Info" }
     exit 1
 }
 
 $remoteCount = ($allCommits | Where-Object { $_.Source -eq "remote" }).Count
 $localCount = ($allCommits | Where-Object { $_.Source -eq "local" }).Count
 $orphanCount = ($allCommits | Where-Object { $_.Source -eq "orphan" }).Count
-Write-Host "OK: $($allCommits.Count) commits trouves ($remoteCount distants, $localCount locaux non pushés, $orphanCount orphelins)" -ForegroundColor Green
+Write-Log "✅ $($allCommits.Count) commits trouvés ($remoteCount distants, $localCount locaux non pushés, $orphanCount orphelins)" "Success"
 
 # Utiliser les commits déjà parsés
 $parsedCommits = $allCommits
@@ -159,7 +338,7 @@ $parsedCommits = $allCommits
 # Grouper par jour (trier par date croissante pour avoir le premier jour en premier)
 $commitsByDay = $parsedCommits | Group-Object -Property Date | Sort-Object Name
 
-Write-Host "Generation du rapport..." -ForegroundColor Cyan
+Write-Log "📝 Génération du rapport..." "Info"
 
 # Fonction pour estimer le temps passé (version améliorée et réaliste)
 function Estimate-TimeSpent {
@@ -288,23 +467,28 @@ function Estimate-TimeSpent {
     }
 }
 
-# Fonction pour catégoriser les commits
+# Fonction pour catégoriser les commits (version améliorée)
 function Categorize-Commit {
     param([string]$Message)
     
     $messageLower = $Message.ToLower()
     
-    if ($messageLower -match "fix|bug|correction|résol|erreur|problème") {
+    # Ordre important : vérifier les patterns les plus spécifiques en premier
+    if ($messageLower -match "(fix|bug|correction|résol|erreur|problème|patch|hotfix|resolve|issue)" -and 
+        $messageLower -notmatch "test.*fix") {
         return "Correction"
-    } elseif ($messageLower -match "feat|ajout|nouveau|add|implement") {
+    } elseif ($messageLower -match "(feat|feature|ajout|nouveau|add|implement|création|create|new)" -and
+              $messageLower -notmatch "test.*feat") {
         return "Développement"
-    } elseif ($messageLower -match "test|debug") {
+    } elseif ($messageLower -match "(test|spec|unittest|integration|e2e|debug|testing)" -and
+              $messageLower -notmatch "(feat|fix).*test") {
         return "Test"
-    } elseif ($messageLower -match "doc|documentation|readme|guide") {
+    } elseif ($messageLower -match "(doc|documentation|readme|guide|comment|changelog|md$)" -and
+              $messageLower -notmatch "test.*doc") {
         return "Documentation"
-    } elseif ($messageLower -match "refactor|nettoyage|cleanup|optimis") {
+    } elseif ($messageLower -match "(refactor|refactoring|nettoyage|cleanup|optimis|optimize|restructure|reorganize)") {
         return "Refactoring"
-    } elseif ($messageLower -match "deploy|déploiement|migration|chore") {
+    } elseif ($messageLower -match "(deploy|déploiement|migration|chore.*deploy|release|build|ci|cd|pipeline)") {
         return "Déploiement"
     } else {
         return "Autre"
@@ -326,7 +510,13 @@ $categoryStats = @{
 
 foreach ($dayGroup in $commitsByDay) {
     $date = $dayGroup.Name
-    $dayCommits = $dayGroup.Group | Sort-Object { [DateTime]::ParseExact($_.DateTime, "yyyy-MM-dd HH:mm", $null) }
+    $dayCommits = $dayGroup.Group | Sort-Object { 
+        try {
+            [DateTime]::ParseExact($_.DateTime, "yyyy-MM-dd HH:mm", $null)
+        } catch {
+            [DateTime]::MinValue
+        }
+    }
     
     $firstCommit = $dayCommits[0]
     $lastCommit = $dayCommits[-1]
@@ -350,16 +540,16 @@ foreach ($dayGroup in $commitsByDay) {
         $categoryStats[$category] += $estimatedHours / $dayCommits.Count
         
         # Extraire les informations
-        if ($commit.Message -match "feat|ajout|nouveau|add|implement|amélioration") {
+        if ($commit.Message -match "feat|ajout|nouveau|add|implement|amélioration|feature") {
             $advances += $commit.Message
         }
-        if ($commit.Message -match "fix|correction|résol|erreur|problème|bug") {
+        if ($commit.Message -match "fix|correction|résol|erreur|problème|bug|patch") {
             $fixes += $commit.Message
         }
-        if ($commit.Message -match "deploy|déploiement|migration|chore.*déploiement") {
+        if ($commit.Message -match "deploy|déploiement|migration|chore.*déploiement|release") {
             $deployments += $commit.Message
         }
-        if ($commit.Message -match "test|debug|script.*test") {
+        if ($commit.Message -match "test|debug|script.*test|spec") {
             $tests += $commit.Message
         }
     }
@@ -382,17 +572,20 @@ foreach ($dayGroup in $commitsByDay) {
 # Générer le document Markdown
 $mdContent = @"
 # Suivi du Temps - Projet OTT
-## Journal de travail pour facturation (Genere automatiquement)
+## Journal de travail pour facturation (Généré automatiquement)
 
 **Période analysée** : $($commitsByDay[0].Name) - $($commitsByDay[-1].Name)  
 **Développeur** : $($parsedCommits[0].Author)  
 **Projet** : OTT - Dispositif Médical IoT  
 **Total commits analysés** : $($parsedCommits.Count)  
 **Branches analysées** : $(if ($IncludeAllBranches) { "Toutes" } else { "Main uniquement" })
+$(if ($Author) { "**Auteur filtré** : $Author  " })
+$(if ($Since) { "**Depuis** : $Since  " })
+$(if ($Until) { "**Jusqu'à** : $Until  " })
 
 ---
 
-## Tableau Recapitulatif
+## Tableau Récapitulatif
 
 | Date | Heures | Commits | Développement | Correction | Test | Documentation | Refactoring | Déploiement |
 |------|--------|---------|---------------|------------|------|----------------|-------------|-------------|
@@ -415,13 +608,17 @@ $mdContent += @"
 
 ---
 
-## Detail par Jour
+## Détail par Jour
 
 "@
 
 # Ajouter le détail pour chaque jour
 foreach ($report in $dailyReports) {
-    $dateFormatted = [DateTime]::ParseExact($report.Date, "yyyy-MM-dd", $null).ToString("dd MMMM yyyy", [System.Globalization.CultureInfo]::new("fr-FR"))
+    try {
+        $dateFormatted = [DateTime]::ParseExact($report.Date, "yyyy-MM-dd", $null).ToString("dd MMMM yyyy", [System.Globalization.CultureInfo]::new("fr-FR"))
+    } catch {
+        $dateFormatted = $report.Date
+    }
     
     $mdContent += @"
 
@@ -489,12 +686,12 @@ $mdContent += @"
 ## Statistiques Globales
 
 ### Répartition par activité
-- **Developpement** : ~$([Math]::Round($categoryStats['Développement'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Développement'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
+- **Développement** : ~$([Math]::Round($categoryStats['Développement'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Développement'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
 - **Correction** : ~$([Math]::Round($categoryStats['Correction'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Correction'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
 - **Test** : ~$([Math]::Round($categoryStats['Test'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Test'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
 - **Documentation** : ~$([Math]::Round($categoryStats['Documentation'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Documentation'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
 - **Refactoring** : ~$([Math]::Round($categoryStats['Refactoring'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Refactoring'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
-- **Deploiement** : ~$([Math]::Round($categoryStats['Déploiement'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Déploiement'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
+- **Déploiement** : ~$([Math]::Round($categoryStats['Déploiement'], 1))h $(if ($totalHours -gt 0) { "($([Math]::Round(($categoryStats['Déploiement'] / $totalHours) * 100, 1))%)" } else { "(0%)" })
 
 ### Temps total estimé : ~$([Math]::Round($totalHours, 1)) heures
 
@@ -510,7 +707,7 @@ $mdContent += @"
 - Estimation basée sur l'analyse des commits Git de **toutes les branches**
 - Calcul de la durée entre premier et dernier commit de la journée
 - Ajustement selon le nombre de commits (plus de commits = plus de temps)
-- Plafond de 12h par jour maximum
+- Plafond de 10h par jour maximum
 - Catégorisation automatique des commits
 
 ### Catégories de travail
@@ -529,7 +726,7 @@ $mdContent += @"
 
 ---
 
-**Derniere generation** : $(Get-Date -Format "dd/MM/yyyy HH:mm")  
+**Dernière génération** : $(Get-Date -Format "dd/MM/yyyy HH:mm")  
 **Source** : Analyse automatique des commits Git du projet  
 **Script** : `scripts/generate_time_tracking.ps1`
 "@
@@ -548,12 +745,60 @@ if (-not (Test-Path $publicDir)) {
 }
 Copy-Item $outputPath -Destination $publicPath -Force
 
-Write-Host "OK: Rapport genere : $outputPath" -ForegroundColor Green
-Write-Host "OK: Copie creee dans : $publicPath" -ForegroundColor Green
-if ($dailyReports.Count -gt 0) {
-    Write-Host "Total estime : ~$([Math]::Round($totalHours, 1)) heures sur $($dailyReports.Count) jours" -ForegroundColor Cyan
-    Write-Host "Moyenne : ~$([Math]::Round($totalHours / $dailyReports.Count, 1))h/jour" -ForegroundColor Cyan
-} else {
-    Write-Host "Aucun rapport genere" -ForegroundColor Yellow
+Write-Log "✅ Rapport généré : $outputPath" "Success"
+Write-Log "✅ Copie créée dans : $publicPath" "Success"
+
+# Export CSV si demandé
+if ($ExportCsv) {
+    $csvPath = $outputPath -replace '\.md$', '.csv'
+    $csvLines = @("Date,Heures,Commits,Développement,Correction,Test,Documentation,Refactoring,Déploiement")
+    foreach ($report in $dailyReports) {
+        $dev = if ($report.Categories.ContainsKey("Développement")) { $report.Categories["Développement"] } else { 0 }
+        $fix = if ($report.Categories.ContainsKey("Correction")) { $report.Categories["Correction"] } else { 0 }
+        $test = if ($report.Categories.ContainsKey("Test")) { $report.Categories["Test"] } else { 0 }
+        $doc = if ($report.Categories.ContainsKey("Documentation")) { $report.Categories["Documentation"] } else { 0 }
+        $ref = if ($report.Categories.ContainsKey("Refactoring")) { $report.Categories["Refactoring"] } else { 0 }
+        $dep = if ($report.Categories.ContainsKey("Déploiement")) { $report.Categories["Déploiement"] } else { 0 }
+        $csvLines += "$($report.Date),$($report.EstimatedHours),$($report.CommitCount),$dev,$fix,$test,$doc,$ref,$dep"
+    }
+    [System.IO.File]::WriteAllLines($csvPath, $csvLines, $utf8NoBom)
+    Write-Log "✅ Export CSV créé : $csvPath" "Success"
 }
 
+# Export JSON si demandé
+if ($ExportJson) {
+    $jsonPath = $outputPath -replace '\.md$', '.json'
+    $jsonData = @{
+        period = @{
+            start = $commitsByDay[0].Name
+            end = $commitsByDay[-1].Name
+        }
+        summary = @{
+            totalCommits = $parsedCommits.Count
+            totalHours = [Math]::Round($totalHours, 1)
+            daysWorked = $dailyReports.Count
+            averagePerDay = if ($dailyReports.Count -gt 0) { [Math]::Round($totalHours / $dailyReports.Count, 1) } else { 0 }
+            categories = $categoryStats
+        }
+        dailyReports = $dailyReports | ForEach-Object {
+            @{
+                date = $_.Date
+                hours = $_.EstimatedHours
+                commits = $_.CommitCount
+                firstCommit = $_.FirstCommit
+                lastCommit = $_.LastCommit
+                categories = $_.Categories
+            }
+        }
+    }
+    $jsonContent = $jsonData | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($jsonPath, $jsonContent, $utf8NoBom)
+    Write-Log "✅ Export JSON créé : $jsonPath" "Success"
+}
+
+if ($dailyReports.Count -gt 0) {
+    Write-Log "📊 Total estimé : ~$([Math]::Round($totalHours, 1)) heures sur $($dailyReports.Count) jours" "Success"
+    Write-Log "📊 Moyenne : ~$([Math]::Round($totalHours / $dailyReports.Count, 1))h/jour" "Success"
+} else {
+    Write-Log "⚠️ Aucun rapport généré" "Warning"
+}

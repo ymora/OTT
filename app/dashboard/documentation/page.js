@@ -9,6 +9,8 @@ import { withBasePath } from '@/lib/utils'
 import logger from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
+import MetadataCard from '@/components/MetadataCard'
+import DayDetailsModal from '@/components/DayDetailsModal'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -156,6 +158,8 @@ function MarkdownViewer({ fileName }) {
   const [chartData, setChartData] = useState(null)
   const [timeView, setTimeView] = useState('day') // 'day', 'week', 'month'
   const [regenerating, setRegenerating] = useState(false)
+  const [selectedDay, setSelectedDay] = useState(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const { fetchWithAuth, API_URL } = useAuth()
   
   // Ref pour éviter les rechargements multiples du même fichier
@@ -163,6 +167,18 @@ function MarkdownViewer({ fileName }) {
   const isLoadingRef = useRef(false)
   const hasRegeneratedRef = useRef(false)
   const lastRegenerationTimeRef = useRef(0)
+  
+  // Fonction pour ouvrir la modal de détails
+  const openDayDetails = useCallback((day) => {
+    setSelectedDay(day)
+    setIsModalOpen(true)
+  }, [])
+  
+  // Fonction pour fermer la modal
+  const closeDayDetails = useCallback(() => {
+    setIsModalOpen(false)
+    setSelectedDay(null)
+  }, [])
   
   // Détecter le thème pour le MarkdownViewer (4ème doc - Suivi Temps)
   useEffect(() => {
@@ -341,6 +357,9 @@ function MarkdownViewer({ fileName }) {
     }
     
     const loadMarkdown = async () => {
+      // Régénération automatique désactivée - le script peut être exécuté manuellement via: pwsh scripts/generate_time_tracking.ps1
+      // Code conservé pour référence:
+      /*
       // Si c'est le fichier de suivi du temps, régénérer automatiquement au chargement
       // Mais seulement si ça fait plus de 15 minutes depuis la dernière régénération
       if (fileName === 'SUIVI_TEMPS_FACTURATION.md') {
@@ -362,6 +381,7 @@ function MarkdownViewer({ fileName }) {
           logger.debug(`⏭️ Régénération ignorée (dernière régénération il y a ${Math.round(timeSinceLastRegen / 1000)}s)`)
         }
       }
+      */
       
       // Charger le contenu
       await reloadContent()
@@ -370,9 +390,23 @@ function MarkdownViewer({ fileName }) {
     loadMarkdown()
   }, [fileName, regenerateTimeTracking, reloadContent])
 
-  // Fonction pour parser le markdown et extraire les données pour les graphiques
+  // Fonctions utilitaires pour parsing robuste
+  function safeParseFloat(value, defaultValue = 0) {
+    if (!value || value === '-' || value === '' || value === '0') return defaultValue
+    const parsed = parseFloat(value)
+    return isNaN(parsed) ? defaultValue : parsed
+  }
+
+  function safeParseInt(value, defaultValue = 0) {
+    if (!value || value === '-' || value === '' || value === '0') return defaultValue
+    const parsed = parseInt(value)
+    return isNaN(parsed) ? defaultValue : parsed
+  }
+
+  // Fonction pour parser le markdown et extraire les données pour les graphiques (VERSION AMÉLIORÉE)
   function parseMarkdownForCharts(md) {
     const data = {
+      metadata: null,
       dailyData: [],
       categories: {
         'Développement': 0,
@@ -383,25 +417,99 @@ function MarkdownViewer({ fileName }) {
         'Déploiement': 0
       },
       totalHours: 0,
-      totalCommits: 0
+      totalCommits: 0,
+      totalHoursFromMarkdown: 0,
+      totalCommitsFromMarkdown: 0,
+      validation: {
+        hoursMatch: true,
+        commitsMatch: true,
+        categoriesMatch: true
+      }
     }
 
-    // Parser le tableau récapitulatif (format flexible)
+    // ============================================
+    // PHASE 1.1 : Extraction des métadonnées
+    // ============================================
+    const metadata = {}
+    
+    // Période analysée
+    const periodMatch = md.match(/\*\*Période analysée\*\* : (\d{4}-\d{2}-\d{2}) - (\d{4}-\d{2}-\d{2})/)
+    if (periodMatch) {
+      metadata.period = {
+        start: periodMatch[1],
+        end: periodMatch[2]
+      }
+    }
+
+    // Développeur
+    const authorMatch = md.match(/\*\*Développeur\*\* : (.+)/)
+    if (authorMatch) {
+      metadata.author = authorMatch[1].trim()
+    }
+
+    // Projet
+    const projectMatch = md.match(/\*\*Projet\*\* : (.+)/)
+    if (projectMatch) {
+      metadata.project = projectMatch[1].trim()
+    }
+
+    // Total commits
+    const totalCommitsMatch = md.match(/\*\*Total commits analysés\*\* : (\d+)/)
+    if (totalCommitsMatch) {
+      metadata.totalCommits = parseInt(totalCommitsMatch[1])
+    }
+
+    // Branches analysées
+    const branchesMatch = md.match(/\*\*Branches analysées\*\* : (.+)/)
+    if (branchesMatch) {
+      metadata.branchesAnalyzed = branchesMatch[1].trim()
+    }
+
+    // Filtres
+    metadata.filters = {}
+    const authorFilterMatch = md.match(/\*\*Auteur filtré\*\* : (.+)/)
+    if (authorFilterMatch) {
+      metadata.filters.author = authorFilterMatch[1].trim()
+    }
+
+    const sinceMatch = md.match(/\*\*Depuis\*\* : (.+)/)
+    if (sinceMatch) {
+      metadata.filters.since = sinceMatch[1].trim()
+    }
+
+    const untilMatch = md.match(/\*\*Jusqu'à\*\* : (.+)/)
+    if (untilMatch) {
+      metadata.filters.until = untilMatch[1].trim()
+    }
+
+    // Dernière génération
+    const lastGenMatch = md.match(/\*\*Dernière génération\*\* : (.+)/)
+    if (lastGenMatch) {
+      metadata.lastGenerated = lastGenMatch[1].trim()
+    }
+
+    if (Object.keys(metadata).length > 0) {
+      data.metadata = metadata
+    }
+
+    // ============================================
+    // PHASE 1.2 : Parsing robuste du tableau
+    // ============================================
     const tableRegex = /\| (\d{4}-\d{2}-\d{2}) \| ~?([\d.]+)h? \| (\d+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \|/g
     let match
     while ((match = tableRegex.exec(md)) !== null) {
       const date = match[1]
-      const hours = parseFloat(match[2]) || 0
-      const commits = parseInt(match[3]) || 0
-      const dev = parseFloat(match[4]) || 0
-      const fix = parseFloat(match[5]) || 0
-      const test = parseFloat(match[6]) || 0
-      const doc = parseFloat(match[7]) || 0
-      const refactor = parseFloat(match[8]) || 0
-      const deploy = parseFloat(match[9]) || 0
+      const hours = safeParseFloat(match[2])
+      const commits = safeParseInt(match[3])
+      const dev = safeParseFloat(match[4])
+      const fix = safeParseFloat(match[5])
+      const test = safeParseFloat(match[6])
+      const doc = safeParseFloat(match[7])
+      const refactor = safeParseFloat(match[8])
+      const deploy = safeParseFloat(match[9])
 
-      // Ignorer la ligne de séparation (---)
-      if (date.includes('---') || isNaN(hours)) continue
+      // Ignorer la ligne de séparation (---) ou lignes invalides
+      if (date.includes('---') || !date.match(/^\d{4}-\d{2}-\d{2}$/)) continue
 
       data.dailyData.push({
         date,
@@ -412,22 +520,145 @@ function MarkdownViewer({ fileName }) {
         test,
         doc,
         refactor,
-        deploy
+        deploy,
+        details: null // Sera rempli par la phase 1.3
       })
 
       data.totalHours += hours
       data.totalCommits += commits
     }
 
-    // Parser les totaux (format flexible avec ou sans **)
+    // ============================================
+    // PHASE 3 : Utiliser les totaux du markdown comme source unique
+    // ============================================
     const totalMatch = md.match(/(?:\*\*)?Total(?:\*\*)? \| (?:\*\*)?~?([\d.]+)h?(?:\*\*)? \| (?:\*\*)?(\d+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)?/)
     if (totalMatch) {
-      data.categories['Développement'] = parseFloat(totalMatch[3]) || 0
-      data.categories['Correction'] = parseFloat(totalMatch[4]) || 0
-      data.categories['Test'] = parseFloat(totalMatch[5]) || 0
-      data.categories['Documentation'] = parseFloat(totalMatch[6]) || 0
-      data.categories['Refactoring'] = parseFloat(totalMatch[7]) || 0
-      data.categories['Déploiement'] = parseFloat(totalMatch[8]) || 0
+      // Utiliser les totaux du markdown comme source de vérité
+      data.totalHoursFromMarkdown = safeParseFloat(totalMatch[1])
+      data.totalCommitsFromMarkdown = safeParseInt(totalMatch[2])
+      
+      // Utiliser ces valeurs comme totaux principaux
+      data.totalHours = data.totalHoursFromMarkdown
+      data.totalCommits = data.totalCommitsFromMarkdown
+
+      // Catégories depuis le markdown
+      data.categories['Développement'] = safeParseFloat(totalMatch[3])
+      data.categories['Correction'] = safeParseFloat(totalMatch[4])
+      data.categories['Test'] = safeParseFloat(totalMatch[5])
+      data.categories['Documentation'] = safeParseFloat(totalMatch[6])
+      data.categories['Refactoring'] = safeParseFloat(totalMatch[7])
+      data.categories['Déploiement'] = safeParseFloat(totalMatch[8])
+
+      // Validation : comparer calculé vs parsé
+      const calculatedHours = data.dailyData.reduce((sum, d) => sum + d.hours, 0)
+      const calculatedCommits = data.dailyData.reduce((sum, d) => sum + d.commits, 0)
+      const hoursDiff = Math.abs(calculatedHours - data.totalHoursFromMarkdown)
+      const commitsDiff = Math.abs(calculatedCommits - data.totalCommitsFromMarkdown)
+      
+      data.validation.hoursMatch = hoursDiff < 0.1
+      data.validation.commitsMatch = commitsDiff === 0
+      
+      if (!data.validation.hoursMatch) {
+        logger.warn(`Écart détecté pour les heures: calculé=${calculatedHours.toFixed(1)}, markdown=${data.totalHoursFromMarkdown.toFixed(1)}`)
+      }
+      if (!data.validation.commitsMatch) {
+        logger.warn(`Écart détecté pour les commits: calculé=${calculatedCommits}, markdown=${data.totalCommitsFromMarkdown}`)
+      }
+    }
+
+    // ============================================
+    // PHASE 1.3 : Parser la section Détail par Jour
+    // ============================================
+    const detailSectionRegex = /### (\d{1,2} \w+ \d{4})\s+[\s\S]*?(?=###|$)/g
+    let detailMatch
+    
+    while ((detailMatch = detailSectionRegex.exec(md)) !== null) {
+      const sectionContent = detailMatch[0]
+      const dateHeader = detailMatch[1]
+      
+      // Extraire la date du header (format: "14 novembre 2025")
+      let dayDate = null
+      try {
+        // Convertir "14 novembre 2025" en "2025-11-14"
+        const dateParts = dateHeader.match(/(\d{1,2}) (\w+) (\d{4})/)
+        if (dateParts) {
+          const day = parseInt(dateParts[1])
+          const monthName = dateParts[2].toLowerCase()
+          const year = parseInt(dateParts[3])
+          
+          const monthMap = {
+            'janvier': 0, 'février': 1, 'mars': 2, 'avril': 3, 'mai': 4, 'juin': 5,
+            'juillet': 6, 'août': 7, 'septembre': 8, 'octobre': 9, 'novembre': 10, 'décembre': 11
+          }
+          
+          const month = monthMap[monthName]
+          if (month !== undefined) {
+            const date = new Date(year, month, day)
+            dayDate = date.toISOString().split('T')[0] // Format YYYY-MM-DD
+          }
+        }
+      } catch (e) {
+        logger.warn('Erreur parsing date détail:', e)
+      }
+
+      if (!dayDate) continue
+
+      // Trouver le jour correspondant dans dailyData
+      const dayIndex = data.dailyData.findIndex(d => d.date === dayDate)
+      if (dayIndex === -1) continue
+
+      const details = {
+        advances: [],
+        fixes: [],
+        deployments: [],
+        tests: []
+      }
+
+      // Extraire les avancées principales
+      const advancesMatch = sectionContent.match(/#### Avancées principales\s+([\s\S]*?)(?=####|$)/)
+      if (advancesMatch) {
+        const advancesText = advancesMatch[1]
+        const advanceLines = advancesText.match(/- \[FEAT\] (.+)/g)
+        if (advanceLines) {
+          details.advances = advanceLines.map(line => line.replace(/- \[FEAT\] /, '').trim())
+        }
+      }
+
+      // Extraire les problèmes résolus
+      const fixesMatch = sectionContent.match(/#### Problèmes résolus\s+([\s\S]*?)(?=####|$)/)
+      if (fixesMatch) {
+        const fixesText = fixesMatch[1]
+        const fixLines = fixesText.match(/- \[FIX\] (.+)/g)
+        if (fixLines) {
+          details.fixes = fixLines.map(line => line.replace(/- \[FIX\] /, '').trim())
+        }
+      }
+
+      // Extraire les redéploiements
+      const deploymentsMatch = sectionContent.match(/#### Redéploiements\s+([\s\S]*?)(?=####|$)/)
+      if (deploymentsMatch) {
+        const deploymentsText = deploymentsMatch[1]
+        const deployLines = deploymentsText.match(/- \[DEPLOY\] (.+)/g)
+        if (deployLines) {
+          details.deployments = deployLines.map(line => line.replace(/- \[DEPLOY\] /, '').trim())
+        }
+      }
+
+      // Extraire les tests
+      const testsMatch = sectionContent.match(/#### Tests\s+([\s\S]*?)(?=####|$)/)
+      if (testsMatch) {
+        const testsText = testsMatch[1]
+        const testLines = testsText.match(/- \[TEST\] (.+)/g)
+        if (testLines) {
+          details.tests = testLines.map(line => line.replace(/- \[TEST\] /, '').trim())
+        }
+      }
+
+      // Ajouter les détails au jour correspondant
+      if (details.advances.length > 0 || details.fixes.length > 0 || 
+          details.deployments.length > 0 || details.tests.length > 0) {
+        data.dailyData[dayIndex].details = details
+      }
     }
 
     // Trier par date croissante (premier jour en premier, dernier à droite)
@@ -861,6 +1092,8 @@ function MarkdownViewer({ fileName }) {
               <a href="#tableau" className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
                 📋 Tableau
               </a>
+              {/* Bouton de mise à jour retiré - le script peut être exécuté manuellement via: pwsh scripts/generate_time_tracking.ps1 */}
+              {/* Code conservé pour référence:
               {fileName === 'SUIVI_TEMPS_FACTURATION.md' && (
                 <button
                   onClick={() => regenerateTimeTracking(true)}
@@ -880,12 +1113,18 @@ function MarkdownViewer({ fileName }) {
                   )}
                 </button>
               )}
+              */}
             </div>
           </div>
         </nav>
       )}
       <div className="max-w-7xl mx-auto p-6">
-        {/* En-tête avec stats globales */}
+        {/* Phase 2.1 : Section Métadonnées */}
+        {chartData && chartData.metadata && (
+          <MetadataCard metadata={chartData.metadata} />
+        )}
+
+        {/* En-tête avec stats globales améliorées */}
         {chartData && stats && (
           <div id="stats" className="bg-gradient-to-r from-primary-500 to-secondary-500 rounded-lg shadow-lg p-6 mb-6 text-white scroll-mt-20">
             <h1 className="text-3xl font-bold mb-4">Suivi du Temps - Projet OTT</h1>
@@ -893,10 +1132,16 @@ function MarkdownViewer({ fileName }) {
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Total Heures</div>
                 <div className="text-2xl font-bold">{chartData.totalHours.toFixed(1)}h</div>
+                {chartData.metadata?.filters && Object.keys(chartData.metadata.filters).length > 0 && (
+                  <div className="text-xs mt-1 opacity-75">⚠️ Filtres actifs</div>
+                )}
               </div>
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Total Commits</div>
                 <div className="text-2xl font-bold">{chartData.totalCommits}</div>
+                {chartData.validation && !chartData.validation.commitsMatch && (
+                  <div className="text-xs mt-1 opacity-75">⚠️ Validation</div>
+                )}
               </div>
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Jours Travaillés</div>
@@ -1036,18 +1281,41 @@ function MarkdownViewer({ fileName }) {
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Documentation</th>
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Refactoring</th>
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Déploiement</th>
+                    {chartData.dailyData.some(d => d.details && (
+                      (d.details.advances && d.details.advances.length > 0) ||
+                      (d.details.fixes && d.details.fixes.length > 0) ||
+                      (d.details.deployments && d.details.deployments.length > 0) ||
+                      (d.details.tests && d.details.tests.length > 0)
+                    )) && (
+                      <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Détails</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {chartData.dailyData.map((day, idx) => {
                     const date = new Date(day.date)
+                    const hasDetails = day.details && (
+                      (day.details.advances && day.details.advances.length > 0) ||
+                      (day.details.fixes && day.details.fixes.length > 0) ||
+                      (day.details.deployments && day.details.deployments.length > 0) ||
+                      (day.details.tests && day.details.tests.length > 0)
+                    )
+                    const tooltipText = hasDetails
+                      ? `Avancées: ${day.details.advances?.length || 0}, Fixes: ${day.details.fixes?.length || 0}, Déploiements: ${day.details.deployments?.length || 0}, Tests: ${day.details.tests?.length || 0}`
+                      : `${day.hours}h de travail, ${day.commits} commits`
+                    
                     return (
-                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-[rgb(var(--night-surface))]' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                      <tr 
+                        key={idx} 
+                        className={`${idx % 2 === 0 ? 'bg-white dark:bg-[rgb(var(--night-surface))]' : 'bg-gray-50 dark:bg-gray-900/50'} hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors cursor-pointer`}
+                        title={tooltipText}
+                        onClick={() => hasDetails && openDayDetails(day)}
+                      >
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-medium">
                           {date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </td>
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center font-bold text-primary-600 dark:text-primary-400">
-                          ~{day.hours}h
+                          ~{day.hours.toFixed(1)}h
                         </td>
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center font-bold">
                           {day.commits}
@@ -1058,6 +1326,20 @@ function MarkdownViewer({ fileName }) {
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.doc > 0 ? day.doc : '-'}</td>
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.refactor > 0 ? day.refactor : '-'}</td>
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.deploy > 0 ? day.deploy : '-'}</td>
+                        {hasDetails && (
+                          <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openDayDetails(day)
+                              }}
+                              className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors"
+                              title="Voir les détails"
+                            >
+                              📋
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -1073,12 +1355,27 @@ function MarkdownViewer({ fileName }) {
                     <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Documentation'].toFixed(1)}</td>
                     <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Refactoring'].toFixed(1)}</td>
                     <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Déploiement'].toFixed(1)}</td>
+                    {chartData.dailyData.some(d => d.details && (
+                      (d.details.advances && d.details.advances.length > 0) ||
+                      (d.details.fixes && d.details.fixes.length > 0) ||
+                      (d.details.deployments && d.details.deployments.length > 0) ||
+                      (d.details.tests && d.details.tests.length > 0)
+                    )) && (
+                      <td className="px-4 py-3 border border-gray-300 dark:border-gray-600"></td>
+                    )}
                   </tr>
                 </tbody>
               </table>
             </div>
           </div>
         )}
+        
+        {/* Phase 2.4 : Modal de détails par jour */}
+        <DayDetailsModal 
+          day={selectedDay}
+          isOpen={isModalOpen}
+          onClose={closeDayDetails}
+        />
       </div>
     </div>
   )
