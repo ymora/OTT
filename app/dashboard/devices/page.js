@@ -1425,23 +1425,26 @@ export default function DevicesPage() {
             }
           }
           
-          // Recharger depuis l'API pour avoir les données à jour
-          const devicesResponse = await fetchJson(
-            fetchWithAuth,
-            API_URL,
-            '/api.php/devices',
-            { method: 'GET' },
-            { requiresAuth: true }
-          )
-          const updatedDevice = (devicesResponse.devices || []).find(d => d.id === existingDevice.id)
-          
-          if (updatedDevice) {
-            setUsbConnectedDevice(updatedDevice)
-            setUsbVirtualDevice(null)
-            await refetch()
-            notifyDevicesUpdated()
-            logger.log('✅ [USB] Dispositif mis à jour et associé')
+          // Mettre à jour le dispositif connecté avec les nouvelles données
+          // Utiliser les données de la réponse PUT ou combiner avec existingDevice
+          const updatedDevice = {
+            ...existingDevice,
+            ...devicePayload,
+            id: existingDevice.id,
+            isVirtual: false
           }
+          
+          setUsbConnectedDevice(updatedDevice)
+          setUsbVirtualDevice(null)
+          notifyDevicesUpdated()
+          
+          // Rafraîchir en arrière-plan (sans bloquer)
+          invalidateCache?.()
+          refetch().catch(err => {
+            logger.warn('⚠️ [USB] Erreur lors du refetch en arrière-plan:', err)
+          })
+          
+          logger.log('✅ [USB] Dispositif mis à jour et visible immédiatement')
         } else {
           // Dispositif n'existe pas - créer (comme DeviceModal)
           logger.log('📝 [USB] Création du dispositif USB dans la base...')
@@ -1500,11 +1503,11 @@ export default function DevicesPage() {
               }
             }
             
-            // Associer et mettre à jour le tableau
-            logger.log('✅ [USB] Dispositif créé, association et mise à jour tableau...', response.device)
+            // Associer le dispositif créé au contexte USB
+            logger.log('✅ [USB] Dispositif créé, association au contexte USB...', response.device)
             
-            // S'assurer que le dispositif créé n'a pas le flag isVirtual et a toutes les propriétés nécessaires
-            const deviceToAdd = {
+            // Préparer le dispositif avec toutes les propriétés nécessaires
+            const deviceCreated = {
               ...response.device,
               isVirtual: false,
               status: response.device.status || 'usb_connected',
@@ -1512,76 +1515,21 @@ export default function DevicesPage() {
             }
             
             // Mettre à jour immédiatement le dispositif connecté
-            setUsbConnectedDevice(deviceToAdd)
+            // allDevices vérifiera automatiquement et l'ajoutera à la liste si nécessaire
+            setUsbConnectedDevice(deviceCreated)
             setUsbVirtualDevice(null)
             
-            // FORCER l'ajout immédiat du dispositif à la liste affichée
-            // Cela permet de voir le dispositif immédiatement sans attendre le refetch
-            if (setData && data) {
-              const currentDevices = data.devices?.devices || []
-              // Vérifier que le dispositif n'est pas déjà dans la liste
-              const alreadyExists = currentDevices.some(d => d.id === response.device.id)
-              
-              if (!alreadyExists) {
-                logger.log('📋 [USB] Ajout immédiat du dispositif créé à la liste affichée')
-                setData({
-                  ...data,
-                  devices: {
-                    ...data.devices,
-                    devices: [deviceToAdd, ...currentDevices]
-                  }
-                })
-              }
-            }
-            
-            // Invalider le cache pour forcer un rafraîchissement complet
-            if (invalidateCache) {
-              invalidateCache()
-            }
-            
-            // Forcer le rafraîchissement immédiat
-            // Attendre un peu pour s'assurer que la base de données a bien enregistré
-            await new Promise(resolve => setTimeout(resolve, 500))
-            await refetch()
-            
-            // Vérifier que le dispositif est bien dans la liste après refetch
-            setTimeout(async () => {
-              try {
-                const checkResponse = await fetchJson(
-                  fetchWithAuth,
-                  API_URL,
-                  '/api.php/devices',
-                  { method: 'GET' },
-                  { requiresAuth: true }
-                )
-                const checkDevices = checkResponse.devices || []
-                const found = checkDevices.find(d => d.id === response.device.id)
-                
-                logger.log('🔍 [USB] Vérification après création:', { 
-                  deviceId: response.device.id, 
-                  found: !!found,
-                  totalDevices: checkDevices.length,
-                  deviceName: found?.device_name || 'N/A'
-                })
-                
-                if (found) {
-                  // Mettre à jour avec les données complètes de l'API
-                  setUsbConnectedDevice({
-                    ...found,
-                    isVirtual: false
-                  })
-                  // Le refetch a déjà été fait, le dispositif devrait être dans la liste
-                } else {
-                  logger.warn('⚠️ [USB] Dispositif créé mais non trouvé dans la liste après refetch')
-                }
-              } catch (checkErr) {
-                logger.warn('⚠️ [USB] Erreur vérification:', checkErr)
-              }
-            }, 1000)
-            
+            // Notifier les autres composants
             notifyDevicesUpdated()
             
-            logger.log('✅ [USB] Dispositif créé et associé, tableau mis à jour')
+            // Rafraîchir les données en arrière-plan (sans bloquer l'affichage)
+            // Le dispositif est déjà visible via usbConnectedDevice et allDevices
+            invalidateCache?.()
+            refetch().catch(err => {
+              logger.warn('⚠️ [USB] Erreur lors du refetch en arrière-plan:', err)
+            })
+            
+            logger.log('✅ [USB] Dispositif créé et visible immédiatement dans le tableau')
           }
         }
       } catch (err) {
@@ -1634,6 +1582,7 @@ export default function DevicesPage() {
     fetchWithAuth, 
     API_URL, 
     refetch, 
+    invalidateCache,
     notifyDevicesUpdated, 
     setUsbConnectedDevice, 
     setUsbVirtualDevice
