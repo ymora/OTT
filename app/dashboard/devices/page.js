@@ -1446,11 +1446,11 @@ export default function DevicesPage() {
           setUsbVirtualDevice(null)
           notifyDevicesUpdated()
           
-          // Rafraîchir en arrière-plan (sans bloquer)
+          // IMPORTANT: Même pattern que pour la création
           invalidateCache?.()
-          refetch().catch(err => {
-            logger.warn('⚠️ [USB] Erreur lors du refetch en arrière-plan:', err)
-          })
+          await new Promise(resolve => setTimeout(resolve, 100))
+          await refetch()
+          notifyDevicesUpdated()
           
           logger.log('✅ [USB] Dispositif mis à jour et visible immédiatement')
         } else {
@@ -1540,17 +1540,17 @@ export default function DevicesPage() {
             // Notifier les autres composants
             notifyDevicesUpdated()
             
-            // Rafraîchir les données pour synchroniser avec l'API
+            // IMPORTANT: Utiliser exactement le même pattern que DeviceModal (onSave)
+            // pour garantir que le dispositif apparaît dans le tableau
             invalidateCache?.()
-            refetch().then(() => {
-              // Après refetch, mettre à jour avec les données fraîches si disponible
-              // Cela se fera automatiquement via les dépendances de useMemo
-              logger.log('✅ [USB] Refetch terminé, dispositif devrait être visible')
-            }).catch(err => {
-              logger.warn('⚠️ [USB] Erreur lors du refetch:', err)
-            })
+            // Attendre un peu pour s'assurer que la base de données est bien mise à jour
+            await new Promise(resolve => setTimeout(resolve, 100))
+            // Puis refetch pour recharger les données (AWAIT pour attendre la fin)
+            await refetch()
+            // Notifier à nouveau après le refetch
+            notifyDevicesUpdated()
             
-            logger.log('✅ [USB] Dispositif créé et devrait être visible immédiatement')
+            logger.log('✅ [USB] Dispositif créé et visible immédiatement')
           }
         }
       } catch (err) {
