@@ -20,62 +20,99 @@ const statusBadges = {
 const ONLINE_THRESHOLD_HOURS = 2
 const WARNING_THRESHOLD_HOURS = 6
 
-function buildIcon(status = 'online', deviceId = null, deviceName = null) {
+function buildIcon(device, status = 'online') {
   const color = statusColors[status] || statusColors.online
-  // Taille fixe pour éviter la disparition au survol
-  const size = 14
+  const size = 18
   const borderSize = 3
   const shadowSize = 8
   
+  // Déterminer l'icône en fonction du statut du dispositif
+  let icon = '📍'
+  let iconColor = color
+  
+  // Vérifier la batterie
+  const battery = device.last_battery
+  if (battery !== null && battery !== undefined) {
+    if (battery < 20) {
+      icon = '🔴' // Batterie critique
+      iconColor = '#ef4444'
+    } else if (battery < 30) {
+      icon = '🟠' // Batterie faible
+      iconColor = '#f97316'
+    } else if (battery >= 80) {
+      icon = '🟢' // Batterie pleine
+      iconColor = '#22c55e'
+    } else {
+      icon = '🔋' // Batterie OK
+      iconColor = '#22c55e'
+    }
+  }
+  
+  // Si le dispositif a des alertes non résolues, priorité à l'icône d'alerte
+  if (device.unresolved_alerts_count > 0) {
+    icon = '⚠️'
+    iconColor = '#f97316'
+  }
+  
   // Créer un label court pour identifier le dispositif
-  const label = deviceName 
-    ? deviceName.split('-').pop()?.substring(0, 3) || deviceId?.toString().slice(-2) || ''
-    : deviceId?.toString().slice(-2) || ''
+  const label = device.device_name 
+    ? device.device_name.split('-').pop()?.substring(0, 3) || device.id?.toString().slice(-2) || ''
+    : device.id?.toString().slice(-2) || ''
   
   return L.divIcon({
     className: 'custom-marker',
     html: `
       <div class="marker-container" style="
         position: relative;
-        width: ${size + borderSize * 2}px;
-        height: ${size + borderSize * 2}px;
+        width: ${size + borderSize * 2 + 10}px;
+        height: ${size + borderSize * 2 + 10}px;
         display: flex;
         align-items: center;
         justify-content: center;
+        cursor: pointer;
       ">
-      <div class="marker-dot" style="
-        background:${color};
-        width:${size}px;
-        height:${size}px;
-        border-radius:50%;
-        border:${borderSize}px solid white;
-        box-shadow:0 0 ${shadowSize}px rgba(0,0,0,0.4);
-        transition: all 0.3s ease;
-        position: relative;
-        z-index: 2;
-      "></div>
+        <!-- Icône principale -->
+        <div class="marker-icon" style="
+          font-size: ${size + 4}px;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+          transition: all 0.3s ease;
+          position: relative;
+          z-index: 2;
+        ">${icon}</div>
+        
+        <!-- Label avec nom du dispositif -->
         ${label ? `
         <div class="marker-label" style="
           position: absolute;
-          top: -8px;
-          right: -8px;
+          bottom: -18px;
+          left: 50%;
+          transform: translateX(-50%);
           background: white;
-          color: ${color};
-          font-size: 10px;
+          color: ${iconColor};
+          font-size: 9px;
           font-weight: bold;
-          padding: 2px 4px;
+          padding: 2px 5px;
           border-radius: 8px;
-          border: 1px solid ${color};
+          border: 1px solid ${iconColor};
           box-shadow: 0 2px 4px rgba(0,0,0,0.2);
           z-index: 3;
-          min-width: 16px;
-          text-align: center;
+          white-space: nowrap;
         ">${label}</div>
         ` : ''}
       </div>
+      
+      <style>
+        .marker-container:hover .marker-icon {
+          transform: scale(1.3);
+        }
+        .marker-container:hover .marker-label {
+          font-size: 10px;
+          padding: 3px 6px;
+        }
+      </style>
     `,
-    iconSize: [26, 26], // Taille fixe
-    iconAnchor: [13, 26] // Anchor fixe
+    iconSize: [40, 40],
+    iconAnchor: [20, 35]
   })
 }
 
@@ -179,7 +216,7 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
   const deviceIcons = useMemo(() => {
     const icons = {}
     enrichedDevices.forEach(device => {
-      icons[device.id] = buildIcon(device.connectionStatus, device.id, device.device_name, false)
+      icons[device.id] = buildIcon(device, device.connectionStatus)
     })
     return icons
   }, [enrichedDevices])
@@ -213,8 +250,8 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
             }
           }}
         >
-          <Popup maxWidth={280}>
-            <div className="space-y-2 p-1">
+          <Popup maxWidth={320}>
+            <div className="space-y-2 p-2">
               <div className="flex items-center justify-between gap-2 border-b pb-2">
                 <p className="font-semibold text-base">{device.device_name || device.sim_iccid}</p>
                 <span
@@ -233,11 +270,13 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
               )}
               
               <div className="space-y-1.5 text-sm">
+                {/* Localisation */}
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">📍 Localisation:</span>
                   <span className="font-medium">{device.city || 'Non localisé'}</span>
                 </div>
                 
+                {/* Batterie */}
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">🔋 Batterie:</span>
                   <span className={`font-semibold ${
@@ -246,16 +285,42 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
                     'text-green-600'
                   }`}>
                     {device.batteryLabel}
-                    {device.batteryStatus === 'critical' && ' ⚠️'}
-                    {device.batteryStatus === 'low' && ' ⚡'}
+                    {device.batteryStatus === 'critical' && ' 🔴'}
+                    {device.batteryStatus === 'low' && ' 🟠'}
                   </span>
                 </div>
                 
+                {/* Débit (si disponible) */}
+                {device.last_flowrate !== null && device.last_flowrate !== undefined && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">💨 Débit:</span>
+                    <span className="font-medium">{Number(device.last_flowrate).toFixed(2)} L/min</span>
+                  </div>
+                )}
+                
+                {/* Firmware */}
+                {device.firmware_version && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">💾 Firmware:</span>
+                    <span className="font-mono text-xs font-medium">{device.firmware_version}</span>
+                  </div>
+                )}
+                
+                {/* Alertes non résolues */}
+                {device.unresolved_alerts_count > 0 && (
+                  <div className="flex items-center justify-between bg-orange-50 border border-orange-200 rounded px-2 py-1">
+                    <span className="text-orange-700 font-semibold">⚠️ Alertes:</span>
+                    <span className="font-bold text-orange-700">{device.unresolved_alerts_count}</span>
+                  </div>
+                )}
+                
+                {/* Dernier contact */}
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">🕒 Dernier contact:</span>
                   <span className="font-medium text-xs">{device.lastSeenLabel}</span>
                 </div>
                 
+                {/* Patient */}
               {device.first_name && (
                   <div className="flex items-center justify-between border-t pt-1.5 mt-1.5">
                     <span className="text-gray-600">👤 Patient:</span>

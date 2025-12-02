@@ -9,6 +9,7 @@ import dynamicImport from 'next/dynamic'
 import StatsCard from '@/components/StatsCard'
 import AlertCard from '@/components/AlertCard'
 import { useApiData, useAutoRefresh } from '@/hooks'
+import { useAuth } from '@/contexts/AuthContext'
 import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
@@ -19,6 +20,7 @@ const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr:
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const { isConnected, usbConnectedDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
   
   // Charger les données avec useApiData
