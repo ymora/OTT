@@ -212,8 +212,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stats Cards - Indicateurs clés (KPIs uniquement) - TAILLE RÉDUITE avec accordéons */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Stats Cards - Indicateurs clés (KPIs + Non Assignés) - TAILLE RÉDUITE avec accordéons */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
         {/* Card Dispositifs Totaux */}
         <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 animate-slide-up overflow-hidden">
           <button 
@@ -363,11 +363,48 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+        
+        {/* Card Non Assignés - alignée avec les KPIs */}
+        {unassignedDevices.length > 0 && (
+          <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 animate-slide-up overflow-hidden" style={{animationDelay: '0.4s'}}>
+            <button 
+              onClick={() => toggleAccordion('unassigned')}
+              className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <div>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Non Assignés</p>
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{unassignedDevices.length}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-3xl">📦</span>
+                <span className="text-lg">{kpiAccordions.unassigned ? '▼' : '▶'}</span>
+              </div>
+            </button>
+            {kpiAccordions.unassigned && (
+              <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
+                <div className="space-y-1 mt-2">
+                  {unassignedDevices.slice(0, 10).map(device => (
+                    <button
+                      key={device.id}
+                      onClick={() => zoomToDevice(device.id)}
+                      className="w-full text-left text-xs px-2 py-1 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded transition-colors"
+                    >
+                      📦 {device.device_name || device.sim_iccid}
+                    </button>
+                  ))}
+                  {unassignedDevices.length > 10 && (
+                    <div className="text-xs text-gray-500 italic px-2">+{unassignedDevices.length - 10} autres...</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Actions Requises - Accordéons avec zoom carte */}
-      {(alerts.length > 0 || unassignedDevices.length > 0 || lowBatteryList.length > 0) && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      {/* Actions Requises - Alertes et Batteries uniquement */}
+      {(alerts.length > 0 || lowBatteryList.length > 0) && (
+        <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
           {/* Card Alertes Actives */}
           {alerts.length > 0 && (
             <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border-2 border-red-300 dark:border-red-700 animate-slide-up overflow-hidden">
@@ -441,43 +478,6 @@ export default function DashboardPage() {
                     })}
                     {lowBatteryList.length > 5 && (
                       <div className="text-xs text-gray-500 italic px-2">+{lowBatteryList.length - 5} autres...</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Card Boîtiers Non Assignés */}
-          {unassignedDevices.length > 0 && (
-            <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-sm border-2 border-amber-300 dark:border-amber-700 animate-slide-up overflow-hidden">
-              <button 
-                onClick={() => toggleAccordion('unassigned')}
-                className="w-full p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Non Assignés</p>
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{unassignedDevices.length}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-3xl">📦</span>
-                  <span className="text-lg">{kpiAccordions.unassigned ? '▼' : '▶'}</span>
-                </div>
-              </button>
-              {kpiAccordions.unassigned && (
-                <div className="px-3 pb-3 border-t border-amber-200 dark:border-amber-800 max-h-40 overflow-y-auto">
-                  <div className="space-y-1 mt-2">
-                    {unassignedDevices.slice(0, 10).map(device => (
-                      <button
-                        key={device.id}
-                        onClick={() => zoomToDevice(device.id)}
-                        className="w-full text-left text-xs px-2 py-1 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded transition-colors"
-                      >
-                        📦 {device.device_name || device.sim_iccid}
-                      </button>
-                    ))}
-                    {unassignedDevices.length > 10 && (
-                      <div className="text-xs text-gray-500 italic px-2">+{unassignedDevices.length - 10} autres...</div>
                     )}
                   </div>
                 </div>
