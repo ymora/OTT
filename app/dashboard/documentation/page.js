@@ -943,28 +943,31 @@ function MarkdownViewer({ fileName }) {
     if (!chartData || !chartData.categories) return null
     
     try {
+      // Palette de couleurs distinctives pour 8 catégories
+      const colorPalette = {
+        'Développement': { bg: 'rgba(59, 130, 246, 0.8)', border: 'rgb(59, 130, 246)' },     // Bleu
+        'Correction': { bg: 'rgba(239, 68, 68, 0.8)', border: 'rgb(239, 68, 68)' },          // Rouge
+        'Test': { bg: 'rgba(168, 85, 247, 0.8)', border: 'rgb(168, 85, 247)' },              // Violet
+        'Documentation': { bg: 'rgba(34, 197, 94, 0.8)', border: 'rgb(34, 197, 94)' },       // Vert
+        'Refactoring': { bg: 'rgba(245, 158, 11, 0.8)', border: 'rgb(245, 158, 11)' },       // Orange
+        'Déploiement': { bg: 'rgba(99, 102, 241, 0.8)', border: 'rgb(99, 102, 241)' },       // Indigo
+        'UI/UX': { bg: 'rgba(236, 72, 153, 0.8)', border: 'rgb(236, 72, 153)' },             // Rose
+        'Optimisation': { bg: 'rgba(14, 165, 233, 0.8)', border: 'rgb(14, 165, 233)' }       // Cyan
+      }
+      
+      const activeCategories = Object.keys(chartData.categories).filter(k => chartData.categories[k] > 0)
+      const activeValues = activeCategories.map(k => chartData.categories[k])
+      const backgroundColors = activeCategories.map(k => colorPalette[k]?.bg || 'rgba(128, 128, 128, 0.8)')
+      const borderColors = activeCategories.map(k => colorPalette[k]?.border || 'rgb(128, 128, 128)')
+      
       return {
-        labels: Object.keys(chartData.categories).filter(k => chartData.categories[k] > 0),
+        labels: activeCategories,
         datasets: [{
-          data: Object.values(chartData.categories).filter(v => v > 0),
-      backgroundColor: [
-        'rgba(102, 126, 234, 0.8)',   // Développement
-        'rgba(239, 68, 68, 0.8)',      // Correction
-        'rgba(245, 158, 11, 0.8)',     // Test
-        'rgba(34, 197, 94, 0.8)',     // Documentation
-        'rgba(168, 85, 247, 0.8)',    // Refactoring
-        'rgba(59, 130, 246, 0.8)'     // Déploiement
-      ],
-      borderColor: [
-        'rgb(102, 126, 234)',
-        'rgb(239, 68, 68)',
-        'rgb(245, 158, 11)',
-        'rgb(34, 197, 94)',
-        'rgb(168, 85, 247)',
-        'rgb(59, 130, 246)'
-      ],
-      borderWidth: 2
-    }]
+          data: activeValues,
+          backgroundColor: backgroundColors,
+          borderColor: borderColors,
+          borderWidth: 2
+        }]
       }
     } catch (error) {
       logger.error('Erreur calcul pieChartData:', error)
