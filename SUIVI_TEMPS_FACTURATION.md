@@ -4,7 +4,7 @@
 **Période analysée** : 2025-11-14 - 2025-12-02  
 **Développeur** : ymora  
 **Projet** : OTT - Dispositif Médical IoT  
-**Total commits analysés** : 537  
+**Total commits analysés** : 550  
 **Branches analysées** : Toutes
 **Auteur filtré** : ymora  
 
@@ -34,8 +34,8 @@
 | 2025-11-29 | ~0.5h | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | 2025-11-30 | ~8h | 77 | 11 | 48 | 0 | 3 | 8 | 0 |
 | 2025-12-01 | ~5h | 14 | 5 | 1 | 0 | 2 | 4 | 0 |
-| 2025-12-02 | ~0.5h | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
-**Total** | **~121h** | **537** | **39.7** | **47.3** | **0.8** | **6.4** | **14.2** | **0.8**
+| 2025-12-02 | ~6h | 14 | 0 | 5 | 0 | 1 | 3 | 0 |
+**Total** | **~126.5h** | **550** | **39.7** | **48.9** | **0.8** | **6.9** | **15.5** | **0.8**
 
 ---
 
@@ -536,14 +536,18 @@
 ---
 
 ### 02 décembre 2025
-**Heures estimées** : ~0.5h  
-**Période** : 07:22 - 07:22  
-**Nombre de commits** : 1
+**Heures estimées** : ~6h  
+**Période** : 07:22 - 22:05  
+**Nombre de commits** : 14
 
 #### Avancées principales
 - *Aucune avancée majeure enregistrée*
 #### Problèmes résolus
 - [FIX] Corrections: tableau base de donn├®es dans Vue d'ensemble, suppression page Audit Consolid├®, correction bug audit/suivi temps
+- [FIX] Fix: Dispositif USB appara├«t imm├®diatement dans le tableau apr├¿s cr├®ation
+- [FIX] Audit complet: s├®curit├®, consolidation, documentation + Fix dispositif USB non visible
+- [FIX] Documentation: Fix dispositif USB visible imm├®diatement
+- [FIX] Simplification: Correction affichage dispositif USB cr├®├® automatiquement
 #### Redéploiements
 - *Aucun redéploiement enregistré*
 #### Tests
@@ -554,18 +558,18 @@
 ## Statistiques Globales
 
 ### Répartition par activité
-- **Développement** : ~39.7h (32.8%)
-- **Correction** : ~47.3h (39.1%)
-- **Test** : ~0.8h (0.7%)
-- **Documentation** : ~6.4h (5.3%)
-- **Refactoring** : ~14.2h (11.7%)
-- **Déploiement** : ~0.8h (0.7%)
+- **Développement** : ~39.7h (31.4%)
+- **Correction** : ~48.9h (38.7%)
+- **Test** : ~0.8h (0.6%)
+- **Documentation** : ~6.9h (5.4%)
+- **Refactoring** : ~15.5h (12.2%)
+- **Déploiement** : ~0.8h (0.6%)
 
-### Temps total estimé : ~121 heures
+### Temps total estimé : ~126.5 heures
 
 ### Nombre de jours travaillés : 19
 
-### Moyenne par jour : ~6.4h
+### Moyenne par jour : ~6.7h
 
 ---
 
@@ -594,6 +598,6 @@
 
 ---
 
-**Dernière génération** : 02/12/2025 07:33  
+**Dernière génération** : 02/12/2025 22:05  
 **Source** : Analyse automatique des commits Git du projet  
 **Script** : scripts/generate_time_tracking.ps1
