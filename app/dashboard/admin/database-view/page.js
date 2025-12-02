@@ -792,12 +792,9 @@ export default function DatabaseViewPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-          📊 Tableau de Bord
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+          🗄️ Base de Données
         </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Vue d&apos;ensemble complète de toutes les données de la base de données
-        </p>
       </div>
 
       {/* Onglets */}
