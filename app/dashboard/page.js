@@ -40,17 +40,6 @@ export default function DashboardPage() {
   const alerts = useMemo(() => {
     return (data?.alerts?.alerts || []).filter(a => a.status === 'unresolved')
   }, [data])
-  
-  const formatDate = (dateString) => {
-    if (!dateString) return '-'
-    return new Date(dateString).toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
 
   // Mémoriser les calculs coûteux pour éviter les recalculs inutiles
   const stats = useMemo(() => {
