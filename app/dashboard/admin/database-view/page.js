@@ -660,109 +660,14 @@ export default function DatabaseViewPage() {
 
   const renderOverview = () => (
     <div className="space-y-6">
-      {/* Stats Cards - Indicateurs clés */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Dispositifs Totaux"
-          value={stats.totalDevices}
-          icon="🔌"
-          color="primary"
-          delay={0}
-        />
-        <StatsCard
-          title="En Ligne"
-          value={stats.activeDevices}
-          icon="✅"
-          color="green"
-          delay={0.1}
-        />
-        <StatsCard
-          title="Alertes Critiques"
-          value={stats.criticalAlerts}
-          icon="⚠️"
-          color="red"
-          delay={0.2}
-        />
-        <StatsCard
-          title={stats.lowBatteryDevices > 0 ? "Batteries Faibles" : "Batteries OK"}
-          value={stats.lowBatteryDevices > 0 ? stats.lowBatteryDevices : stats.okBatteryDevices}
-          icon="🔋"
-          color={stats.lowBatteryDevices > 0 ? "orange" : "green"}
-          delay={0.3}
-        />
+      <div className="card">
+        <p className="text-gray-600 dark:text-gray-400">
+          La vue d'ensemble des statistiques et actions requises est disponible sur la page principale (🏠 Vue d'Ensemble).
+        </p>
+        <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+          Utilisez les onglets ci-dessus pour explorer les différentes tables de la base de données.
+        </p>
       </div>
-
-      {/* Section Actions Requises */}
-      {(unresolvedAlerts.length > 0 || unassignedDevices.length > 0 || lowBatteryList.length > 0) && (
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <span className="text-red-500">⚡</span>
-            Actions Requises
-          </h2>
-          
-          <div className="space-y-6">
-            {/* Toutes les alertes */}
-            {unresolvedAlerts.length > 0 && (
-              <div>
-                <h3 className="font-semibold text-primary mb-3 flex items-center justify-between">
-                  <span>🔔 Toutes les Alertes ({unresolvedAlerts.length})</span>
-                </h3>
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {unresolvedAlerts.map((alert, i) => (
-                    <AlertCard key={alert.id} alert={alert} delay={i * 0.05} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Autres actions (batteries faibles, non assignés) */}
-            {(lowBatteryList.length > 0 || unassignedDevices.length > 0) && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-                {/* Batteries faibles */}
-                {lowBatteryList.length > 0 && (
-                  <div className="border-l-4 border-orange-500 pl-4">
-                    <h3 className="font-semibold text-orange-600 dark:text-orange-400 mb-2">Batteries Faibles ({lowBatteryList.length})</h3>
-                    <div className="space-y-2">
-                      {lowBatteryListDisplay.map(device => {
-                        const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
-                        return (
-                          <div key={device.id} className="text-sm">
-                            <p className="font-semibold text-primary">{device.device_name || device.sim_iccid}</p>
-                            <p className="text-xs text-muted">{battery.toFixed(0)}% restant</p>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <button className="btn-secondary text-xs mt-2" onClick={() => router.push('/dashboard/outils')}>
-                      Voir tous →
-                    </button>
-                  </div>
-                )}
-
-                {/* Boîtiers non assignés */}
-                {unassignedDevices.length > 0 && (
-                  <div className="border-l-4 border-amber-500 pl-4">
-                    <h3 className="font-semibold text-amber-600 dark:text-amber-400 mb-2">Non Assignés ({unassignedDevices.length})</h3>
-                    <div className="space-y-2">
-                      {unassignedDevices.slice(0, 5).map(device => (
-                        <div key={device.id} className="text-sm">
-                          <p className="font-semibold text-primary">{device.device_name || device.sim_iccid}</p>
-                          <p className="text-xs text-muted">
-                            {device.last_seen ? new Date(device.last_seen).toLocaleDateString('fr-FR') : 'Jamais connecté'}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                    <button className="btn-primary text-xs mt-2" onClick={() => router.push('/dashboard/outils')}>
-                      Assigner →
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 
