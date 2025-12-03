@@ -1737,16 +1737,7 @@ export default function DebugTab() {
                 📋 Copier
               </button>
               <button
-                onClick={() => {
-                  if (confirm('Effacer tous les logs de la console ?')) {
-                    // Clear logs via context
-                    if (typeof clearUsbStreamLogs === 'function') {
-                      clearUsbStreamLogs()
-                    }
-                    setRemoteLogs([])
-                    logger.log('🗑️ Console effacée')
-                  }
-                }}
+                onClick={() => setShowClearLogsModal(true)}
                 className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
                 title="Effacer la console"
               >
@@ -1831,6 +1822,52 @@ export default function DebugTab() {
         </div>
 
       </div>
+
+      {/* Modal de confirmation RAZ console */}
+      {showClearLogsModal && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700">
+            <div className="p-6">
+              <div className="flex items-start gap-4 mb-4">
+                <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                  <span className="text-3xl">⚠️</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
+                    Effacer la console ?
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Cette action supprimera tous les logs affichés dans la console USB.
+                    Les logs ne seront pas supprimés de la base de données.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowClearLogsModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => {
+                    if (typeof clearUsbStreamLogs === 'function') {
+                      clearUsbStreamLogs()
+                    }
+                    setRemoteLogs([])
+                    setShowClearLogsModal(false)
+                    logger.log('🗑️ Console effacée')
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                >
+                  🗑️ Effacer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
