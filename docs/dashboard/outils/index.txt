@@ -1,0 +1,32 @@
+2:I[9107,[],"ClientPageRoot"]
+3:I[3140,["3125","static/chunks/2f0b94e8-82ec13cf2f3acd1d.js","9531","static/chunks/9531-a90d7e4a65633562.js","2200","static/chunks/2200-d50195e1943acdc7.js","4767","static/chunks/4767-2147efd2b81cc565.js","637","static/chunks/app/dashboard/outils/page-03c8ca4d9cc1b250.js"],"default",1]
+4:I[4707,[],""]
+5:I[6423,[],""]
+6:I[6424,["7648","static/chunks/7648-03b8ebf45c1c9d99.js","4767","static/chunks/4767-2147efd2b81cc565.js","7663","static/chunks/app/dashboard/layout-8451359fbb312fd0.js"],"default",1]
+8:I[9999,["3185","static/chunks/app/layout-2baea554a577ec28.js"],"AuthProvider"]
+9:I[3334,["7601","static/chunks/app/error-998ef8e87ac070b1.js"],"default"]
+a:I[6359,["7648","static/chunks/7648-03b8ebf45c1c9d99.js","9160","static/chunks/app/not-found-38bb3e15743dbe23.js"],"default"]
+7:{}
+b:T442,
+                (function() {
+                  if ('serviceWorker' in navigator) {
+                    const swPath = "/OTT/sw.js";
+                    
+                    // Enregistrer le service worker uniquement en production (version en ligne)
+                    window.addEventListener('load', () => {
+                      navigator.serviceWorker.register(swPath)
+                        .catch(function(err) {
+                          // Logger l'erreur sans polluer la console en production
+                          // Note: logger n'est pas disponible dans ce contexte (script inline)
+                          // Le warning est conditionnel à NODE_ENV === 'development'
+                          if (process.env.NODE_ENV === 'development') {
+                            // Utilisation de console.warn acceptable ici (script inline, pas de logger disponible)
+                            console.warn('[SW] Échec enregistrement:', err);
+                          }
+                        });
+                    });
+                  }
+                })();
+              0:["build-1764742700971",[[["",{"children":["dashboard",{"children":["outils",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",{"children":["dashboard",{"children":["outils",{"children":["__PAGE__",{},[["$L1",["$","$L2",null,{"props":{"params":{},"searchParams":{}},"Component":"$3"}],null],null],null]},[null,["$","$L4",null,{"parallelRouterKey":"children","segmentPath":["children","dashboard","children","outils","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[null,["$","$L6",null,{"children":["$","$L4",null,{"parallelRouterKey":"children","segmentPath":["children","dashboard","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}],"params":"$7"}]],null],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/OTT/_next/static/css/b49faf458ead9e5d.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"fr","children":[["$","head",null,{"children":[["$","meta",null,{"name":"viewport","content":"width=device-width, initial-scale=1, maximum-scale=1"}],["$","meta",null,{"name":"theme-color","content":"#667eea"}],["$","link",null,{"rel":"manifest","href":"/OTT/manifest.json"}],["$","link",null,{"rel":"icon","href":"/OTT/icon-192.png"}],["$","link",null,{"rel":"apple-touch-icon","href":"/OTT/icon-192.png"}],["$","link",null,{"rel":"apple-touch-icon","sizes":"512x512","href":"/OTT/icon-512.png"}]]}],["$","body",null,{"className":"__className_e97114","children":[["$","$L8",null,{"children":["$","$L4",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$9","errorStyles":[],"errorScripts":[],"template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":["$","$La",null,{}],"notFoundStyles":[]}]}],false,["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$b"}}]]}]]}]],null],null],["$Lc",null]]]]
+c:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"name":"theme-color","content":"#667eea"}],["$","meta","2",{"charSet":"utf-8"}],["$","title","3",{"children":"OTT Dashboard - HAPPLYZ Medical"}],["$","meta","4",{"name":"description","content":"Plateforme de suivi dispositifs OTT en temps réel"}]]
+1:null
