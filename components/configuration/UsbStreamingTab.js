@@ -437,7 +437,7 @@ export default function DebugTab() {
       }
     } else {
       // Dispositif pas en base → AUTO-SYNC (création ou restauration)
-      logger.log('📝 [AUTO-SYNC] Enregistrement automatique du dispositif USB...')
+      logger.log('📝 [AUTO-SYNC] Création device:', { iccid: simIccid?.slice(-10), serial: deviceSerial })
       
       const deviceName = usbDeviceInfo.device_name || `USB-${simIccid?.slice(-4) || deviceSerial?.slice(-4) || 'XXXX'}`
       

@@ -294,18 +294,14 @@ export function UsbProvider({ children }) {
       try {
         const payload = JSON.parse(trimmed)
         
-        // Log TOUS les messages JSON reçus pour debug (seulement les 3 premiers pour éviter le spam)
-        if (!payload.seq || payload.seq <= 3 || payload.type === 'device_info' || payload.type === 'device_config') {
-          logger.log('📥 JSON reçu:', {
-            type: payload.type || payload.mode || 'unknown',
-            has_mode: !!payload.mode,
-            has_type: !!payload.type,
-            keys: Object.keys(payload).slice(0, 10),
-            seq: payload.seq,
-            flow_lpm: payload.flow_lpm,
-            battery_percent: payload.battery_percent,
-            has_flow_lpm: payload.flow_lpm !== undefined,
-            has_battery_percent: payload.battery_percent !== undefined
+        // Log les premiers messages JSON (debug création device)
+        if (!payload.seq || payload.seq <= 5) {
+          logger.log('📥 JSON:', {
+            seq: payload.seq || 0,
+            iccid: payload.sim_iccid?.slice(-10),
+            serial: payload.device_serial,
+            flow: payload.flow_lpm,
+            battery: payload.battery_percent
           })
         }
         
