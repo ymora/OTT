@@ -152,7 +152,7 @@ function handleRestoreOrCreateDevice() {
         $finalDeviceName = $device_name_input ?: $finalDeviceSerial;
         
         // UPSERT PostgreSQL : essayer d'insérer, sinon mettre à jour
-        // Note: En cas de restauration, device_serial est conservé (pas écrasé)
+        // Note: device_serial conservé SAUF si ancien format (ex: OTT-PIERRE-001)
         $stmt = $pdo->prepare("
             INSERT INTO devices (
                 sim_iccid, device_serial, device_name, patient_id, 
@@ -163,8 +163,11 @@ function handleRestoreOrCreateDevice() {
             )
             ON CONFLICT (sim_iccid) DO UPDATE SET
                 device_name = COALESCE(EXCLUDED.device_name, devices.device_name),
-                -- NE PAS écraser device_serial lors de la restauration (garder le numéro original)
-                device_serial = devices.device_serial,
+                -- Mettre à jour device_serial SI ancien format (pas OTT-YY-NNN)
+                device_serial = CASE 
+                    WHEN devices.device_serial ~ '^OTT-[0-9]{2}-[0-9]{3}$' THEN devices.device_serial
+                    ELSE EXCLUDED.device_serial
+                END,
                 firmware_version = COALESCE(EXCLUDED.firmware_version, devices.firmware_version),
                 status = EXCLUDED.status,
                 last_seen = EXCLUDED.last_seen,
