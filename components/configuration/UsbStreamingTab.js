@@ -1265,16 +1265,6 @@ export default function DebugTab() {
                 Dernières valeurs enregistrées en base de données. Badge <span className="inline-flex items-center px-1 py-0.5 text-[10px] bg-green-500 text-white rounded">● LIVE</span> pour les dispositifs connectés en USB.
               </p>
             </div>
-            <button
-              onClick={() => {
-                setEditingDevice(null) // null = création
-                setShowDeviceModal(true)
-              }}
-              className="btn-primary"
-              title="Créer un nouveau dispositif"
-            >
-              ➕ Nouveau Dispositif
-            </button>
           </div>
           <div className="overflow-x-auto">
             {devicesLoading ? (
