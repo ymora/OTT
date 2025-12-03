@@ -421,87 +421,44 @@ export default function DebugTab() {
     const simIccid = usbDeviceInfo.sim_iccid
     const deviceSerial = usbDeviceInfo.device_serial
     
-    logger.log('🔵 [SYNC] Synchronisation USB', {
-      simIccid,
-      deviceSerial,
-      allDevicesCount: allDevices.length,
-      hasConnectedDevice: !!usbConnectedDevice,
-      hasVirtualDevice: !!usbVirtualDevice
-    })
+    // Chercher si le dispositif existe déjà en base (recherche simple et efficace)
+    const existingDevice = allDevices.find(d => 
+      d.sim_iccid === simIccid || d.device_serial === deviceSerial
+    )
     
-    // LOG DÉTAILLÉ pour debug
-    logger.log('📋 [SYNC] Contenu allDevices:', allDevices.map(d => ({
-      name: d.device_name,
-      iccid: d.sim_iccid,
-      serial: d.device_serial,
-      iccid_type: typeof d.sim_iccid,
-      serial_type: typeof d.device_serial
-    })))
-    
-    logger.log('🔍 [SYNC] Recherche de:', {
-      simIccid,
-      simIccid_type: typeof simIccid,
-      deviceSerial,
-      deviceSerial_type: typeof deviceSerial
-    })
-    
-    // Chercher si le dispositif existe déjà en base
-    const existingDevice = allDevices.find(d => {
-      const iccidMatch = d.sim_iccid === simIccid
-      const serialMatch = d.device_serial === deviceSerial
-      
-      logger.log('🔍 [SYNC] Comparaison avec:', {
-        device: d.device_name,
-        db_iccid: d.sim_iccid,
-        usb_iccid: simIccid,
-        iccidMatch,
-        db_serial: d.device_serial,
-        usb_serial: deviceSerial,
-        serialMatch
-      })
-      
-      return iccidMatch || serialMatch
-    })
-    
-    logger.log('🔍 [SYNC] Résultat recherche:', {
-      found: !!existingDevice,
-      deviceInDb: existingDevice ? `${existingDevice.device_name} (ICCID: ${existingDevice.sim_iccid})` : 'AUCUN'
-    })
+    logger.log(existingDevice 
+      ? `✅ [SYNC] Dispositif trouvé: ${existingDevice.device_name}`
+      : `📝 [SYNC] Nouveau dispositif USB: ${simIccid || deviceSerial}`
+    )
     
     if (existingDevice) {
-      // Dispositif trouvé en base → lier au contexte USB
-      logger.log('✅ [SYNC] Dispositif trouvé en base:', existingDevice.device_name)
+      // Dispositif trouvé → lier au contexte (simple et direct)
       if (!usbConnectedDevice || usbConnectedDevice.id !== existingDevice.id) {
         setUsbConnectedDevice({ ...existingDevice, isVirtual: false })
         setUsbVirtualDevice(null)
-        logger.log('✅ [SYNC] usbConnectedDevice mis à jour')
       }
     } else {
-      // Dispositif pas encore en base → CRÉER EN BASE DE DONNÉES
-      logger.log('📝 [SYNC] Dispositif non trouvé en base, CRÉATION AUTOMATIQUE')
+      // Dispositif pas en base → AUTO-SYNC (création ou restauration)
+      logger.log('📝 [AUTO-SYNC] Enregistrement automatique du dispositif USB...')
       
       const deviceName = usbDeviceInfo.device_name || `USB-${simIccid?.slice(-4) || deviceSerial?.slice(-4) || 'XXXX'}`
       
-      // Créer le dispositif en base de données automatiquement
-      const createDevice = async () => {
+      // Fonction simplifiée d'auto-sync (une seule tentative, UPSERT backend)
+      const autoSyncDevice = async () => {
         try {
-          const newDeviceData = {
-            device_name: deviceName,
-            sim_iccid: simIccid || null,
-            device_serial: deviceSerial || null,
-            firmware_version: usbDeviceInfo.firmware_version || null,
-            status: 'active',
-            last_seen: new Date().toISOString()
-          }
-          
-          logger.log('🚀 [AUTO-CREATE] Création du dispositif en base:', newDeviceData)
-          
           const response = await fetchWithAuth(
             `${API_URL}/api.php/devices`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(newDeviceData)
+              body: JSON.stringify({
+                device_name: deviceName,
+                sim_iccid: simIccid || null,
+                device_serial: deviceSerial || null,
+                firmware_version: usbDeviceInfo.firmware_version || null,
+                status: 'active',
+                last_seen: new Date().toISOString()
+              })
             },
             { requiresAuth: true }
           )
@@ -509,41 +466,33 @@ export default function DebugTab() {
           if (response.ok) {
             const data = await response.json()
             if (data.success && data.device) {
-              logger.log('✅ [AUTO-CREATE] Dispositif créé en base avec succès:', data.device)
-              
-              // Recharger la liste des dispositifs
-              await refetchDevices()
-              invalidateCache()
+              const action = data.was_created ? 'créé' : 'restauré'
+              logger.log(`✅ [AUTO-SYNC] Dispositif ${action}:`, data.device.device_name)
               
               // Définir comme dispositif connecté
               setUsbConnectedDevice({ ...data.device, isVirtual: false })
               setUsbVirtualDevice(null)
+              
+              // Recharger UNE SEULE FOIS après un délai (laisser le temps à la base)
+              setTimeout(() => {
+                refetchDevices()
+                invalidateCache()
+              }, 1000)
             }
           } else {
-            const errorData = await response.json().catch(() => ({}))
-            logger.error('❌ [AUTO-CREATE] Échec création:', errorData)
-            
-            // Si le dispositif existe déjà (ICCID déjà utilisé), recharger quand même
-            if (errorData.error && errorData.error.includes('déjà utilisé')) {
-              logger.log('⚠️ [AUTO-CREATE] Dispositif existe déjà, rechargement forcé...')
-              await refetchDevices()
-              invalidateCache()
-              
-              // Attendre un peu que le rechargement se propage
-              setTimeout(() => {
-                // La synchronisation va se redéclencher et trouver le dispositif
-                logger.log('🔄 [AUTO-CREATE] Rechargement terminé, la synchronisation va reprendre')
-              }, 500)
-            }
+            logger.warn('⚠️ [AUTO-SYNC] Échec, dispositif affiché comme virtuel')
           }
         } catch (err) {
-          logger.error('❌ [AUTO-CREATE] Erreur:', err)
+          logger.error('❌ [AUTO-SYNC] Erreur:', err.message)
         }
       }
       
-      createDevice()
+      autoSyncDevice()
     }
-  }, [usbDeviceInfo, isConnected, allDevices, usbConnectedDevice, usbVirtualDevice, setUsbConnectedDevice, setUsbVirtualDevice, fetchWithAuth, API_URL, refetchDevices, invalidateCache])
+  }, [usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, isConnected])
+  // IMPORTANT: Ne surveiller QUE les identifiants USB (ICCID, Serial) et la connexion
+  // PAS allDevices, pas usbConnectedDevice, pas usbVirtualDevice (causerait boucle infinie)
+  // Les setters sont stables et n'ont pas besoin d'être dans les dépendances
   // ========== FIN SYNCHRONISATION USB ==========
   
   // Helper pour déterminer la source et le timestamp d'une donnée
@@ -1351,7 +1300,46 @@ export default function DebugTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allDevices.length === 0 ? (
+                    {/* AFFICHER D'ABORD LE DISPOSITIF VIRTUEL USB s'il existe et n'est pas déjà dans allDevices */}
+                    {usbVirtualDevice && !allDevices.find(d => 
+                      d.sim_iccid === usbVirtualDevice.sim_iccid || 
+                      d.device_serial === usbVirtualDevice.device_serial
+                    ) && (
+                      <tr key={usbVirtualDevice.id} className="border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
+                        <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                          <div className="flex items-center gap-2">
+                            <span className="text-green-500 text-lg">🟢</span>
+                            <span className="font-medium">{usbVirtualDevice.device_name}</span>
+                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">USB Connecté</span>
+                            <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded">Non enregistré en base</span>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            ICCID: {usbVirtualDevice.sim_iccid || 'N/A'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">-</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbVirtualDevice.firmware_version || 'N/A'}</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">USB</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">-</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.flowrate?.toFixed(2) || '-'}</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.battery?.toFixed(0) || '-'}%</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.rssi || '-'}</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamMeasurements.length}</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">Temps réel</td>
+                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
+                          <button
+                            onClick={() => {
+                              alert('Ce dispositif doit être enregistré en base de données.\nCréez-le via le bouton "+ Nouveau Dispositif" en utilisant ces informations:\nICCID: ' + usbVirtualDevice.sim_iccid + '\nSerial: ' + usbVirtualDevice.device_serial)
+                            }}
+                            className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                          >
+                            📝 Enregistrer
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                    
+                    {allDevices.length === 0 && !usbVirtualDevice ? (
                       <tr>
                         <td colSpan="11" className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex flex-col items-center gap-3">

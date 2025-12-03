@@ -115,6 +115,86 @@ function handleGetDevices() {
     }
 }
 
+/**
+ * Créer ou restaurer un dispositif (UPSERT automatique)
+ * Si l'ICCID existe déjà (même supprimé) : restaure et met à jour
+ * Si l'ICCID n'existe pas : crée
+ */
+function handleRestoreOrCreateDevice() {
+    global $pdo;
+    requirePermission('devices.edit');
+    
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    $sim_iccid = trim($input['sim_iccid'] ?? '');
+    
+    if (empty($sim_iccid)) {
+        handleCreateDevice();
+        return;
+    }
+    
+    try {
+        // UPSERT PostgreSQL : essayer d'insérer, sinon mettre à jour
+        $stmt = $pdo->prepare("
+            INSERT INTO devices (
+                sim_iccid, device_serial, device_name, patient_id, 
+                status, firmware_version, installation_date, first_use_date, last_seen
+            ) VALUES (
+                :sim_iccid, :device_serial, :device_name, :patient_id,
+                :status, :firmware_version, :installation_date, :first_use_date, :last_seen
+            )
+            ON CONFLICT (sim_iccid) DO UPDATE SET
+                device_name = COALESCE(EXCLUDED.device_name, devices.device_name),
+                device_serial = COALESCE(EXCLUDED.device_serial, devices.device_serial),
+                firmware_version = COALESCE(EXCLUDED.firmware_version, devices.firmware_version),
+                status = EXCLUDED.status,
+                last_seen = EXCLUDED.last_seen,
+                deleted_at = NULL,
+                updated_at = NOW()
+            RETURNING *, (xmax = 0) AS was_insert
+        ");
+        
+        $stmt->execute([
+            'sim_iccid' => $sim_iccid,
+            'device_serial' => $input['device_serial'] ?? null,
+            'device_name' => $input['device_name'] ?? null,
+            'patient_id' => $input['patient_id'] ?? null,
+            'status' => $input['status'] ?? 'active',
+            'firmware_version' => $input['firmware_version'] ?? null,
+            'installation_date' => $input['installation_date'] ?? null,
+            'first_use_date' => $input['first_use_date'] ?? null,
+            'last_seen' => $input['last_seen'] ?? date('Y-m-d H:i:s')
+        ]);
+        
+        $device = $stmt->fetch(PDO::FETCH_ASSOC);
+        $wasInsert = $device['was_insert'];
+        unset($device['was_insert']);
+        
+        // Créer la configuration si c'est une insertion
+        if ($wasInsert) {
+            $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id)")
+                ->execute(['device_id' => $device['id']]);
+        }
+        
+        auditLog($wasInsert ? 'device.created' : 'device.restored', 'device', $device['id'], null, $device);
+        
+        // Invalider le cache des devices
+        SimpleCache::clear();
+        
+        http_response_code($wasInsert ? 201 : 200);
+        echo json_encode([
+            'success' => true,
+            'message' => $wasInsert ? 'Dispositif créé avec succès' : 'Dispositif restauré avec succès',
+            'device' => $device,
+            'was_created' => $wasInsert,
+            'was_restored' => !$wasInsert
+        ]);
+        
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Erreur serveur']);
+    }
+}
+
 function handleCreateDevice() {
     global $pdo;
     requirePermission('devices.edit');
@@ -1107,11 +1187,16 @@ function handleListAllCommands() {
         $offset = ($page - 1) * $limit;
     }
     
+    // Obtenir l'utilisateur courant pour le cache
+    $currentUser = getCurrentUser();
+    
     // Cache: générer une clé basée sur les paramètres
-    $cacheKey = SimpleCache::key('devices', [
+    $cacheKey = SimpleCache::key('commands', [
         'limit' => $limit,
         'offset' => $offset,
-        'user_id' => $user ? $user['id'] : null
+        'status' => $statusFilter,
+        'iccid' => $iccidFilter,
+        'user_id' => $currentUser ? $currentUser['id'] : null
     ]);
     
     // Essayer de récupérer depuis le cache

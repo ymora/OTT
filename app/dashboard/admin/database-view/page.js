@@ -18,7 +18,8 @@ export default function DatabaseViewPage() {
   const { user, fetchWithAuth, API_URL } = useAuth()
   const router = useRouter()
   const { 
-    isConnected, 
+    isConnected,
+    usbVirtualDevice,
     usbDeviceInfo, 
     usbStreamLastMeasurement,
     setSendMeasurementCallback,

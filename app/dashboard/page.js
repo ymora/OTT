@@ -19,7 +19,7 @@ const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr:
 export default function DashboardPage() {
   const router = useRouter()
   const { user } = useAuth()
-  const { isConnected, usbConnectedDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
+  const { isConnected, usbConnectedDevice, usbVirtualDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
   
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -64,7 +64,23 @@ export default function DashboardPage() {
   useAutoRefresh(refetch, 30000)
 
   // Mémoriser les données pour éviter les re-renders inutiles
-  const devices = useMemo(() => data?.devices?.devices || [], [data?.devices])
+  const devicesFromDb = useMemo(() => data?.devices?.devices || [], [data?.devices])
+  
+  // Ajouter le dispositif USB virtuel s'il existe et n'est pas déjà dans la liste
+  const devices = useMemo(() => {
+    if (!usbVirtualDevice) return devicesFromDb
+    
+    // Vérifier si le dispositif USB est déjà dans la liste
+    const alreadyInList = devicesFromDb.find(d => 
+      d.sim_iccid === usbVirtualDevice.sim_iccid || 
+      d.device_serial === usbVirtualDevice.device_serial
+    )
+    
+    if (alreadyInList) return devicesFromDb
+    
+    // Ajouter le dispositif virtuel au début de la liste
+    return [usbVirtualDevice, ...devicesFromDb]
+  }, [devicesFromDb, usbVirtualDevice])
   const users = useMemo(() => data?.users?.users || [], [data?.users])
   const patients = useMemo(() => data?.patients?.patients || [], [data?.patients])
   const firmwares = useMemo(() => data?.firmwares?.firmwares || [], [data?.firmwares])
