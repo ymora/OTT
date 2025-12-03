@@ -168,6 +168,7 @@ static uint16_t airflowPasses = 2;
 static uint16_t airflowSamplesPerPass = 10;
 static uint16_t airflowSampleDelayMs = 5;
 static uint32_t watchdogTimeoutSeconds = WATCHDOG_TIMEOUT_DEFAULT_SEC;
+static bool gpsEnabled = false;  // GPS DÉSACTIVÉ par défaut (peut bloquer modem/consommer batterie)
 
 // Variables pour mode hybride (détection changement flux)
 static float lastFlowValue = 0.0;
@@ -415,10 +416,10 @@ void loop()
         m.rssi = 0; // Pas de RSSI si modem pas prêt
       }
       
-      // GPS (tentative rapide, non-bloquante, seulement si modem prêt)
+      // GPS (tentative rapide, non-bloquante, seulement si modem prêt ET GPS activé)
       float latitude = 0.0, longitude = 0.0;
       bool hasLocation = false;
-      if (modemReady) {
+      if (modemReady && gpsEnabled) {
         hasLocation = getDeviceLocationFast(&latitude, &longitude);
       }
       
@@ -736,7 +737,9 @@ void logRuntimeConfig()
                 watchdogTimeoutSeconds,
                 NETWORK_APN.c_str(),
                 SIM_PIN.length() ? SIM_PIN.c_str() : "<none>");
-  Serial.printf("[CFG] OTA primary=%s\n", otaPrimaryUrl.isEmpty() ? "<unset>" : otaPrimaryUrl.c_str());
+  Serial.printf("[CFG] GPS=%s | OTA primary=%s\n", 
+                gpsEnabled ? "ON" : "OFF",
+                otaPrimaryUrl.isEmpty() ? "<unset>" : otaPrimaryUrl.c_str());
   Serial.println(F("[CFG] ---------"));
 }
 
