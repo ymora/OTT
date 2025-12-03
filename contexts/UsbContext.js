@@ -1057,7 +1057,7 @@ export function UsbProvider({ children }) {
       usbStreamStopRef.current = stop
       setUsbStreamStatus('waiting')
       
-        logger.info('✅ USB streaming démarré')
+        logger.log('✅ USB streaming démarré')
       
       // Plus besoin d'envoyer les commandes "usb" et "start" :
       // - Le firmware détecte automatiquement la connexion série et entre en mode debug
