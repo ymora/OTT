@@ -1335,9 +1335,10 @@ export default function DebugTab() {
                       <tr>
                         <td colSpan="11" className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex flex-col items-center gap-3">
-                            <p className="text-sm">Aucun dispositif dans la base de données</p>
+                            <span className="text-4xl">🔌</span>
+                            <p className="text-sm font-medium">Aucun dispositif enregistré</p>
                             <p className="text-xs text-gray-400 dark:text-gray-500">
-                              Utilisez le bouton &quot;➕ Nouveau Dispositif&quot; ci-dessus pour créer un dispositif
+                              Connectez un dispositif USB pour l'enregistrer automatiquement
                             </p>
                           </div>
                         </td>
