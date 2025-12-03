@@ -1252,15 +1252,10 @@ export default function DebugTab() {
         <div className="mb-6">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex-1">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-2">
-                <span className="text-lg">🔌</span>
-                Dispositifs
-                {!devicesLoading && allDevices.length === 0 && (
-                  <span className="ml-3 text-xs font-normal text-gray-500 dark:text-gray-400">
-                    (Aucun dispositif trouvé dans la base de données)
-                  </span>
-                )}
-              </h3>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-2">
+              <span className="text-lg">🔌</span>
+              Dispositifs
+            </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Dernières valeurs enregistrées en base de données.
             </p>
