@@ -450,30 +450,59 @@ export default function DebugTab() {
         logger.log('✅ [SYNC] usbConnectedDevice mis à jour')
       }
     } else {
-      // Dispositif pas encore en base → créer/mettre à jour le dispositif virtuel
-      logger.log('📝 [SYNC] Dispositif non trouvé en base, création virtuelle')
+      // Dispositif pas encore en base → CRÉER EN BASE DE DONNÉES
+      logger.log('📝 [SYNC] Dispositif non trouvé en base, CRÉATION AUTOMATIQUE')
       
       const deviceName = usbDeviceInfo.device_name || `USB-${simIccid?.slice(-4) || deviceSerial?.slice(-4) || 'XXXX'}`
-      const virtualDevice = {
-        id: `virtual_${Date.now()}`,
-        device_name: deviceName,
-        sim_iccid: simIccid,
-        device_serial: deviceSerial,
-        firmware_version: usbDeviceInfo.firmware_version,
-        status: 'usb_connected',
-        isVirtual: true
+      
+      // Créer le dispositif en base de données automatiquement
+      const createDevice = async () => {
+        try {
+          const newDeviceData = {
+            device_name: deviceName,
+            sim_iccid: simIccid || null,
+            device_serial: deviceSerial || null,
+            firmware_version: usbDeviceInfo.firmware_version || null,
+            status: 'active',
+            last_seen: new Date().toISOString()
+          }
+          
+          logger.log('🚀 [AUTO-CREATE] Création du dispositif en base:', newDeviceData)
+          
+          const response = await fetchWithAuth(
+            `${API_URL}/api.php/devices`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newDeviceData)
+            },
+            { requiresAuth: true }
+          )
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && data.device) {
+              logger.log('✅ [AUTO-CREATE] Dispositif créé en base avec succès:', data.device)
+              
+              // Recharger la liste des dispositifs
+              refetchDevices()
+              invalidateCache()
+              
+              // Définir comme dispositif connecté
+              setUsbConnectedDevice({ ...data.device, isVirtual: false })
+              setUsbVirtualDevice(null)
+            }
+          } else {
+            logger.error('❌ [AUTO-CREATE] Échec création:', await response.text())
+          }
+        } catch (err) {
+          logger.error('❌ [AUTO-CREATE] Erreur:', err)
+        }
       }
       
-      // TOUJOURS mettre à jour le dispositif virtuel (même s'il existe déjà)
-      setUsbVirtualDevice(virtualDevice)
-      setUsbConnectedDevice(null)
-      logger.log('✅ [SYNC] Dispositif virtuel créé/mis à jour:', {
-        name: virtualDevice.device_name,
-        iccid: virtualDevice.sim_iccid,
-        serial: virtualDevice.device_serial
-      })
+      createDevice()
     }
-  }, [usbDeviceInfo, isConnected, allDevices, usbConnectedDevice, usbVirtualDevice, setUsbConnectedDevice, setUsbVirtualDevice])
+  }, [usbDeviceInfo, isConnected, allDevices, usbConnectedDevice, usbVirtualDevice, setUsbConnectedDevice, setUsbVirtualDevice, fetchWithAuth, API_URL, refetchDevices, invalidateCache])
   // ========== FIN SYNCHRONISATION USB ==========
   
   // Helper pour déterminer la source et le timestamp d'une donnée
