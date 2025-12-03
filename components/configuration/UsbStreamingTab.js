@@ -133,9 +133,10 @@ export default function DebugTab() {
   }, [user, fetchWithAuth, API_URL])
   
   // Déterminer si on doit utiliser les logs distants (admin sans USB local)
+  const currentDevice = usbConnectedDevice || usbVirtualDevice
   const shouldUseRemoteLogs = useMemo(() => {
-    return user?.role_name === 'admin' && !isConnected && selectedDevice
-  }, [user, isConnected, selectedDevice])
+    return user?.role_name === 'admin' && !isConnected && currentDevice
+  }, [user, isConnected, currentDevice])
   
   // Fusionner les logs locaux et distants
   const allLogs = useMemo(() => {
@@ -154,14 +155,14 @@ export default function DebugTab() {
   
   // STREAMING AUTOMATIQUE en temps réel pour les admins
   useEffect(() => {
-    if (!shouldUseRemoteLogs || !selectedDevice) {
+    if (!shouldUseRemoteLogs || !currentDevice) {
       setIsStreamingRemote(false)
       setRemoteLogs([])
       lastLogTimestampRef.current = 0
       return
     }
     
-    const deviceId = selectedDevice.sim_iccid || selectedDevice.device_serial || selectedDevice.device_name
+    const deviceId = currentDevice.sim_iccid || currentDevice.device_serial || currentDevice.device_name
     
     // Chargement initial
     setIsStreamingRemote(true)
@@ -176,7 +177,7 @@ export default function DebugTab() {
       clearInterval(interval)
       setIsStreamingRemote(false)
     }
-  }, [shouldUseRemoteLogs, selectedDevice, loadRemoteLogs])
+  }, [shouldUseRemoteLogs, currentDevice, loadRemoteLogs])
   
   // ========== CONFIGURATION DES CALLBACKS USB ==========
   // Configurer les callbacks pour enregistrer automatiquement les dispositifs dans la base

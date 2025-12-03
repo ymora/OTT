@@ -36,7 +36,6 @@ export function UsbProvider({ children }) {
   
   // Batch des logs pour envoi au serveur (pour monitoring à distance)
   const logsToSendRef = useRef([])
-  const sendLogsTimerRef = useRef(null)
   
   // Initialiser le système de partage
   useEffect(() => {
