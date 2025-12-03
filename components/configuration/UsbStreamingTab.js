@@ -118,18 +118,48 @@ export default function DebugTab() {
   const creatingDeviceRef = useRef(false)
   
   useEffect(() => {
-    if (!usbDeviceInfo || !isConnected || showDeviceModal || creatingDeviceRef.current) return
+    logger.log('🔵 [USB-TAB] useEffect DÉCLENCHÉ', {
+      hasUsbDeviceInfo: !!usbDeviceInfo,
+      isConnected,
+      showDeviceModal,
+      creating: creatingDeviceRef.current
+    })
+    
+    if (!usbDeviceInfo || !isConnected || showDeviceModal || creatingDeviceRef.current) {
+      logger.log('❌ [USB-TAB] STOP -', {
+        noInfo: !usbDeviceInfo,
+        notConnected: !isConnected,
+        modalOpen: showDeviceModal,
+        alreadyCreating: creatingDeviceRef.current
+      })
+      return
+    }
     
     const simIccid = usbDeviceInfo.sim_iccid
     const deviceSerial = usbDeviceInfo.device_serial
     const validIccid = simIccid && simIccid !== 'N/A' && simIccid.trim().length >= 4 && /^\d+$/.test(simIccid.trim())
     const validSerial = deviceSerial && deviceSerial !== 'N/A' && deviceSerial.trim().length >= 4 && /^[A-Z0-9\-]+$/i.test(deviceSerial.trim())
     
-    if (!validIccid && !validSerial) return
+    logger.log('🔍 [USB-TAB] Validation', {
+      simIccid,
+      deviceSerial,
+      validIccid,
+      validSerial
+    })
+    
+    if (!validIccid && !validSerial) {
+      logger.log('❌ [USB-TAB] Identifiants invalides')
+      return
+    }
     
     const existingDevice = allDevices.find(d =>
       (validIccid && d.sim_iccid === simIccid) || (validSerial && d.device_serial === deviceSerial)
     )
+    
+    logger.log('🔍 [USB-TAB] Recherche en BDD', {
+      allDevicesCount: allDevices.length,
+      existingDevice: existingDevice ? `${existingDevice.device_name} (ID: ${existingDevice.id})` : 'NON TROUVÉ'
+    })
     
     creatingDeviceRef.current = true
     
