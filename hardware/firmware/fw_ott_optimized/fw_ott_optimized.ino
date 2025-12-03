@@ -1669,11 +1669,9 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     if (payloadDoc.containsKey("apn")) {
       NETWORK_APN = payloadDoc["apn"].as<String>();
     }
-    // Configuration du JWT (JSON Web Token) - Token d'authentification pour l'API
-    // Le JWT permet au dispositif de s'authentifier auprès du serveur lors des envois OTA
-    // Note : Le champ "jwt" était utilisé dans les versions antérieures mais n'est plus nécessaire.
-    // L'authentification se fait uniquement par sim_iccid (endpoint /measurements sans auth).
-    // Le champ est ignoré pour compatibilité avec d'anciennes commandes.
+    // Note : Le champ "jwt" était utilisé dans d'anciennes versions (< v1.0).
+    // L'authentification se fait maintenant uniquement par sim_iccid.
+    // Le champ est ignoré pour compatibilité avec d'anciennes commandes UPDATE_CONFIG.
     if (payloadDoc.containsKey("iccid")) {
       DEVICE_ICCID = payloadDoc["iccid"].as<String>();
     }
