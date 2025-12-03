@@ -70,11 +70,30 @@ export function UsbProvider({ children }) {
   // source: 'device' pour les logs venant du dispositif, 'dashboard' pour les logs du dashboard
   const appendUsbStreamLog = useCallback((line, source = 'device') => {
     if (!line) return
+    
+    const timestamp = Date.now()
+    
+    // Ajouter au state local pour affichage immédiat
     setUsbStreamLogs(prev => {
-      const next = [...prev, { id: `${Date.now()}-${Math.random()}`, line, timestamp: Date.now(), source }]
+      const next = [...prev, { id: `${timestamp}-${Math.random()}`, line, timestamp, source }]
       return next.slice(-80)
     })
-  }, [])
+    
+    // Ajouter au batch pour envoi au serveur (si on a un dispositif connecté)
+    const currentDevice = usbConnectedDevice || usbVirtualDevice
+    if (currentDevice && sendMeasurementToApiRef.current) {
+      logsToSendRef.current.push({
+        log_line: line,
+        log_source: source,
+        timestamp: timestamp
+      })
+      
+      // Limiter la taille du buffer (éviter la surcharge mémoire)
+      if (logsToSendRef.current.length > 200) {
+        logsToSendRef.current = logsToSendRef.current.slice(-200)
+      }
+    }
+  }, [usbConnectedDevice, usbVirtualDevice])
 
   // Fonction pour préparer le port
   const ensurePortReady = useCallback(async () => {
@@ -102,6 +121,79 @@ export function UsbProvider({ children }) {
     return selectedPort
   }, [connect, isConnected, isSupported, port, requestPort])
 
+  // Fonction pour envoyer les logs USB au serveur (batch)
+  const sendLogsToServer = useCallback(async () => {
+    // Vérifier qu'il y a des logs à envoyer
+    if (logsToSendRef.current.length === 0) {
+      return
+    }
+    
+    const currentDevice = usbConnectedDevice || usbVirtualDevice
+    if (!currentDevice || !sendMeasurementToApiRef.current) {
+      return
+    }
+    
+    // Identifier le dispositif
+    const deviceIdentifier = currentDevice.sim_iccid || currentDevice.device_serial || currentDevice.device_name
+    if (!deviceIdentifier) {
+      logger.warn('⚠️ Impossible d\'envoyer les logs : aucun identifiant de dispositif')
+      return
+    }
+    
+    // Copier les logs et vider le buffer
+    const logsToSend = [...logsToSendRef.current]
+    logsToSendRef.current = []
+    
+    try {
+      // Importer fetchJson dynamiquement
+      const { fetchJson } = await import('@/lib/api')
+      
+      // Utiliser le fetchWithAuth du contexte Auth (via sendMeasurementToApiRef)
+      // On va créer une fonction wrapper qui utilise fetchWithAuth
+      const response = await fetch('/api.php/usb-logs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: JSON.stringify({
+          device_identifier: deviceIdentifier,
+          device_name: currentDevice.device_name,
+          logs: logsToSend
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        logger.warn('⚠️ Erreur envoi logs USB:', response.status, errorData)
+        // En cas d'erreur, remettre les logs dans le buffer pour réessayer plus tard
+        logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
+      } else {
+        const result = await response.json()
+        logger.debug(`✅ ${result.inserted_count || logsToSend.length} logs USB envoyés au serveur`)
+      }
+    } catch (err) {
+      logger.error('❌ Erreur envoi logs USB au serveur:', err)
+      // En cas d'erreur, remettre les logs dans le buffer
+      logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
+    }
+  }, [usbConnectedDevice, usbVirtualDevice])
+  
+  // Timer pour envoyer les logs toutes les 5 secondes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      sendLogsToServer()
+    }, 5000) // Envoyer toutes les 5 secondes
+    
+    return () => {
+      clearInterval(interval)
+      // Envoyer les derniers logs avant de démonter
+      if (logsToSendRef.current.length > 0) {
+        sendLogsToServer()
+      }
+    }
+  }, [sendLogsToServer])
+  
   // Fonction pour envoyer une mesure à l'API avec retry et validation
   const sendMeasurementToApi = useCallback(async (measurement, device) => {
     if (!device || !sendMeasurementToApiRef.current) {

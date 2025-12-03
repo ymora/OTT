@@ -42,6 +42,13 @@ const menuStructure = [
     permission: null, // Vérifié dans la page (admin uniquement)
     description: 'Vue complète de la base de données'
   },
+  {
+    name: 'Logs USB',
+    icon: '📡',
+    path: '/dashboard/admin/usb-logs',
+    permission: null, // Vérifié dans la page (admin uniquement)
+    description: 'Monitoring des dispositifs USB à distance'
+  },
 ]
 
 export default function Sidebar() {
@@ -105,8 +112,8 @@ export default function Sidebar() {
             }
           }
           
-          // Vérification spéciale pour Base de Données (admin uniquement)
-          if (item.path === '/dashboard/admin/database-view') {
+          // Vérification spéciale pour Base de Données et Logs USB (admin uniquement)
+          if (item.path === '/dashboard/admin/database-view' || item.path === '/dashboard/admin/usb-logs') {
             if (user?.role_name !== 'admin') {
               return null
             }

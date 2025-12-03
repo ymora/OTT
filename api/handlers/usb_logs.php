@@ -9,40 +9,29 @@
  * - DELETE /api.php/usb-logs/cleanup  Nettoyer les vieux logs (admin seulement)
  */
 
-require_once __DIR__ . '/../helpers.php';
-require_once __DIR__ . '/../helpers_sql.php';
-require_once __DIR__ . '/../validators.php';
-
 /**
  * Enregistrer des logs USB (batch)
- * POST /api.php/usb-logs
- * 
- * Body: {
- *   "device_identifier": "8933302400...",
- *   "device_name": "USB-1234",
- *   "logs": [
- *     { "log_line": "...", "log_source": "device", "timestamp": 1234567890000 },
- *     ...
- *   ]
- * }
  */
 function createUsbLogs($pdo, $body, $userId) {
     // Validation
     if (!isset($body['device_identifier']) || empty($body['device_identifier'])) {
-        return jsonError('device_identifier est requis', 400);
+        http_response_code(400);
+        return json_encode(['success' => false, 'error' => 'device_identifier est requis']);
     }
     
     if (!isset($body['logs']) || !is_array($body['logs']) || count($body['logs']) === 0) {
-        return jsonError('logs doit être un tableau non vide', 400);
+        http_response_code(400);
+        return json_encode(['success' => false, 'error' => 'logs doit être un tableau non vide']);
     }
     
     $deviceIdentifier = trim($body['device_identifier']);
     $deviceName = isset($body['device_name']) ? trim($body['device_name']) : null;
     $logs = $body['logs'];
     
-    // Limiter le nombre de logs par requête (éviter les abus)
+    // Limiter le nombre de logs par requête
     if (count($logs) > 100) {
-        return jsonError('Maximum 100 logs par requête', 400);
+        http_response_code(400);
+        return json_encode(['success' => false, 'error' => 'Maximum 100 logs par requête']);
     }
     
     try {
@@ -56,18 +45,16 @@ function createUsbLogs($pdo, $body, $userId) {
         
         foreach ($logs as $log) {
             if (!isset($log['log_line']) || empty(trim($log['log_line']))) {
-                continue; // Ignorer les logs vides
+                continue;
             }
             
             $logLine = trim($log['log_line']);
             $logSource = isset($log['log_source']) ? trim($log['log_source']) : 'device';
             
-            // Valider log_source
             if (!in_array($logSource, ['device', 'dashboard'])) {
                 $logSource = 'device';
             }
             
-            // Utiliser le timestamp fourni ou le timestamp actuel
             $timestamp = isset($log['timestamp']) && is_numeric($log['timestamp']) 
                 ? date('Y-m-d H:i:s.u', $log['timestamp'] / 1000) 
                 : date('Y-m-d H:i:s.u');
@@ -86,55 +73,53 @@ function createUsbLogs($pdo, $body, $userId) {
         
         $pdo->commit();
         
-        return jsonSuccess([
+        http_response_code(201);
+        return json_encode([
+            'success' => true,
             'message' => "$insertedCount logs enregistrés avec succès",
             'inserted_count' => $insertedCount
-        ], 201);
+        ]);
         
     } catch (PDOException $e) {
         $pdo->rollBack();
         error_log("Erreur création logs USB: " . $e->getMessage());
-        return jsonError('Erreur lors de l\'enregistrement des logs', 500);
+        http_response_code(500);
+        return json_encode(['success' => false, 'error' => 'Erreur lors de l\'enregistrement des logs']);
     }
 }
 
 /**
  * Récupérer les logs USB
- * GET /api.php/usb-logs?device=xxx&limit=100&offset=0&since=timestamp
  */
 function getUsbLogs($pdo, $query, $userRole) {
     // Seuls les admins peuvent voir tous les logs
     if ($userRole !== 'admin') {
-        return jsonError('Accès refusé. Seuls les administrateurs peuvent consulter les logs.', 403);
+        http_response_code(403);
+        return json_encode(['success' => false, 'error' => 'Accès refusé. Seuls les administrateurs peuvent consulter les logs.']);
     }
     
     try {
         $conditions = [];
         $params = [];
         
-        // Filtrer par dispositif
         if (isset($query['device']) && !empty($query['device'])) {
             $conditions[] = "device_identifier = :device";
             $params[':device'] = trim($query['device']);
         }
         
-        // Filtrer par date (logs depuis un timestamp)
         if (isset($query['since']) && is_numeric($query['since'])) {
             $conditions[] = "created_at >= :since";
             $params[':since'] = date('Y-m-d H:i:s', $query['since'] / 1000);
         }
         
-        // Filtrer par source
         if (isset($query['source']) && in_array($query['source'], ['device', 'dashboard'])) {
             $conditions[] = "log_source = :source";
             $params[':source'] = $query['source'];
         }
         
-        // Limite et offset pour pagination
         $limit = isset($query['limit']) && is_numeric($query['limit']) ? min((int)$query['limit'], 1000) : 100;
         $offset = isset($query['offset']) && is_numeric($query['offset']) ? (int)$query['offset'] : 0;
         
-        // Construire la requête
         $whereClause = count($conditions) > 0 ? 'WHERE ' . implode(' AND ', $conditions) : '';
         
         $sql = "
@@ -163,7 +148,6 @@ function getUsbLogs($pdo, $query, $userRole) {
         
         $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Compter le total pour la pagination
         $countSql = "SELECT COUNT(*) as total FROM usb_logs $whereClause";
         $countStmt = $pdo->prepare($countSql);
         foreach ($params as $key => $value) {
@@ -172,7 +156,9 @@ function getUsbLogs($pdo, $query, $userRole) {
         $countStmt->execute();
         $total = (int)$countStmt->fetch(PDO::FETCH_ASSOC)['total'];
         
-        return jsonSuccess([
+        http_response_code(200);
+        return json_encode([
+            'success' => true,
             'logs' => $logs,
             'total' => $total,
             'limit' => $limit,
@@ -182,34 +168,31 @@ function getUsbLogs($pdo, $query, $userRole) {
         
     } catch (PDOException $e) {
         error_log("Erreur récupération logs USB: " . $e->getMessage());
-        return jsonError('Erreur lors de la récupération des logs', 500);
+        http_response_code(500);
+        return json_encode(['success' => false, 'error' => 'Erreur lors de la récupération des logs']);
     }
 }
 
 /**
  * Récupérer les logs d'un dispositif spécifique
- * GET /api.php/usb-logs/:device
  */
 function getDeviceUsbLogs($pdo, $deviceIdentifier, $query, $userRole) {
-    // Seuls les admins peuvent voir les logs
     if ($userRole !== 'admin') {
-        return jsonError('Accès refusé. Seuls les administrateurs peuvent consulter les logs.', 403);
+        http_response_code(403);
+        return json_encode(['success' => false, 'error' => 'Accès refusé. Seuls les administrateurs peuvent consulter les logs.']);
     }
     
-    // Ajouter le device identifier dans les paramètres de requête
     $query['device'] = $deviceIdentifier;
-    
     return getUsbLogs($pdo, $query, $userRole);
 }
 
 /**
- * Nettoyer les vieux logs (plus de 7 jours)
- * DELETE /api.php/usb-logs/cleanup
+ * Nettoyer les vieux logs
  */
 function cleanupUsbLogs($pdo, $userRole) {
-    // Seuls les admins peuvent nettoyer les logs
     if ($userRole !== 'admin') {
-        return jsonError('Accès refusé. Seuls les administrateurs peuvent nettoyer les logs.', 403);
+        http_response_code(403);
+        return json_encode(['success' => false, 'error' => 'Accès refusé. Seuls les administrateurs peuvent nettoyer les logs.']);
     }
     
     try {
@@ -217,14 +200,17 @@ function cleanupUsbLogs($pdo, $userRole) {
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         $deletedCount = (int)$result['deleted_count'];
         
-        return jsonSuccess([
+        http_response_code(200);
+        return json_encode([
+            'success' => true,
             'message' => "$deletedCount logs supprimés avec succès",
             'deleted_count' => $deletedCount
         ]);
         
     } catch (PDOException $e) {
         error_log("Erreur nettoyage logs USB: " . $e->getMessage());
-        return jsonError('Erreur lors du nettoyage des logs', 500);
+        http_response_code(500);
+        return json_encode(['success' => false, 'error' => 'Erreur lors du nettoyage des logs']);
     }
 }
 
@@ -232,7 +218,6 @@ function cleanupUsbLogs($pdo, $userRole) {
  * Router principal pour les logs USB
  */
 function handleUsbLogsRequest($pdo, $method, $path, $body, $query, $userId, $userRole) {
-    // Retirer le préfixe /usb-logs
     $subPath = preg_replace('#^/usb-logs/?#', '', $path);
     
     switch ($method) {
@@ -240,25 +225,27 @@ function handleUsbLogsRequest($pdo, $method, $path, $body, $query, $userId, $use
             if (empty($subPath)) {
                 return createUsbLogs($pdo, $body, $userId);
             }
-            return jsonError('Endpoint non trouvé', 404);
+            http_response_code(404);
+            return json_encode(['success' => false, 'error' => 'Endpoint non trouvé']);
             
         case 'GET':
             if (empty($subPath)) {
                 return getUsbLogs($pdo, $query, $userRole);
             } elseif (!empty($subPath)) {
-                // GET /usb-logs/:device
                 return getDeviceUsbLogs($pdo, $subPath, $query, $userRole);
             }
-            return jsonError('Endpoint non trouvé', 404);
+            http_response_code(404);
+            return json_encode(['success' => false, 'error' => 'Endpoint non trouvé']);
             
         case 'DELETE':
             if ($subPath === 'cleanup') {
                 return cleanupUsbLogs($pdo, $userRole);
             }
-            return jsonError('Endpoint non trouvé', 404);
+            http_response_code(404);
+            return json_encode(['success' => false, 'error' => 'Endpoint non trouvé']);
             
         default:
-            return jsonError('Méthode non supportée', 405);
+            http_response_code(405);
+            return json_encode(['success' => false, 'error' => 'Méthode non supportée']);
     }
 }
-
