@@ -294,6 +294,7 @@ export default function DatabaseViewPage() {
     { id: 'roles', label: '🔐 Rôles & Permissions', count: roles.length },
     { id: 'alerts', label: '⚠️ Alertes', count: stats.totalAlerts },
     { id: 'firmwares', label: '💾 Firmwares', count: stats.totalFirmwares },
+    { id: 'usb_logs', label: '🔌 Logs USB', count: 0 },
     { id: 'audit', label: '📜 Historique Actions', count: stats.totalAuditLogs }
   ]
 
@@ -909,6 +910,34 @@ export default function DatabaseViewPage() {
     </div>
   )
 
+  const renderUsbLogsTable = () => (
+    <div className="overflow-x-auto">
+      <div className="alert alert-info mb-4">
+        <strong>ℹ️ Logs USB Streaming</strong><br />
+        Les logs USB sont automatiquement streamés en temps réel dans l'onglet <strong>Dispositifs OTT</strong>.
+        Cette table stocke l'historique des 7 derniers jours pour audit et debugging.
+      </div>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-gray-200 dark:border-gray-700">
+            <th className="text-left py-3 px-4">ID</th>
+            <th className="text-left py-3 px-4">ICCID / Serial</th>
+            <th className="text-left py-3 px-4">Ligne de log</th>
+            <th className="text-left py-3 px-4">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colSpan="4" className="py-8 text-center text-gray-500">
+              <p className="mb-2">📊 Consultez les logs USB en temps réel dans l'onglet <strong>Dispositifs OTT</strong></p>
+              <p className="text-sm text-gray-400">Table usb_logs disponible pour requêtes SQL personnalisées</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+
   const renderContent = () => {
     switch (activeTab) {
       case 'users':
@@ -923,6 +952,8 @@ export default function DatabaseViewPage() {
         return renderAlertsTable()
       case 'firmwares':
         return renderFirmwaresTable()
+      case 'usb_logs':
+        return renderUsbLogsTable()
       case 'archived':
         return renderArchivedDevicesTable()
       case 'audit':
