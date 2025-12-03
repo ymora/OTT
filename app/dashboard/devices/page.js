@@ -1192,7 +1192,20 @@ export default function DevicesPage() {
   // Création automatique en arrière-plan (sans modal)
   const creatingDeviceRef = useRef(false) // Éviter les créations simultanées
   
+  // Log pour vérifier que le composant est monté
   useEffect(() => {
+    logger.log('🟢 [USB] Composant DevicesPage MONTÉ')
+    logger.log('🟢 [USB] usbDeviceInfo initial:', usbDeviceInfo)
+    logger.log('🟢 [USB] isConnected initial:', isConnected)
+  }, []) // Se déclenche une seule fois au montage
+  
+  useEffect(() => {
+    // Log au TOUT DÉBUT du useEffect (avant toute condition)
+    logger.log('🔵 [USB] useEffect DÉCLENCHÉ (avant conditions)')
+    logger.log('🔵 [USB] usbDeviceInfo?.sim_iccid:', usbDeviceInfo?.sim_iccid)
+    logger.log('🔵 [USB] showDeviceModal:', showDeviceModal)
+    logger.log('🔵 [USB] isConnected:', isConnected)
+    
     // NE PAS créer automatiquement si le modal est ouvert (pour éviter les conflits)
     if (showDeviceModal) {
       logger.log('🔍 [USB] Modal ouvert, création automatique désactivée temporairement')
