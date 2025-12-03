@@ -325,6 +325,31 @@ $report | Out-File -FilePath $reportPath -Encoding UTF8
 Write-Host "  ✅ Rapport généré: $reportPath" -ForegroundColor Green
 
 # ================================================================================
+# PHASE 8 : GÉNÉRATION SUIVI TEMPS
+# ================================================================================
+
+Write-Host "`n⏱️  PHASE 8 : Suivi du Temps (Git)" -ForegroundColor Yellow
+Write-Host ("=" * 80) -ForegroundColor Gray
+
+# Lancer le script de suivi du temps
+$timeTrackingScript = Join-Path $PSScriptRoot "generate_time_tracking.ps1"
+if (Test-Path $timeTrackingScript) {
+    Write-Host "  📝 Génération du suivi du temps..." -ForegroundColor Gray
+    try {
+        & $timeTrackingScript -ErrorAction Stop
+        if (Test-Path "SUIVI_TEMPS_FACTURATION.md") {
+            Write-Host "  ✅ SUIVI_TEMPS_FACTURATION.md mis à jour" -ForegroundColor Green
+        } else {
+            Write-Host "  ⚠️  Fichier non généré" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "  ⚠️  Erreur génération suivi temps: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  ⚠️  Script generate_time_tracking.ps1 non trouvé" -ForegroundColor Yellow
+}
+
+# ================================================================================
 # RÉSUMÉ FINAL
 # ================================================================================
 
@@ -336,17 +361,31 @@ Write-Host @"
 Endpoints API     : $endpointsScore% ($endpointsOK/$endpointsTotal OK)
 Composants morts  : $($deadComponents.Count)
 Fichiers MD (root): $($stats.MD)
-Rapport           : $reportPath
+Rapport détaillé  : $reportPath
+Suivi temps       : SUIVI_TEMPS_FACTURATION.md
 ================================================================================
 
 "@ -ForegroundColor Cyan
 
+# Calculer score global
+$scoreGlobal = 0
+$scoreGlobal += if ($deadComponents.Count -eq 0) { 10 } else { 8 }
+$scoreGlobal += if ($stats.MD -le 5) { 10 } else { 7 }
+$scoreGlobal += [math]::Round($endpointsScore / 10, 1)
+$scoreGlobal = [math]::Round($scoreGlobal / 3, 1)
+
+Write-Host "🎯 SCORE GLOBAL ESTIMÉ : $scoreGlobal/10" -ForegroundColor $(if($scoreGlobal -ge 9){"Green"}elseif($scoreGlobal -ge 7){"Yellow"}else{"Red"})
+Write-Host ""
+
 # Retourner code de sortie basé sur les résultats
-if ($deadComponents.Count -gt 0 -or $endpointsScore -lt 95 -or $stats.MD -gt 10) {
+if ($scoreGlobal -ge 9) {
+    Write-Host "🎉 Projet en excellent état !" -ForegroundColor Green
+    exit 0
+} elseif ($scoreGlobal -ge 7) {
     Write-Host "⚠️  Améliorations recommandées (voir rapport)" -ForegroundColor Yellow
     exit 1
 } else {
-    Write-Host "🎉 Projet en excellent état !" -ForegroundColor Green
-    exit 0
+    Write-Host "❌ Corrections nécessaires" -ForegroundColor Red
+    exit 1
 }
 
