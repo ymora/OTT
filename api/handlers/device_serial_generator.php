@@ -1,57 +1,56 @@
 <?php
 /**
- * Générateur automatique de numéros de série OTT
+ * Générateur de numéros de série OTT automatiques
  * Format : OTT-001, OTT-002, OTT-003, etc.
  */
 
 /**
  * Génère le prochain numéro de série OTT disponible
  * 
- * @param PDO $pdo Connexion à la base de données
- * @return string Le prochain numéro (ex: 'OTT-004')
+ * @param PDO $pdo Instance PDO
+ * @return string Prochain numéro (ex: OTT-042)
  */
 function generateNextOttSerial($pdo) {
     try {
-        // Chercher le dernier numéro utilisé (même dans les dispositifs supprimés)
-        // On compte TOUS les dispositifs pour éviter les doublons
-        $stmt = $pdo->query("
+        // Récupérer le numéro le plus élevé (même dispositifs supprimés)
+        $stmt = $pdo->prepare("
             SELECT device_serial 
             FROM devices 
             WHERE device_serial LIKE 'OTT-%'
-            ORDER BY device_serial DESC
+            ORDER BY device_serial DESC 
             LIMIT 1
         ");
-        
+        $stmt->execute();
         $lastSerial = $stmt->fetchColumn();
         
         if ($lastSerial) {
-            // Extraire le numéro (ex: 'OTT-005' → 5)
+            // Extraire le numéro (OTT-042 → 42)
             preg_match('/OTT-(\d+)/', $lastSerial, $matches);
             $lastNumber = isset($matches[1]) ? intval($matches[1]) : 0;
             $nextNumber = $lastNumber + 1;
         } else {
-            // Aucun dispositif OTT- trouvé, commencer à 1
+            // Premier dispositif
             $nextNumber = 1;
         }
         
-        // Formater avec padding (ex: 1 → '001')
+        // Formater avec padding (001, 002, etc.)
         return 'OTT-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
         
     } catch (PDOException $e) {
-        error_log("Erreur génération serial OTT: " . $e->getMessage());
-        // Fallback : utiliser timestamp
-        return 'OTT-' . substr(time(), -3);
+        error_log('[generateNextOttSerial] Erreur: ' . $e->getMessage());
+        // Fallback en cas d'erreur : utiliser timestamp
+        return 'OTT-' . date('ymdHis');
     }
 }
 
 /**
- * Vérifie si un numéro de série OTT est déjà utilisé
+ * Vérifie si un numéro de série OTT existe déjà
  * 
- * @param PDO $pdo Connexion à la base de données
+ * @param PDO $pdo Instance PDO
  * @param string $serial Numéro à vérifier
- * @return bool True si utilisé, False si disponible
+ * @return bool True si existe
  */
-function isOttSerialUsed($pdo, $serial) {
+function ottSerialExists($pdo, $serial) {
     try {
         $stmt = $pdo->prepare("
             SELECT COUNT(*) 
@@ -59,10 +58,9 @@ function isOttSerialUsed($pdo, $serial) {
             WHERE device_serial = :serial
         ");
         $stmt->execute(['serial' => $serial]);
-        return intval($stmt->fetchColumn()) > 0;
+        return $stmt->fetchColumn() > 0;
     } catch (PDOException $e) {
-        error_log("Erreur vérification serial: " . $e->getMessage());
-        return true; // En cas d'erreur, considérer comme utilisé pour éviter doublons
+        return false;
     }
 }
 
