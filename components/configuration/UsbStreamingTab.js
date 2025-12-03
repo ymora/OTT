@@ -13,6 +13,8 @@ import FlashModal from '@/components/FlashModal'
 import DeviceModal from '@/components/DeviceModal'
 
 export default function DebugTab() {
+  const usbContext = useUsb()
+  
   const {
     usbConnectedDevice,
     setUsbConnectedDevice,
@@ -35,7 +37,20 @@ export default function DebugTab() {
     startUsbStreaming,
     pauseUsbStreaming,
     appendUsbStreamLog
-  } = useUsb()
+  } = usbContext
+  
+  // Log pour vérifier ce que le contexte fournit
+  useEffect(() => {
+    logger.log('🟢 [USB-TAB] Contexte USB reçu:', {
+      hasUsbDeviceInfo: !!usbDeviceInfo,
+      usbDeviceInfo_keys: usbDeviceInfo ? Object.keys(usbDeviceInfo) : [],
+      isConnected,
+      isSupported,
+      usbStreamStatus,
+      usbConnectedDevice_name: usbConnectedDevice?.device_name,
+      usbVirtualDevice_name: usbVirtualDevice?.device_name
+    })
+  }, [usbDeviceInfo, isConnected, usbStreamStatus, usbConnectedDevice, usbVirtualDevice])
   
   const { fetchWithAuth, API_URL, user } = useAuth()
   
