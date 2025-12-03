@@ -243,15 +243,13 @@ bool getDeviceLocationFast(float* latitude, float* longitude);
 void setup()
 {
   initSerial();
-  Serial.println(F("\n[BOOT] ========================================"));
-  Serial.printf("[BOOT] Firmware version: %s\n", FIRMWARE_VERSION);
-  Serial.printf("[BOOT] Device serial: %s\n", DEVICE_SERIAL.c_str());
+  Serial.println(F("\n═══ OTT Firmware v1.0 ═══"));
+  Serial.printf("Serial: %s | ICCID: %s\n", 
+                DEVICE_SERIAL.c_str(), 
+                DEVICE_ICCID.substring(0, 10).c_str());
   if (DEVICE_SERIAL == "OTT-XX-XXX") {
-    Serial.println(F("[BOOT] ⚠️  Serial temporaire détecté"));
-    Serial.println(F("[BOOT] 💡 Le backend générera automatiquement un serial définitif"));
-    Serial.println(F("[BOOT] 💡 Format : OTT-YY-NNN (YY=année, NNN=numéro séquentiel)"));
+    Serial.println(F("⚠️ Serial temporaire → Backend assignera OTT-YY-NNN"));
   }
-  Serial.println(F("[BOOT] ========================================\n"));
   
   initBoard();
   loadConfig();
@@ -262,13 +260,8 @@ void setup()
   // Valider le boot et marquer le firmware comme stable si c'est un boot réussi
   validateBootAndMarkStable();
   
-  // Afficher les informations d'authentification
-  Serial.println(F("\n[AUTH] ════════════════════════════════════"));
-  Serial.println(F("[AUTH] Authentification par ICCID uniquement"));
-  Serial.printf("[AUTH] ICCID: %s\n", DEVICE_ICCID.c_str());
-  Serial.printf("[AUTH] Serial: %s\n", DEVICE_SERIAL.c_str());
-  Serial.println(F("[AUTH] Pas de JWT requis pour envoi mesures"));
-  Serial.println(F("[AUTH] ════════════════════════════════════\n"));
+  // Auth: ICCID uniquement (pas de JWT)
+  Serial.println(F("🔐 Auth: ICCID uniquement (pas de JWT)"));
   
   configureWatchdog(watchdogTimeoutSeconds);
   feedWatchdog();
@@ -286,15 +279,9 @@ void setup()
   usbModeActive = usbConnected;
   
   if (usbConnected) {
-    Serial.println(F("\n🔌 [USB] ═══════════════════════════════════"));
-    Serial.println(F("🔌 [USB] Connecté au boot - Mode streaming"));
-    Serial.println(F("🔌 [USB] Surveillance dynamique active"));
-    Serial.println(F("🔌 [USB] ═══════════════════════════════════\n"));
+    Serial.println(F("\n🔌 USB: Mode streaming (1s interval)"));
   } else {
-    Serial.println(F("\n📡 [MODE] ═══════════════════════════════════"));
-    Serial.println(F("📡 [MODE] Mode hybride (détection changement)"));
-    Serial.println(F("🔌 [USB] Connexion possible à tout moment"));
-    Serial.println(F("📡 [MODE] ═══════════════════════════════════\n"));
+    Serial.println(F("\n📡 Mode: Hybride (détection changement flux)"));
   }
 
   // =========================================================================
@@ -302,25 +289,22 @@ void setup()
   // =========================================================================
   if (usbModeActive) {
     // Mode USB : Démarrage modem EN ARRIÈRE-PLAN (non bloquant)
-    Serial.println(F("[MODEM] Mode USB → Démarrage différé"));
-    Serial.println(F("[MODEM] Le streaming démarre IMMÉDIATEMENT"));
-    Serial.println(F("[MODEM] Le modem démarrera en arrière-plan\n"));
+    Serial.println(F("⚡ Streaming démarré | Modem: arrière-plan\n"));
     modemReady = false;
     // Continuer vers loop() IMMÉDIATEMENT sans attendre le modem
     // Le modem sera initialisé lors de la première tentative GPS/RSSI
   } else {
     // Mode hybride : Modem REQUIS
-    Serial.println(F("[MODEM] Mode hybride → Démarrage requis..."));
+    Serial.println(F("📡 Démarrage modem..."));
     if (!startModem()) {
-      Serial.println(F("[MODEM] ⚠️ Échec démarrage → Sleep 1 min"));
+      Serial.println(F("❌ Modem échec → Sleep 1min"));
       goToSleep(1);
       return;
     }
-    Serial.println(F("[MODEM] ✅ Démarré avec succès\n"));
+    Serial.println(F("✅ Modem prêt\n"));
   }
   
-  // Mode normal (pas d'USB) : Mode hybride avec détection changement
-  Serial.println(F("[MODE] Mode hybride activé - Surveillance continue du flux"));
+  // Mode hybride activé (pas d'USB au boot)
   
   // ✅ ENVOI AU RESET HARD (mesure initiale)
   Serial.println(F("[BOOT] 📤 Envoi mesure initiale (reset hard)"));
@@ -373,15 +357,12 @@ void loop()
     // Transition OFF → ON (USB branché)
     if (currentUsbState && !usbModeActive) {
       usbModeActive = true;
-      Serial.println(F("\n🔌 [USB] ═══ CONNEXION DÉTECTÉE ═══"));
-      Serial.println(F("🔌 [USB] Passage en mode streaming continu"));
-      Serial.println(F("🔌 [USB] Envoi mesures toutes les secondes\n"));
+      Serial.println(F("\n🔌 USB connecté → Streaming 1s"));
     }
     // Transition ON → OFF (USB débranché)
     else if (!currentUsbState && usbModeActive) {
       usbModeActive = false;
-      Serial.println(F("\n🔌 [USB] ═══ DÉCONNEXION DÉTECTÉE ═══"));
-      Serial.println(F("📡 [MODE] Retour en mode hybride\n"));
+      Serial.println(F("\n📡 USB déconnecté → Mode hybride"));
     }
   }
   
@@ -718,20 +699,11 @@ void goToSleep(uint32_t minutes)
 
 void logRuntimeConfig()
 {
-  Serial.println(F("[CFG] ---------"));
-  Serial.printf("[CFG] sleep=%lu min | airflow=%u x %u @ %u ms\n",
+  Serial.printf("⚙️  Sleep %lumin | GPS %s | WDT %lus | APN %s\n",
                 static_cast<unsigned long>(configuredSleepMinutes),
-                airflowPasses,
-                airflowSamplesPerPass,
-                airflowSampleDelayMs);
-  Serial.printf("[CFG] WDT=%lus | APN=%s | SIM pin=%s\n",
-                watchdogTimeoutSeconds,
-                NETWORK_APN.c_str(),
-                SIM_PIN.length() ? SIM_PIN.c_str() : "<none>");
-  Serial.printf("[CFG] GPS=%s | OTA primary=%s\n", 
                 gpsEnabled ? "ON" : "OFF",
-                otaPrimaryUrl.isEmpty() ? "<unset>" : otaPrimaryUrl.c_str());
-  Serial.println(F("[CFG] ---------"));
+                watchdogTimeoutSeconds,
+                NETWORK_APN.c_str());
 }
 
 Measurement captureSensorSnapshot()
