@@ -210,11 +210,40 @@ export default function DebugTab() {
           details: err,
           stack: err.stack
         })
+        
+        // Si erreur "déjà utilisé", chercher le dispositif existant
+        if (err.error && (err.error.includes('déjà utilisé') || err.error.includes('Database error'))) {
+          logger.log('🔄 [USB-TAB] Recherche du dispositif existant après erreur...')
+          
+          try {
+            // Recharger tous les dispositifs depuis l'API
+            await refetchDevices()
+            
+            // Chercher le dispositif dans la liste fraîchement rechargée
+            const freshDevices = devicesData?.devices?.devices || []
+            const foundDevice = freshDevices.find(d =>
+              (validIccid && d.sim_iccid === simIccid) ||
+              (validSerial && d.device_serial === deviceSerial) ||
+              (d.device_name && d.device_name.includes(simIccid?.slice(-4)))
+            )
+            
+            if (foundDevice) {
+              logger.log('✅ [USB-TAB] Dispositif existant trouvé après erreur:', foundDevice.device_name)
+              setUsbConnectedDevice({ ...foundDevice, isVirtual: false })
+              setUsbVirtualDevice(null)
+              notifyDevicesUpdated()
+            } else {
+              logger.error('❌ [USB-TAB] Dispositif non trouvé malgré erreur conflit')
+            }
+          } catch (searchErr) {
+            logger.error('❌ [USB-TAB] Erreur recherche:', searchErr)
+          }
+        }
       } finally {
         creatingDeviceRef.current = false
       }
     })()
-  }, [usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, isConnected, allDevices, showDeviceModal])
+  }, [usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, isConnected, allDevices, showDeviceModal, refetchDevices, invalidateCache, notifyDevicesUpdated, setUsbConnectedDevice, setUsbVirtualDevice])
   // ========== FIN CRÉATION AUTOMATIQUE USB ==========
   
   // Helper pour déterminer la source et le timestamp d'une donnée
