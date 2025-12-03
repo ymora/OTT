@@ -364,6 +364,9 @@ export default function DebugTab() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   
+  // État pour le modal RAZ console
+  const [showClearLogsModal, setShowClearLogsModal] = useState(false)
+  
   // États unifiés pour création et modification (comme pour patients et utilisateurs)
   
   // États pour l'assignation de patient
