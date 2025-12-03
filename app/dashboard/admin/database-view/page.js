@@ -26,6 +26,8 @@ export default function DatabaseViewPage() {
     setUpdateDeviceFirmwareCallback
   } = useUsb()
   const [activeTab, setActiveTab] = useState('users')
+  const [archivedDevices, setArchivedDevices] = useState([])
+  const [loadingArchived, setLoadingArchived] = useState(false)
 
   // Charger toutes les données nécessaires
   const { data, loading, error, refetch } = useApiData(
@@ -279,12 +281,13 @@ export default function DatabaseViewPage() {
 
   const tabs = [
     { id: 'users', label: '👥 Utilisateurs', count: stats.totalUsers },
-    { id: 'devices', label: '📱 Dispositifs', count: stats.totalDevices },
+    { id: 'devices', label: '📱 Dispositifs Actifs', count: stats.totalDevices },
+    { id: 'archived', label: '🗄️ Dispositifs Archivés', count: 0 },
     { id: 'patients', label: '🏥 Patients', count: stats.totalPatients },
     { id: 'roles', label: '🔐 Rôles & Permissions', count: roles.length },
     { id: 'alerts', label: '⚠️ Alertes', count: stats.totalAlerts },
     { id: 'firmwares', label: '💾 Firmwares', count: stats.totalFirmwares },
-    { id: 'audit', label: '📋 Audit', count: stats.totalAuditLogs }
+    { id: 'audit', label: '📜 Historique Actions', count: stats.totalAuditLogs }
   ]
 
   const formatDate = (dateString) => {
@@ -730,6 +733,120 @@ export default function DatabaseViewPage() {
     </div>
   )
 
+  // Charger les dispositifs archivés quand on affiche l'onglet
+  useEffect(() => {
+    const loadArchived = async () => {
+      if (activeTab !== 'archived') return
+      
+      setLoadingArchived(true)
+      try {
+        const response = await fetchWithAuth(
+          `${API_URL}/api.php/admin/database-view`,
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        
+        if (response.ok) {
+          const data = await response.json()
+          const archived = data.data?.tables
+            ?.find(t => t.name === 'devices')
+            ?.sample?.filter(d => d.deleted_at !== null) || []
+          setArchivedDevices(archived)
+        }
+      } catch (err) {
+        logger.error('Erreur chargement dispositifs archivés:', err)
+      } finally {
+        setLoadingArchived(false)
+      }
+    }
+    
+    loadArchived()
+  }, [activeTab, fetchWithAuth, API_URL])
+  
+  const restoreDevice = async (deviceId) => {
+    if (!confirm('Restaurer ce dispositif ?')) return
+    
+    try {
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/devices/${deviceId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleted_at: null })
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        alert('Dispositif restauré avec succès !')
+        refetch()
+        setArchivedDevices(prev => prev.filter(d => d.id !== deviceId))
+      }
+    } catch (err) {
+      alert('Erreur lors de la restauration')
+    }
+  }
+
+  const renderArchivedDevicesTable = () => {
+    return (
+      <div className="space-y-4">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            🗄️ Ces dispositifs ont été supprimés (soft delete) mais restent en base pour la traçabilité médicale.
+          </p>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="text-left py-3 px-4">ID</th>
+                <th className="text-left py-3 px-4">Nom</th>
+                <th className="text-left py-3 px-4">ICCID</th>
+                <th className="text-left py-3 px-4">Serial</th>
+                <th className="text-left py-3 px-4">Supprimé le</th>
+                <th className="text-left py-3 px-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingArchived ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center">
+                    <LoadingSpinner size="sm" />
+                  </td>
+                </tr>
+              ) : archivedDevices.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-gray-500">
+                    ✅ Aucun dispositif archivé
+                  </td>
+                </tr>
+              ) : (
+                archivedDevices.map((device) => (
+                  <tr key={device.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td className="py-3 px-4">{device.id}</td>
+                    <td className="py-3 px-4 font-medium">{device.device_name || '-'}</td>
+                    <td className="py-3 px-4 font-mono text-sm">{device.sim_iccid || '-'}</td>
+                    <td className="py-3 px-4 text-sm">{device.device_serial || '-'}</td>
+                    <td className="py-3 px-4 text-sm">{formatDate(device.deleted_at)}</td>
+                    <td className="py-3 px-4">
+                      <button
+                        onClick={() => restoreDevice(device.id)}
+                        className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                      >
+                        ♻️ Restaurer
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
   const renderAuditTable = () => (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -799,6 +916,8 @@ export default function DatabaseViewPage() {
         return renderAlertsTable()
       case 'firmwares':
         return renderFirmwaresTable()
+      case 'archived':
+        return renderArchivedDevicesTable()
       case 'audit':
         return renderAuditTable()
       default:
