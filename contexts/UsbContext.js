@@ -391,6 +391,16 @@ export function UsbProvider({ children }) {
           
           // 1. Extraire et stocker les identifiants (toujours présents dans le format unifié)
           {
+            logger.log('🔍🔍🔍 [USB] PAYLOAD REÇU:', {
+              type: payload.type,
+              mode: payload.mode,
+              sim_iccid: payload.sim_iccid,
+              device_serial: payload.device_serial,
+              device_name: payload.device_name,
+              firmware_version: payload.firmware_version,
+              allKeys: Object.keys(payload)
+            })
+            
             const deviceInfoFromUsb = {
               sim_iccid: payload.sim_iccid || null,
               device_serial: payload.device_serial || null,
