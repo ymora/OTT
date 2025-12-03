@@ -258,7 +258,14 @@ export default function DebugTab() {
         creatingDeviceRef.current = false
       }
     })()
-  }, [usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, isConnected, allDevices, showDeviceModal, refetchDevices, invalidateCache, notifyDevicesUpdated, setUsbConnectedDevice, setUsbVirtualDevice])
+  }, [
+    usbDeviceInfo, // Dépendance complète au lieu de propriétés individuelles
+    isConnected, 
+    allDevices.length, // Utiliser length pour éviter ref changes
+    showDeviceModal, 
+    fetchWithAuth, 
+    API_URL
+  ])
   // ========== FIN CRÉATION AUTOMATIQUE USB ==========
   
   // Helper pour déterminer la source et le timestamp d'une donnée
