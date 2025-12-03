@@ -4,6 +4,8 @@
  * Extracted from api.php during refactoring
  */
 
+require_once __DIR__ . '/device_serial_generator.php';
+
 function handleGetDevices() {
     global $pdo;
     
@@ -133,7 +135,14 @@ function handleRestoreOrCreateDevice() {
     }
     
     try {
+        // Générer automatiquement le numéro de série OTT si non fourni
+        $device_serial = $input['device_serial'] ?? null;
+        if (empty($device_serial)) {
+            $device_serial = generateNextOttSerial($pdo);
+        }
+        
         // UPSERT PostgreSQL : essayer d'insérer, sinon mettre à jour
+        // Note: En cas de restauration, device_serial est conservé (pas écrasé)
         $stmt = $pdo->prepare("
             INSERT INTO devices (
                 sim_iccid, device_serial, device_name, patient_id, 
@@ -144,7 +153,8 @@ function handleRestoreOrCreateDevice() {
             )
             ON CONFLICT (sim_iccid) DO UPDATE SET
                 device_name = COALESCE(EXCLUDED.device_name, devices.device_name),
-                device_serial = COALESCE(EXCLUDED.device_serial, devices.device_serial),
+                -- NE PAS écraser device_serial lors de la restauration (garder le numéro original)
+                device_serial = devices.device_serial,
                 firmware_version = COALESCE(EXCLUDED.firmware_version, devices.firmware_version),
                 status = EXCLUDED.status,
                 last_seen = EXCLUDED.last_seen,
@@ -155,7 +165,7 @@ function handleRestoreOrCreateDevice() {
         
         $stmt->execute([
             'sim_iccid' => $sim_iccid,
-            'device_serial' => $input['device_serial'] ?? null,
+            'device_serial' => $device_serial,
             'device_name' => $input['device_name'] ?? null,
             'patient_id' => $input['patient_id'] ?? null,
             'status' => $input['status'] ?? 'active',
