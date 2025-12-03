@@ -3,10 +3,11 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUsb } from '@/contexts/UsbContext'
 import { useUsbAutoDetection } from '@/hooks'
+import logger from '@/lib/logger'
 import InoEditorTab from '@/components/configuration/InoEditorTab'
 import UsbStreamingTab from '@/components/configuration/UsbStreamingTab'
 
@@ -17,12 +18,26 @@ export default function OutilsPage() {
   // Activer la détection automatique USB
   useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting, usbConnectedDevice, usbVirtualDevice)
 
+  // Log immédiat de la page
+  useEffect(() => {
+    logger.log('🏁 [OUTILS-PAGE] ========== PAGE OUTILS MONTÉE ==========')
+    logger.log('🏁 [OUTILS-PAGE] URL:', window.location.href)
+    logger.log('🏁 [OUTILS-PAGE] User:', user?.email, 'Role:', user?.role_name)
+    return () => {
+      logger.log('🔴 [OUTILS-PAGE] Page démontée')
+    }
+  }, [])
 
   // Vérifier les permissions (admin ou technicien)
   const canAccess = user?.role_name === 'admin' || user?.role_name === 'technicien'
 
   // Onglet actif (Dispositifs par défaut)
   const [activeTab, setActiveTab] = useState('streaming')
+  
+  // Log à chaque changement d'onglet
+  useEffect(() => {
+    logger.log('📑 [OUTILS-PAGE] Onglet actif:', activeTab, activeTab === 'streaming' ? '(UsbStreamingTab affiché)' : '(InoEditorTab affiché)')
+  }, [activeTab])
 
   if (!canAccess) {
     return (
