@@ -66,7 +66,7 @@ function handleGetDevices() {
                 d.updated_at,
                 p.first_name, 
                 p.last_name,
-                COALESCE(dc.firmware_version, d.firmware_version) as firmware_version,
+                COALESCE(d.firmware_version, dc.firmware_version) as firmware_version,
                 COALESCE(dc.ota_pending, FALSE) as ota_pending
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
