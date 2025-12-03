@@ -72,6 +72,73 @@ export default function DebugTab() {
   )
   const allDevices = devicesData?.devices?.devices || []
   
+  // ========== LOGS DISTANTS (pour admin) ==========
+  const [remoteLogs, setRemoteLogs] = useState([])
+  const [loadingRemoteLogs, setLoadingRemoteLogs] = useState(false)
+  const [showingRemoteLogs, setShowingRemoteLogs] = useState(false)
+  
+  // Charger les logs distants depuis l'API (pour admin uniquement)
+  const loadRemoteLogs = useCallback(async (deviceIdentifier) => {
+    if (!user || user.role_name !== 'admin' || !fetchWithAuth || !API_URL) {
+      return
+    }
+    
+    setLoadingRemoteLogs(true)
+    try {
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/usb-logs/${encodeURIComponent(deviceIdentifier)}?limit=100`,
+        {},
+        { requiresAuth: true }
+      )
+      
+      if (response.success && response.logs) {
+        // Convertir les logs de l'API au format attendu par l'interface
+        const formattedLogs = response.logs.map(log => ({
+          id: `remote-${log.id}`,
+          line: log.log_line,
+          timestamp: log.timestamp_ms || new Date(log.created_at).getTime(),
+          source: log.log_source,
+          isRemote: true
+        }))
+        
+        setRemoteLogs(formattedLogs)
+        setShowingRemoteLogs(true)
+        logger.log(`📡 ${formattedLogs.length} logs distants chargés pour ${deviceIdentifier}`)
+      }
+    } catch (err) {
+      logger.error('Erreur chargement logs distants:', err)
+    } finally {
+      setLoadingRemoteLogs(false)
+    }
+  }, [user, fetchWithAuth, API_URL])
+  
+  // Fusionner les logs locaux et distants
+  const allLogs = useMemo(() => {
+    if (!showingRemoteLogs) {
+      return usbStreamLogs
+    }
+    
+    // Fusionner et trier par timestamp
+    const merged = [...usbStreamLogs, ...remoteLogs]
+    return merged.sort((a, b) => a.timestamp - b.timestamp).slice(-100) // Garder les 100 derniers
+  }, [usbStreamLogs, remoteLogs, showingRemoteLogs])
+  
+  // Auto-refresh des logs distants toutes les 5 secondes
+  useEffect(() => {
+    if (!showingRemoteLogs || !selectedDevice) {
+      return
+    }
+    
+    const interval = setInterval(() => {
+      const deviceId = selectedDevice.sim_iccid || selectedDevice.device_serial || selectedDevice.device_name
+      loadRemoteLogs(deviceId)
+    }, 5000) // Toutes les 5 secondes
+    
+    return () => clearInterval(interval)
+  }, [showingRemoteLogs, selectedDevice, loadRemoteLogs])
+  
   // ========== CONFIGURATION DES CALLBACKS USB ==========
   // Configurer les callbacks pour enregistrer automatiquement les dispositifs dans la base
   useEffect(() => {
@@ -1597,27 +1664,53 @@ export default function DebugTab() {
             className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 p-4 shadow-inner overflow-y-auto" 
             style={{ minHeight: '500px', maxHeight: '600px' }}
           >
-            {usbStreamLogs.length === 0 ? (
+            {/* Bouton pour charger les logs distants (admin uniquement) */}
+            {user?.role_name === 'admin' && selectedDevice && !isConnected && (
+              <div className="mb-3 flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const deviceId = selectedDevice.sim_iccid || selectedDevice.device_serial || selectedDevice.device_name
+                    loadRemoteLogs(deviceId)
+                  }}
+                  disabled={loadingRemoteLogs}
+                  className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition disabled:opacity-50"
+                >
+                  {loadingRemoteLogs ? '⏳ Chargement...' : showingRemoteLogs ? '🔄 Actualiser logs distants' : '📡 Voir logs distants'}
+                </button>
+                {showingRemoteLogs && (
+                  <span className="text-xs text-blue-400">
+                    📡 Affichage des logs distants ({remoteLogs.length} logs chargés)
+                  </span>
+                )}
+              </div>
+            )}
+            
+            {allLogs.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-gray-500">
                 <span className="text-4xl">📡</span>
                 <p className="font-medium">En attente de logs USB...</p>
                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Connectez un dispositif USB et démarrez le streaming pour voir les logs
+                  {user?.role_name === 'admin' && selectedDevice && !isConnected 
+                    ? 'Cliquez sur "Voir logs distants" pour charger les logs du serveur'
+                    : 'Connectez un dispositif USB et démarrez le streaming pour voir les logs'
+                  }
                 </p>
               </div>
             ) : (
               <div className="space-y-1 font-mono text-sm tracking-tight">
-                {[...usbStreamLogs].reverse().map((log) => {
+                {[...allLogs].reverse().map((log) => {
                   const isDashboard = log.source === 'dashboard'
+                  const isRemote = log.isRemote
                   return (
                   <div key={log.id} className="whitespace-pre-wrap">
                     <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
-                      <span className={isDashboard 
-                        ? 'text-blue-400 dark:text-blue-300' 
-                        : 'text-green-400 dark:text-green-300'
-                      }>
-                        {log.line}
-                      </span>
+                    {isRemote && <span className="text-purple-400 text-xs mr-2">[distant]</span>}
+                    <span className={isDashboard 
+                      ? 'text-blue-400 dark:text-blue-300' 
+                      : 'text-green-400 dark:text-green-300'
+                    }>
+                      {log.line}
+                    </span>
                   </div>
                   )
                 })}
