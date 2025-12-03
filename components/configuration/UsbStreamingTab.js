@@ -72,29 +72,32 @@ export default function DebugTab() {
   )
   const allDevices = devicesData?.devices?.devices || []
   
-  // ========== LOGS DISTANTS (pour admin) ==========
+  // ========== STREAMING LOGS EN TEMPS RÉEL (pour admin à distance) ==========
   const [remoteLogs, setRemoteLogs] = useState([])
-  const [loadingRemoteLogs, setLoadingRemoteLogs] = useState(false)
-  const [showingRemoteLogs, setShowingRemoteLogs] = useState(false)
+  const [isStreamingRemote, setIsStreamingRemote] = useState(false)
+  const lastLogTimestampRef = useRef(0)
   
-  // Charger les logs distants depuis l'API (pour admin uniquement)
-  const loadRemoteLogs = useCallback(async (deviceIdentifier) => {
+  // Charger les logs distants depuis l'API
+  const loadRemoteLogs = useCallback(async (deviceIdentifier, sinceTimestamp = null) => {
     if (!user || user.role_name !== 'admin' || !fetchWithAuth || !API_URL) {
       return
     }
     
-    setLoadingRemoteLogs(true)
     try {
+      // Charger uniquement les nouveaux logs (depuis le dernier timestamp)
+      const url = sinceTimestamp 
+        ? `/api.php/usb-logs/${encodeURIComponent(deviceIdentifier)}?limit=100&since=${sinceTimestamp}`
+        : `/api.php/usb-logs/${encodeURIComponent(deviceIdentifier)}?limit=100`
+      
       const response = await fetchJson(
         fetchWithAuth,
         API_URL,
-        `/api.php/usb-logs/${encodeURIComponent(deviceIdentifier)}?limit=100`,
+        url,
         {},
         { requiresAuth: true }
       )
       
       if (response.success && response.logs) {
-        // Convertir les logs de l'API au format attendu par l'interface
         const formattedLogs = response.logs.map(log => ({
           id: `remote-${log.id}`,
           line: log.log_line,
@@ -103,41 +106,77 @@ export default function DebugTab() {
           isRemote: true
         }))
         
-        setRemoteLogs(formattedLogs)
-        setShowingRemoteLogs(true)
-        logger.log(`📡 ${formattedLogs.length} logs distants chargés pour ${deviceIdentifier}`)
+        if (sinceTimestamp) {
+          // Ajouter uniquement les nouveaux logs
+          setRemoteLogs(prev => {
+            const merged = [...prev, ...formattedLogs]
+            // Dédupliquer par ID
+            const unique = merged.filter((log, index, self) => 
+              index === self.findIndex(l => l.id === log.id)
+            )
+            return unique.sort((a, b) => a.timestamp - b.timestamp).slice(-100)
+          })
+        } else {
+          // Remplacer tous les logs
+          setRemoteLogs(formattedLogs)
+        }
+        
+        // Mettre à jour le timestamp du dernier log
+        if (formattedLogs.length > 0) {
+          const lastTimestamp = Math.max(...formattedLogs.map(l => l.timestamp))
+          lastLogTimestampRef.current = lastTimestamp
+        }
       }
     } catch (err) {
       logger.error('Erreur chargement logs distants:', err)
-    } finally {
-      setLoadingRemoteLogs(false)
     }
   }, [user, fetchWithAuth, API_URL])
   
+  // Déterminer si on doit utiliser les logs distants (admin sans USB local)
+  const shouldUseRemoteLogs = useMemo(() => {
+    return user?.role_name === 'admin' && !isConnected && selectedDevice
+  }, [user, isConnected, selectedDevice])
+  
   // Fusionner les logs locaux et distants
   const allLogs = useMemo(() => {
-    if (!showingRemoteLogs) {
+    // Si on a une connexion USB locale, utiliser uniquement les logs locaux
+    if (isConnected || usbStreamLogs.length > 0) {
       return usbStreamLogs
     }
     
-    // Fusionner et trier par timestamp
-    const merged = [...usbStreamLogs, ...remoteLogs]
-    return merged.sort((a, b) => a.timestamp - b.timestamp).slice(-100) // Garder les 100 derniers
-  }, [usbStreamLogs, remoteLogs, showingRemoteLogs])
+    // Sinon, utiliser les logs distants (pour admin)
+    if (shouldUseRemoteLogs) {
+      return remoteLogs
+    }
+    
+    return []
+  }, [usbStreamLogs, remoteLogs, isConnected, shouldUseRemoteLogs])
   
-  // Auto-refresh des logs distants toutes les 5 secondes
+  // STREAMING AUTOMATIQUE en temps réel pour les admins
   useEffect(() => {
-    if (!showingRemoteLogs || !selectedDevice) {
+    if (!shouldUseRemoteLogs || !selectedDevice) {
+      setIsStreamingRemote(false)
+      setRemoteLogs([])
+      lastLogTimestampRef.current = 0
       return
     }
     
-    const interval = setInterval(() => {
-      const deviceId = selectedDevice.sim_iccid || selectedDevice.device_serial || selectedDevice.device_name
-      loadRemoteLogs(deviceId)
-    }, 5000) // Toutes les 5 secondes
+    const deviceId = selectedDevice.sim_iccid || selectedDevice.device_serial || selectedDevice.device_name
     
-    return () => clearInterval(interval)
-  }, [showingRemoteLogs, selectedDevice, loadRemoteLogs])
+    // Chargement initial
+    setIsStreamingRemote(true)
+    loadRemoteLogs(deviceId, null)
+    
+    // Polling toutes les 2 secondes pour un vrai streaming temps réel
+    const interval = setInterval(() => {
+      loadRemoteLogs(deviceId, lastLogTimestampRef.current)
+    }, 2000)
+    
+    return () => {
+      clearInterval(interval)
+      setIsStreamingRemote(false)
+    }
+  }, [shouldUseRemoteLogs, selectedDevice, loadRemoteLogs])
   
   // ========== CONFIGURATION DES CALLBACKS USB ==========
   // Configurer les callbacks pour enregistrer automatiquement les dispositifs dans la base
@@ -1664,34 +1703,28 @@ export default function DebugTab() {
             className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 p-4 shadow-inner overflow-y-auto" 
             style={{ minHeight: '500px', maxHeight: '600px' }}
           >
-            {/* Bouton pour charger les logs distants (admin uniquement) */}
-            {user?.role_name === 'admin' && selectedDevice && !isConnected && (
-              <div className="mb-3 flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    const deviceId = selectedDevice.sim_iccid || selectedDevice.device_serial || selectedDevice.device_name
-                    loadRemoteLogs(deviceId)
-                  }}
-                  disabled={loadingRemoteLogs}
-                  className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition disabled:opacity-50"
-                >
-                  {loadingRemoteLogs ? '⏳ Chargement...' : showingRemoteLogs ? '🔄 Actualiser logs distants' : '📡 Voir logs distants'}
-                </button>
-                {showingRemoteLogs && (
-                  <span className="text-xs text-blue-400">
-                    📡 Affichage des logs distants ({remoteLogs.length} logs chargés)
-                  </span>
-                )}
+            {/* Indicateur de streaming distant pour admin */}
+            {isStreamingRemote && (
+              <div className="mb-3 flex items-center gap-2 text-xs">
+                <span className="flex items-center gap-1 text-purple-400">
+                  <span className="animate-pulse">📡</span>
+                  Streaming distant en temps réel
+                </span>
+                <span className="text-gray-500">
+                  ({remoteLogs.length} logs)
+                </span>
               </div>
             )}
             
             {allLogs.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-gray-500">
                 <span className="text-4xl">📡</span>
-                <p className="font-medium">En attente de logs USB...</p>
+                <p className="font-medium">
+                  {isStreamingRemote ? 'Chargement du streaming distant...' : 'En attente de logs USB...'}
+                </p>
                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                  {user?.role_name === 'admin' && selectedDevice && !isConnected 
-                    ? 'Cliquez sur "Voir logs distants" pour charger les logs du serveur'
+                  {isStreamingRemote 
+                    ? 'Les logs apparaîtront ici dès qu\'ils seront disponibles'
                     : 'Connectez un dispositif USB et démarrez le streaming pour voir les logs'
                   }
                 </p>
@@ -1704,7 +1737,7 @@ export default function DebugTab() {
                   return (
                   <div key={log.id} className="whitespace-pre-wrap">
                     <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
-                    {isRemote && <span className="text-purple-400 text-xs mr-2">[distant]</span>}
+                    {isRemote && <span className="text-purple-400 text-xs mr-2">📡</span>}
                     <span className={isDashboard 
                       ? 'text-blue-400 dark:text-blue-300' 
                       : 'text-green-400 dark:text-green-300'
