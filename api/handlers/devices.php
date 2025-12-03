@@ -154,8 +154,8 @@ function handleCreateDevice() {
 
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO devices (sim_iccid, device_serial, device_name, patient_id, status, installation_date, first_use_date)
-            VALUES (:sim_iccid, :device_serial, :device_name, :patient_id, :status, :installation_date, :first_use_date)
+            INSERT INTO devices (sim_iccid, device_serial, device_name, patient_id, status, firmware_version, installation_date, first_use_date)
+            VALUES (:sim_iccid, :device_serial, :device_name, :patient_id, :status, :firmware_version, :installation_date, :first_use_date)
             RETURNING *
         ");
         $stmt->execute([
@@ -164,6 +164,7 @@ function handleCreateDevice() {
             'device_name' => $device_name ?: null,
             'patient_id' => $patientParam,
             'status' => $input['status'] ?? 'inactive',
+            'firmware_version' => $input['firmware_version'] ?? null,
             'installation_date' => $input['installation_date'] ?? null,
             'first_use_date' => $input['first_use_date'] ?? null,
         ]);

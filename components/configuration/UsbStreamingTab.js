@@ -173,13 +173,21 @@ export default function DebugTab() {
           setUsbConnectedDevice({ ...existingDevice, status: 'usb_connected', isVirtual: false })
         } else {
           const deviceName = usbDeviceInfo.device_name || (validIccid ? `OTT-${simIccid.slice(-4)}` : deviceSerial)
+          logger.log('📝 [USB-TAB] Tentative création avec:', {
+            device_name: deviceName,
+            sim_iccid: validIccid ? simIccid : null,
+            device_serial: validSerial ? deviceSerial : null,
+            firmware_version: usbDeviceInfo.firmware_version,
+            status: 'usb_connected'
+          })
+          
           const response = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices', {
             method: 'POST',
             body: JSON.stringify({
               device_name: deviceName,
               sim_iccid: validIccid ? simIccid : null,
               device_serial: validSerial ? deviceSerial : null,
-              firmware_version: usbDeviceInfo.firmware_version,
+              firmware_version: usbDeviceInfo.firmware_version || null,
               status: 'usb_connected'
             })
           }, { requiresAuth: true })
@@ -196,7 +204,12 @@ export default function DebugTab() {
         await refetchDevices()
         notifyDevicesUpdated()
       } catch (err) {
-        logger.error('❌ [USB-TAB] Erreur:', err)
+        logger.error('❌ [USB-TAB] Erreur complète:', {
+          message: err.message,
+          error: err.error,
+          details: err,
+          stack: err.stack
+        })
       } finally {
         creatingDeviceRef.current = false
       }
