@@ -3,13 +3,20 @@
  *  OTT Firmware v1.0 - Mode unifié avec numérotation automatique
  * ================================================================
  * 
+ * MATÉRIEL : LILYGO TTGO T-A7670G ESP32 Dev Board
+ * ================================================
+ * - ESP32-WROVER-B (240MHz dual-core, 4MB Flash, 8MB PSRAM)
+ * - Module SIMCOM A7670G (LTE Cat-1, 4G, GPRS, GPS)
+ * - Support batterie 18650 avec circuit de charge intégré
+ * - Carte microSD, antenne 4G/GPS externe
+ * 
  * Fonctionnalités principales :
  *   - Mesure du débit d'oxygène, batterie, RSSI, GPS
  *   - Envoi automatique des mesures via OTA (réseau) et USB (si connecté)
  *   - Format unifié : identifiants + mesures + configuration dans chaque message
  *   - Mode hybride : envoi au boot + envoi sur changement de flux d'air
  *   - Configuration via USB (prioritaire) ou OTA
- *   - TinyGSM SIM7600 : GPRS, HTTPS, GPS
+ *   - TinyGSM A7670G : GPRS, HTTPS, GPS
  *   - Persistence : APN/JWT/ICCID/PIN/calibration en NVS
  *   - Logs : POST /devices/logs + tampon NVS si réseau coupé
  *   - Commandes OTA : SET_SLEEP_SECONDS, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
@@ -17,7 +24,12 @@
  *   - Numérotation automatique : OTT-XX-XXX → OTT-25-001 (généré par backend)
  */
 
-#define TINY_GSM_MODEM_SIM7600   // Indique à TinyGSM le modem utilisé
+// Configuration du modem SIMCOM A7670G (LTE Cat-1)
+// TEMPORAIRE : Utilisation du driver SIM7600 (compatible avec A7670G)
+// Note : Le A7670G et SIM7600 sont de la même famille SIMCOM et partagent
+//        la plupart des commandes AT. Le driver SIM7600 fonctionne correctement.
+// TODO : Mettre à jour TinyGSM vers v0.12.0+ pour utiliser TINY_GSM_MODEM_A7672X
+#define TINY_GSM_MODEM_SIM7600   // Compatible avec A7670G (même famille SIMCOM)
 #define TINY_GSM_RX_BUFFER 1024  // Buffer AT -> augmente la stabilité HTTPS
 
 #include <Arduino.h>
@@ -165,6 +177,11 @@ static const float FLOW_CHANGE_THRESHOLD = 0.5;  // Seuil de changement (L/min)
 static const unsigned long MIN_INTERVAL_MS = 5000;  // Intervalle minimum entre mesures (5s)
 static const unsigned long IDLE_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes sans changement → light sleep
 static const unsigned long OTA_CHECK_INTERVAL_MS = 30000;  // Vérifier commandes OTA toutes les 30s
+
+// Variables pour mode USB dynamique
+static bool usbModeActive = false;
+static unsigned long lastUsbCheck = 0;
+static const unsigned long USB_CHECK_INTERVAL_MS = 500;  // Vérifier USB toutes les 500ms
 static bool watchdogConfigured = false;
 static String otaPrimaryUrl;
 static String otaFallbackUrl;
@@ -224,6 +241,7 @@ Measurement captureSensorSnapshot();
 void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude = nullptr, float* longitude = nullptr);
 void handleSerialCommand(const String& command);
 bool getDeviceLocation(float* latitude, float* longitude);
+bool getDeviceLocationFast(float* latitude, float* longitude);
 
 void setup()
 {
@@ -276,97 +294,16 @@ void setup()
     return;
   }
 
-  // Vérifier si USB est connecté (pas de deep sleep si USB connecté)
+  // Détection USB initiale (non-bloquante)
   bool usbConnected = Serial.availableForWrite() > 0;
+  usbModeActive = usbConnected;
   
   if (usbConnected) {
-    // Mode continu : envoi de données en boucle (pas de deep sleep)
-    Serial.println(F("🔌 USB connecté - Mode continu activé"));
-    
-    uint32_t sequence = 0;
-    uint32_t intervalMs = 1000; // 1 seconde par défaut
-    
-    // Envoyer immédiatement un message unifié avec identifiants, config et première mesure
-    {
-      Measurement m = captureSensorSnapshot();
-      int8_t csq = modem.getSignalQuality();
-      m.rssi = csqToRssi(csq);
-      float latitude = 0.0, longitude = 0.0;
-      bool hasLocation = getDeviceLocation(&latitude, &longitude);
-      emitDebugMeasurement(m, sequence, intervalMs, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
-    }
-    
-    while (true) {
-      feedWatchdog();
-      
-      // Vérifier si USB toujours connecté
-      if (Serial.availableForWrite() == 0) {
-        Serial.println(F("🔌 USB déconnecté"));
-        break;
-      }
-      
-      // Capturer une mesure
-      Measurement m = captureSensorSnapshot();
-      
-      // Obtenir RSSI
-      int8_t csq = modem.getSignalQuality();
-      m.rssi = csqToRssi(csq);
-      
-      // Obtenir position GPS (activé par défaut)
-      float latitude = 0.0, longitude = 0.0;
-      bool hasLocation = getDeviceLocation(&latitude, &longitude);
-      
-      // Envoyer via USB (format JSON) - TOUTES les données toutes les secondes
-      emitDebugMeasurement(m, ++sequence, intervalMs, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
-      
-      // Envoyer via réseau (si connecté) - TOUTES les données toutes les secondes
-      if (modemReady && modem.isNetworkConnected()) {
-        sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr, "USB_STREAM");
-        
-        // Vérifier périodiquement les commandes OTA (toutes les 30 secondes)
-        static unsigned long lastOtaCheck = 0;
-        unsigned long now = millis();
-        if (now - lastOtaCheck >= 30000) { // Vérifier toutes les 30 secondes
-          lastOtaCheck = now;
-          Command cmds[5];
-          int count = fetchCommands(cmds, 5);
-          if (count > 0) {
-            Serial.printf("📡 %d commande(s) OTA en attente (appliquées après déconnexion USB)\n", count);
-          }
-        }
-      }
-      
-      // Traiter les commandes série si disponibles
-      static String commandBuffer = "";
-      while (Serial.available()) {
-        char incoming = Serial.read();
-        if (incoming == '\r') continue;
-        if (incoming == '\n') {
-          commandBuffer.trim();
-          if (commandBuffer.length() > 0) {
-            // Gérer les commandes spéciales
-            String lowered = commandBuffer;
-            lowered.toLowerCase();
-            if (lowered.startsWith("interval=")) {
-              long requested = lowered.substring(9).toInt();
-              if (requested >= 200 && requested <= 10000) {
-                intervalMs = requested;
-                Serial.printf("✅ Intervalle: %lu ms\n", static_cast<unsigned long>(intervalMs));
-              }
-            } else {
-              handleSerialCommand(commandBuffer);
-            }
-          }
-          commandBuffer = "";
-        } else {
-          commandBuffer += incoming;
-          if (commandBuffer.length() > 128) commandBuffer = "";
-        }
-      }
-      
-      // Attendre avant la prochaine mesure
-      delay(intervalMs);
-    }
+    Serial.println(F("🔌 [USB] Connecté au boot - Mode streaming activé"));
+    Serial.println(F("🔌 [USB] Surveillance dynamique active (peut se connecter/déconnecter à tout moment)"));
+  } else {
+    Serial.println(F("📡 [MODE] Démarrage en mode hybride (détection changement flux)"));
+    Serial.println(F("🔌 [USB] Surveillance active - Connexion USB possible à tout moment"));
   }
   
   // Mode normal (pas d'USB) : Mode hybride avec détection changement
@@ -411,8 +348,98 @@ void setup()
 void loop()
 {
   feedWatchdog();
+  unsigned long now = millis();
   
-  // Lire le capteur (optimisé : lecture directe sans mesure complète si pas de changement)
+  // =========================================================================
+  // DÉTECTION USB DYNAMIQUE (vérification toutes les 500ms)
+  // =========================================================================
+  if (now - lastUsbCheck >= USB_CHECK_INTERVAL_MS) {
+    lastUsbCheck = now;
+    bool currentUsbState = Serial.availableForWrite() > 0;
+    
+    // Transition OFF → ON (USB branché)
+    if (currentUsbState && !usbModeActive) {
+      usbModeActive = true;
+      Serial.println(F("\n🔌 [USB] ═══ CONNEXION DÉTECTÉE ═══"));
+      Serial.println(F("🔌 [USB] Passage en mode streaming continu"));
+      Serial.println(F("🔌 [USB] Envoi mesures toutes les secondes\n"));
+    }
+    // Transition ON → OFF (USB débranché)
+    else if (!currentUsbState && usbModeActive) {
+      usbModeActive = false;
+      Serial.println(F("\n🔌 [USB] ═══ DÉCONNEXION DÉTECTÉE ═══"));
+      Serial.println(F("📡 [MODE] Retour en mode hybride\n"));
+    }
+  }
+  
+  // =========================================================================
+  // MODE USB ACTIF : Envoi continu
+  // =========================================================================
+  if (usbModeActive) {
+    static uint32_t usbSequence = 0;
+    static unsigned long lastUsbSend = 0;
+    
+    // Envoyer toutes les secondes en mode USB
+    if (now - lastUsbSend >= 1000) {
+      lastUsbSend = now;
+      
+      // Capturer mesure
+      Measurement m = captureSensorSnapshot();
+      
+      // RSSI (non-bloquant)
+      int8_t csq = modem.getSignalQuality();
+      m.rssi = csqToRssi(csq);
+      
+      // GPS (tentative rapide, non-bloquante)
+      float latitude = 0.0, longitude = 0.0;
+      bool hasLocation = getDeviceLocationFast(&latitude, &longitude);
+      
+      // Envoyer via USB
+      emitDebugMeasurement(m, ++usbSequence, 1000, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
+      
+      // Envoyer via réseau si disponible
+      if (modemReady && modem.isNetworkConnected()) {
+        sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr, "USB_STREAM");
+      }
+      
+      // Vérifier commandes OTA (toutes les 30s)
+      static unsigned long lastOtaCheckUsb = 0;
+      if (now - lastOtaCheckUsb >= 30000) {
+        lastOtaCheckUsb = now;
+        Command cmds[5];
+        int count = fetchCommands(cmds, 5);
+        if (count > 0) {
+          Serial.printf("📡 [OTA] %d commande(s) en attente\n", count);
+        }
+      }
+    }
+    
+    // Traiter commandes série
+    static String commandBuffer = "";
+    while (Serial.available()) {
+      char incoming = Serial.read();
+      if (incoming == '\r') continue;
+      if (incoming == '\n') {
+        commandBuffer.trim();
+        if (commandBuffer.length() > 0) {
+          handleSerialCommand(commandBuffer);
+        }
+        commandBuffer = "";
+      } else {
+        commandBuffer += incoming;
+        if (commandBuffer.length() > 128) commandBuffer = "";
+      }
+    }
+    
+    delay(100); // Petit délai pour ne pas surcharger
+    return; // Sortir de loop(), on reviendra au prochain cycle
+  }
+  
+  // =========================================================================
+  // MODE HYBRIDE : Détection changement flux
+  // =========================================================================
+  
+  // Lire le capteur
   float currentFlowRaw = measureAirflowRaw();
   float currentFlow = airflowToLpm(currentFlowRaw);
   
@@ -420,7 +447,6 @@ void loop()
   float flowChange = abs(currentFlow - lastFlowValue);
   
   // Vérifier si changement significatif ET intervalle minimum respecté
-  unsigned long now = millis();
   bool shouldMeasure = false;
   
   if (flowChange > FLOW_CHANGE_THRESHOLD && (now - lastMeasurementTime >= MIN_INTERVAL_MS)) {
@@ -1169,27 +1195,78 @@ int8_t csqToRssi(int8_t csq)
   }
 }
 
+/**
+ * Mesure la tension et le pourcentage de charge de la batterie 18650
+ * 
+ * CONFIGURATION MATÉRIELLE (LILYGO TTGO T-A7670G / T-SIM7600) :
+ * ============================================================
+ * La carte utilise un diviseur de tension sur GPIO35 pour mesurer la batterie.
+ * 
+ * Schéma du diviseur de tension :
+ *   Battery(+) ---[R1: 100kΩ]---+---[R2: 100kΩ]--- GND
+ *                               |
+ *                            GPIO35 (ADC)
+ * 
+ * CALCUL DU DIVISEUR :
+ * -------------------
+ * Ratio = R2 / (R1 + R2) = 100kΩ / (100kΩ + 100kΩ) = 0.5
+ * 
+ * Cela signifie que la tension sur GPIO35 est exactement la moitié 
+ * de la tension réelle de la batterie :
+ *   V_adc = V_batterie × 0.5
+ * 
+ * Pour retrouver la tension batterie :
+ *   V_batterie = V_adc × 2
+ * 
+ * PLAGE DE TENSION BATTERIE 18650 (Li-ion) :
+ * ==========================================
+ * - 4.2V = 100% (pleine charge)
+ * - 3.7V = ~50% (tension nominale)
+ * - 3.0V = 0% (décharge complète, ne pas descendre en dessous)
+ * - 2.5V = seuil critique absolu (risque d'endommagement permanent)
+ * 
+ * EXEMPLE DE CALCUL :
+ * ==================
+ * Si l'ADC lit 1.87V :
+ *   V_batterie = 1.87V × 2 = 3.74V
+ *   Pourcentage = ((3.74V - 3.0V) / 1.2V) × 100% = 61.7%
+ * 
+ * @return float Pourcentage de charge de la batterie (0-100%)
+ */
 float measureBattery()
 {
   // Lecture brute de l'ADC (0-4095 pour 0-3.3V sur ESP32)
   int raw = analogRead(BATTERY_ADC_PIN);
-  float voltage = (raw / 4095.0f) * 3.3f;
   
-  // ⚠️ AMÉLIORATION NÉCESSAIRE : Cette formule est simpliste
-  // Pour une batterie LiPo typique (1 cellule = 3.0V à 4.2V) :
-  // - 3.0V = 0% (décharge complète)
-  // - 4.2V = 100% (charge complète)
-  // Mais il faut tenir compte du diviseur de tension si présent sur le PCB
-  // 
-  // Formule actuelle (temporaire) : suppose 0-3.3V = 0-100%
-  // TODO: Calibrer avec un voltmètre réel et ajuster selon le diviseur de tension
-  float pct = (voltage / 3.3f) * 100.0f;
+  // Conversion ADC vers tension mesurée sur GPIO35
+  // ADC 12-bit : 0-4095 correspond à 0-3.3V
+  float adcVoltage = (raw / 4095.0f) * 3.3f;
   
-  // Limiter à 0-100%
+  // Application du diviseur de tension (ratio 2:1)
+  // La tension réelle de la batterie est le double de la tension ADC
+  float batteryVoltage = adcVoltage * 2.0f;
+  
+  // Conversion tension → pourcentage pour batterie 18650 (Li-ion)
+  // Plage : 3.0V (0%) à 4.2V (100%)
+  const float MIN_VOLTAGE = 3.0f;  // Tension minimale sûre
+  const float MAX_VOLTAGE = 4.2f;  // Tension maximale (pleine charge)
+  const float VOLTAGE_RANGE = MAX_VOLTAGE - MIN_VOLTAGE; // 1.2V
+  
+  float pct = ((batteryVoltage - MIN_VOLTAGE) / VOLTAGE_RANGE) * 100.0f;
+  
+  // Limiter à 0-100% (sécurité)
   if (pct < 0.0f) pct = 0.0f;
   if (pct > 100.0f) pct = 100.0f;
   
-  Serial.printf("[SENSOR] Batterie ADC=%d (%.3fV) = %.1f%%\n", raw, voltage, pct);
+  // Affichage détaillé pour debug/monitoring
+  Serial.printf("[SENSOR] Batterie ADC=%d | V_adc=%.3fV | V_batt=%.3fV | Charge=%.1f%%\n", 
+                raw, adcVoltage, batteryVoltage, pct);
+  
+  // Avertissement si batterie faible
+  if (batteryVoltage < 3.2f) {
+    Serial.println(F("[SENSOR] ⚠️  BATTERIE FAIBLE ! Recharger rapidement."));
+  }
+  
   return pct;
 }
 
