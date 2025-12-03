@@ -475,15 +475,17 @@ export default function DeviceModal({
             {/* Numéro de série */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Numéro de série
+                Numéro de série {editingItem?.id && <span className="text-xs text-gray-500">(non modifiable)</span>}
               </label>
               <input
                 type="text"
                 name="device_serial"
-                value={formData.device_serial}
+                value={formData.device_serial || 'OTT-XXX (auto-généré)'}
                 onChange={handleInputChange}
-                className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''}`}
-                placeholder="Ex: ESP32-001"
+                disabled={!!editingItem?.id}
+                className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''} ${editingItem?.id ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' : ''}`}
+                placeholder="Auto-généré (OTT-001, OTT-002, etc.)"
+                title={editingItem?.id ? 'Le numéro de série ne peut pas être modifié (traçabilité médicale)' : 'Sera généré automatiquement'}
               />
               {formErrors.device_serial && (
                 <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_serial}</p>
