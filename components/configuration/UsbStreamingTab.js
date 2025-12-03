@@ -39,11 +39,20 @@ export default function DebugTab() {
     appendUsbStreamLog
   } = usbContext
   
+  // Log IMMÉDIAT pour vérifier que le composant est monté
+  useEffect(() => {
+    logger.log('🟢🟢🟢 [USB-TAB] ========== COMPOSANT MONTÉ ==========')
+    return () => {
+      logger.log('🔴 [USB-TAB] Composant démonté')
+    }
+  }, [])
+  
   // Log pour vérifier ce que le contexte fournit
   useEffect(() => {
-    logger.log('🟢 [USB-TAB] Contexte USB reçu:', {
+    logger.log('🟢 [USB-TAB] Contexte USB mis à jour:', {
       hasUsbDeviceInfo: !!usbDeviceInfo,
-      usbDeviceInfo_keys: usbDeviceInfo ? Object.keys(usbDeviceInfo) : [],
+      usbDeviceInfo_iccid: usbDeviceInfo?.sim_iccid,
+      usbDeviceInfo_name: usbDeviceInfo?.device_name,
       isConnected,
       isSupported,
       usbStreamStatus,
