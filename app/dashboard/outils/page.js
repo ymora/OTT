@@ -26,13 +26,10 @@ export default function OutilsPage() {
   // Activer la détection automatique USB
   useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting, usbConnectedDevice, usbVirtualDevice)
 
-  // Log immédiat de la page
+  // Cleanup au démontage
   useEffect(() => {
-    logger.log('🏁 [OUTILS-PAGE] ========== PAGE OUTILS MONTÉE ==========')
-    logger.log('🏁 [OUTILS-PAGE] URL:', window.location.href)
-    logger.log('🏁 [OUTILS-PAGE] User:', user?.email, 'Role:', user?.role_name)
     return () => {
-      logger.log('🔴 [OUTILS-PAGE] Page démontée')
+      logger.debug('[OUTILS] Cleanup')
     }
   }, [])
   
@@ -151,9 +148,9 @@ export default function OutilsPage() {
   // Onglet actif (Dispositifs par défaut)
   const [activeTab, setActiveTab] = useState('streaming')
   
-  // Log à chaque changement d'onglet
+  // Log changement onglet (debug uniquement)
   useEffect(() => {
-    logger.log('📑 [OUTILS-PAGE] Onglet actif:', activeTab, activeTab === 'streaming' ? '(UsbStreamingTab affiché)' : '(InoEditorTab affiché)')
+    logger.debug('[OUTILS] Onglet:', activeTab)
   }, [activeTab])
 
   if (!canAccess) {

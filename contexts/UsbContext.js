@@ -987,7 +987,7 @@ export function UsbProvider({ children }) {
         logger.log('▶️ [USB] Reprise du streaming USB depuis la pause...')
         setUsbStreamStatus('connecting')
       } else {
-        logger.log('📡 [USB] Démarrage du streaming USB...')
+        logger.debug('[USB] Starting stream')
         setUsbStreamStatus('connecting')
       }
       
@@ -999,7 +999,7 @@ export function UsbProvider({ children }) {
       const portIsConnected = portToUse && isConnected
       
       if (portIsOpen || portIsConnected) {
-        logger.log('✅ [USB] Port disponible, démarrage de la lecture')
+        logger.debug('[USB] Port ready')
         // Si le port est ouvert mais pas dans le contexte, mettre à jour le contexte
         if (portToUse && portToUse !== port) {
           logger.log('🔄 [USB] Mise à jour du port dans le contexte...')
@@ -1022,7 +1022,7 @@ export function UsbProvider({ children }) {
 
       // Arrêter l'ancien streaming s'il existe (si on n'est pas en pause)
       if (usbStreamStopRef.current && !isResuming) {
-        logger.log('🛑 [USB] Arrêt de l\'ancien streaming')
+        logger.debug('[USB] Stop ancien stream')
         try {
           usbStreamStopRef.current()
         } catch (stopErr) {
@@ -1046,7 +1046,7 @@ export function UsbProvider({ children }) {
         appendUsbStreamLog('▶️ Reprise du streaming...', 'dashboard')
       }
       
-      logger.log('📖 [USB] Démarrage de la lecture...')
+        logger.debug('[USB] Reading...')
 
       // Démarrer la lecture
       const stop = await startReading(handleUsbStreamChunk)
@@ -1057,7 +1057,7 @@ export function UsbProvider({ children }) {
       usbStreamStopRef.current = stop
       setUsbStreamStatus('waiting')
       
-      logger.log('✅ [USB] Streaming démarré, en attente de données...')
+        logger.info('✅ USB streaming démarré')
       
       // Plus besoin d'envoyer les commandes "usb" et "start" :
       // - Le firmware détecte automatiquement la connexion série et entre en mode debug
@@ -1077,7 +1077,7 @@ export function UsbProvider({ children }) {
     if (usbStreamStopRef.current) {
       try {
         if (!silent) {
-          logger.log('⏸️ [USB] Arrêt du streaming...')
+          logger.debug('[USB] Pause')
         }
         usbStreamStopRef.current()
         if (!silent) {
@@ -1106,7 +1106,7 @@ export function UsbProvider({ children }) {
 
   // Arrêter complètement le streaming USB (déconnecte le port et réinitialise)
   const stopUsbStreaming = useCallback(() => {
-    logger.log('🛑 [USB] Arrêt complet du streaming demandé')
+      logger.debug('[USB] Stop streaming')
     stopStreamingInternal(true) // Arrêter silencieusement le streaming
     // Réinitialiser les buffers et logs
     usbStreamBufferRef.current = ''
@@ -1115,7 +1115,7 @@ export function UsbProvider({ children }) {
     setUsbStreamLastMeasurement(null)
     setUsbStreamLastUpdate(null)
     setUsbStreamStatus('idle')
-    logger.log('✅ [USB] Streaming complètement arrêté, état réinitialisé')
+      logger.debug('[USB] Streaming stopped')
   }, [stopStreamingInternal])
 
   // Détecter un dispositif USB (fonction simplifiée - à compléter avec la logique de détection)
@@ -1225,7 +1225,7 @@ export function UsbProvider({ children }) {
             }
           } else {
             // Port non ouvert, essayer de l'ouvrir
-            logger.log('🔌 [USB] Tentative de connexion automatique au port...')
+            logger.debug('[USB] Auto-connect')
             try {
               const connected = await connect(availablePort, 115200)
               if (connected && isMounted) {

@@ -41,27 +41,19 @@ export default function DebugTab() {
     setUpdateDeviceFirmwareCallback
   } = usbContext
   
-  // Log IMMÉDIAT pour vérifier que le composant est monté
+  // Cleanup au démontage
   useEffect(() => {
-    logger.log('🟢🟢🟢 [USB-TAB] ========== COMPOSANT MONTÉ ==========')
     return () => {
-      logger.log('🔴 [USB-TAB] Composant démonté')
+      logger.debug('[USB-TAB] Cleanup')
     }
   }, [])
   
-  // Log pour vérifier ce que le contexte fournit
+  // Log contexte USB uniquement si changement important
   useEffect(() => {
-    logger.log('🟢 [USB-TAB] Contexte USB mis à jour:', {
-      hasUsbDeviceInfo: !!usbDeviceInfo,
-      usbDeviceInfo_iccid: usbDeviceInfo?.sim_iccid,
-      usbDeviceInfo_name: usbDeviceInfo?.device_name,
-      isConnected,
-      isSupported,
-      usbStreamStatus,
-      usbConnectedDevice_name: usbConnectedDevice?.device_name,
-      usbVirtualDevice_name: usbVirtualDevice?.device_name
-    })
-  }, [usbDeviceInfo, isConnected, usbStreamStatus, usbConnectedDevice, usbVirtualDevice])
+    if (usbDeviceInfo?.sim_iccid) {
+      logger.debug('[USB-TAB] Device:', usbDeviceInfo.sim_iccid?.slice(-4))
+    }
+  }, [usbDeviceInfo?.sim_iccid])
   
   const { fetchWithAuth, API_URL, user } = useAuth()
   
@@ -331,7 +323,7 @@ export default function DebugTab() {
     setSendMeasurementCallback(sendMeasurement)
     setUpdateDeviceFirmwareCallback(updateDevice)
     
-    logger.log('✅ Callbacks USB configurés')
+    logger.debug('[USB] Callbacks configurés')
     
     // Cleanup au démontage
     return () => {
@@ -608,7 +600,7 @@ export default function DebugTab() {
     if (usbStreamStatus === 'idle' && !isToggling) {
       const autoStart = async () => {
         try {
-          logger.log('[DebugTab] Démarrage automatique du streaming...')
+          logger.debug('[USB] Auto-start streaming')
           await startUsbStreaming(port)
         } catch (err) {
           logger.error('[DebugTab] Erreur démarrage automatique streaming:', err)
