@@ -1261,9 +1261,9 @@ export default function DebugTab() {
                   </span>
                 )}
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Dernières valeurs enregistrées en base de données. Badge <span className="inline-flex items-center px-1 py-0.5 text-[10px] bg-green-500 text-white rounded">● LIVE</span> pour les dispositifs connectés en USB.
-              </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Dernières valeurs enregistrées en base de données.
+            </p>
             </div>
           </div>
           <div className="overflow-x-auto">
