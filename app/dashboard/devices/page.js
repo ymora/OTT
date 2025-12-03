@@ -69,6 +69,7 @@ export default function DevicesPage() {
     setUsbConnectedDevice,
     usbVirtualDevice,
     setUsbVirtualDevice,
+    usbDeviceInfo,
     checkingUSB,
     setCheckingUSB,
     usbPortInfo,
