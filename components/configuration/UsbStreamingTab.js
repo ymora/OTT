@@ -114,6 +114,66 @@ export default function DebugTab() {
   // isDisabled : seulement pour les actions (pas pour l'affichage des données)
   const isDisabled = useMemo(() => !isConnected, [isConnected])
   
+  // ========== CRÉATION AUTOMATIQUE USB ==========
+  const creatingDeviceRef = useRef(false)
+  
+  useEffect(() => {
+    if (!usbDeviceInfo || !isConnected || showDeviceModal || creatingDeviceRef.current) return
+    
+    const simIccid = usbDeviceInfo.sim_iccid
+    const deviceSerial = usbDeviceInfo.device_serial
+    const validIccid = simIccid && simIccid !== 'N/A' && simIccid.trim().length >= 4 && /^\d+$/.test(simIccid.trim())
+    const validSerial = deviceSerial && deviceSerial !== 'N/A' && deviceSerial.trim().length >= 4 && /^[A-Z0-9\-]+$/i.test(deviceSerial.trim())
+    
+    if (!validIccid && !validSerial) return
+    
+    const existingDevice = allDevices.find(d =>
+      (validIccid && d.sim_iccid === simIccid) || (validSerial && d.device_serial === deviceSerial)
+    )
+    
+    creatingDeviceRef.current = true
+    
+    ;(async () => {
+      try {
+        if (existingDevice) {
+          await fetchJson(fetchWithAuth, API_URL, `/api.php/devices/${existingDevice.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status: 'usb_connected', firmware_version: usbDeviceInfo.firmware_version })
+          }, { requiresAuth: true })
+          setUsbConnectedDevice({ ...existingDevice, status: 'usb_connected', isVirtual: false })
+        } else {
+          const deviceName = usbDeviceInfo.device_name || (validIccid ? `OTT-${simIccid.slice(-4)}` : deviceSerial)
+          const response = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices', {
+            method: 'POST',
+            body: JSON.stringify({
+              device_name: deviceName,
+              sim_iccid: validIccid ? simIccid : null,
+              device_serial: validSerial ? deviceSerial : null,
+              firmware_version: usbDeviceInfo.firmware_version,
+              status: 'usb_connected'
+            })
+          }, { requiresAuth: true })
+          
+          if (response.device) {
+            logger.log('✅ [USB-TAB] Dispositif créé:', response.device.id)
+            setUsbConnectedDevice({ ...response.device, isVirtual: false })
+          }
+        }
+        
+        setUsbVirtualDevice(null)
+        invalidateCache?.()
+        await new Promise(r => setTimeout(r, 100))
+        await refetchDevices()
+        notifyDevicesUpdated()
+      } catch (err) {
+        logger.error('❌ [USB-TAB] Erreur:', err)
+      } finally {
+        creatingDeviceRef.current = false
+      }
+    })()
+  }, [usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, isConnected, allDevices, showDeviceModal])
+  // ========== FIN CRÉATION AUTOMATIQUE USB ==========
+  
   // Helper pour déterminer la source et le timestamp d'une donnée
   const getDataInfo = useCallback((usbValue, usbTimestamp, dbValue, dbTimestamp) => {
     // Vérifier explicitement !== null et !== undefined (pas != null qui exclut aussi 0 et false)
