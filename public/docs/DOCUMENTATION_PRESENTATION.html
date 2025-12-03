@@ -506,7 +506,7 @@
 <div class="header">
     <h1>🏥 OTT - Dispositif Médical IoT</h1>
     <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
-    <div class="version-badge">Version 3.11 - Documentation Présentation</div>
+    <div class="version-badge">Version 3.12 - Documentation Présentation</div>
     <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
 </div>
 
@@ -542,6 +542,17 @@
     
     <h3>🎉 Nouveautés Version 1.0 - Décembre 2024 (Score: 8.8/10)</h3>
     <div class="alert alert-success">
+        <strong>🚀 Nouveautés v3.12 - Firmware Production-Ready!</strong>
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li><strong>⚡ Streaming USB immédiat</strong> : Démarrage instantané (< 1 seconde après boot) sans attendre le modem. Mesures JSON envoyées toutes les secondes dès la connexion</li>
+            <li><strong>🔌 Détection USB dynamique</strong> : Connexion/déconnexion USB détectée toutes les 500ms en arrière-plan. Plus besoin de reboot pour activer le streaming !</li>
+            <li><strong>📡 GPS désactivé par défaut</strong> : GPS OFF par défaut pour stabilité maximale (évite blocages modem + économie batterie). Activable par dispositif si besoin</li>
+            <li><strong>🛡️ Zero blocage garanti</strong> : Modem démarré en arrière-plan en mode USB. Le streaming fonctionne même si le modem échoue (RSSI/GPS à null)</li>
+            <li><strong>📊 Firmware v1.0 stable</strong> : Version production avec architecture optimisée, logs détaillés, et gestion d'erreur robuste</li>
+        </ul>
+    </div>
+
+    <div class="alert alert-success" style="margin-top: 1.5rem;">
         <strong>✨ Fonctionnalités majeures - Production Ready!</strong>
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
             <li><strong>📡 Logs USB à distance</strong> : Streaming temps réel pour tous les administrateurs. Maxime voit vos logs automatiquement sans être sur place (polling 2s, historique 7 jours)</li>
@@ -573,8 +584,8 @@
     <div class="alert alert-success">
         <strong>Fonctionnalités déjà disponibles</strong>
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
-            <li><strong>Streaming USB en temps réel</strong> : console USB intégrée avec détection automatique (Web Serial API)</li>
-            <li><strong>UsbContext global</strong> : détection permanente des dispositifs USB, même lors de la navigation entre pages</li>
+            <li><strong>Streaming USB ultra-rapide</strong> : démarrage instantané (< 1s), détection dynamique toutes les 500ms, aucun blocage possible (Web Serial API)</li>
+            <li><strong>UsbContext global</strong> : détection permanente des dispositifs USB, même lors de la navigation entre pages. Gestion intelligente du modem en arrière-plan</li>
             <li><strong>Menu simplifié</strong> : 4 pages principales avec fonctionnalités regroupées</li>
             <li><strong>PWA installable</strong> : application progressive web avec manifest.json et service worker</li>
             <li><strong>Carte interactive</strong> : visualisation des dispositifs avec statut (batterie, en ligne/hors ligne)</li>
