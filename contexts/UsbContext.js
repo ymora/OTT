@@ -603,7 +603,15 @@ export function UsbProvider({ children }) {
             
             // Envoyer la mesure à l'API si un dispositif USB est connecté
             const currentDevice = usbConnectedDevice || usbVirtualDevice
+            logger.log('🔍 [USB-CONTEXT] Check envoi mesure:', {
+              hasCurrentDevice: !!currentDevice,
+              currentDevice: currentDevice ? currentDevice.device_name : 'AUCUN',
+              usbConnectedDevice: usbConnectedDevice ? usbConnectedDevice.device_name : 'null',
+              usbVirtualDevice: usbVirtualDevice ? usbVirtualDevice.device_name : 'null',
+              hasCallback: !!sendMeasurementToApiRef.current
+            })
             if (currentDevice) {
+              logger.log('📤 [USB-CONTEXT] Appel sendMeasurementToApi...')
               sendMeasurementToApi(measurement, currentDevice)
               
               // Mettre à jour la base de données avec les dernières valeurs (batterie, débit, RSSI)
@@ -730,7 +738,13 @@ export function UsbProvider({ children }) {
           
           // Envoyer la mesure à l'API si un dispositif USB est connecté
           const currentDevice = usbConnectedDevice || usbVirtualDevice
+          logger.log('🔍 [USB-CONTEXT-OLD] Check envoi mesure:', {
+            hasCurrentDevice: !!currentDevice,
+            currentDevice: currentDevice ? currentDevice.device_name : 'AUCUN',
+            hasCallback: !!sendMeasurementToApiRef.current
+          })
           if (currentDevice) {
+            logger.log('📤 [USB-CONTEXT-OLD] Appel sendMeasurementToApi...')
             sendMeasurementToApi(measurement, currentDevice)
             
             // Mettre à jour les informations du dispositif dans la base de données
