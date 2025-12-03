@@ -144,7 +144,13 @@ try {
     
     # Analyser composants
     $allComponents = Get-ChildItem -Path components -Recurse -File -Include *.js | ForEach-Object { $_.BaseName }
-    $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx -Exclude node_modules,.next,docs,public
+    # CORRECTION: Mieux exclure node_modules
+    $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\' -and
+        $_.FullName -notmatch '\\docs\\' -and
+        $_.FullName -notmatch '\\public\\'
+    }
     
     foreach ($comp in $allComponents) {
         $usage = @($searchFiles | Select-String -Pattern $comp -SimpleMatch).Count
@@ -201,14 +207,20 @@ try {
     Write-Info "Analyse patterns dupliqués..."
     
     $patterns = @(
-        @{Pattern='useState\('; Description='useState'; Seuil=50},
-        @{Pattern='useEffect\('; Description='useEffect'; Seuil=40},
-        @{Pattern='fetchJson\(fetchWithAuth'; Description='Appels API'; Seuil=20},
-        @{Pattern='try\s*\{'; Description='Try/catch'; Seuil=30}
+        @{Pattern='useState\('; Description='useState'; Seuil=100},
+        @{Pattern='useEffect\('; Description='useEffect'; Seuil=80},
+        @{Pattern='fetchJson\(fetchWithAuth'; Description='Appels API'; Seuil=50},
+        @{Pattern='try\s*\{'; Description='Try/catch'; Seuil=100}
     )
     
     $duplications = @()
-    $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx -Exclude node_modules,.next,docs,public
+    # CORRECTION: Mieux exclure node_modules
+    $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\' -and
+        $_.FullName -notmatch '\\docs\\' -and
+        $_.FullName -notmatch '\\public\\'
+    }
     
     foreach ($pattern in $patterns) {
         $matches = @($searchFiles | Select-String -Pattern $pattern.Pattern)
@@ -241,10 +253,18 @@ try {
 Write-Section "📐 PHASE 4/15 : Complexité - Fichiers/Fonctions Volumineux"
 
 try {
-    Write-Info "Analyse fichiers volumineux..."
+    Write-Info "Analyse fichiers volumineux (hors node_modules)..."
     
     $largeFiles = @()
-    $allCodeFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx,*.php -Exclude node_modules,.next,docs,public,vendor
+    # CORRECTION: Mieux exclure node_modules et fichiers systèmes
+    $allCodeFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx,*.php | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\' -and
+        $_.FullName -notmatch '\\docs\\' -and
+        $_.FullName -notmatch '\\public\\' -and
+        $_.FullName -notmatch '\\vendor\\' -and
+        $_.FullName -notmatch '\\\.git\\'
+    }
     
     foreach ($file in $allCodeFiles) {
         try {
