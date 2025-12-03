@@ -1345,10 +1345,11 @@ export default function DebugTab() {
                       </tr>
                     ) : (
                       allDevices.map((device) => {
-                  // Vérifier si ce dispositif est connecté en USB
+                  // Vérifier si ce dispositif est connecté en USB (données temps réel)
                   const isDeviceUsbConnected = isConnected && (
                     usbDeviceInfo?.sim_iccid === device.sim_iccid ||
-                    usbDeviceInfo?.device_serial === device.device_serial
+                    usbDeviceInfo?.device_serial === device.device_serial ||
+                    usbConnectedDevice?.id === device.id
                   )
                   const isDeviceUsbVirtual = usbVirtualDevice && (
                     usbVirtualDevice.sim_iccid === device.sim_iccid ||
@@ -1371,10 +1372,16 @@ export default function DebugTab() {
                     const timestamp = deviceUsbInfo?.last_seen || deviceDbData?.last_seen
                     return (
                       <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <span className={`text-xs font-semibold ${!deviceName ? 'text-gray-400 dark:text-gray-500' : 'text-orange-600 dark:text-orange-400'}`}>
                             {deviceName || 'N/A'}
                           </span>
+                          {isDeviceUsbConnected && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-green-500 text-white rounded animate-pulse">
+                              <span className="w-1 h-1 bg-white rounded-full"></span>
+                              LIVE
+                            </span>
+                          )}
                         </div>
                         {identifier && (
                           <span className={`text-xs font-mono text-gray-600 dark:text-gray-400`}>
