@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v3.8 - Mode unifié
+ *  OTT Firmware v1.0 - Mode unifié avec numérotation automatique
  * ================================================================
  * 
  * Fonctionnalités principales :
@@ -14,6 +14,7 @@
  *   - Logs : POST /devices/logs + tampon NVS si réseau coupé
  *   - Commandes OTA : SET_SLEEP_SECONDS, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
  *   - Deep sleep : économie d'énergie quand inactif
+ *   - Numérotation automatique : OTT-XX-XXX → OTT-25-001 (généré par backend)
  */
 
 #define TINY_GSM_MODEM_SIM7600   // Indique à TinyGSM le modem utilisé
@@ -62,9 +63,28 @@ static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
 #ifndef OTT_DEFAULT_ICCID
 #define OTT_DEFAULT_ICCID "89330123456789012345"
 #endif
+
+// Numérotation automatique des dispositifs (v1.0)
+// ================================================
+// À la sortie d'usine, le firmware est flashé avec le serial par défaut "OTT-XX-XXX"
+// 
+// Lors de la première connexion au backend (via OTA ou USB), le serveur :
+// 1. Détecte le serial temporaire "OTT-XX-XXX"
+// 2. Génère automatiquement un serial définitif au format : OTT-YY-NNN
+//    - YY = année en cours (25 pour 2025, 26 pour 2026, etc.)
+//    - NNN = numéro séquentiel à 3 chiffres (001, 002, 003...)
+// 3. Envoie une commande UPDATE_CONFIG pour mettre à jour le serial en NVS
+// 
+// Exemples :
+// - Premier dispositif de 2025 : OTT-XX-XXX → OTT-25-001
+// - Deuxième dispositif de 2025 : OTT-XX-XXX → OTT-25-002
+// - Premier dispositif de 2026 : OTT-XX-XXX → OTT-26-001
+// 
+// Note : Le serial est IMMUABLE après attribution (identifiant unique du dispositif)
 #ifndef OTT_DEFAULT_SERIAL
-#define OTT_DEFAULT_SERIAL "OTT-PIERRE-001"
+#define OTT_DEFAULT_SERIAL "OTT-XX-XXX"
 #endif
+
 #ifndef OTT_DEFAULT_JWT
 #define OTT_DEFAULT_JWT ""
 #endif
@@ -90,7 +110,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "3.8-unified"
+#define FIRMWARE_VERSION_STR "1.0"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -210,6 +230,12 @@ void setup()
   initSerial();
   Serial.println(F("\n[BOOT] ========================================"));
   Serial.printf("[BOOT] Firmware version: %s\n", FIRMWARE_VERSION);
+  Serial.printf("[BOOT] Device serial: %s\n", DEVICE_SERIAL.c_str());
+  if (DEVICE_SERIAL == "OTT-XX-XXX") {
+    Serial.println(F("[BOOT] ⚠️  Serial temporaire détecté"));
+    Serial.println(F("[BOOT] 💡 Le backend générera automatiquement un serial définitif"));
+    Serial.println(F("[BOOT] 💡 Format : OTT-YY-NNN (YY=année, NNN=numéro séquentiel)"));
+  }
   Serial.println(F("[BOOT] ========================================\n"));
   
   initBoard();

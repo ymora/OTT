@@ -135,11 +135,21 @@ function handleRestoreOrCreateDevice() {
     }
     
     try {
-        // Générer automatiquement le numéro de série OTT si non fourni
-        $device_serial = $input['device_serial'] ?? null;
-        if (empty($device_serial)) {
-            $device_serial = generateNextOttSerial($pdo);
+        // Générer automatiquement le numéro de série OTT si non fourni ou temporaire
+        $device_serial_input = $input['device_serial'] ?? null;
+        $needsSerialUpdate = false;
+        $finalDeviceSerial = null;
+        
+        if (empty($device_serial_input) || isTemporarySerial($device_serial_input)) {
+            $finalDeviceSerial = generateNextOttSerial($pdo);
+            $needsSerialUpdate = true;
+        } else {
+            $finalDeviceSerial = $device_serial_input;
         }
+        
+        // Générer device_name : par défaut identique au serial
+        $device_name_input = $input['device_name'] ?? null;
+        $finalDeviceName = $device_name_input ?: $finalDeviceSerial;
         
         // UPSERT PostgreSQL : essayer d'insérer, sinon mettre à jour
         // Note: En cas de restauration, device_serial est conservé (pas écrasé)
@@ -165,8 +175,8 @@ function handleRestoreOrCreateDevice() {
         
         $stmt->execute([
             'sim_iccid' => $sim_iccid,
-            'device_serial' => $device_serial,
-            'device_name' => $input['device_name'] ?? null,
+            'device_serial' => $finalDeviceSerial,
+            'device_name' => $finalDeviceName,
             'patient_id' => $input['patient_id'] ?? null,
             'status' => $input['status'] ?? 'active',
             'firmware_version' => $input['firmware_version'] ?? null,
@@ -185,6 +195,25 @@ function handleRestoreOrCreateDevice() {
                 ->execute(['device_id' => $device['id']]);
         }
         
+        // Si le serial était temporaire, créer une commande UPDATE_CONFIG pour mettre à jour le firmware
+        if ($needsSerialUpdate && $wasInsert) {
+            $updateConfigPayload = json_encode([
+                'serial' => $finalDeviceSerial,
+                'iccid' => $sim_iccid
+            ]);
+            
+            $cmdStmt = $pdo->prepare("
+                INSERT INTO device_commands (device_id, command, payload, status, created_at)
+                VALUES (:device_id, 'UPDATE_CONFIG', :payload::jsonb, 'pending', NOW())
+            ");
+            $cmdStmt->execute([
+                'device_id' => $device['id'],
+                'payload' => $updateConfigPayload
+            ]);
+            
+            error_log("[Device Registration] Serial temporaire détecté, commande UPDATE_CONFIG créée pour dispositif {$device['id']} → {$finalDeviceSerial}");
+        }
+        
         auditLog($wasInsert ? 'device.created' : 'device.restored', 'device', $device['id'], null, $device);
         
         // Invalider le cache des devices
@@ -196,7 +225,8 @@ function handleRestoreOrCreateDevice() {
             'message' => $wasInsert ? 'Dispositif créé avec succès' : 'Dispositif restauré avec succès',
             'device' => $device,
             'was_created' => $wasInsert,
-            'was_restored' => !$wasInsert
+            'was_restored' => !$wasInsert,
+            'serial_updated' => $needsSerialUpdate
         ]);
         
     } catch (PDOException $e) {
@@ -412,20 +442,38 @@ function handleUpdateDevice($device_id) {
             }
         }
 
+        // Gestion de l'attribution/désattribution patient avec mise à jour automatique du device_name
         if (array_key_exists('patient_id', $input)) {
             if ($input['patient_id'] === null || $input['patient_id'] === '') {
+                // Désattribution : réinitialiser le nom au serial
                 $updates[] = "patient_id = NULL";
+                $updates[] = "device_name = :device_name_reset";
+                $params['device_name_reset'] = $device['device_serial'];
+                error_log("[Device Update] Désattribution patient du dispositif {$device_id}, device_name réinitialisé à {$device['device_serial']}");
             } else {
+                // Attribution : mettre à jour le nom avec le patient
                 $patientId = (int)$input['patient_id'];
-                $patientCheck = $pdo->prepare("SELECT id FROM patients WHERE id = :id");
+                $patientCheck = $pdo->prepare("SELECT id, first_name, last_name FROM patients WHERE id = :id AND deleted_at IS NULL");
                 $patientCheck->execute(['id' => $patientId]);
-                if (!$patientCheck->fetch()) {
+                $patient = $patientCheck->fetch();
+                
+                if (!$patient) {
                     http_response_code(422);
                     echo json_encode(['success' => false, 'error' => 'Patient not found']);
                     return;
                 }
+                
                 $updates[] = "patient_id = :patient_id";
                 $params['patient_id'] = $patientId;
+                
+                // Générer le nouveau device_name : OTT-25-Pierre Dupont
+                $year = extractYearFromSerial($device['device_serial']) ?: date('y');
+                $newDeviceName = sprintf('OTT-%s-%s %s', $year, $patient['first_name'], $patient['last_name']);
+                
+                $updates[] = "device_name = :device_name_patient";
+                $params['device_name_patient'] = $newDeviceName;
+                
+                error_log("[Device Update] Attribution patient {$patientId} au dispositif {$device_id}, device_name: {$newDeviceName}");
             }
         }
 
