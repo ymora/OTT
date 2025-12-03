@@ -2158,10 +2158,103 @@ bool performOtaUpdate(const String& url, const String& expectedMd5, const String
 // ----------------------------------------------------------------------------- //
 
 /**
- * Obtient la position du dispositif via GPS ou réseau cellulaire.
+ * Obtient position GPS de manière RAPIDE et NON-BLOQUANTE
+ * Timeout: 500ms max (1 seule tentative)
+ * Usage: Mode USB streaming (appelé toutes les secondes)
+ * 
+ * @param latitude Pointeur vers la variable latitude (sortie)
+ * @param longitude Pointeur vers la variable longitude (sortie)
+ * @return true si la position a été obtenue, false sinon
+ */
+bool getDeviceLocationFast(float* latitude, float* longitude)
+{
+  if (!modemReady || latitude == nullptr || longitude == nullptr) {
+    return false; // Pas de log pour ne pas polluer
+  }
+  
+  static float cached_lat = 0.0, cached_lon = 0.0;
+  static bool has_cached = false;
+  static unsigned long last_gps_attempt = 0;
+  static int consecutive_failures = 0;
+  
+  unsigned long now = millis();
+  
+  // Si on a une position en cache et qu'on a échoué plusieurs fois récemment,
+  // utiliser le cache et ne réessayer que toutes les 30 secondes
+  if (has_cached && consecutive_failures > 5 && (now - last_gps_attempt < 30000)) {
+    *latitude = cached_lat;
+    *longitude = cached_lon;
+    return true;
+  }
+  
+  // Ne tenter qu'une fois toutes les 5 secondes minimum pour ne pas surcharger
+  if (now - last_gps_attempt < 5000) {
+    if (has_cached) {
+      *latitude = cached_lat;
+      *longitude = cached_lon;
+      return true;
+    }
+    return false;
+  }
+  
+  last_gps_attempt = now;
+  
+  // Tentative GPS RAPIDE (500ms max)
+  float lat = 0.0, lon = 0.0;
+  float speed = 0.0, alt = 0.0;
+  int vsat = 0, usat = 0;
+  float accuracy = 0.0;
+  
+  unsigned long gpsStart = millis();
+  if (modem.getGPS(&lat, &lon, &speed, &alt, &vsat, &usat, &accuracy)) {
+    // Timeout vérifié
+    if (millis() - gpsStart > 500) {
+      consecutive_failures++;
+      return has_cached ? (*latitude = cached_lat, *longitude = cached_lon, true) : false;
+    }
+    
+    // Valider coordonnées
+    if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0 && 
+        lat != 0.0 && lon != 0.0) {
+      *latitude = lat;
+      *longitude = lon;
+      cached_lat = lat;
+      cached_lon = lon;
+      has_cached = true;
+      consecutive_failures = 0;
+      
+      // Log seulement toutes les 10 acquisitions réussies
+      static int success_count = 0;
+      if (++success_count % 10 == 0) {
+        Serial.printf("[GPS] ✅ Fix: %.6f, %.6f (sat: %d, acc: %.1fm)\n", lat, lon, usat, accuracy);
+      }
+      return true;
+    }
+  }
+  
+  consecutive_failures++;
+  
+  // Si premier échec, logger
+  if (consecutive_failures == 1) {
+    Serial.println(F("[GPS] ⏱️ Pas de fix (timeout 500ms) - Acquisition en cours..."));
+  }
+  
+  // Utiliser cache si disponible
+  if (has_cached) {
+    *latitude = cached_lat;
+    *longitude = cached_lon;
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Obtient la position du dispositif via GPS ou réseau cellulaire (version standard).
+ * Timeout: 3 secondes (réduit de 10s)
+ * Usage: Mode hybride, envoi initial au boot
  * 
  * IMPORTANT: Le GPS est intégré au modem SIM7600, donc il nécessite que le modem soit démarré.
- * On ne peut pas utiliser le GPS sans démarrer le modem car c'est le même composant matériel.
  * 
  * Priorité:
  * 1. GPS si disponible (modem.getGPS()) - nécessite modem démarré
@@ -2184,27 +2277,28 @@ bool getDeviceLocation(float* latitude, float* longitude)
   int vsat = 0, usat = 0;
   float accuracy = 0.0;
   
-  // Tentative GPS avec timeout de 10 secondes
-  Serial.println(F("[GPS] Tentative GPS..."));
+  // Tentative GPS avec timeout de 3 secondes (réduit de 10s)
+  Serial.println(F("[GPS] Tentative acquisition..."));
   unsigned long gpsStart = millis();
   bool gpsSuccess = false;
   
-  // Essayer jusqu'à 3 fois avec timeout de 10s par tentative
-  for (int attempt = 0; attempt < 3 && !gpsSuccess && (millis() - gpsStart) < 10000; attempt++) {
-    if (modem.getGPS(&lat, &lon, &speed, &alt, &vsat, &usat, &accuracy)) {
-      // Valider les coordonnées (latitude: -90 à 90, longitude: -180 à 180)
-      if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0 && 
-          lat != 0.0 && lon != 0.0) { // Exclure 0,0 (souvent une erreur)
-        *latitude = lat;
-        *longitude = lon;
-        Serial.printf("[GPS] Position GPS obtenue: %.6f, %.6f (précision: %.1fm, satellites: %d)\n", 
-                      lat, lon, accuracy, usat);
-        gpsSuccess = true;
-        return true;
-      }
+  // 1 seule tentative avec timeout de 3s (au lieu de 3 tentatives × 10s)
+  if (modem.getGPS(&lat, &lon, &speed, &alt, &vsat, &usat, &accuracy)) {
+    if (millis() - gpsStart > 3000) {
+      Serial.println(F("[GPS] ⏱️ Timeout (3s)"));
+      return false;
     }
-    delay(500); // Attendre un peu entre les tentatives
-    feedWatchdog();
+    
+    // Valider les coordonnées
+    if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0 && 
+        lat != 0.0 && lon != 0.0) {
+      *latitude = lat;
+      *longitude = lon;
+      Serial.printf("[GPS] ✅ Position: %.6f, %.6f (acc: %.1fm, sat: %d)\n", 
+                    lat, lon, accuracy, usat);
+      gpsSuccess = true;
+      return true;
+    }
   }
   
   // Si GPS échoue, essayer la localisation réseau cellulaire (plus rapide mais moins précis)
