@@ -1,10 +1,10 @@
 # Suivi du Temps - Projet OTT
 ## Journal de travail pour facturation (Généré automatiquement)
 
-**Période analysée** : 2025-11-14 - 2025-12-02  
+**Période analysée** : 2025-11-14 - 2025-12-03  
 **Développeur** : ymora  
 **Projet** : OTT - Dispositif Médical IoT  
-**Total commits analysés** : 576  
+**Total commits analysés** : 619  
 **Branches analysées** : Toutes
 **Auteur filtré** : ymora  
 
@@ -34,8 +34,9 @@
 | 2025-11-29 | ~0.5h | 2 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
 | 2025-11-30 | ~8h | 77 | 5 | 32 | 0 | 1 | 1 | 0 | 8 | 26 |
 | 2025-12-01 | ~5h | 14 | 1 | 1 | 0 | 1 | 0 | 0 | 2 | 8 |
-| 2025-12-02 | ~8h | 40 | 1 | 4 | 0 | 4 | 0 | 0 | 10 | 15 |
-**Total** | **~128.5h** | **576** | **27** | **41.3** | **0.4** | **4.5** | **8.6** | **0.8** | **17.7** | **18.3**
+| 2025-12-02 | ~8h | 50 | 1 | 9 | 0 | 5 | 0 | 0 | 11 | 15 |
+| 2025-12-03 | ~5h | 33 | 2 | 10 | 0 | 2 | 0 | 0 | 4 | 13 |
+**Total** | **~133.5h** | **619** | **27.3** | **43.4** | **0.4** | **4.8** | **8.6** | **0.8** | **18** | **19.7**
 
 ---
 
@@ -537,8 +538,8 @@
 
 ### 02 décembre 2025
 **Heures estimées** : ~8h  
-**Période** : 07:22 - 22:57  
-**Nombre de commits** : 40
+**Période** : 07:22 - 23:27  
+**Nombre de commits** : 50
 
 #### Avancées principales
 - [FEAT] ­ƒù║´©Å Ajout carte dispositifs + r├®duction taille boutons vue d'ensemble
@@ -550,30 +551,67 @@
 - [FIX] Documentation: Fix dispositif USB visible imm├®diatement
 - [FIX] Simplification: Correction affichage dispositif USB cr├®├® automatiquement
 - [FIX] ­ƒöº Fix default tab Base de Donn├®es
+- [FIX] ­ƒöº Correction graphique Temps par Jour de la Semaine + logs debug
+- [FIX] ­ƒöº Fix graphique jour de la semaine: cl├®s en minuscules + initialisation compl├¿te
+- [FIX] ­ƒöº Fix cr├®ation automatique USB: utiliser le m├¬me pattern que DeviceModal (await refetch + setTimeout)
+- [FIX] ­ƒôØ Documentation fix USB automatique final
 #### Redéploiements
 - *Aucun redéploiement enregistré*
 #### Tests
-- *Aucun test enregistré*
+- [TEST] ­ƒöº Correction graphique Temps par Jour de la Semaine + logs debug
+
+---
+
+### 03 décembre 2025
+**Heures estimées** : ~5h  
+**Période** : 05:21 - 07:49  
+**Nombre de commits** : 33
+
+#### Avancées principales
+- [FEAT] ­ƒÉø FIX CRITIQUE: Ajout usbDeviceInfo manquant dans useUsb destructuring
+- [FEAT] Ô£¿ Ajout cr├®ation automatique USB dans UsbStreamingTab (vraie page Dispositifs OTT)
+- [FEAT] ­ƒöì Ajout logs debug cr├®ation automatique USB dans UsbStreamingTab
+- [FEAT] ­ƒöº API: Ajout firmware_version dans INSERT devices + logs d├®taill├®s cr├®ation USB
+- [FEAT] Fix: Ajouter SUIVI_TEMPS_FACTURATION.md au dossier docs/ et am├®liorer le script d'export
+#### Problèmes résolus
+- [FIX] ­ƒöº Correction cr├®ation automatique USB - Suppression v├®rifications 'd├®j├á trait├®', toujours cr├®er/MAJ dispositif USB
+- [FIX] ­ƒöì Debug: logs suppl├®mentaires pour tracer usbDeviceInfo
+- [FIX] ­ƒöì Debug: logs au montage du composant et d├®but useEffect
+- [FIX] ­ƒÉø FIX CRITIQUE: Ajout usbDeviceInfo manquant dans useUsb destructuring
+- [FIX] ­ƒùæ´©Å Suppression fichiers diagnostic temporaires (5 HTML/PS1 de debug)
+- [FIX] ­ƒöì Ajout logs debug cr├®ation automatique USB dans UsbStreamingTab
+- [FIX] ­ƒöº Gestion erreur conflit ICCID - Rechercher dispositif existant apr├¿s Database error
+- [FIX] ­ƒöì Debug: V├®rifier ce que UsbStreamingTab re├ºoit du contexte USB
+- [FIX] ­ƒöº Fix useEffect dependencies - usbDeviceInfo complet au lieu de propri├®t├®s
+- [FIX] ­ƒöì Logs page outils et onglet actif pour debug
+#### Redéploiements
+- [DEPLOY] Fix: Deploy dashboard to GitHub Pages with .nojekyll
+#### Tests
+- [TEST] ­ƒöì Debug: logs suppl├®mentaires pour tracer usbDeviceInfo
+- [TEST] ­ƒöì Debug: logs au montage du composant et d├®but useEffect
+- [TEST] ­ƒùæ´©Å Suppression fichiers diagnostic temporaires (5 HTML/PS1 de debug)
+- [TEST] ­ƒöì Ajout logs debug cr├®ation automatique USB dans UsbStreamingTab
+- [TEST] ­ƒöì Debug: V├®rifier ce que UsbStreamingTab re├ºoit du contexte USB
 
 ---
 
 ## Statistiques Globales
 
 ### Répartition par activité
-- **Développement** : ~27h (21%)
-- **Correction** : ~41.3h (32.1%)
+- **Développement** : ~27.3h (20.4%)
+- **Correction** : ~43.4h (32.5%)
 - **Test** : ~0.4h (0.3%)
-- **Documentation** : ~4.5h (3.5%)
-- **Refactoring** : ~8.6h (6.7%)
+- **Documentation** : ~4.8h (3.6%)
+- **Refactoring** : ~8.6h (6.4%)
 - **Déploiement** : ~0.8h (0.6%)
-- **UI/UX** : ~17.7h (13.7%)
-- **Optimisation** : ~18.3h (14.2%)
+- **UI/UX** : ~18h (13.5%)
+- **Optimisation** : ~19.7h (14.7%)
 
-### Temps total estimé : ~128.5 heures
+### Temps total estimé : ~133.5 heures
 
-### Nombre de jours travaillés : 19
+### Nombre de jours travaillés : 20
 
-### Moyenne par jour : ~6.8h
+### Moyenne par jour : ~6.7h
 
 ---
 
@@ -604,6 +642,6 @@
 
 ---
 
-**Dernière génération** : 02/12/2025 22:58  
+**Dernière génération** : 03/12/2025 07:57  
 **Source** : Analyse automatique des commits Git du projet  
 **Script** : scripts/generate_time_tracking.ps1
