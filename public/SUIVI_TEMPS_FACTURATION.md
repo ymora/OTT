@@ -4,7 +4,7 @@
 **Periode analysee** : 2025-11-14 - 2025-12-03
 **Developpeur** : ymora
 **Projet** : OTT - Dispositif Medical IoT
-**Total commits analyses** : 658
+**Total commits analyses** : 660
 
 ---
 
@@ -30,7 +30,7 @@
 | 2025-11-30 | ~10h | 77 | 21 | 48 | 6 | 4 | 8 | 0 | 15 | 1 |
 | 2025-12-01 | ~8h | 14 | 1 | 1 | 0 | 5 | 3 | 0 | 1 | 3 |
 | 2025-12-02 | ~10h | 50 | 0 | 11 | 0 | 9 | 0 | 0 | 8 | 4 |
-| 2025-12-03 | ~10h | 71 | 13 | 25 | 4 | 8 | 2 | 2 | 12 | 3 |
+| 2025-12-03 | ~10h | 73 | 14 | 25 | 4 | 8 | 2 | 2 | 12 | 3 |
 
 ---
 
@@ -43,5 +43,5 @@
 
 ---
 
-_Rapport genere automatiquement le 2025-12-03 22:06_
+_Rapport genere automatiquement le 2025-12-03 22:27_
 _Base sur l'analyse Git des commits de ymora_

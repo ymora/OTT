@@ -1722,13 +1722,12 @@ export default function DebugTab() {
             {/* Statut USB aligné à droite */}
             <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
               <div className="flex items-center gap-2 text-xs">
-                <span className="font-semibold text-gray-700 dark:text-gray-300">Statut USB:</span>
                 <span className={`px-2 py-0.5 rounded font-medium ${
                   isConnected 
                     ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'
                 }`}>
-                  {isConnected ? '🔌 Connecté' : '⚪ Non connecté'}
+                  {isConnected ? 'USB Connecté' : 'USB Déconnecté'}
                 </span>
                 {usbDeviceInfo && (
                   <span className="text-gray-600 dark:text-gray-400">
