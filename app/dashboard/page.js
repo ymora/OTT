@@ -63,13 +63,14 @@ export default function DashboardPage() {
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
   useAutoRefresh(refetch, 30000)
 
-  const devices = data?.devices?.devices || []
-  const users = data?.users?.users || []
-  const patients = data?.patients?.patients || []
-  const firmwares = data?.firmwares?.firmwares || []
+  // Mémoriser les données pour éviter les re-renders inutiles
+  const devices = useMemo(() => data?.devices?.devices || [], [data?.devices])
+  const users = useMemo(() => data?.users?.users || [], [data?.users])
+  const patients = useMemo(() => data?.patients?.patients || [], [data?.patients])
+  const firmwares = useMemo(() => data?.firmwares?.firmwares || [], [data?.firmwares])
   const alerts = useMemo(() => {
     return (data?.alerts?.alerts || []).filter(a => a.status === 'unresolved')
-  }, [data])
+  }, [data?.alerts])
 
   // Mémoriser les calculs coûteux pour éviter les recalculs inutiles
   const stats = useMemo(() => {

@@ -4,7 +4,7 @@
 **Période analysée** : 2025-11-14 - 2025-12-03  
 **Développeur** : ymora  
 **Projet** : OTT - Dispositif Médical IoT  
-**Total commits analysés** : 622  
+**Total commits analysés** : 628  
 **Branches analysées** : Toutes
 **Auteur filtré** : ymora  
 
@@ -35,8 +35,8 @@
 | 2025-11-30 | ~8h | 77 | 5 | 32 | 0 | 1 | 1 | 0 | 8 | 26 |
 | 2025-12-01 | ~5h | 14 | 1 | 1 | 0 | 1 | 0 | 0 | 2 | 8 |
 | 2025-12-02 | ~8h | 50 | 1 | 9 | 0 | 5 | 0 | 0 | 11 | 15 |
-| 2025-12-03 | ~5h | 36 | 2 | 10 | 0 | 2 | 0 | 0 | 5 | 15 |
-**Total** | **~133.5h** | **622** | **27.2** | **43.3** | **0.4** | **4.8** | **8.6** | **0.8** | **18.1** | **19.8**
+| 2025-12-03 | ~6h | 42 | 2 | 10 | 0 | 2 | 0 | 0 | 9 | 17 |
+**Total** | **~134.5h** | **628** | **27.2** | **43.3** | **0.4** | **4.8** | **8.6** | **0.8** | **18.7** | **20.1**
 
 ---
 
@@ -563,9 +563,9 @@
 ---
 
 ### 03 décembre 2025
-**Heures estimées** : ~5h  
-**Période** : 05:21 - 08:18  
-**Nombre de commits** : 36
+**Heures estimées** : ~6h  
+**Période** : 05:21 - 08:45  
+**Nombre de commits** : 42
 
 #### Avancées principales
 - [FEAT] ­ƒÉø FIX CRITIQUE: Ajout usbDeviceInfo manquant dans useUsb destructuring
@@ -586,6 +586,7 @@
 - [FIX] ­ƒöì Logs page outils et onglet actif pour debug
 #### Redéploiements
 - [DEPLOY] Fix: Deploy dashboard to GitHub Pages with .nojekyll
+- [DEPLOY] Ô£¿ Audit: ├ëlimination faux positifs SQL migrations + XSS service worker
 #### Tests
 - [TEST] ­ƒöì Debug: logs suppl├®mentaires pour tracer usbDeviceInfo
 - [TEST] ­ƒöì Debug: logs au montage du composant et d├®but useEffect
@@ -598,16 +599,16 @@
 ## Statistiques Globales
 
 ### Répartition par activité
-- **Développement** : ~27.2h (20.4%)
-- **Correction** : ~43.3h (32.4%)
+- **Développement** : ~27.2h (20.2%)
+- **Correction** : ~43.3h (32.2%)
 - **Test** : ~0.4h (0.3%)
 - **Documentation** : ~4.8h (3.6%)
 - **Refactoring** : ~8.6h (6.4%)
 - **Déploiement** : ~0.8h (0.6%)
-- **UI/UX** : ~18.1h (13.6%)
-- **Optimisation** : ~19.8h (14.8%)
+- **UI/UX** : ~18.7h (13.9%)
+- **Optimisation** : ~20.1h (15%)
 
-### Temps total estimé : ~133.5 heures
+### Temps total estimé : ~134.5 heures
 
 ### Nombre de jours travaillés : 20
 
@@ -642,6 +643,6 @@
 
 ---
 
-**Dernière génération** : 03/12/2025 08:32  
+**Dernière génération** : 03/12/2025 19:15  
 **Source** : Analyse automatique des commits Git du projet  
 **Script** : scripts/generate_time_tracking.ps1

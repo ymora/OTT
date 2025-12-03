@@ -75,9 +75,9 @@ function buildIcon(device, status = 'online') {
         <div class="marker-icon" style="
           font-size: ${size + 4}px;
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-          transition: all 0.3s ease;
-          position: relative;
-          z-index: 2;
+        transition: all 0.3s ease;
+        position: relative;
+        z-index: 2;
         ">${icon}</div>
         
         <!-- Label avec nom du dispositif -->
