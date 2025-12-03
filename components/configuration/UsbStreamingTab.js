@@ -36,7 +36,9 @@ export default function DebugTab() {
     write,
     startUsbStreaming,
     pauseUsbStreaming,
-    appendUsbStreamLog
+    appendUsbStreamLog,
+    setSendMeasurementCallback,
+    setUpdateDeviceFirmwareCallback
   } = usbContext
   
   // Log IMMÉDIAT pour vérifier que le composant est monté
@@ -69,6 +71,111 @@ export default function DebugTab() {
     { requiresAuth: true, autoLoad: !!user }
   )
   const allDevices = devicesData?.devices?.devices || []
+  
+  // ========== CONFIGURATION DES CALLBACKS USB ==========
+  // Configurer les callbacks pour enregistrer automatiquement les dispositifs dans la base
+  useEffect(() => {
+    if (!fetchWithAuth || !API_URL) {
+      return
+    }
+    
+    // Callback pour envoyer les mesures à l'API
+    const sendMeasurement = async (measurementData) => {
+      try {
+        const response = await fetchWithAuth(
+          `${API_URL}/api.php/devices/measurements`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(measurementData)
+          },
+          { requiresAuth: false }
+        )
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
+        }
+        
+        const result = await response.json()
+        
+        // Rafraîchir les données après l'enregistrement
+        setTimeout(() => {
+          refetchDevices()
+          notifyDevicesUpdated()
+        }, 500)
+        
+        return result
+      } catch (err) {
+        logger.error('❌ Erreur envoi mesure USB:', err)
+        throw err
+      }
+    }
+    
+    // Callback pour mettre à jour les informations du dispositif
+    const updateDevice = async (identifier, firmwareVersion, updateData = {}) => {
+      try {
+        // Récupérer la liste actuelle des dispositifs
+        const devicesResponse = await fetchWithAuth(
+          `${API_URL}/api.php/devices`,
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        
+        if (!devicesResponse.ok) return
+        
+        const devicesData = await devicesResponse.json()
+        const devices = devicesData.devices || []
+        
+        const device = devices.find(d => 
+          d.sim_iccid === identifier || 
+          d.device_serial === identifier ||
+          d.device_name === identifier
+        )
+        
+        if (!device) return
+        
+        const updatePayload = { ...updateData }
+        if (firmwareVersion && firmwareVersion !== '') {
+          updatePayload.firmware_version = firmwareVersion
+        }
+        
+        const response = await fetchWithAuth(
+          `${API_URL}/api.php/devices/${device.id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatePayload)
+          },
+          { requiresAuth: true }
+        )
+        
+        if (response.ok) {
+          setTimeout(() => {
+            refetchDevices()
+            notifyDevicesUpdated()
+          }, 500)
+        }
+        
+        return await response.json()
+      } catch (err) {
+        logger.error('❌ Erreur mise à jour dispositif:', err)
+      }
+    }
+    
+    // Configurer les callbacks UNE SEULE FOIS
+    setSendMeasurementCallback(sendMeasurement)
+    setUpdateDeviceFirmwareCallback(updateDevice)
+    
+    logger.log('✅ Callbacks USB configurés')
+    
+    // Cleanup au démontage
+    return () => {
+      setSendMeasurementCallback(null)
+      setUpdateDeviceFirmwareCallback(null)
+    }
+  }, [fetchWithAuth, API_URL, setSendMeasurementCallback, setUpdateDeviceFirmwareCallback])
+  // NE PAS ajouter allDevices, refetchDevices dans les dépendances - ça causerait des re-renders infinis
   
   // Fonction pour notifier les autres composants que les dispositifs ont changé
   const notifyDevicesUpdated = useCallback(() => {
@@ -138,143 +245,30 @@ export default function DebugTab() {
   // isDisabled : seulement pour les actions (pas pour l'affichage des données)
   const isDisabled = useMemo(() => !isConnected, [isConnected])
   
-  // ========== CRÉATION AUTOMATIQUE USB ==========
-  const creatingDeviceRef = useRef(false)
+  // ========== CRÉATION AUTOMATIQUE USB - DÉSACTIVÉE ==========
+  // Cette logique est maintenant gérée par les callbacks USB configurés ci-dessus
+  // qui utilisent l'endpoint /api.php/devices/measurements pour créer automatiquement
+  // le dispositif via handlePostMeasurement() dans api/handlers/devices.php
   
+  // Juste synchroniser le dispositif USB avec la base si on le trouve
   useEffect(() => {
-    logger.log('🔵 [USB-TAB] useEffect DÉCLENCHÉ', {
-      hasUsbDeviceInfo: !!usbDeviceInfo,
-      isConnected,
-      showDeviceModal,
-      creating: creatingDeviceRef.current
-    })
-    
-    if (!usbDeviceInfo || !isConnected || showDeviceModal || creatingDeviceRef.current) {
-      logger.log('❌ [USB-TAB] STOP -', {
-        noInfo: !usbDeviceInfo,
-        notConnected: !isConnected,
-        modalOpen: showDeviceModal,
-        alreadyCreating: creatingDeviceRef.current
-      })
+    if (!usbDeviceInfo || !isConnected) {
       return
     }
     
     const simIccid = usbDeviceInfo.sim_iccid
     const deviceSerial = usbDeviceInfo.device_serial
-    const validIccid = simIccid && simIccid !== 'N/A' && simIccid.trim().length >= 4 && /^\d+$/.test(simIccid.trim())
-    const validSerial = deviceSerial && deviceSerial !== 'N/A' && deviceSerial.trim().length >= 4 && /^[A-Z0-9\-]+$/i.test(deviceSerial.trim())
-    
-    logger.log('🔍 [USB-TAB] Validation', {
-      simIccid,
-      deviceSerial,
-      validIccid,
-      validSerial
-    })
-    
-    if (!validIccid && !validSerial) {
-      logger.log('❌ [USB-TAB] Identifiants invalides')
-      return
-    }
     
     const existingDevice = allDevices.find(d =>
-      (validIccid && d.sim_iccid === simIccid) || (validSerial && d.device_serial === deviceSerial)
+      d.sim_iccid === simIccid || d.device_serial === deviceSerial
     )
     
-    logger.log('🔍 [USB-TAB] Recherche en BDD', {
-      allDevicesCount: allDevices.length,
-      existingDevice: existingDevice ? `${existingDevice.device_name} (ID: ${existingDevice.id})` : 'NON TROUVÉ'
-    })
-    
-    creatingDeviceRef.current = true
-    
-    ;(async () => {
-      try {
-        if (existingDevice) {
-          await fetchJson(fetchWithAuth, API_URL, `/api.php/devices/${existingDevice.id}`, {
-            method: 'PUT',
-            body: JSON.stringify({ status: 'usb_connected', firmware_version: usbDeviceInfo.firmware_version })
-          }, { requiresAuth: true })
-          setUsbConnectedDevice({ ...existingDevice, status: 'usb_connected', isVirtual: false })
-        } else {
-          const deviceName = usbDeviceInfo.device_name || (validIccid ? `OTT-${simIccid.slice(-4)}` : deviceSerial)
-          logger.log('📝 [USB-TAB] Tentative création avec:', {
-            device_name: deviceName,
-            sim_iccid: validIccid ? simIccid : null,
-            device_serial: validSerial ? deviceSerial : null,
-            firmware_version: usbDeviceInfo.firmware_version,
-            status: 'usb_connected'
-          })
-          
-          const response = await fetchJson(fetchWithAuth, API_URL, '/api.php/devices', {
-            method: 'POST',
-            body: JSON.stringify({
-              device_name: deviceName,
-              sim_iccid: validIccid ? simIccid : null,
-              device_serial: validSerial ? deviceSerial : null,
-              firmware_version: usbDeviceInfo.firmware_version || null,
-              status: 'usb_connected'
-            })
-          }, { requiresAuth: true })
-          
-          if (response.device) {
-            logger.log('✅ [USB-TAB] Dispositif créé:', response.device.id)
-            setUsbConnectedDevice({ ...response.device, isVirtual: false })
-          }
-        }
-        
-        setUsbVirtualDevice(null)
-        invalidateCache?.()
-        await new Promise(r => setTimeout(r, 100))
-        await refetchDevices()
-        notifyDevicesUpdated()
-      } catch (err) {
-        logger.error('❌ [USB-TAB] Erreur complète:', {
-          message: err.message,
-          error: err.error,
-          details: err,
-          stack: err.stack
-        })
-        
-        // Si erreur "déjà utilisé", chercher le dispositif existant
-        if (err.error && (err.error.includes('déjà utilisé') || err.error.includes('Database error'))) {
-          logger.log('🔄 [USB-TAB] Recherche du dispositif existant après erreur...')
-          
-          try {
-            // Recharger tous les dispositifs depuis l'API
-            await refetchDevices()
-            
-            // Chercher le dispositif dans la liste fraîchement rechargée
-            const freshDevices = devicesData?.devices?.devices || []
-            const foundDevice = freshDevices.find(d =>
-              (validIccid && d.sim_iccid === simIccid) ||
-              (validSerial && d.device_serial === deviceSerial) ||
-              (d.device_name && d.device_name.includes(simIccid?.slice(-4)))
-            )
-            
-            if (foundDevice) {
-              logger.log('✅ [USB-TAB] Dispositif existant trouvé après erreur:', foundDevice.device_name)
-              setUsbConnectedDevice({ ...foundDevice, isVirtual: false })
-              setUsbVirtualDevice(null)
-              notifyDevicesUpdated()
-            } else {
-              logger.error('❌ [USB-TAB] Dispositif non trouvé malgré erreur conflit')
-            }
-          } catch (searchErr) {
-            logger.error('❌ [USB-TAB] Erreur recherche:', searchErr)
-          }
-        }
-      } finally {
-        creatingDeviceRef.current = false
-      }
-    })()
-  }, [
-    usbDeviceInfo, // Dépendance complète au lieu de propriétés individuelles
-    isConnected, 
-    allDevices.length, // Utiliser length pour éviter ref changes
-    showDeviceModal, 
-    fetchWithAuth, 
-    API_URL
-  ])
+    if (existingDevice && !usbConnectedDevice) {
+      // Dispositif trouvé en base, le lier au contexte USB
+      setUsbConnectedDevice({ ...existingDevice, isVirtual: false })
+      setUsbVirtualDevice(null)
+    }
+  }, [usbDeviceInfo, isConnected, allDevices, usbConnectedDevice, setUsbConnectedDevice, setUsbVirtualDevice])
   // ========== FIN CRÉATION AUTOMATIQUE USB ==========
   
   // Helper pour déterminer la source et le timestamp d'une donnée

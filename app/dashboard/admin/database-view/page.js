@@ -3,7 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiData, useAutoRefresh } from '@/hooks'
@@ -12,11 +12,18 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import StatsCard from '@/components/StatsCard'
 import AlertCard from '@/components/AlertCard'
+import logger from '@/lib/logger'
 
 export default function DatabaseViewPage() {
-  const { user } = useAuth()
+  const { user, fetchWithAuth, API_URL } = useAuth()
   const router = useRouter()
-  const { isConnected, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
+  const { 
+    isConnected, 
+    usbDeviceInfo, 
+    usbStreamLastMeasurement,
+    setSendMeasurementCallback,
+    setUpdateDeviceFirmwareCallback
+  } = useUsb()
   const [activeTab, setActiveTab] = useState('users')
 
   // Charger toutes les données nécessaires
@@ -36,6 +43,92 @@ export default function DatabaseViewPage() {
 
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
   useAutoRefresh(refetch, 30000)
+  
+  // Configurer les callbacks USB pour enregistrer automatiquement les dispositifs dans la base
+  useEffect(() => {
+    if (!fetchWithAuth || !API_URL) {
+      return
+    }
+    
+    const sendMeasurement = async (measurementData) => {
+      try {
+        const response = await fetchWithAuth(
+          `${API_URL}/api.php/devices/measurements`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(measurementData)
+          },
+          { requiresAuth: false }
+        )
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
+        }
+        
+        const result = await response.json()
+        setTimeout(() => refetch(), 1000)
+        return result
+      } catch (err) {
+        logger.error('❌ Erreur envoi mesure USB:', err)
+        throw err
+      }
+    }
+    
+    const updateDevice = async (identifier, firmwareVersion, updateData = {}) => {
+      try {
+        const devicesResponse = await fetchWithAuth(
+          `${API_URL}/api.php/devices`,
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        
+        if (!devicesResponse.ok) return
+        
+        const devicesData = await devicesResponse.json()
+        const devices = devicesData.devices || []
+        
+        const device = devices.find(d => 
+          d.sim_iccid === identifier || 
+          d.device_serial === identifier ||
+          d.device_name === identifier
+        )
+        
+        if (!device) return
+        
+        const updatePayload = { ...updateData }
+        if (firmwareVersion && firmwareVersion !== '') {
+          updatePayload.firmware_version = firmwareVersion
+        }
+        
+        const response = await fetchWithAuth(
+          `${API_URL}/api.php/devices/${device.id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatePayload)
+          },
+          { requiresAuth: true }
+        )
+        
+        if (response.ok) {
+          setTimeout(() => refetch(), 1000)
+        }
+      } catch (err) {
+        // Ignorer silencieusement
+      }
+    }
+    
+    setSendMeasurementCallback(sendMeasurement)
+    setUpdateDeviceFirmwareCallback(updateDevice)
+    
+    return () => {
+      setSendMeasurementCallback(null)
+      setUpdateDeviceFirmwareCallback(null)
+    }
+  }, [fetchWithAuth, API_URL, setSendMeasurementCallback, setUpdateDeviceFirmwareCallback])
+  // NE PAS ajouter devices ou refetch dans les dépendances
 
   // Extraire les données exactement comme dans users/page.js et patients/page.js
   const users = data?.users?.users || []
