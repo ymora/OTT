@@ -287,23 +287,45 @@ void setup()
   
   // Les identifiants et la configuration seront envoyés dans le premier message unifié
 
-  // Démarrer le modem (activé par défaut)
-  if (!startModem()) {
-    Serial.println(F("[MODEM] indisponible → wake 1 min (envoi mesure annulé)"));
-    goToSleep(1);
-    return;
-  }
-
-  // Détection USB initiale (non-bloquante)
+  // =========================================================================
+  // DÉTECTION USB EN PRIORITÉ (avant modem pour ne pas bloquer)
+  // =========================================================================
   bool usbConnected = Serial.availableForWrite() > 0;
   usbModeActive = usbConnected;
   
   if (usbConnected) {
-    Serial.println(F("🔌 [USB] Connecté au boot - Mode streaming activé"));
-    Serial.println(F("🔌 [USB] Surveillance dynamique active (peut se connecter/déconnecter à tout moment)"));
+    Serial.println(F("\n🔌 [USB] ═══════════════════════════════════"));
+    Serial.println(F("🔌 [USB] Connecté au boot - Mode streaming"));
+    Serial.println(F("🔌 [USB] Surveillance dynamique active"));
+    Serial.println(F("🔌 [USB] ═══════════════════════════════════\n"));
   } else {
-    Serial.println(F("📡 [MODE] Démarrage en mode hybride (détection changement flux)"));
-    Serial.println(F("🔌 [USB] Surveillance active - Connexion USB possible à tout moment"));
+    Serial.println(F("\n📡 [MODE] ═══════════════════════════════════"));
+    Serial.println(F("📡 [MODE] Mode hybride (détection changement)"));
+    Serial.println(F("🔌 [USB] Connexion possible à tout moment"));
+    Serial.println(F("📡 [MODE] ═══════════════════════════════════\n"));
+  }
+
+  // =========================================================================
+  // DÉMARRAGE MODEM (non bloquant si USB actif)
+  // =========================================================================
+  Serial.println(F("[MODEM] Tentative démarrage..."));
+  if (!startModem()) {
+    Serial.println(F("[MODEM] ⚠️ Indisponible"));
+    
+    // Si USB connecté, continuer quand même en mode streaming (sans GPS/RSSI)
+    if (usbModeActive) {
+      Serial.println(F("[MODEM] ⚠️ Mode USB actif → Continuation sans modem"));
+      Serial.println(F("[MODEM] ⚠️ GPS et RSSI non disponibles"));
+      modemReady = false;
+      // NE PAS faire goToSleep(), continuer vers loop()
+    } else {
+      // Pas d'USB, aller dormir
+      Serial.println(F("[MODEM] Mode hybride sans modem → Sleep 1 min"));
+      goToSleep(1);
+      return;
+    }
+  } else {
+    Serial.println(F("[MODEM] ✅ Démarré avec succès"));
   }
   
   // Mode normal (pas d'USB) : Mode hybride avec détection changement
