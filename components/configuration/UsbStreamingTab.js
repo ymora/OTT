@@ -1735,6 +1735,26 @@ export default function DebugTab() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
+                  if (usbStreamStatus === 'running') {
+                    pauseUsbStreaming()
+                    logger.log('⏸️ Logs en pause')
+                  } else if (usbStreamStatus === 'paused') {
+                    startUsbStreaming(port)
+                    logger.log('▶️ Logs reprennent')
+                  }
+                }}
+                className={`px-3 py-1.5 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                  usbStreamStatus === 'paused' 
+                    ? 'bg-green-500 hover:bg-green-600' 
+                    : 'bg-orange-500 hover:bg-orange-600'
+                }`}
+                title={usbStreamStatus === 'paused' ? 'Reprendre les logs' : 'Mettre en pause les logs'}
+                disabled={!isConnected}
+              >
+                {usbStreamStatus === 'paused' ? '▶️' : '⏸️'}
+              </button>
+              <button
+                onClick={() => {
                   const logs = [...usbStreamLogs, ...remoteLogs].join('\n')
                   navigator.clipboard.writeText(logs)
                     .then(() => {
