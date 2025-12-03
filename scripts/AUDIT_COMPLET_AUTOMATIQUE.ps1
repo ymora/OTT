@@ -592,28 +592,162 @@ Write-OK "Best Practices: Conformite elevee"
 # ===============================================================================
 
 # ===============================================================================
-# GENERATION SUIVI TEMPS
+# GENERATION SUIVI TEMPS (INTEGRE)
 # ===============================================================================
 
 Write-Section "Generation Suivi du Temps"
 
-$timeTrackingScript = Join-Path $PSScriptRoot "generate_time_tracking.ps1"
-if (Test-Path $timeTrackingScript) {
+try {
+    Write-Info "Generation rapport suivi temps..."
+    
+    # Verifier Git disponible
     try {
-        Write-Info "Execution generate_time_tracking.ps1..."
-        & $timeTrackingScript -Author "ymora" 2>&1 | ForEach-Object {
-            if ($_ -match '✅|📊') {
-                Write-Host "  $_" -ForegroundColor Green
+        $null = git --version 2>&1
+        $null = git rev-parse --git-dir 2>&1
+    } catch {
+        Write-Warn "Git non disponible ou pas de depot Git"
+        throw
+    }
+    
+    # Recuperer tous les commits (branches distantes + locales)
+    $allCommits = @()
+    
+    # Commits distants
+    $remoteCommits = git log --all --remotes --format="%ci|%an|%s|%H" 2>&1 | Where-Object { $_ -match '\|' }
+    if ($remoteCommits) {
+        foreach ($line in $remoteCommits) {
+            $parts = $line -split '\|'
+            if ($parts.Count -ge 4) {
+                $dateTime = $parts[0] -replace ' \+\d{4}', ''
+                $allCommits += [PSCustomObject]@{
+                    DateTime = $dateTime
+                    Date = ($dateTime -split ' ')[0]
+                    Author = $parts[1]
+                    Message = $parts[2]
+                    Hash = $parts[3]
+                }
             }
         }
-        if (Test-Path "SUIVI_TEMPS_FACTURATION.md") {
-            Write-OK "SUIVI_TEMPS_FACTURATION.md mis a jour"
-        }
-    } catch {
-        Write-Warn "Erreur suivi temps: $($_.Exception.Message)"
     }
-} else {
-    Write-Warn "Script generate_time_tracking.ps1 non trouve"
+    
+    # Filtrer par auteur ymora
+    $commits = $allCommits | Where-Object { $_.Author -like "*ymora*" } | Sort-Object DateTime
+    
+    if ($commits.Count -eq 0) {
+        Write-Warn "Aucun commit trouve"
+        throw
+    }
+    
+    Write-OK "$($commits.Count) commits trouves"
+    
+    # Grouper par date et categoriser
+    $commitsByDate = @{}
+    $categories = @{
+        'Developpement' = @('feat', 'add', 'create', 'implement', 'develop')
+        'Correction' = @('fix', 'correct', 'repair', 'resolve', 'bug')
+        'Test' = @('test', 'spec', 'coverage')
+        'Documentation' = @('doc', 'readme', 'comment', 'guide')
+        'Refactoring' = @('refactor', 'clean', 'organize', 'restructure')
+        'Deploiement' = @('deploy', 'release', 'publish', 'build')
+        'UI/UX' = @('ui', 'ux', 'style', 'design', 'css', 'layout')
+        'Optimisation' = @('optim', 'perf', 'improve', 'enhance', 'speed')
+    }
+    
+    foreach ($commit in $commits) {
+        $date = $commit.Date
+        if (-not $commitsByDate.ContainsKey($date)) {
+            $commitsByDate[$date] = @{
+                Commits = @()
+                Categories = @{}
+            }
+            foreach ($cat in $categories.Keys) {
+                $commitsByDate[$date].Categories[$cat] = 0
+            }
+        }
+        
+        $commitsByDate[$date].Commits += $commit
+        
+        # Categoriser
+        $message = $commit.Message.ToLower()
+        foreach ($cat in $categories.Keys) {
+            foreach ($keyword in $categories[$cat]) {
+                if ($message -match $keyword) {
+                    $commitsByDate[$date].Categories[$cat]++
+                    break
+                }
+            }
+        }
+    }
+    
+    # Estimer temps (2-4h par jour avec commits, arrondi)
+    $sortedDates = $commitsByDate.Keys | Sort-Object
+    $totalHours = 0
+    $daysWorked = $sortedDates.Count
+    
+    # Generer rapport Markdown
+    $report = @"
+# Suivi du Temps - Projet OTT
+## Journal de travail pour facturation (Genere automatiquement)
+
+**Periode analysee** : $($sortedDates[0]) - $($sortedDates[-1])
+**Developpeur** : ymora
+**Projet** : OTT - Dispositif Medical IoT
+**Total commits analyses** : $($commits.Count)
+
+---
+
+## Tableau Recapitulatif
+
+| Date | Heures | Commits | Developpement | Correction | Test | Documentation | Refactoring | Deploiement | UI/UX | Optimisation |
+|------|--------|---------|---------------|------------|------|----------------|-------------|-------------|-------|--------------|
+"@
+    
+    foreach ($date in $sortedDates) {
+        $dayData = $commitsByDate[$date]
+        $commitCount = $dayData.Commits.Count
+        
+        # Estimation heures (2-4h base + bonus si beaucoup de commits)
+        $estimatedHours = 2
+        if ($commitCount -gt 20) { $estimatedHours = 10 }
+        elseif ($commitCount -gt 10) { $estimatedHours = 8 }
+        elseif ($commitCount -gt 5) { $estimatedHours = 6 }
+        elseif ($commitCount -gt 3) { $estimatedHours = 4 }
+        
+        $totalHours += $estimatedHours
+        
+        $cats = $dayData.Categories
+        $report += "| $date | ~${estimatedHours}h | $commitCount | $($cats['Developpement']) | $($cats['Correction']) | $($cats['Test']) | $($cats['Documentation']) | $($cats['Refactoring']) | $($cats['Deploiement']) | $($cats['UI/UX']) | $($cats['Optimisation']) |`n"
+    }
+    
+    $avgHours = [math]::Round($totalHours / $daysWorked, 1)
+    
+    $report += @"
+
+---
+
+## Resume
+
+- **Total estime** : ~$totalHours heures
+- **Jours travailles** : $daysWorked jours
+- **Moyenne** : ~${avgHours}h/jour
+- **Periode** : $($sortedDates[0]) -> $($sortedDates[-1])
+
+---
+
+_Rapport genere automatiquement le $(Get-Date -Format 'yyyy-MM-dd HH:mm')_
+_Base sur l'analyse Git des commits de ymora_
+"@
+    
+    # Sauvegarder
+    $report | Out-File -FilePath "SUIVI_TEMPS_FACTURATION.md" -Encoding UTF8
+    $report | Out-File -FilePath "public\SUIVI_TEMPS_FACTURATION.md" -Encoding UTF8 -ErrorAction SilentlyContinue
+    
+    Write-OK "Rapport genere: SUIVI_TEMPS_FACTURATION.md"
+    Write-Host "  Total estime: ~$totalHours heures sur $daysWorked jours" -ForegroundColor Green
+    Write-Host "  Moyenne: ~${avgHours}h/jour" -ForegroundColor Green
+    
+} catch {
+    Write-Warn "Erreur generation suivi temps: $($_.Exception.Message)"
 }
 # CALCUL SCORE GLOBAL
 # ===============================================================================

@@ -34,6 +34,10 @@ export function UsbProvider({ children }) {
   const updateDeviceFirmwareRef = useRef(null) // Callback pour mettre à jour les informations du dispositif dans la base (firmware_version, last_battery, last_seen, status)
   const portSharingRef = useRef(null)
   
+  // Batch des logs pour envoi au serveur (pour monitoring à distance)
+  const logsToSendRef = useRef([])
+  const sendLogsTimerRef = useRef(null)
+  
   // Initialiser le système de partage
   useEffect(() => {
     if (typeof window !== 'undefined') {

@@ -14,6 +14,7 @@ require_once __DIR__ . '/api/handlers/auth.php';
 require_once __DIR__ . '/api/handlers/devices.php';
 require_once __DIR__ . '/api/handlers/firmwares.php';
 require_once __DIR__ . '/api/handlers/notifications.php';
+require_once __DIR__ . '/api/handlers/usb_logs.php';
 
 // Démarrer le buffer de sortie pour capturer toute sortie HTML accidentelle
 ob_start();
@@ -887,6 +888,16 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleGetNotificationsQueue();
 } elseif(preg_match('#/notifications/process$#', $path) && $method === 'POST') {
     handleProcessNotificationsQueue();
+
+// USB Logs (pour monitoring à distance)
+} elseif(preg_match('#^/usb-logs(/.*)?$#', $path)) {
+    $currentUser = getCurrentUser();
+    $userId = $currentUser ? $currentUser['id'] : null;
+    $userRole = $currentUser ? $currentUser['role_name'] : null;
+    
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    
+    echo handleUsbLogsRequest($pdo, $method, $path, $body, $_GET, $userId, $userRole);
 
 // Admin tools - IMPORTANT: Routes spécifiques avant routes génériques
 // Route database-view - doit être très tôt pour éviter les conflits
