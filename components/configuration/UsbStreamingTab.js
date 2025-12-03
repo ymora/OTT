@@ -413,14 +413,20 @@ export default function DebugTab() {
     const simIccid = usbDeviceInfo.sim_iccid
     const deviceSerial = usbDeviceInfo.device_serial
     
+    logger.log('🔍 [SYNC] Recherche device:', { 
+      iccid: simIccid?.slice(-10), 
+      serial: deviceSerial,
+      allDevicesCount: allDevices.length 
+    })
+    
     // Chercher si le dispositif existe déjà en base (recherche simple et efficace)
     const existingDevice = allDevices.find(d => 
       d.sim_iccid === simIccid || d.device_serial === deviceSerial
     )
     
     logger.log(existingDevice 
-      ? `✅ [SYNC] Dispositif trouvé: ${existingDevice.device_name}`
-      : `📝 [SYNC] Nouveau dispositif USB: ${simIccid || deviceSerial}`
+      ? `✅ [SYNC] Trouvé: ${existingDevice.device_name}`
+      : `📝 [SYNC] NOUVEAU → Création auto...`
     )
     
     if (existingDevice) {

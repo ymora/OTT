@@ -520,11 +520,11 @@ export function UsbProvider({ children }) {
                 last_seen: now
               }
               
-              // Log TOUJOURS l'état de usbDeviceInfo
-              logger.log('📝 [USB] État usbDeviceInfo:', {
-                prev_iccid: prev?.sim_iccid,
-                next_iccid: next.sim_iccid,
-                changed: next.sim_iccid !== prev?.sim_iccid
+              // Log identifiants reçus (IMPORTANT pour debug)
+              logger.log('📝 [USB] Device Info:', {
+                iccid: next.sim_iccid?.slice(-10),
+                serial: next.device_serial,
+                name: next.device_name
               })
               
               // Log uniquement si les identifiants sont présents et différents
