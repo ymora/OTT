@@ -124,6 +124,15 @@ Copy-Item -Path "out\*" -Destination "docs" -Recurse -Force
 Write-Host "  Copie de .nojekyll..." -ForegroundColor Yellow
 Copy-Item -Path ".nojekyll" -Destination "docs\.nojekyll" -Force
 
+# Copier le fichier SUIVI_TEMPS_FACTURATION.md depuis public/
+Write-Host "  Copie de SUIVI_TEMPS_FACTURATION.md..." -ForegroundColor Yellow
+if (Test-Path "public\SUIVI_TEMPS_FACTURATION.md") {
+    Copy-Item -Path "public\SUIVI_TEMPS_FACTURATION.md" -Destination "docs\SUIVI_TEMPS_FACTURATION.md" -Force
+    Write-Host "    OK SUIVI_TEMPS_FACTURATION.md copie" -ForegroundColor Green
+} else {
+    Write-Host "    ATTENTION: SUIVI_TEMPS_FACTURATION.md non trouve dans public/" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "Copie vers docs/ terminee !" -ForegroundColor Green
 $docsFileCount = (Get-ChildItem -Path "docs" -Recurse -File).Count
