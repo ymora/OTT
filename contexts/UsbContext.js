@@ -419,16 +419,21 @@ export function UsbProvider({ children }) {
                 last_seen: now
               }
               
+              // Log TOUJOURS l'état de usbDeviceInfo
+              logger.log('📝 [USB] État usbDeviceInfo:', {
+                prev_iccid: prev?.sim_iccid,
+                next_iccid: next.sim_iccid,
+                changed: next.sim_iccid !== prev?.sim_iccid
+              })
+              
               // Log uniquement si les identifiants sont présents et différents
               if ((next.sim_iccid || next.device_serial) && 
                   (next.sim_iccid !== prev?.sim_iccid || next.device_serial !== prev?.device_serial)) {
-                logger.log('📝 [USB] Mise à jour usbDeviceInfo avec identifiants:', {
+                logger.log('📝 [USB] ✅ Mise à jour usbDeviceInfo avec NOUVEAUX identifiants:', {
                   sim_iccid: next.sim_iccid,
                   device_serial: next.device_serial,
                   device_name: next.device_name,
-                  firmware_version: next.firmware_version,
-                  had_prev_sim_iccid: !!prev?.sim_iccid,
-                  had_prev_device_serial: !!prev?.device_serial
+                  firmware_version: next.firmware_version
                 })
               }
               
