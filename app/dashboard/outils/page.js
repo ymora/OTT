@@ -85,8 +85,38 @@ export default function OutilsPage() {
           d.device_name === identifier
         )
         
-        if (!device) return
+        // ✨ AUTO-CRÉATION: Si le dispositif n'existe pas, le créer automatiquement
+        if (!device) {
+          logger.log(`🆕 [AUTO-CREATE] Dispositif non trouvé (${identifier}), création automatique...`)
+          
+          const createPayload = {
+            device_name: updateData.device_name || `USB-${identifier.slice(-4)}`,
+            sim_iccid: updateData.sim_iccid || (identifier.startsWith('89') ? identifier : null),
+            device_serial: updateData.device_serial || (!identifier.startsWith('89') ? identifier : null),
+            firmware_version: firmwareVersion || null,
+            status: updateData.status || 'usb_connected',
+            last_seen: updateData.last_seen || new Date().toISOString()
+          }
+          
+          if (updateData.last_battery !== undefined) createPayload.last_battery = updateData.last_battery
+          if (updateData.last_flowrate !== undefined) createPayload.last_flowrate = updateData.last_flowrate
+          if (updateData.last_rssi !== undefined) createPayload.last_rssi = updateData.last_rssi
+          
+          await fetchWithAuth(
+            `${API_URL}/api.php/devices`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(createPayload)
+            },
+            { requiresAuth: true }
+          )
+          
+          logger.log('✅ [AUTO-CREATE] Dispositif créé avec succès')
+          return
+        }
         
+        // MISE À JOUR: Le dispositif existe
         const updatePayload = { ...updateData }
         if (firmwareVersion && firmwareVersion !== '') {
           updatePayload.firmware_version = firmwareVersion

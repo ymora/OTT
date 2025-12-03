@@ -1201,6 +1201,135 @@ export function UsbProvider({ children }) {
     updateDeviceFirmwareRef.current = callback
   }, [])
 
+  // ============================================================================
+  // AUTO-CRÉATION/MISE À JOUR INTELLIGENTE DES DISPOSITIFS USB
+  // ============================================================================
+  
+  /**
+   * Fonction pour auto-créer ou mettre à jour un dispositif USB en base de données
+   * Cette fonction est appelée automatiquement quand un dispositif USB est détecté
+   * 
+   * @param {Object} deviceInfo - Informations du dispositif USB détecté
+   * @param {Function} fetchWithAuth - Fonction d'authentification
+   * @param {string} apiUrl - URL de l'API
+   * @returns {Promise<Object|null>} - Le dispositif créé/mis à jour ou null en cas d'erreur
+   */
+  const autoCreateOrUpdateDevice = useCallback(async (deviceInfo, fetchWithAuth, apiUrl) => {
+    if (!deviceInfo) {
+      logger.warn('autoCreateOrUpdateDevice: deviceInfo vide')
+      return null
+    }
+
+    const identifier = deviceInfo.sim_iccid || deviceInfo.device_serial
+    
+    if (!identifier) {
+      logger.warn('autoCreateOrUpdateDevice: aucun identifiant (ICCID ou serial)', deviceInfo)
+      return null
+    }
+
+    try {
+      logger.log(`🔍 [AUTO-CREATE] Vérification dispositif: ${identifier}`)
+      
+      // Importer fetchJson
+      const { fetchJson } = await import('@/lib/api')
+      
+      // 1. Vérifier si le dispositif existe déjà en BDD
+      const devicesResponse = await fetchJson(fetchWithAuth, apiUrl, '/api.php/devices', {}, { requiresAuth: true })
+      
+      if (!devicesResponse.success) {
+        logger.error('❌ Échec récupération dispositifs:', devicesResponse.message)
+        return null
+      }
+
+      const allDevices = devicesResponse.devices || []
+      
+      // Chercher le dispositif par ICCID ou serial
+      const existingDevice = allDevices.find(d => 
+        (deviceInfo.sim_iccid && d.sim_iccid === deviceInfo.sim_iccid) ||
+        (deviceInfo.device_serial && d.device_serial === deviceInfo.device_serial)
+      )
+
+      if (existingDevice) {
+        // 2a. DISPOSITIF EXISTE → Mise à jour
+        logger.log(`✅ [AUTO-CREATE] Dispositif trouvé (ID: ${existingDevice.id}), mise à jour...`)
+        
+        const updateData = {
+          last_seen: new Date().toISOString(),
+          status: 'usb_connected'
+        }
+        
+        // Mettre à jour firmware si disponible
+        if (deviceInfo.firmware_version) {
+          updateData.firmware_version = deviceInfo.firmware_version
+        }
+        
+        // Mettre à jour les identifiants si manquants
+        if (deviceInfo.sim_iccid && !existingDevice.sim_iccid) {
+          updateData.sim_iccid = deviceInfo.sim_iccid
+        }
+        if (deviceInfo.device_serial && !existingDevice.device_serial) {
+          updateData.device_serial = deviceInfo.device_serial
+        }
+
+        const updateResponse = await fetchJson(
+          fetchWithAuth, 
+          apiUrl, 
+          `/api.php/devices/${existingDevice.id}`, 
+          { method: 'PATCH', body: JSON.stringify(updateData) },
+          { requiresAuth: true }
+        )
+
+        if (updateResponse.success) {
+          logger.log('✅ [AUTO-CREATE] Dispositif mis à jour avec succès')
+          return { ...existingDevice, ...updateData }
+        } else {
+          logger.error('❌ [AUTO-CREATE] Échec mise à jour:', updateResponse.message)
+          return existingDevice // Retourner quand même le dispositif existant
+        }
+
+      } else {
+        // 2b. DISPOSITIF N'EXISTE PAS → Création automatique
+        logger.log(`🆕 [AUTO-CREATE] Nouveau dispositif détecté, création automatique...`)
+        
+        const newDeviceData = {
+          device_name: deviceInfo.device_name || `USB-${identifier.slice(-4)}`,
+          sim_iccid: deviceInfo.sim_iccid || null,
+          device_serial: deviceInfo.device_serial || null,
+          firmware_version: deviceInfo.firmware_version || null,
+          status: 'usb_connected',
+          last_seen: new Date().toISOString()
+        }
+
+        const createResponse = await fetchJson(
+          fetchWithAuth,
+          apiUrl,
+          '/api.php/devices',
+          { method: 'POST', body: JSON.stringify(newDeviceData) },
+          { requiresAuth: true }
+        )
+
+        if (createResponse.success) {
+          logger.log('✅ [AUTO-CREATE] Nouveau dispositif créé avec succès:', createResponse.device)
+          return createResponse.device
+        } else {
+          logger.error('❌ [AUTO-CREATE] Échec création:', createResponse.message)
+          return null
+        }
+      }
+
+    } catch (error) {
+      logger.error('❌ [AUTO-CREATE] Erreur:', error)
+      return null
+    }
+  }, [])
+
+  // Référence pour la fonction auto-create (accessible dans les callbacks)
+  const autoCreateOrUpdateDeviceRef = useRef(autoCreateOrUpdateDevice)
+  
+  useEffect(() => {
+    autoCreateOrUpdateDeviceRef.current = autoCreateOrUpdateDevice
+  }, [autoCreateOrUpdateDevice])
+
   const value = {
     // État USB
     usbConnectedDevice,
