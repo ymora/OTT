@@ -77,6 +77,12 @@ export function UsbProvider({ children }) {
       const next = [...prev, { id: `${timestamp}-${Math.random()}`, line, timestamp, source }]
       return next.slice(-80)
     })
+  }, [])
+  
+  // Fonction pour effacer les logs
+  const clearUsbStreamLogs = useCallback(() => {
+    setUsbStreamLogs([])
+    logger.log('🗑️ Console USB effacée')
     
     // Ajouter au batch pour envoi au serveur (si on a un dispositif connecté)
     const currentDevice = usbConnectedDevice || usbVirtualDevice
