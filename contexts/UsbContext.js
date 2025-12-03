@@ -1462,6 +1462,7 @@ export function UsbProvider({ children }) {
     startReading,
     write,
     appendUsbStreamLog,
+    clearUsbStreamLogs,
     setSendMeasurementCallback,
     setUpdateDeviceFirmwareCallback,
   }

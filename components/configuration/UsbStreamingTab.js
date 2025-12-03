@@ -1711,6 +1711,43 @@ export default function DebugTab() {
                 Logs en temps réel du streaming USB et des actions du dashboard
               </p>
             </div>
+            
+            {/* Boutons d'action console */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const logs = [...usbStreamLogs, ...remoteLogs].join('\n')
+                  navigator.clipboard.writeText(logs)
+                    .then(() => {
+                      logger.log('📋 Logs copiés dans le presse-papiers')
+                    })
+                    .catch(err => {
+                      logger.error('❌ Erreur copie:', err)
+                    })
+                }}
+                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                title="Copier tous les logs"
+              >
+                📋 Copier
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm('Effacer tous les logs de la console ?')) {
+                    // Clear logs via context
+                    if (typeof clearUsbStreamLogs === 'function') {
+                      clearUsbStreamLogs()
+                    }
+                    setRemoteLogs([])
+                    logger.log('🗑️ Console effacée')
+                  }
+                }}
+                className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                title="Effacer la console"
+              >
+                🗑️ RAZ
+              </button>
+            </div>
+            
             {/* Statut USB aligné à droite */}
             <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
               <div className="flex items-center gap-2 text-xs">
