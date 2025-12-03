@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documentation Développeurs OTT V3.11 - HAPPLYZ MEDICAL</title>
+    <title>Documentation Développeurs OTT v1.0 - HAPPLYZ MEDICAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -530,7 +530,7 @@
 <div class="header">
     <h1>🏥 OTT - Dispositif Médical IoT</h1>
     <div class="subtitle">Solution Enterprise de Monitoring Oxygénothérapie</div>
-    <div class="version-badge">Version 3.12 - Documentation Développeurs</div>
+    <div class="version-badge">Version 1.0 Production - Documentation Développeurs</div>
     <p style="margin-top: 1rem; font-size: 1.1rem;">HAPPLYZ MEDICAL SAS</p>
 </div>
 
@@ -613,7 +613,7 @@
     </pre>
     
     <div class="alert alert-info" style="margin-bottom: 2rem;">
-        <strong>🚀 Nouveautés v3.12 - Firmware Production-Ready</strong>
+        <strong>🚀 Firmware v1.0 Production - Architecture Optimisée</strong>
         <ul style="margin-top: 0.8rem; margin-left: 1.5rem;">
             <li><strong>⚡ Architecture USB optimisée</strong> : Détection USB en priorité (avant modem), streaming instantané (< 1s), aucun blocage possible</li>
             <li><strong>🔌 Détection dynamique</strong> : Vérification USB toutes les 500ms dans <code>loop()</code>, transitions fluides ON/OFF automatiques</li>
@@ -686,8 +686,8 @@ maxime/
     <pre><code># Windows PowerShell
 .\scripts\build_firmware_bin.ps1
 
-# Le fichier .bin sera généré dans hardware/firmware/v3.0/
-# Exemple : ott_firmware_v3.0-rebuild_20250121.bin</code></pre>
+# Le fichier .bin sera généré dans hardware/firmware/fw_ott_optimized/
+# Exemple : ott_firmware_v1.0_20251203.bin</code></pre>
     <p>Le fichier .bin peut ensuite être :</p>
     <ul>
         <li>Uploadé via le modal "Flash USB" dans le dashboard</li>
@@ -1553,9 +1553,9 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     
     <h3>📍 Chemins Importants</h3>
     <ul>
-        <li><strong>Firmware Source</strong> : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code> (v3.0-rebuild)</li>
-        <li><strong>Firmwares Compilés</strong> : <code>hardware/firmware/vX.X/*.bin</code> (organisés par version)</li>
-        <li><strong>Firmwares Uploadés</strong> : <code>hardware/firmware/vX.X/*.ino</code> (organisés par version)</li>
+        <li><strong>Firmware Source</strong> : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code> (v1.0 production)</li>
+        <li><strong>Firmwares Compilés</strong> : Générés localement ou via dashboard (format .bin)</li>
+        <li><strong>Firmwares Uploadés</strong> : Via dashboard → Menu Firmware → Upload .ino</li>
         <li><strong>Bibliothèques</strong> : <code>hardware/lib/TinyGSM/</code></li>
         <li><strong>Scripts Build</strong> : <code>scripts/build_firmware_bin.ps1</code> et <code>scripts/flash_firmware.ps1</code></li>
     </ul>
@@ -1564,7 +1564,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h4>Pour un développeur :</h4>
     <ol>
         <li>Modifier le firmware source : <code>hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino</code></li>
-        <li>Compiler localement : <code>.\scripts\build_firmware_bin.ps1</code> (génère un .bin dans <code>hardware/firmware/v3.0/</code>)</li>
+        <li>Compiler localement : Via Arduino IDE ou <code>.\scripts\build_firmware_bin.ps1</code></li>
         <li>Tester : <code>.\scripts\flash_firmware.ps1 -Port COM6</code></li>
         <li>Ou uploader via dashboard : Menu "Firmware" → Upload .ino → Compilation automatique</li>
     </ol>
@@ -1700,10 +1700,10 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <p>Lors de la connexion USB, le firmware envoie automatiquement ses informations au format JSON :</p>
     <pre><code>{
   "type": "device_info",
-  "iccid": "89330123456789012345",
-  "serial": "OTT-1234",
-  "firmware_version": "3.0-rebuild",
-  "device_name": "OTT-1234"
+  "sim_iccid": "89331508210512788370",
+  "device_serial": "OTT-25-001",
+  "firmware_version": "1.0",
+  "device_name": "OTT-8370"
 }</code></pre>
     
     <p>Ces informations sont automatiquement :</p>
@@ -1745,9 +1745,13 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h4>Payload Mesures</h4>
     <p>Le firmware envoie :</p>
     <pre><code>{
-  "sim_iccid": "89330123456789012345",
+  "sim_iccid": "89331508210512788370",
+  "device_serial": "OTT-25-001",
+  "firmware_version": "1.0",
   "flowrate": 2.34,
+  "flow_lpm": 2.34,
   "battery": 85.5,
+  "battery_percent": 85.5,
   "rssi": -75,
   "firmware_version": "v2.0",
   "timestamp": "2025-01-15T10:30:00Z",
@@ -2029,7 +2033,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h2>🚀 Roadmap & Améliorations Futures</h2>
     
     <div class="alert alert-success">
-        <strong>✅ Version 3.11 (Actuelle - Décembre 2025)</strong><br>
+        <strong>✅ Version 1.0 Production (Actuelle - Décembre 2025)</strong><br>
         Version actuellement déployée avec les fonctionnalités suivantes :
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
             <li>✅ Pagination complète sur tous les endpoints de liste</li>
@@ -2049,7 +2053,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         </ul>
     </div>
     
-    <h3>📅 Version 3.4 (Q2-Q3 2025)</h3>
+    <h3>📅 Version 1.1 (Q1 2026)</h3>
     
     <h4>🔐 Sécurité Avancée</h4>
     <ul>
@@ -2075,7 +2079,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li>✨ Rapports programmés (hebdo, mensuel)</li>
     </ul>
     
-    <h3>📅 Version 3.5 (Q4 2025)</h3>
+    <h3>📅 Version 1.2 (Q2 2026)</h3>
     
     <h4>🌍 Internationalisation</h4>
     <ul>
@@ -2115,7 +2119,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
 
 <div class="footer">
     <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
-    <p>OTT - Version 3.11 Enterprise | Documentation Développeurs</p>
+    <p>OTT - Version 1.0 Production | Documentation Développeurs</p>
     <p style="margin-top: 1rem; font-size: 1rem; font-weight: bold;">
         📚 Documentation :
         <a href="DOCUMENTATION_PRESENTATION.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">📸 Présentation</a> | 
