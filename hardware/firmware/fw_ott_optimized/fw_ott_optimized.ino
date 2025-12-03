@@ -293,6 +293,7 @@ void setup()
     modemReady = false;
     // Continuer vers loop() IMMÉDIATEMENT sans attendre le modem
     // Le modem sera initialisé lors de la première tentative GPS/RSSI
+    return;  // ← IMPORTANT: Sortir de setup() et aller dans loop() !
   } else {
     // Mode hybride : Modem REQUIS
     Serial.println(F("📡 Démarrage modem..."));
