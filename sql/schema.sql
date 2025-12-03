@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS devices (
   sim_iccid VARCHAR(20) UNIQUE NOT NULL,
   device_serial VARCHAR(50) UNIQUE,
   device_name VARCHAR(100),
-  firmware_version VARCHAR(20) DEFAULT 'v2.0',
+  firmware_version VARCHAR(20),
   status TEXT CHECK (status IN ('active','inactive','maintenance')) DEFAULT 'active',
   patient_id INT REFERENCES patients(id) ON DELETE SET NULL,
   installation_date TIMESTAMPTZ,
@@ -198,7 +198,7 @@ CREATE INDEX idx_device_logs_device_time ON device_logs(device_id, timestamp DES
 
 CREATE TABLE IF NOT EXISTS device_configurations (
   device_id INT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
-  firmware_version VARCHAR(20) DEFAULT '3.0.0',
+  firmware_version VARCHAR(20),
   target_firmware_version VARCHAR(20),
   firmware_url TEXT,
   sleep_minutes INT DEFAULT 30,

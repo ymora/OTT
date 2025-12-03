@@ -13,8 +13,8 @@
  * Enregistrer des logs USB (batch)
  */
 function createUsbLogs($pdo, $body, $userId) {
-    // Validation
-    if (!isset($body['device_identifier']) || empty($body['device_identifier'])) {
+    // Validation stricte
+    if (!isset($body['device_identifier']) || empty(trim($body['device_identifier']))) {
         http_response_code(400);
         return json_encode(['success' => false, 'error' => 'device_identifier est requis']);
     }
@@ -24,9 +24,16 @@ function createUsbLogs($pdo, $body, $userId) {
         return json_encode(['success' => false, 'error' => 'logs doit être un tableau non vide']);
     }
     
-    $deviceIdentifier = trim($body['device_identifier']);
-    $deviceName = isset($body['device_name']) ? trim($body['device_name']) : null;
+    // Sanitization
+    $deviceIdentifier = htmlspecialchars(trim($body['device_identifier']), ENT_QUOTES, 'UTF-8');
+    $deviceName = isset($body['device_name']) ? htmlspecialchars(trim($body['device_name']), ENT_QUOTES, 'UTF-8') : null;
     $logs = $body['logs'];
+    
+    // Validation longueur
+    if (strlen($deviceIdentifier) > 255) {
+        http_response_code(400);
+        return json_encode(['success' => false, 'error' => 'device_identifier trop long']);
+    }
     
     // Limiter le nombre de logs par requête
     if (count($logs) > 100) {
@@ -48,11 +55,18 @@ function createUsbLogs($pdo, $body, $userId) {
                 continue;
             }
             
-            $logLine = trim($log['log_line']);
+            // Sanitization XSS
+            $logLine = htmlspecialchars(trim($log['log_line']), ENT_QUOTES, 'UTF-8');
             $logSource = isset($log['log_source']) ? trim($log['log_source']) : 'device';
             
-            if (!in_array($logSource, ['device', 'dashboard'])) {
+            // Validation stricte
+            if (!in_array($logSource, ['device', 'dashboard'], true)) {
                 $logSource = 'device';
+            }
+            
+            // Validation longueur
+            if (strlen($logLine) > 5000) {
+                continue; // Ignorer logs trop longs (protection)
             }
             
             $timestamp = isset($log['timestamp']) && is_numeric($log['timestamp']) 
