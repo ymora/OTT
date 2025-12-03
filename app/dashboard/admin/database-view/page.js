@@ -17,6 +17,13 @@ import logger from '@/lib/logger'
 export default function DatabaseViewPage() {
   const { user, fetchWithAuth, API_URL } = useAuth()
   const router = useRouter()
+  
+  // Vérifier que l'utilisateur est admin
+  useEffect(() => {
+    if (user && user.role_name !== 'admin') {
+      router.push('/dashboard')
+    }
+  }, [user, router])
   const { 
     isConnected,
     usbVirtualDevice,
