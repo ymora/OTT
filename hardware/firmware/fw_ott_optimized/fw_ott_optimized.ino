@@ -97,21 +97,17 @@ static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
 #define OTT_DEFAULT_SERIAL "OTT-XX-XXX"
 #endif
 
-#ifndef OTT_DEFAULT_JWT
-#define OTT_DEFAULT_JWT ""
-#endif
-
-// JWT (JSON Web Token) : Token d'authentification pour l'API
-// - Utilisé pour authentifier le dispositif auprès du serveur lors des envois OTA (Over-The-Air)
-// - Format : "Bearer xxxxx" ou simplement "xxxxx" (le préfixe "Bearer " est ajouté automatiquement)
-// - Obtention : Généré par le dashboard/admin, envoyé au dispositif via commande UPDATE_CONFIG
-// - Stockage : Sauvegardé en NVS (mémoire non-volatile) pour persister entre redémarrages
-// - Important : Sans JWT, les envois de mesures via réseau (OTA) échoueront (mais USB fonctionne)
+// ============================================================================
+// AUTHENTIFICATION API
+// ============================================================================
+// L'API authentifie les dispositifs par leur sim_iccid UNIQUEMENT.
+// Pas de JWT requis pour l'envoi de mesures (endpoint /devices/measurements).
+// Sécurité : L'ICCID est un identifiant unique de 20 chiffres (ex: 89331508210512788370)
+//            difficilement falsifiable, cryptographiquement sécurisé par l'opérateur SIM.
 String SIM_PIN        = OTT_DEFAULT_SIM_PIN;
 String NETWORK_APN    = OTT_DEFAULT_APN;
 String DEVICE_ICCID   = OTT_DEFAULT_ICCID;
 String DEVICE_SERIAL  = OTT_DEFAULT_SERIAL;
-String DEVICE_JWT     = OTT_DEFAULT_JWT;  // Token d'authentification API (obligatoire pour OTA)
 
 const char* API_HOST       = "ott-jbln.onrender.com";
 const uint16_t API_PORT    = 443;
@@ -266,18 +262,13 @@ void setup()
   // Valider le boot et marquer le firmware comme stable si c'est un boot réussi
   validateBootAndMarkStable();
   
-  // Afficher l'état du JWT (JSON Web Token) au démarrage
-  // Le JWT est un token d'authentification nécessaire pour envoyer des données via le réseau (OTA)
-  // Sans JWT : seuls les envois USB fonctionnent (pour tests/développement)
-  // Avec JWT : les envois OTA fonctionnent (production)
-  if (DEVICE_JWT.isEmpty()) {
-    Serial.println(F("[BOOT] ⚠️ JWT (token d'authentification) non configuré"));
-    Serial.println(F("[BOOT] ⚠️ Les envois de mesures via réseau (OTA) peuvent échouer"));
-    Serial.println(F("[BOOT] 💡 Configurez le JWT via commande UPDATE_CONFIG (OTA) ou USB"));
-    Serial.println(F("[BOOT] 💡 Le JWT est obtenu depuis le dashboard/admin"));
-  } else {
-    Serial.printf("[BOOT] ✅ JWT configuré (longueur: %d caractères)\n", DEVICE_JWT.length());
-  }
+  // Afficher les informations d'authentification
+  Serial.println(F("\n[AUTH] ════════════════════════════════════"));
+  Serial.println(F("[AUTH] Authentification par ICCID uniquement"));
+  Serial.printf("[AUTH] ICCID: %s\n", DEVICE_ICCID.c_str());
+  Serial.printf("[AUTH] Serial: %s\n", DEVICE_SERIAL.c_str());
+  Serial.println(F("[AUTH] Pas de JWT requis pour envoi mesures"));
+  Serial.println(F("[AUTH] ════════════════════════════════════\n"));
   
   configureWatchdog(watchdogTimeoutSeconds);
   feedWatchdog();
@@ -1367,17 +1358,16 @@ String buildPath(const char* path)
 
 // Construire l'en-tête d'authentification HTTP avec le JWT
 // Le JWT (JSON Web Token) est utilisé pour authentifier le dispositif auprès de l'API
-// Format de l'en-tête : "Authorization: Bearer <token>"
+// ============================================================================
+// AUTHENTIFICATION API
+// ============================================================================
+// L'API identifie les dispositifs par sim_iccid UNIQUEMENT (pas de JWT requis).
+// L'ICCID est un identifiant unique de 20 chiffres fourni par l'opérateur télécom,
+// cryptographiquement sécurisé et difficile à falsifier.
+// Cette fonction est conservée pour compatibilité future si besoin d'ajouter un token.
 String buildAuthHeader()
 {
-  if (DEVICE_JWT.isEmpty()) {
-    return String();  // Pas de JWT = pas d'authentification (envoi échouera probablement)
-  }
-  // Ajouter le préfixe "Bearer " si absent (format standard HTTP)
-  if (DEVICE_JWT.startsWith("Bearer ")) {
-    return DEVICE_JWT;
-  }
-  return "Bearer " + DEVICE_JWT;
+  return String();  // Pas d'authentification JWT pour les mesures (ICCID suffit)
 }
 
 bool httpPost(const char* path, const String& body, String* response)
@@ -1510,12 +1500,8 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   String body;
   serializeJson(doc, body);
   
-  // Vérifier si JWT (token d'authentification) est configuré
-  // Sans JWT, l'API refusera probablement la requête (401 Unauthorized)
-  if (DEVICE_JWT.isEmpty()) {
-    Serial.println(F("[API] ⚠️ JWT (token d'authentification) non configuré - l'envoi OTA peut échouer"));
-    Serial.println(F("[API] 💡 Configurez le JWT via UPDATE_CONFIG pour activer les envois OTA"));
-  }
+  // Authentification par ICCID uniquement (pas de JWT requis pour /measurements)
+  Serial.println(F("[API] ℹ️ Authentification par ICCID"));
   
   String apiResponse;
   bool ok = httpPost(PATH_MEASURE, body, &apiResponse);
@@ -1687,11 +1673,9 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     }
     // Configuration du JWT (JSON Web Token) - Token d'authentification pour l'API
     // Le JWT permet au dispositif de s'authentifier auprès du serveur lors des envois OTA
-    // Format attendu : {"jwt": "Bearer xxxxx"} ou {"jwt": "xxxxx"} (le préfixe "Bearer " est optionnel)
-    // Le JWT est obtenu depuis le dashboard/admin et doit être unique par dispositif
-    if (payloadDoc.containsKey("jwt")) {
-      DEVICE_JWT = payloadDoc["jwt"].as<String>();
-    }
+    // Note : Le champ "jwt" était utilisé dans les versions antérieures mais n'est plus nécessaire.
+    // L'authentification se fait uniquement par sim_iccid (endpoint /measurements sans auth).
+    // Le champ est ignoré pour compatibilité avec d'anciennes commandes.
     if (payloadDoc.containsKey("iccid")) {
       DEVICE_ICCID = payloadDoc["iccid"].as<String>();
     }
@@ -1832,7 +1816,7 @@ void loadConfig()
     }
   }
   NETWORK_APN = prefs.getString("apn", NETWORK_APN);
-  DEVICE_JWT  = prefs.getString("jwt", DEVICE_JWT);
+  // Note: JWT retiré - authentification par ICCID uniquement
   DEVICE_ICCID = prefs.getString("iccid", DEVICE_ICCID);
   DEVICE_SERIAL = prefs.getString("serial", DEVICE_SERIAL);
   SIM_PIN = prefs.getString("sim_pin", SIM_PIN);
@@ -1887,7 +1871,7 @@ void saveConfig()
     return;
   }
   prefs.putString("apn", NETWORK_APN);
-  prefs.putString("jwt", DEVICE_JWT);
+  // Note: JWT retiré - authentification par ICCID uniquement
   prefs.putString("iccid", DEVICE_ICCID);
   prefs.putString("serial", DEVICE_SERIAL);
   prefs.putString("sim_pin", SIM_PIN);
