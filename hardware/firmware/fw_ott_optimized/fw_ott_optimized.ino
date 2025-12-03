@@ -306,26 +306,25 @@ void setup()
   }
 
   // =========================================================================
-  // DÉMARRAGE MODEM (non bloquant si USB actif)
+  // DÉMARRAGE MODEM (optionnel en mode USB, requis en mode hybride)
   // =========================================================================
-  Serial.println(F("[MODEM] Tentative démarrage..."));
-  if (!startModem()) {
-    Serial.println(F("[MODEM] ⚠️ Indisponible"));
-    
-    // Si USB connecté, continuer quand même en mode streaming (sans GPS/RSSI)
-    if (usbModeActive) {
-      Serial.println(F("[MODEM] ⚠️ Mode USB actif → Continuation sans modem"));
-      Serial.println(F("[MODEM] ⚠️ GPS et RSSI non disponibles"));
-      modemReady = false;
-      // NE PAS faire goToSleep(), continuer vers loop()
-    } else {
-      // Pas d'USB, aller dormir
-      Serial.println(F("[MODEM] Mode hybride sans modem → Sleep 1 min"));
+  if (usbModeActive) {
+    // Mode USB : Démarrage modem EN ARRIÈRE-PLAN (non bloquant)
+    Serial.println(F("[MODEM] Mode USB → Démarrage différé"));
+    Serial.println(F("[MODEM] Le streaming démarre IMMÉDIATEMENT"));
+    Serial.println(F("[MODEM] Le modem démarrera en arrière-plan\n"));
+    modemReady = false;
+    // Continuer vers loop() IMMÉDIATEMENT sans attendre le modem
+    // Le modem sera initialisé lors de la première tentative GPS/RSSI
+  } else {
+    // Mode hybride : Modem REQUIS
+    Serial.println(F("[MODEM] Mode hybride → Démarrage requis..."));
+    if (!startModem()) {
+      Serial.println(F("[MODEM] ⚠️ Échec démarrage → Sleep 1 min"));
       goToSleep(1);
       return;
     }
-  } else {
-    Serial.println(F("[MODEM] ✅ Démarré avec succès"));
+    Serial.println(F("[MODEM] ✅ Démarré avec succès\n"));
   }
   
   // Mode normal (pas d'USB) : Mode hybride avec détection changement
@@ -408,13 +407,20 @@ void loop()
       // Capturer mesure
       Measurement m = captureSensorSnapshot();
       
-      // RSSI (non-bloquant)
-      int8_t csq = modem.getSignalQuality();
-      m.rssi = csqToRssi(csq);
+      // RSSI (seulement si modem prêt)
+      if (modemReady) {
+        int8_t csq = modem.getSignalQuality();
+        m.rssi = csqToRssi(csq);
+      } else {
+        m.rssi = 0; // Pas de RSSI si modem pas prêt
+      }
       
-      // GPS (tentative rapide, non-bloquante)
+      // GPS (tentative rapide, non-bloquante, seulement si modem prêt)
       float latitude = 0.0, longitude = 0.0;
-      bool hasLocation = getDeviceLocationFast(&latitude, &longitude);
+      bool hasLocation = false;
+      if (modemReady) {
+        hasLocation = getDeviceLocationFast(&latitude, &longitude);
+      }
       
       // Envoyer via USB
       emitDebugMeasurement(m, ++usbSequence, 1000, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
