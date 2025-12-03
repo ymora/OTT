@@ -426,15 +426,42 @@ export default function DebugTab() {
       deviceSerial,
       allDevicesCount: allDevices.length,
       hasConnectedDevice: !!usbConnectedDevice,
-      hasVirtualDevice: !!usbVirtualDevice,
-      allDevicesICCIDs: allDevices.map(d => d.sim_iccid),
-      allDevicesSerials: allDevices.map(d => d.device_serial)
+      hasVirtualDevice: !!usbVirtualDevice
+    })
+    
+    // LOG DÉTAILLÉ pour debug
+    logger.log('📋 [SYNC] Contenu allDevices:', allDevices.map(d => ({
+      name: d.device_name,
+      iccid: d.sim_iccid,
+      serial: d.device_serial,
+      iccid_type: typeof d.sim_iccid,
+      serial_type: typeof d.device_serial
+    })))
+    
+    logger.log('🔍 [SYNC] Recherche de:', {
+      simIccid,
+      simIccid_type: typeof simIccid,
+      deviceSerial,
+      deviceSerial_type: typeof deviceSerial
     })
     
     // Chercher si le dispositif existe déjà en base
-    const existingDevice = allDevices.find(d =>
-      d.sim_iccid === simIccid || d.device_serial === deviceSerial
-    )
+    const existingDevice = allDevices.find(d => {
+      const iccidMatch = d.sim_iccid === simIccid
+      const serialMatch = d.device_serial === deviceSerial
+      
+      logger.log('🔍 [SYNC] Comparaison avec:', {
+        device: d.device_name,
+        db_iccid: d.sim_iccid,
+        usb_iccid: simIccid,
+        iccidMatch,
+        db_serial: d.device_serial,
+        usb_serial: deviceSerial,
+        serialMatch
+      })
+      
+      return iccidMatch || serialMatch
+    })
     
     logger.log('🔍 [SYNC] Résultat recherche:', {
       found: !!existingDevice,
