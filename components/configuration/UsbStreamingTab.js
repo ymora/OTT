@@ -1027,25 +1027,6 @@ export default function DebugTab() {
 
         {/* Indicateur de source des données et statut USB */}
         <div className="mb-4 space-y-2">
-          {dataSource && (usbDeviceInfo || dbDeviceData) && (
-            <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-semibold text-gray-700 dark:text-gray-300">Source des données:</span>
-                <span className={`px-2 py-0.5 rounded font-medium ${
-                  dataSource === 'usb' 
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                    : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                }`}>
-                  {dataSource === 'usb' ? '🔌 USB (temps réel)' : '📡 Base de données'}
-                </span>
-                {dataSource === 'usb' && usbStreamLastUpdate && (
-                  <span className="text-gray-500 dark:text-gray-400 ml-auto">
-                    Dernière mise à jour: {Math.floor((Date.now() - usbStreamLastUpdate) / 1000)}s
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
           
         </div>
 
