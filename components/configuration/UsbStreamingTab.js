@@ -15,7 +15,9 @@ import DeviceModal from '@/components/DeviceModal'
 export default function DebugTab() {
   const {
     usbConnectedDevice,
+    setUsbConnectedDevice,
     usbVirtualDevice,
+    setUsbVirtualDevice,
     usbDeviceInfo, // Données reçues du dispositif USB en temps réel (uniquement depuis le dispositif)
     isSupported,
     isConnected,
@@ -38,11 +40,23 @@ export default function DebugTab() {
   const { fetchWithAuth, API_URL, user } = useAuth()
   
   // Charger tous les dispositifs pour le tableau
-  const { data: devicesData, loading: devicesLoading, refetch: refetchDevices } = useApiData(
+  const { data: devicesData, loading: devicesLoading, refetch: refetchDevices, invalidateCache } = useApiData(
     ['/api.php/devices'],
     { requiresAuth: true, autoLoad: !!user }
   )
   const allDevices = devicesData?.devices?.devices || []
+  
+  // Fonction pour notifier les autres composants que les dispositifs ont changé
+  const notifyDevicesUpdated = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('ott-devices-updated'))
+      try {
+        window.localStorage.setItem('ott-devices-last-update', Date.now().toString())
+      } catch (err) {
+        // Ignorer les erreurs localStorage
+      }
+    }
+  }, [])
   
   // Charger les patients pour l'assignation
   const { data: patientsData, loading: patientsLoading } = useApiData(
