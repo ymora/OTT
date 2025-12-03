@@ -804,6 +804,62 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # RESUME
 # ===============================================================================
 
+# ===============================================================================
+# PHASE 16 : NETTOYAGE ET FICHIERS OBSOLÈTES
+# ===============================================================================
+Write-Section "[16/16] Nettoyage - Fichiers Obsoletes et Code a Nettoyer"
+
+# Fichiers MD suspects à la racine
+$rootMdFiles = Get-ChildItem -Path "." -Filter "*.md" | Where-Object { $_.Name -notmatch "README|SUIVI_TEMPS|FACTURATION" }
+if ($rootMdFiles.Count -gt 0) {
+    Write-Warn "$($rootMdFiles.Count) fichier(s) MD suspect(s) a la racine"
+    $auditResults.Warnings += "Fichiers MD suspects: " + ($rootMdFiles.Name -join ", ")
+} else {
+    Write-OK "Aucun fichier MD suspect a la racine"
+}
+
+# Fichiers backup
+$backupFiles = Get-ChildItem -Recurse -Include "*.backup","*.bak","*~" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch "node_modules" }
+if ($backupFiles.Count -gt 0) {
+    Write-Warn "$($backupFiles.Count) fichier(s) backup detecte(s)"
+    $auditResults.Warnings += "Fichiers backup: $($backupFiles.Count)"
+} else {
+    Write-OK "Aucun fichier backup"
+}
+
+# Répertoires vides
+$emptyDirs = Get-ChildItem -Recurse -Directory -ErrorAction SilentlyContinue | Where-Object { 
+    $_.FullName -notmatch "node_modules|\.git|_next" -and 
+    (Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue).Count -eq 0 
+}
+if ($emptyDirs.Count -gt 0) {
+    Write-Warn "$($emptyDirs.Count) repertoire(s) vide(s)"
+} else {
+    Write-OK "Aucun repertoire vide"
+}
+
+# TODO/FIXME dans le code
+$todoFiles = Select-String -Path "*.js","*.jsx","*.php","*.ts","*.tsx" -Pattern "TODO|FIXME|XXX|HACK" -ErrorAction SilentlyContinue | 
+    Where-Object { $_.Path -notmatch "node_modules|\.next|build" } | 
+    Group-Object Path
+if ($todoFiles.Count -gt 0) {
+    Write-Warn "$($todoFiles.Count) fichier(s) avec TODO/FIXME"
+    $auditResults.Recommendations += "Nettoyer les TODO/FIXME ($($todoFiles.Count) fichiers)"
+} else {
+    Write-OK "Aucun TODO/FIXME en attente"
+}
+
+# console.log oubliés (hors logger.js)
+$consoleLogs = Select-String -Path "*.js","*.jsx","*.ts","*.tsx" -Pattern "console\.(log|warn|error)" -ErrorAction SilentlyContinue | 
+    Where-Object { $_.Path -notmatch "node_modules|\.next|build|logger\.js|inject\.js" }
+$consoleCount = ($consoleLogs | Measure-Object).Count
+if ($consoleCount -gt 20) {
+    Write-Warn "$consoleCount console.log detectes (>20)"
+    $auditResults.Recommendations += "Remplacer console.log par logger"
+} else {
+    Write-OK "$consoleCount console.log (acceptable)"
+}
+
 Write-Host ""
 Write-Host "RESUME" -ForegroundColor Cyan
 Write-Host ("-" * 80) -ForegroundColor Gray
