@@ -17,7 +17,7 @@
  *   - Mode hybride : envoi au boot + envoi sur changement de flux d'air
  *   - Configuration via USB (prioritaire) ou OTA
  *   - TinyGSM A7670G : GPRS, HTTPS, GPS
- *   - Persistence : APN/JWT/ICCID/PIN/calibration en NVS
+ *   - Persistence : APN/ICCID/PIN/Serial/calibration en NVS
  *   - Logs : POST /devices/logs + tampon NVS si réseau coupé
  *   - Commandes OTA : SET_SLEEP_SECONDS, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
  *   - Deep sleep : économie d'énergie quand inactif
@@ -1356,8 +1356,7 @@ String buildPath(const char* path)
   return String(API_PREFIX) + path;
 }
 
-// Construire l'en-tête d'authentification HTTP avec le JWT
-// Le JWT (JSON Web Token) est utilisé pour authentifier le dispositif auprès de l'API
+// Construire l'en-tête d'authentification HTTP (pour compatibilité future)
 // ============================================================================
 // AUTHENTIFICATION API
 // ============================================================================
@@ -1380,9 +1379,8 @@ bool httpPost(const char* path, const String& body, String* response)
   String auth = buildAuthHeader();
   if (auth.length()) {
     http.sendHeader("Authorization", auth);
-  } else {
-    Serial.println(F("[HTTP] ⚠️ Pas de JWT - l'authentification peut échouer"));
   }
+  // Note: Pas de JWT requis - authentification par ICCID uniquement
   http.sendHeader("Content-Length", body.length());
   http.beginBody();
   http.print(body);
