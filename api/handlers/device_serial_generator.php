@@ -61,6 +61,12 @@ function generateNextOttSerial($pdo) {
  */
 function ottSerialExists($pdo, $serial) {
     try {
+        // Validation format avant requête (sécurité)
+        // Format: OTT-YY-NNN (ex: OTT-25-001)
+        if (!preg_match('/^OTT-\d{2}-\d{3}$/', $serial)) {
+            return true; // Format invalide = considéré comme existant
+        }
+        
         $stmt = $pdo->prepare("
             SELECT COUNT(*) 
             FROM devices 
@@ -70,6 +76,28 @@ function ottSerialExists($pdo, $serial) {
         return $stmt->fetchColumn() > 0;
     } catch (PDOException $e) {
         return false;
+    }
+}
+
+/**
+ * Trouve le premier numéro OTT disponible (en cas de limite atteinte)
+ */
+function findFirstAvailableOttSerial($pdo) {
+    try {
+        $currentYear = date('y');
+        
+        // Chercher un trou dans la séquence de l'année
+        for ($i = 1; $i <= 999; $i++) {
+            $serial = sprintf('OTT-%s-%03d', $currentYear, $i);
+            if (!ottSerialExists($pdo, $serial)) {
+                return $serial;
+            }
+        }
+        
+        // Tous pris (improbable) → fallback timestamp
+        return 'OTT-' . $currentYear . '-' . date('His');
+    } catch (Exception $e) {
+        return 'OTT-' . date('y') . '-' . date('His');
     }
 }
 
