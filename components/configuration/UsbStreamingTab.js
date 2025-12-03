@@ -512,7 +512,7 @@ export default function DebugTab() {
               logger.log('✅ [AUTO-CREATE] Dispositif créé en base avec succès:', data.device)
               
               // Recharger la liste des dispositifs
-              refetchDevices()
+              await refetchDevices()
               invalidateCache()
               
               // Définir comme dispositif connecté
@@ -520,7 +520,21 @@ export default function DebugTab() {
               setUsbVirtualDevice(null)
             }
           } else {
-            logger.error('❌ [AUTO-CREATE] Échec création:', await response.text())
+            const errorData = await response.json().catch(() => ({}))
+            logger.error('❌ [AUTO-CREATE] Échec création:', errorData)
+            
+            // Si le dispositif existe déjà (ICCID déjà utilisé), recharger quand même
+            if (errorData.error && errorData.error.includes('déjà utilisé')) {
+              logger.log('⚠️ [AUTO-CREATE] Dispositif existe déjà, rechargement forcé...')
+              await refetchDevices()
+              invalidateCache()
+              
+              // Attendre un peu que le rechargement se propage
+              setTimeout(() => {
+                // La synchronisation va se redéclencher et trouver le dispositif
+                logger.log('🔄 [AUTO-CREATE] Rechargement terminé, la synchronisation va reprendre')
+              }, 500)
+            }
           }
         } catch (err) {
           logger.error('❌ [AUTO-CREATE] Erreur:', err)
