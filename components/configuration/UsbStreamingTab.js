@@ -1300,18 +1300,17 @@ export default function DebugTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {/* AFFICHER D'ABORD LE DISPOSITIF VIRTUEL USB s'il existe et n'est pas déjà dans allDevices */}
+                    {/* AFFICHER LE DISPOSITIF VIRTUEL USB temporairement (pendant l'enregistrement) */}
                     {usbVirtualDevice && !allDevices.find(d => 
                       d.sim_iccid === usbVirtualDevice.sim_iccid || 
                       d.device_serial === usbVirtualDevice.device_serial
                     ) && (
-                      <tr key={usbVirtualDevice.id} className="border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
+                      <tr key={usbVirtualDevice.id} className="border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20 animate-pulse">
                         <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                           <div className="flex items-center gap-2">
-                            <span className="text-green-500 text-lg">🟢</span>
+                            <span className="text-blue-500 text-lg animate-spin">⏳</span>
                             <span className="font-medium">{usbVirtualDevice.device_name}</span>
-                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">USB Connecté</span>
-                            <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded">Non enregistré en base</span>
+                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">Enregistrement automatique...</span>
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
                             ICCID: {usbVirtualDevice.sim_iccid || 'N/A'}
@@ -1327,14 +1326,7 @@ export default function DebugTab() {
                         <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamMeasurements.length}</td>
                         <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">Temps réel</td>
                         <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
-                          <button
-                            onClick={() => {
-                              alert('Ce dispositif doit être enregistré en base de données.\nCréez-le via le bouton "+ Nouveau Dispositif" en utilisant ces informations:\nICCID: ' + usbVirtualDevice.sim_iccid + '\nSerial: ' + usbVirtualDevice.device_serial)
-                            }}
-                            className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                          >
-                            📝 Enregistrer
-                          </button>
+                          <span className="text-xs text-gray-500 italic">Auto...</span>
                         </td>
                       </tr>
                     )}
