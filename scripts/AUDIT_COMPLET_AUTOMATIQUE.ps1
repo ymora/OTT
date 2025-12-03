@@ -805,9 +805,46 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # ===============================================================================
 
 # ===============================================================================
-# PHASE 16 : NETTOYAGE ET FICHIERS OBSOLÈTES
+# PHASE 16 : ORGANISATION ET NETTOYAGE
 # ===============================================================================
-Write-Section "[16/16] Nettoyage - Fichiers Obsoletes et Code a Nettoyer"
+Write-Section "[16/16] Organisation Projet et Nettoyage"
+
+# Vérifier l'organisation des dossiers
+$expectedDirs = @("app", "components", "contexts", "hooks", "lib", "api", "sql", "scripts", "public")
+$actualDirs = Get-ChildItem -Path "." -Directory | Where-Object { $_.Name -notmatch "node_modules|\.git|\.next|docs|hardware|bin|bootstrap" } | Select-Object -ExpandProperty Name
+$missingDirs = $expectedDirs | Where-Object { $actualDirs -notcontains $_ }
+if ($missingDirs.Count -eq 0) {
+    Write-OK "Structure projet conforme (Next.js + API)"
+} else {
+    Write-Warn "Dossiers manquants: $($missingDirs -join ', ')"
+}
+
+# Fichiers de config à la racine (acceptable)
+$configFiles = Get-ChildItem -Path "." -Filter "*config*" | Measure-Object
+Write-Info "$($configFiles.Count) fichiers de configuration a la racine (normal)"
+
+# Vérifier les composants dans le bon dossier
+$componentsOutsideDir = Get-ChildItem -Path "." -Recurse -Filter "*.jsx" | Where-Object { 
+    $_.FullName -notmatch "components|app|node_modules|\.next" -and $_.Name -match "^[A-Z]"
+}
+if ($componentsOutsideDir.Count -gt 0) {
+    Write-Warn "Composants React en dehors de components/:"
+    $componentsOutsideDir | ForEach-Object { Write-Host "  - $($_.FullName -replace [regex]::Escape($rootPath), '')" -ForegroundColor Gray }
+} else {
+    Write-OK "Composants React bien organises"
+}
+
+# Vérifier les fichiers API dans le bon dossier
+$apiOutsideDir = Get-ChildItem -Path "." -Recurse -Filter "*.php" | Where-Object { 
+    $_.FullName -notmatch "api|vendor|node_modules|bootstrap" -and 
+    $_.Name -ne "api.php" -and $_.Name -ne "index.php" -and $_.Name -ne "router.php"
+}
+if ($apiOutsideDir.Count -gt 0) {
+    Write-Warn "Fichiers PHP mal places:"
+    $apiOutsideDir | ForEach-Object { Write-Host "  - $($_.FullName -replace [regex]::Escape($rootPath), '')" -ForegroundColor Gray }
+} else {
+    Write-OK "Fichiers PHP bien organises (api/ + bootstrap/)"
+}
 
 # Fichiers MD suspects à la racine
 $rootMdFiles = Get-ChildItem -Path "." -Filter "*.md" | Where-Object { $_.Name -notmatch "README|SUIVI_TEMPS|FACTURATION" }
