@@ -4,6 +4,7 @@
  * Extracted from api.php during refactoring
  */
 
+require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/device_serial_generator.php';
 
 function handleGetDevices() {
