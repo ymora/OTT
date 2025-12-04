@@ -1,0 +1,58 @@
+═══════════════════════════════════════════════════════════════
+ ⚠️ MIGRATION GPS OBLIGATOIRE - EXÉCUTION REQUISE
+═══════════════════════════════════════════════════════════════
+
+PROBLÈME ACTUEL
+---------------
+❌ Modal bloqué lors de la sauvegarde
+❌ Erreur: "Database error"
+❌ GPS ne fonctionne pas
+
+CAUSE
+-----
+La colonne 'gps_enabled' n'existe pas en BDD
+
+SOLUTION (30 secondes)
+----------------------
+
+1. Aller sur: https://dashboard.render.com
+
+2. Cliquer sur votre base PostgreSQL
+
+3. Cliquer sur "Connect" ou onglet "Shell"
+
+4. COPIER CETTE LIGNE (ci-dessous):
+
+   ALTER TABLE device_configurations ADD COLUMN IF NOT EXISTS gps_enabled BOOLEAN DEFAULT false;
+
+5. COLLER dans le shell Render
+
+6. Appuyer sur ENTRÉE
+
+7. ✅ C'EST FAIT !
+
+
+APRÈS L'EXÉCUTION
+------------------
+✅ GPS toggle fonctionne
+✅ Modal se ferme normalement
+✅ Logs bleus/verts confirmations
+✅ Tous paramètres configurables
+✅ 100% production-ready
+
+
+WORKAROUND TEMPORAIRE (si vous ne pouvez pas faire la migration maintenant)
+----------------------------------------------------------------------------
+Pour modifier un device SANS GPS:
+1. Éditer device
+2. NE PAS toucher le toggle GPS (laisser OFF)
+3. Modifier seulement: Sleep, Calibration, etc.
+4. Sauvegarder → Fonctionne ✅
+
+
+═══════════════════════════════════════════════════════════════
+Cette migration est la SEULE chose qui manque pour que tout
+fonctionne à 100%. Le code est prêt, il attend juste cette
+colonne en BDD !
+═══════════════════════════════════════════════════════════════
+
