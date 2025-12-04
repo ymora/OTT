@@ -2225,7 +2225,14 @@ function handleUpdateDeviceConfig($device_id) {
         $updates = [];
         $params = ['device_id' => $device_id];
         
-        foreach(['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients', 'gps_enabled'] as $field) {
+        // Vérifier si gps_enabled existe en BDD (compatibilité migration)
+        $hasGpsColumn = columnExists('device_configurations', 'gps_enabled');
+        $fieldsToUpdate = ['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients'];
+        if ($hasGpsColumn) {
+            $fieldsToUpdate[] = 'gps_enabled';
+        }
+        
+        foreach($fieldsToUpdate as $field) {
             if (array_key_exists($field, $input)) {
                 if ($input[$field] === null) {
                     // Permettre de mettre à NULL pour réinitialiser
@@ -2245,7 +2252,12 @@ function handleUpdateDeviceConfig($device_id) {
             
             // Créer une commande UPDATE_CONFIG pour envoyer la nouvelle config au firmware
             $configPayload = [];
-            foreach(['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients', 'gps_enabled'] as $field) {
+            $configFields = ['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients'];
+            if ($hasGpsColumn) {
+                $configFields[] = 'gps_enabled';
+            }
+            
+            foreach($configFields as $field) {
                 if (array_key_exists($field, $input) && $input[$field] !== null) {
                     $configPayload[$field] = $input[$field];
                 }
