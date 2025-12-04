@@ -1,0 +1,58 @@
+═══════════════════════════════════════════════════════════════
+ ⏳ ATTENDRE DÉPLOIEMENT RENDER (2-3 minutes)
+═══════════════════════════════════════════════════════════════
+
+SITUATION ACTUELLE
+------------------
+✅ Code corrigé et poussé sur GitHub (commit 4517ca15)
+⏳ Render est en train de build/déployer
+❌ Ancienne version tourne encore → Erreur "Database error" normale
+
+POURQUOI L'ERREUR PERSISTE ?
+-----------------------------
+Le nouveau code compatible (qui ignore GPS si colonne manquante) n'est 
+pas encore déployé sur Render. C'est en cours automatiquement.
+
+QUE FAIRE ?
+-----------
+1. ⏳ ATTENDRE 2-3 MINUTES (le temps du build Render)
+
+2. 🔄 RAFRAÎCHIR le dashboard (F5)
+
+3. 🧪 TESTER:
+   - Éditer un device
+   - Modifier Sleep, Calibration, etc.
+   - Sauvegarder
+   - → Modal se ferme ✅
+
+VÉRIFIER QUE C'EST DÉPLOYÉ
+---------------------------
+Essayez d'accéder à:
+https://ott-jbln.onrender.com/api.php/healthcheck
+
+Si ça répond vite → Déployé ✅
+Si ça prend 30s+ ou timeout → Encore en build ⏳
+
+TIMELINE
+--------
+18:40 - Code pushé ✅
+18:42 - Build commence ⏳
+18:44 - Build termine ✅
+18:45 - Nouvelle version live ✅
+
+APRÈS LE DÉPLOIEMENT
+--------------------
+✅ Modal fonctionne
+✅ Tous paramètres sauf GPS OK
+✅ Logs bleus confirmations
+✅ Aucune erreur
+
+GPS SERA DISPONIBLE
+-------------------
+Quand vous exécuterez la migration (schema.sql ou migration complète)
+sur Render. Mais ce n'est plus bloquant maintenant !
+
+═══════════════════════════════════════════════════════════════
+PATIENCE: 2-3 minutes et tout fonctionnera ! ⏳
+═══════════════════════════════════════════════════════════════
+

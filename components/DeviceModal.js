@@ -258,10 +258,9 @@ export default function DeviceModal({
       if (formData.calibration_coefficients && Array.isArray(formData.calibration_coefficients)) {
         configPayload.calibration_coefficients = formData.calibration_coefficients
       }
-      // GPS: Temporairement désactivé jusqu'à migration BDD
-      // if (formData.gps_enabled != null) {
-      //   configPayload.gps_enabled = formData.gps_enabled
-      // }
+      if (formData.gps_enabled != null) {
+        configPayload.gps_enabled = formData.gps_enabled
+      }
 
       if (editingItem) {
         // Modification
