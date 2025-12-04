@@ -15,10 +15,9 @@ if ($secret !== 'execute-migration-gps-2025') {
 }
 
 try {
-    // Connexion PostgreSQL
-    $dbUrl = getenv('DATABASE_URL') ?: 'postgresql://ott_data_user:lxNCXElZadbthGiOgT3cg2Y6JmMeMqUM@dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com/ott_data';
-    $pdo = new PDO($dbUrl);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    // Connexion PostgreSQL depuis bootstrap
+    require_once __DIR__ . '/../bootstrap/database.php';
+    global $pdo;
     
     echo json_encode(['status' => 'connected', 'message' => 'Connexion BDD OK']) . "\n";
     
