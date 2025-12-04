@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS users (
   role_id INT NOT NULL REFERENCES roles(id),
   is_active BOOLEAN DEFAULT TRUE,
   last_login TIMESTAMPTZ,
+  timezone VARCHAR(50) DEFAULT 'Europe/Paris',
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -71,6 +73,12 @@ CREATE TABLE IF NOT EXISTS patients (
   city VARCHAR(100),
   postal_code VARCHAR(10),
   notes TEXT,
+  date_of_birth DATE,
+  emergency_contact_name VARCHAR(200),
+  emergency_contact_phone VARCHAR(20),
+  medical_notes TEXT,
+  timezone VARCHAR(50) DEFAULT 'Europe/Paris',
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -83,16 +91,24 @@ CREATE TABLE IF NOT EXISTS devices (
   device_serial VARCHAR(50) UNIQUE,
   device_name VARCHAR(100),
   firmware_version VARCHAR(20),
-  status TEXT CHECK (status IN ('active','inactive','maintenance')) DEFAULT 'active',
+  status TEXT CHECK (status IN ('active','inactive')) DEFAULT 'active',
   patient_id INT REFERENCES patients(id) ON DELETE SET NULL,
   installation_date TIMESTAMPTZ,
   first_use_date TIMESTAMPTZ,
   last_seen TIMESTAMPTZ,
-  last_battery NUMERIC(5,2),
-  last_flowrate NUMERIC(5,2),
-  last_rssi INT,
+  last_battery FLOAT,
+  last_flowrate FLOAT,
+  last_rssi INTEGER,
   latitude NUMERIC(10,8),
   longitude NUMERIC(11,8),
+  modem_imei VARCHAR(15),
+  last_ip VARCHAR(45),
+  warranty_expiry DATE,
+  purchase_date DATE,
+  purchase_price NUMERIC(10,2),
+  imei VARCHAR(15) UNIQUE,
+  timezone VARCHAR(50) DEFAULT 'Europe/Paris',
+  deleted_at TIMESTAMPTZ,
   -- Min/Max values (mises à jour automatiquement par trigger)
   min_flowrate NUMERIC(5,2),
   max_flowrate NUMERIC(5,2),
@@ -201,10 +217,13 @@ CREATE TABLE IF NOT EXISTS device_configurations (
   firmware_version VARCHAR(20),
   target_firmware_version VARCHAR(20),
   firmware_url TEXT,
-  sleep_minutes INT DEFAULT 30,
-  measurement_duration_ms INT DEFAULT 100,
+  sleep_minutes INT,
+  measurement_duration_ms INT,
   send_every_n_wakeups INT DEFAULT 1,
   calibration_coefficients JSONB,
+  gps_enabled BOOLEAN DEFAULT false,
+  min_battery_pct INTEGER DEFAULT 20,
+  max_temp_celsius INTEGER DEFAULT 50,
   ota_pending BOOLEAN DEFAULT FALSE,
   ota_requested_at TIMESTAMPTZ,
   ota_completed_at TIMESTAMPTZ,
@@ -326,6 +345,19 @@ CREATE TABLE IF NOT EXISTS device_commands (
 );
 CREATE TRIGGER trg_device_commands_updated BEFORE UPDATE ON device_commands
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Table USB Logs pour streaming à distance
+CREATE TABLE IF NOT EXISTS usb_logs (
+    id SERIAL PRIMARY KEY,
+    device_identifier VARCHAR(255) NOT NULL,
+    device_name VARCHAR(255),
+    log_line TEXT NOT NULL,
+    log_source VARCHAR(50) DEFAULT 'device',
+    timestamp_ms BIGINT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_usb_logs_device_identifier ON usb_logs(device_identifier);
+CREATE INDEX IF NOT EXISTS idx_usb_logs_created_at ON usb_logs(created_at);
 
 CREATE OR REPLACE VIEW device_stats AS
 SELECT 
