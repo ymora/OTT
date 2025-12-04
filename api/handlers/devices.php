@@ -554,7 +554,7 @@ function handleDeleteDevice($device_id) {
             $pdo->prepare("DELETE FROM device_configurations WHERE device_id = :id")->execute(['id' => $device_id]);
             $pdo->prepare("DELETE FROM device_commands WHERE device_id = :id")->execute(['id' => $device_id]);
             $pdo->prepare("DELETE FROM alerts WHERE device_id = :id")->execute(['id' => $device_id]);
-            $pdo->prepare("DELETE FROM usb_logs WHERE device_iccid = :iccid OR device_serial = :serial")
+            $pdo->prepare("DELETE FROM usb_logs WHERE device_identifier = :iccid OR device_identifier = :serial")
                 ->execute(['iccid' => $device['sim_iccid'], 'serial' => $device['device_serial']]);
             
             // Supprimer le dispositif lui-même
