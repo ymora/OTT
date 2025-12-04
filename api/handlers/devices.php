@@ -519,13 +519,17 @@ function handleDeleteDevice($device_id) {
     global $pdo;
     requirePermission('devices.delete');
     
+    // Vérifier si c'est une suppression permanente (depuis archives)
+    $isPermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
+    
     try {
-        // Vérifier que le dispositif existe
+        // Chercher le dispositif (y compris les archivés si permanent)
+        $whereClause = $isPermanent ? "WHERE d.id = :id" : "WHERE d.id = :id AND d.deleted_at IS NULL";
         $stmt = $pdo->prepare("
             SELECT d.*, p.first_name, p.last_name
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
-            WHERE d.id = :id AND d.deleted_at IS NULL
+            $whereClause
         ");
         $stmt->execute(['id' => $device_id]);
         $device = $stmt->fetch();
@@ -536,9 +540,39 @@ function handleDeleteDevice($device_id) {
             return;
         }
         
-        // Si le dispositif est assigné, on le désassigne d'abord (soft delete)
+        // SUPPRESSION PERMANENTE (hard delete)
+        if ($isPermanent) {
+            // Vérifier que le device est déjà archivé
+            if (!$device['deleted_at']) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Le dispositif doit être archivé avant suppression permanente']);
+                return;
+            }
+            
+            // Supprimer les données associées dans l'ordre (contraintes FK)
+            $pdo->prepare("DELETE FROM device_events WHERE device_id = :id")->execute(['id' => $device_id]);
+            $pdo->prepare("DELETE FROM device_configurations WHERE device_id = :id")->execute(['id' => $device_id]);
+            $pdo->prepare("DELETE FROM device_commands WHERE device_id = :id")->execute(['id' => $device_id]);
+            $pdo->prepare("DELETE FROM alerts WHERE device_id = :id")->execute(['id' => $device_id]);
+            $pdo->prepare("DELETE FROM usb_logs WHERE device_iccid = :iccid OR device_serial = :serial")
+                ->execute(['iccid' => $device['sim_iccid'], 'serial' => $device['device_serial']]);
+            
+            // Supprimer le dispositif lui-même
+            $pdo->prepare("DELETE FROM devices WHERE id = :id")->execute(['id' => $device_id]);
+            
+            auditLog('device.permanently_deleted', 'device', $device_id, $device, null);
+            
+            echo json_encode([
+                'success' => true, 
+                'message' => 'Dispositif supprimé définitivement',
+                'permanent' => true
+            ]);
+            return;
+        }
+        
+        // SUPPRESSION NORMALE (soft delete)
+        // Si le dispositif est assigné, on le désassigne d'abord
         if ($device['patient_id']) {
-            // Désassigner le patient avant suppression
             $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE id = :id")
                 ->execute(['id' => $device_id]);
         }
@@ -547,12 +581,11 @@ function handleDeleteDevice($device_id) {
         $pdo->prepare("UPDATE devices SET deleted_at = NOW() WHERE id = :id")
             ->execute(['id' => $device_id]);
         
-        // Enregistrer dans l'audit
         auditLog('device.deleted', 'device', $device_id, $device, null);
         
         $message = $device['patient_id'] 
-            ? 'Dispositif supprimé avec succès (désassigné du patient ' . ($device['first_name'] ?? '') . ' ' . ($device['last_name'] ?? '') . ')'
-            : 'Dispositif supprimé avec succès';
+            ? 'Dispositif archivé avec succès (désassigné du patient ' . ($device['first_name'] ?? '') . ' ' . ($device['last_name'] ?? '') . ')'
+            : 'Dispositif archivé avec succès';
         
         echo json_encode([
             'success' => true, 
@@ -1997,6 +2030,8 @@ function handleDeletePatient($patient_id) {
     global $pdo;
     requirePermission('patients.edit');
 
+    $isPermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
+
     try {
         // Vérifier que le patient existe
         $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id");
@@ -2009,6 +2044,28 @@ function handleDeletePatient($patient_id) {
             return;
         }
 
+        // SUPPRESSION PERMANENTE
+        if ($isPermanent) {
+            if (!$patient['deleted_at']) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Le patient doit être archivé avant suppression permanente']);
+                return;
+            }
+            
+            // Supprimer les données associées
+            $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :id")->execute(['id' => $patient_id]);
+            $pdo->prepare("DELETE FROM patients WHERE id = :id")->execute(['id' => $patient_id]);
+            
+            auditLog('patient.permanently_deleted', 'patient', $patient_id, $patient, null);
+            echo json_encode([
+                'success' => true, 
+                'message' => 'Patient supprimé définitivement',
+                'permanent' => true
+            ]);
+            return;
+        }
+
+        // SUPPRESSION NORMALE (soft delete)
         // Vérifier s'il y a des dispositifs assignés et les désassigner automatiquement
         $deviceStmt = $pdo->prepare("SELECT id, sim_iccid, device_name FROM devices WHERE patient_id = :patient_id AND deleted_at IS NULL");
         $deviceStmt->execute(['patient_id' => $patient_id]);
@@ -2016,33 +2073,29 @@ function handleDeletePatient($patient_id) {
 
         $wasAssigned = false;
         if (count($assignedDevices) > 0) {
-            // Désassigner tous les dispositifs avant de supprimer le patient
             $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE patient_id = :patient_id")
                 ->execute(['patient_id' => $patient_id]);
             $wasAssigned = true;
             
-            // Logger la désassignation pour chaque dispositif
             foreach ($assignedDevices as $device) {
                 auditLog('device.unassigned_before_patient_delete', 'device', $device['id'], ['old_patient_id' => $patient_id], null);
             }
         }
 
-        // Supprimer les préférences de notifications associées
+        // Supprimer les préférences de notifications
         try {
             $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :patient_id")->execute(['patient_id' => $patient_id]);
         } catch(PDOException $e) {
-            // Ignorer si la table n'existe pas
             error_log('[handleDeletePatient] Could not delete notification preferences: ' . $e->getMessage());
         }
 
-        // Supprimer le patient
-        // Soft delete au lieu de DELETE réel
+        // Soft delete
         $pdo->prepare("UPDATE patients SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $patient_id]);
 
         auditLog('patient.deleted', 'patient', $patient_id, $patient, null);
         echo json_encode([
             'success' => true, 
-            'message' => 'Patient supprimé avec succès' . ($wasAssigned ? ' (dispositifs désassignés automatiquement)' : ''),
+            'message' => 'Patient archivé avec succès' . ($wasAssigned ? ' (dispositifs désassignés automatiquement)' : ''),
             'devices_unassigned' => $wasAssigned ? count($assignedDevices) : 0
         ]);
     } catch(PDOException $e) {

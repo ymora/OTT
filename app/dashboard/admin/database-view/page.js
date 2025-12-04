@@ -10,8 +10,10 @@ import { useApiData, useAutoRefresh } from '@/hooks'
 import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
+import SuccessMessage from '@/components/SuccessMessage'
 import StatsCard from '@/components/StatsCard'
 import AlertCard from '@/components/AlertCard'
+import ConfirmModal from '@/components/ConfirmModal'
 import logger from '@/lib/logger'
 
 export default function DatabaseViewPage() {
@@ -38,6 +40,12 @@ export default function DatabaseViewPage() {
   const [archivedPatients, setArchivedPatients] = useState([])
   const [archivedUsers, setArchivedUsers] = useState([])
   const [loadingArchived, setLoadingArchived] = useState(false)
+  
+  // États pour les modaux et messages
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: '', itemId: null, itemName: '' })
+  const [actionLoading, setActionLoading] = useState(false)
+  const [successMessage, setSuccessMessage] = useState(null)
+  const [errorMessage, setErrorMessage] = useState(null)
 
   // Charger toutes les données nécessaires
   const { data, loading, error, refetch } = useApiData(
@@ -780,7 +788,9 @@ export default function DatabaseViewPage() {
         
         if (response.ok) {
           const data = await response.json()
-          setter(data.data || [])
+          // L'API retourne data.devices, data.patients, ou data.users selon l'endpoint
+          const items = data.devices || data.patients || data.users || data.data || []
+          setter(items)
         }
       } catch (err) {
         logger.error('Erreur chargement archives:', err)
@@ -793,8 +803,8 @@ export default function DatabaseViewPage() {
   }, [activeTab, archiveSubTab, fetchWithAuth, API_URL])
   
   const restoreDevice = async (deviceId) => {
-    if (!confirm('Restaurer ce dispositif ?')) return
-    
+    setActionLoading(true)
+    setErrorMessage(null)
     try {
       const response = await fetchWithAuth(
         `${API_URL}/api.php/devices/${deviceId}`,
@@ -807,18 +817,56 @@ export default function DatabaseViewPage() {
       )
       
       if (response.ok) {
-        alert('Dispositif restauré avec succès !')
+        setSuccessMessage('✅ Dispositif restauré avec succès !')
         refetch()
         setArchivedDevices(prev => prev.filter(d => d.id !== deviceId))
+        setTimeout(() => setSuccessMessage(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setErrorMessage(errorData.error || 'Erreur lors de la restauration')
       }
     } catch (err) {
-      alert('Erreur lors de la restauration')
+      setErrorMessage('Erreur lors de la restauration')
+      logger.error('Erreur restauration device:', err)
+    } finally {
+      setActionLoading(false)
+      setConfirmModal({ isOpen: false, type: '', itemId: null, itemName: '' })
+    }
+  }
+  
+  const permanentlyDeleteDevice = async (deviceId) => {
+    setActionLoading(true)
+    setErrorMessage(null)
+    try {
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/devices/${deviceId}?permanent=true`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        setSuccessMessage('✅ Dispositif supprimé définitivement')
+        setArchivedDevices(prev => prev.filter(d => d.id !== deviceId))
+        setTimeout(() => setSuccessMessage(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setErrorMessage(errorData.error || 'Suppression impossible')
+      }
+    } catch (err) {
+      setErrorMessage('Erreur lors de la suppression : ' + err.message)
+      logger.error('Erreur suppression device:', err)
+    } finally {
+      setActionLoading(false)
+      setConfirmModal({ isOpen: false, type: '', itemId: null, itemName: '' })
     }
   }
   
   const restorePatient = async (patientId) => {
-    if (!confirm('Restaurer ce patient ?')) return
-    
+    setActionLoading(true)
+    setErrorMessage(null)
     try {
       const response = await fetchWithAuth(
         `${API_URL}/api.php/patients/${patientId}`,
@@ -831,18 +879,56 @@ export default function DatabaseViewPage() {
       )
       
       if (response.ok) {
-        alert('Patient restauré avec succès !')
+        setSuccessMessage('✅ Patient restauré avec succès !')
         refetch()
         setArchivedPatients(prev => prev.filter(p => p.id !== patientId))
+        setTimeout(() => setSuccessMessage(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setErrorMessage(errorData.error || 'Erreur lors de la restauration')
       }
     } catch (err) {
-      alert('Erreur lors de la restauration')
+      setErrorMessage('Erreur lors de la restauration')
+      logger.error('Erreur restauration patient:', err)
+    } finally {
+      setActionLoading(false)
+      setConfirmModal({ isOpen: false, type: '', itemId: null, itemName: '' })
+    }
+  }
+  
+  const permanentlyDeletePatient = async (patientId) => {
+    setActionLoading(true)
+    setErrorMessage(null)
+    try {
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/patients/${patientId}?permanent=true`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        setSuccessMessage('✅ Patient supprimé définitivement')
+        setArchivedPatients(prev => prev.filter(p => p.id !== patientId))
+        setTimeout(() => setSuccessMessage(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setErrorMessage(errorData.error || 'Suppression impossible')
+      }
+    } catch (err) {
+      setErrorMessage('Erreur lors de la suppression : ' + err.message)
+      logger.error('Erreur suppression patient:', err)
+    } finally {
+      setActionLoading(false)
+      setConfirmModal({ isOpen: false, type: '', itemId: null, itemName: '' })
     }
   }
   
   const restoreUser = async (userId) => {
-    if (!confirm('Restaurer cet utilisateur ?')) return
-    
+    setActionLoading(true)
+    setErrorMessage(null)
     try {
       const response = await fetchWithAuth(
         `${API_URL}/api.php/users/${userId}`,
@@ -855,12 +941,50 @@ export default function DatabaseViewPage() {
       )
       
       if (response.ok) {
-        alert('Utilisateur restauré avec succès !')
+        setSuccessMessage('✅ Utilisateur restauré avec succès !')
         refetch()
         setArchivedUsers(prev => prev.filter(u => u.id !== userId))
+        setTimeout(() => setSuccessMessage(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setErrorMessage(errorData.error || 'Erreur lors de la restauration')
       }
     } catch (err) {
-      alert('Erreur lors de la restauration')
+      setErrorMessage('Erreur lors de la restauration')
+      logger.error('Erreur restauration user:', err)
+    } finally {
+      setActionLoading(false)
+      setConfirmModal({ isOpen: false, type: '', itemId: null, itemName: '' })
+    }
+  }
+  
+  const permanentlyDeleteUser = async (userId) => {
+    setActionLoading(true)
+    setErrorMessage(null)
+    try {
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/users/${userId}?permanent=true`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        setSuccessMessage('✅ Utilisateur supprimé définitivement')
+        setArchivedUsers(prev => prev.filter(u => u.id !== userId))
+        setTimeout(() => setSuccessMessage(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setErrorMessage(errorData.error || 'Suppression impossible')
+      }
+    } catch (err) {
+      setErrorMessage('Erreur lors de la suppression : ' + err.message)
+      logger.error('Erreur suppression user:', err)
+    } finally {
+      setActionLoading(false)
+      setConfirmModal({ isOpen: false, type: '', itemId: null, itemName: '' })
     }
   }
 
@@ -900,12 +1024,34 @@ export default function DatabaseViewPage() {
                   <td className="py-3 px-4 text-sm">{device.device_serial || '-'}</td>
                   <td className="py-3 px-4 text-sm">{formatDate(device.deleted_at)}</td>
                   <td className="py-3 px-4">
-                    <button
-                      onClick={() => restoreDevice(device.id)}
-                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
-                    >
-                      ♻️ Restaurer
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setConfirmModal({ 
+                          isOpen: true, 
+                          type: 'restore-device', 
+                          itemId: device.id, 
+                          itemName: device.device_name || device.sim_iccid || `ID ${device.id}` 
+                        })}
+                        disabled={actionLoading}
+                        className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50"
+                        title="Restaurer ce dispositif"
+                      >
+                        ♻️ Restaurer
+                      </button>
+                      <button
+                        onClick={() => setConfirmModal({ 
+                          isOpen: true, 
+                          type: 'delete-device', 
+                          itemId: device.id, 
+                          itemName: device.device_name || device.sim_iccid || `ID ${device.id}` 
+                        })}
+                        disabled={actionLoading}
+                        className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                        title="Supprimer définitivement (irréversible)"
+                      >
+                        🗑️ Supprimer
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -952,12 +1098,34 @@ export default function DatabaseViewPage() {
                   <td className="py-3 px-4 text-sm">{patient.email || '-'}</td>
                   <td className="py-3 px-4 text-sm">{formatDate(patient.deleted_at)}</td>
                   <td className="py-3 px-4">
-                    <button
-                      onClick={() => restorePatient(patient.id)}
-                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
-                    >
-                      ♻️ Restaurer
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setConfirmModal({ 
+                          isOpen: true, 
+                          type: 'restore-patient', 
+                          itemId: patient.id, 
+                          itemName: `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || `ID ${patient.id}` 
+                        })}
+                        disabled={actionLoading}
+                        className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50"
+                        title="Restaurer ce patient"
+                      >
+                        ♻️ Restaurer
+                      </button>
+                      <button
+                        onClick={() => setConfirmModal({ 
+                          isOpen: true, 
+                          type: 'delete-patient', 
+                          itemId: patient.id, 
+                          itemName: `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || `ID ${patient.id}` 
+                        })}
+                        disabled={actionLoading}
+                        className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                        title="Supprimer définitivement (irréversible)"
+                      >
+                        🗑️ Supprimer
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -1004,12 +1172,34 @@ export default function DatabaseViewPage() {
                   <td className="py-3 px-4 text-sm">{user.role_name || '-'}</td>
                   <td className="py-3 px-4 text-sm">{formatDate(user.deleted_at)}</td>
                   <td className="py-3 px-4">
-                    <button
-                      onClick={() => restoreUser(user.id)}
-                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
-                    >
-                      ♻️ Restaurer
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setConfirmModal({ 
+                          isOpen: true, 
+                          type: 'restore-user', 
+                          itemId: user.id, 
+                          itemName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || `ID ${user.id}` 
+                        })}
+                        disabled={actionLoading}
+                        className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50"
+                        title="Restaurer cet utilisateur"
+                      >
+                        ♻️ Restaurer
+                      </button>
+                      <button
+                        onClick={() => setConfirmModal({ 
+                          isOpen: true, 
+                          type: 'delete-user', 
+                          itemId: user.id, 
+                          itemName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || `ID ${user.id}` 
+                        })}
+                        disabled={actionLoading}
+                        className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                        title="Supprimer définitivement (irréversible)"
+                      >
+                        🗑️ Supprimer
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -1169,6 +1359,61 @@ export default function DatabaseViewPage() {
     }
   }
 
+  // Gestionnaire de confirmation unifié
+  const handleConfirm = async () => {
+    const { type, itemId } = confirmModal
+    
+    switch (type) {
+      case 'restore-device':
+        await restoreDevice(itemId)
+        break
+      case 'delete-device':
+        await permanentlyDeleteDevice(itemId)
+        break
+      case 'restore-patient':
+        await restorePatient(itemId)
+        break
+      case 'delete-patient':
+        await permanentlyDeletePatient(itemId)
+        break
+      case 'restore-user':
+        await restoreUser(itemId)
+        break
+      case 'delete-user':
+        await permanentlyDeleteUser(itemId)
+        break
+      default:
+        break
+    }
+  }
+
+  // Configuration du modal selon le type
+  const getModalConfig = () => {
+    const { type, itemName } = confirmModal
+    
+    if (type.startsWith('restore-')) {
+      return {
+        title: 'Restaurer',
+        message: `Êtes-vous sûr de vouloir restaurer :\n\n"${itemName}" ?\n\nL'élément sera de nouveau actif.`,
+        confirmText: 'Restaurer',
+        variant: 'success'
+      }
+    }
+    
+    if (type.startsWith('delete-')) {
+      return {
+        title: '⚠️ Suppression Définitive',
+        message: `ATTENTION : Cette action est IRRÉVERSIBLE !\n\nVous allez supprimer définitivement :\n\n"${itemName}"\n\nToutes les données associées seront perdues :\n• Historique complet\n• Mesures et événements\n• Données liées\n\nÊtes-vous absolument certain ?`,
+        confirmText: 'Supprimer définitivement',
+        variant: 'danger'
+      }
+    }
+    
+    return { title: 'Confirmer', message: '', confirmText: 'OK', variant: 'info' }
+  }
+
+  const modalConfig = getModalConfig()
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -1176,6 +1421,20 @@ export default function DatabaseViewPage() {
           🗄️ Base de Données
         </h1>
       </div>
+
+      {/* Messages de succès/erreur */}
+      {successMessage && (
+        <SuccessMessage 
+          message={successMessage} 
+          onDismiss={() => setSuccessMessage(null)} 
+        />
+      )}
+      {errorMessage && (
+        <ErrorMessage 
+          error={errorMessage} 
+          onRetry={() => setErrorMessage(null)} 
+        />
+      )}
 
       {/* Onglets */}
       <div className="card">
@@ -1200,6 +1459,18 @@ export default function DatabaseViewPage() {
         <ErrorMessage error={error} onRetry={refetch} />
         {renderContent()}
       </div>
+
+      {/* Modal de confirmation */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, type: '', itemId: null, itemName: '' })}
+        onConfirm={handleConfirm}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        confirmText={modalConfig.confirmText}
+        variant={modalConfig.variant}
+        loading={actionLoading}
+      />
     </div>
   )
 }
