@@ -33,7 +33,10 @@ export default function DatabaseViewPage() {
     setUpdateDeviceFirmwareCallback
   } = useUsb()
   const [activeTab, setActiveTab] = useState('users')
+  const [archiveSubTab, setArchiveSubTab] = useState('devices') // Sous-onglet dans Archives
   const [archivedDevices, setArchivedDevices] = useState([])
+  const [archivedPatients, setArchivedPatients] = useState([])
+  const [archivedUsers, setArchivedUsers] = useState([])
   const [loadingArchived, setLoadingArchived] = useState(false)
 
   // Charger toutes les données nécessaires
@@ -288,13 +291,13 @@ export default function DatabaseViewPage() {
 
   const tabs = [
     { id: 'users', label: '👥 Utilisateurs', count: stats.totalUsers },
-    { id: 'devices', label: '📱 Dispositifs Actifs', count: stats.totalDevices },
-    { id: 'archived', label: '🗄️ Dispositifs Archivés', count: 0 },
     { id: 'patients', label: '🏥 Patients', count: stats.totalPatients },
+    { id: 'devices', label: '📱 Dispositifs', count: stats.totalDevices },
     { id: 'roles', label: '🔐 Rôles & Permissions', count: roles.length },
     { id: 'alerts', label: '⚠️ Alertes', count: stats.totalAlerts },
     { id: 'firmwares', label: '💾 Firmwares', count: stats.totalFirmwares },
     { id: 'usb_logs', label: '🔌 Logs USB', count: 0 },
+    { id: 'archives', label: '🗄️ Archives', count: 0 },
     { id: 'audit', label: '📜 Historique Actions', count: stats.totalAuditLogs }
   ]
 
@@ -741,35 +744,53 @@ export default function DatabaseViewPage() {
     </div>
   )
 
-  // Charger les dispositifs archivés quand on affiche l'onglet
+  // Charger les archives selon le sous-onglet actif
   useEffect(() => {
-    const loadArchived = async () => {
-      if (activeTab !== 'archived') return
+    const loadArchives = async () => {
+      if (activeTab !== 'archives') return
       
       setLoadingArchived(true)
       try {
+        let endpoint = ''
+        let setter = null
+        
+        switch (archiveSubTab) {
+          case 'devices':
+            endpoint = `${API_URL}/api.php/devices?include_deleted=true`
+            setter = setArchivedDevices
+            break
+          case 'patients':
+            endpoint = `${API_URL}/api.php/patients?include_deleted=true`
+            setter = setArchivedPatients
+            break
+          case 'users':
+            endpoint = `${API_URL}/api.php/users?include_deleted=true`
+            setter = setArchivedUsers
+            break
+          default:
+            setLoadingArchived(false)
+            return
+        }
+        
         const response = await fetchWithAuth(
-          `${API_URL}/api.php/admin/database-view`,
+          endpoint,
           { method: 'GET' },
           { requiresAuth: true }
         )
         
         if (response.ok) {
           const data = await response.json()
-          const archived = data.data?.tables
-            ?.find(t => t.name === 'devices')
-            ?.sample?.filter(d => d.deleted_at !== null) || []
-          setArchivedDevices(archived)
+          setter(data.data || [])
         }
       } catch (err) {
-        logger.error('Erreur chargement dispositifs archivés:', err)
+        logger.error('Erreur chargement archives:', err)
       } finally {
         setLoadingArchived(false)
       }
     }
     
-    loadArchived()
-  }, [activeTab, fetchWithAuth, API_URL])
+    loadArchives()
+  }, [activeTab, archiveSubTab, fetchWithAuth, API_URL])
   
   const restoreDevice = async (deviceId) => {
     if (!confirm('Restaurer ce dispositif ?')) return
@@ -794,65 +815,234 @@ export default function DatabaseViewPage() {
       alert('Erreur lors de la restauration')
     }
   }
+  
+  const restorePatient = async (patientId) => {
+    if (!confirm('Restaurer ce patient ?')) return
+    
+    try {
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/patients/${patientId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleted_at: null })
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        alert('Patient restauré avec succès !')
+        refetch()
+        setArchivedPatients(prev => prev.filter(p => p.id !== patientId))
+      }
+    } catch (err) {
+      alert('Erreur lors de la restauration')
+    }
+  }
+  
+  const restoreUser = async (userId) => {
+    if (!confirm('Restaurer cet utilisateur ?')) return
+    
+    try {
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/users/${userId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleted_at: null })
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        alert('Utilisateur restauré avec succès !')
+        refetch()
+        setArchivedUsers(prev => prev.filter(u => u.id !== userId))
+      }
+    } catch (err) {
+      alert('Erreur lors de la restauration')
+    }
+  }
 
   const renderArchivedDevicesTable = () => {
     return (
-      <div className="space-y-4">
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-          <p className="text-sm text-yellow-800 dark:text-yellow-200">
-            🗄️ Ces dispositifs ont été supprimés (soft delete) mais restent en base pour la traçabilité médicale.
-          </p>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-3 px-4">ID</th>
-                <th className="text-left py-3 px-4">Nom</th>
-                <th className="text-left py-3 px-4">ICCID</th>
-                <th className="text-left py-3 px-4">Serial</th>
-                <th className="text-left py-3 px-4">Supprimé le</th>
-                <th className="text-left py-3 px-4">Actions</th>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className="text-left py-3 px-4">ID</th>
+              <th className="text-left py-3 px-4">Nom</th>
+              <th className="text-left py-3 px-4">ICCID</th>
+              <th className="text-left py-3 px-4">Serial</th>
+              <th className="text-left py-3 px-4">Archivé le</th>
+              <th className="text-left py-3 px-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loadingArchived ? (
+              <tr>
+                <td colSpan="6" className="py-8 text-center">
+                  <LoadingSpinner size="sm" />
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {loadingArchived ? (
-                <tr>
-                  <td colSpan="6" className="py-8 text-center">
-                    <LoadingSpinner size="sm" />
+            ) : archivedDevices.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="py-8 text-center text-gray-500">
+                  ✅ Aucun dispositif archivé
+                </td>
+              </tr>
+            ) : (
+              archivedDevices.map((device) => (
+                <tr key={device.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="py-3 px-4">{device.id}</td>
+                  <td className="py-3 px-4 font-medium">{device.device_name || '-'}</td>
+                  <td className="py-3 px-4 font-mono text-sm">{device.sim_iccid || '-'}</td>
+                  <td className="py-3 px-4 text-sm">{device.device_serial || '-'}</td>
+                  <td className="py-3 px-4 text-sm">{formatDate(device.deleted_at)}</td>
+                  <td className="py-3 px-4">
+                    <button
+                      onClick={() => restoreDevice(device.id)}
+                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                    >
+                      ♻️ Restaurer
+                    </button>
                   </td>
                 </tr>
-              ) : archivedDevices.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="py-8 text-center text-gray-500">
-                    ✅ Aucun dispositif archivé
-                  </td>
-                </tr>
-              ) : (
-                archivedDevices.map((device) => (
-                  <tr key={device.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="py-3 px-4">{device.id}</td>
-                    <td className="py-3 px-4 font-medium">{device.device_name || '-'}</td>
-                    <td className="py-3 px-4 font-mono text-sm">{device.sim_iccid || '-'}</td>
-                    <td className="py-3 px-4 text-sm">{device.device_serial || '-'}</td>
-                    <td className="py-3 px-4 text-sm">{formatDate(device.deleted_at)}</td>
-                    <td className="py-3 px-4">
-                      <button
-                        onClick={() => restoreDevice(device.id)}
-                        className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
-                      >
-                        ♻️ Restaurer
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     )
+  }
+  
+  const renderArchivedPatientsTable = () => {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className="text-left py-3 px-4">ID</th>
+              <th className="text-left py-3 px-4">Nom</th>
+              <th className="text-left py-3 px-4">Prénom</th>
+              <th className="text-left py-3 px-4">Email</th>
+              <th className="text-left py-3 px-4">Archivé le</th>
+              <th className="text-left py-3 px-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loadingArchived ? (
+              <tr>
+                <td colSpan="6" className="py-8 text-center">
+                  <LoadingSpinner size="sm" />
+                </td>
+              </tr>
+            ) : archivedPatients.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="py-8 text-center text-gray-500">
+                  ✅ Aucun patient archivé
+                </td>
+              </tr>
+            ) : (
+              archivedPatients.map((patient) => (
+                <tr key={patient.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="py-3 px-4">{patient.id}</td>
+                  <td className="py-3 px-4 font-medium">{patient.last_name || '-'}</td>
+                  <td className="py-3 px-4">{patient.first_name || '-'}</td>
+                  <td className="py-3 px-4 text-sm">{patient.email || '-'}</td>
+                  <td className="py-3 px-4 text-sm">{formatDate(patient.deleted_at)}</td>
+                  <td className="py-3 px-4">
+                    <button
+                      onClick={() => restorePatient(patient.id)}
+                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                    >
+                      ♻️ Restaurer
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+  
+  const renderArchivedUsersTable = () => {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className="text-left py-3 px-4">ID</th>
+              <th className="text-left py-3 px-4">Nom</th>
+              <th className="text-left py-3 px-4">Email</th>
+              <th className="text-left py-3 px-4">Rôle</th>
+              <th className="text-left py-3 px-4">Archivé le</th>
+              <th className="text-left py-3 px-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loadingArchived ? (
+              <tr>
+                <td colSpan="6" className="py-8 text-center">
+                  <LoadingSpinner size="sm" />
+                </td>
+              </tr>
+            ) : archivedUsers.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="py-8 text-center text-gray-500">
+                  ✅ Aucun utilisateur archivé
+                </td>
+              </tr>
+            ) : (
+              archivedUsers.map((user) => (
+                <tr key={user.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="py-3 px-4">{user.id}</td>
+                  <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
+                  <td className="py-3 px-4 text-sm">{user.email}</td>
+                  <td className="py-3 px-4 text-sm">{user.role_name || '-'}</td>
+                  <td className="py-3 px-4 text-sm">{formatDate(user.deleted_at)}</td>
+                  <td className="py-3 px-4">
+                    <button
+                      onClick={() => restoreUser(user.id)}
+                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                    >
+                      ♻️ Restaurer
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+  
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'users':
+        return renderUsersTable()
+      case 'devices':
+        return renderDevicesTable()
+      case 'patients':
+        return renderPatientsTable()
+      case 'roles':
+        return renderRolesTable()
+      case 'alerts':
+        return renderAlertsTable()
+      case 'firmwares':
+        return renderFirmwaresTable()
+      case 'usb_logs':
+        return renderUsbLogsTable()
+      case 'archives':
+        return renderArchivesTab()
+      case 'audit':
+        return renderAuditTable()
+      default:
+        return renderUsersTable()
+    }
   }
 
   const renderAuditTable = () => (
@@ -938,6 +1128,47 @@ export default function DatabaseViewPage() {
     </div>
   )
 
+  // Rendu onglet Archives unifié avec sous-sections
+  const renderArchivesTab = () => {
+    const archiveSubTabs = [
+      { id: 'devices', label: '📱 Dispositifs', count: archivedDevices.length },
+      { id: 'patients', label: '🏥 Patients', count: archivedPatients.length },
+      { id: 'users', label: '👥 Utilisateurs', count: archivedUsers.length }
+    ]
+    
+    return (
+      <div className="space-y-4">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            🗄️ Les éléments archivés sont conservés pour la traçabilité médicale et légale. Vous pouvez les restaurer à tout moment.
+          </p>
+        </div>
+        
+        {/* Sous-onglets */}
+        <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+          {archiveSubTabs.map(subTab => (
+            <button
+              key={subTab.id}
+              onClick={() => setArchiveSubTab(subTab.id)}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+                archiveSubTab === subTab.id
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {subTab.label} {subTab.count > 0 && <span className="ml-1 text-xs opacity-75">({subTab.count})</span>}
+            </button>
+          ))}
+        </div>
+        
+        {/* Contenu selon sous-onglet */}
+        {archiveSubTab === 'devices' && renderArchivedDevicesTable()}
+        {archiveSubTab === 'patients' && renderArchivedPatientsTable()}
+        {archiveSubTab === 'users' && renderArchivedUsersTable()}
+      </div>
+    )
+  }
+  
   const renderContent = () => {
     switch (activeTab) {
       case 'users':
@@ -954,8 +1185,8 @@ export default function DatabaseViewPage() {
         return renderFirmwaresTable()
       case 'usb_logs':
         return renderUsbLogsTable()
-      case 'archived':
-        return renderArchivedDevicesTable()
+      case 'archives':
+        return renderArchivesTab()
       case 'audit':
         return renderAuditTable()
       default:

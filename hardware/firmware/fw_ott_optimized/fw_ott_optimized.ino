@@ -1689,6 +1689,15 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     if (payloadDoc.containsKey("modem_max_reboots")) {
       modemMaxReboots = std::max<uint8_t>(static_cast<uint8_t>(1), payloadDoc["modem_max_reboots"].as<uint8_t>());
     }
+    if (payloadDoc.containsKey("gps_enabled")) {
+      bool newGpsState = payloadDoc["gps_enabled"].as<bool>();
+      if (newGpsState != gpsEnabled) {
+        gpsEnabled = newGpsState;
+        Serial.printf("✅ [CMD] GPS changé: %s → %s\n", 
+                      gpsEnabled ? "OFF" : "ON", 
+                      gpsEnabled ? "ON" : "OFF");
+      }
+    }
     if (payloadDoc.containsKey("ota_primary_url")) {
       otaPrimaryUrl = payloadDoc["ota_primary_url"].as<String>();
     }
@@ -1699,6 +1708,12 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       otaExpectedMd5 = payloadDoc["ota_md5"].as<String>();
     }
     saveConfig();
+    
+    // Afficher un résumé de ce qui a été modifié
+    Serial.println("✅ [CMD] Configuration appliquée et sauvegardée en NVS");
+    Serial.printf("    • Serial: %s | ICCID: %s\n", DEVICE_SERIAL.c_str(), DEVICE_ICCID.substring(0,10).c_str());
+    Serial.printf("    • Sleep: %d min | GPS: %s\n", configuredSleepMinutes, gpsEnabled ? "ON" : "OFF");
+    
     acknowledgeCommand(cmd, true, "config updated");
     sendLog("INFO", "Configuration mise à jour à distance", "commands");
     stopModem();
@@ -1796,6 +1811,7 @@ void loadConfig()
   airflowPasses = prefs.getUShort("flow_passes", airflowPasses);
   airflowSamplesPerPass = prefs.getUShort("flow_samples", airflowSamplesPerPass);
   airflowSampleDelayMs = prefs.getUShort("flow_delay", airflowSampleDelayMs);
+  gpsEnabled = prefs.getBool("gps_enabled", false);
   watchdogTimeoutSeconds = prefs.getUInt("wdt_sec", watchdogTimeoutSeconds);
   modemBootTimeoutMs = prefs.getUInt("mdm_boot_ms", modemBootTimeoutMs);
   simReadyTimeoutMs = prefs.getUInt("sim_ready_ms", simReadyTimeoutMs);
@@ -1851,6 +1867,7 @@ void saveConfig()
   prefs.putUShort("flow_passes", airflowPasses);
   prefs.putUShort("flow_samples", airflowSamplesPerPass);
   prefs.putUShort("flow_delay", airflowSampleDelayMs);
+  prefs.putBool("gps_enabled", gpsEnabled);
   prefs.putUInt("wdt_sec", watchdogTimeoutSeconds);
   prefs.putUInt("mdm_boot_ms", modemBootTimeoutMs);
   prefs.putUInt("sim_ready_ms", simReadyTimeoutMs);

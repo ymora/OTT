@@ -124,6 +124,50 @@ export default function DebugTab() {
     }
   }, [user, fetchWithAuth, API_URL])
   
+  // AUTO-SÉLECTION du device avec badge ● LIVE pour admin distant
+  useEffect(() => {
+    if (user?.role_name !== 'admin' || isConnected || usbVirtualDevice || allDevices.length === 0) {
+      return
+    }
+    
+    // Vérifier quel device a des logs USB récents (< 30s = LIVE streaming)
+    const checkLiveDevices = async () => {
+      try {
+        // Chercher parmi tous les devices celui qui a des logs USB très récents
+        const thirtySecondsAgo = Date.now() - 30000
+        
+        for (const device of allDevices) {
+          const deviceId = device.sim_iccid || device.device_serial || device.id
+          
+          // Vérifier s'il y a des logs USB récents pour ce device
+          const response = await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/usb-logs/${encodeURIComponent(deviceId)}?limit=1`,
+            {},
+            { requiresAuth: true }
+          )
+          
+          if (response.success && response.logs && response.logs.length > 0) {
+            const lastLog = response.logs[0]
+            const lastLogTime = new Date(lastLog.created_at).getTime()
+            
+            // Si le dernier log a moins de 30s = device est LIVE (USB connecté ailleurs)
+            if (lastLogTime > thirtySecondsAgo) {
+              logger.log(`🔴 [AUTO-SELECT] Device LIVE détecté: ${device.device_name} (logs < 30s)`)
+              setUsbVirtualDevice({ ...device, isVirtual: true })
+              break // On prend le premier trouvé
+            }
+          }
+        }
+      } catch (err) {
+        logger.debug('Erreur détection device LIVE:', err)
+      }
+    }
+    
+    checkLiveDevices()
+  }, [user, isConnected, usbVirtualDevice, allDevices, setUsbVirtualDevice, fetchWithAuth, API_URL])
+  
   // Déterminer si on doit utiliser les logs distants (admin sans USB local)
   const currentDevice = usbConnectedDevice || usbVirtualDevice
   const shouldUseRemoteLogs = useMemo(() => {
@@ -1181,6 +1225,7 @@ export default function DebugTab() {
         API_URL={API_URL}
         patients={allPatients}
         allDevices={allDevices}
+        appendLog={appendUsbStreamLog}
       />
       
       {/* Modal de confirmation de suppression */}

@@ -126,13 +126,19 @@ function handleGetUsers() {
     global $pdo;
     requirePermission('users.view');
     
+    // Paramètre pour inclure les utilisateurs archivés (soft-deleted)
+    $includeDeleted = isset($_GET['include_deleted']) && $_GET['include_deleted'] === 'true';
+    
     // Pagination
     $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     try {
-        // Compter le total (exclure soft delete)
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL");
+        // Condition WHERE selon le paramètre include_deleted
+        $whereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
+        
+        // Compter le total
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE $whereClause");
         $countStmt->execute();
         $total = $countStmt->fetchColumn();
         
@@ -160,13 +166,13 @@ function handleGetUsers() {
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN permissions p ON rp.permission_id = p.id
                 LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
-                WHERE u.deleted_at IS NULL
+                WHERE u.$whereClause
                 GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
-                         u.is_active, u.last_login, u.created_at, r.name, r.description,
+                         u.is_active, u.last_login, u.created_at, u.deleted_at, r.name, r.description,
                          unp.email_enabled, unp.sms_enabled, unp.push_enabled,
                          unp.notify_battery_low, unp.notify_device_offline, 
                          unp.notify_abnormal_flow, unp.notify_new_patient
-                ORDER BY u.created_at DESC
+                ORDER BY " . ($includeDeleted ? "u.deleted_at DESC" : "u.created_at DESC") . "
                 LIMIT :limit OFFSET :offset
             ");
         } else {
@@ -190,9 +196,9 @@ function handleGetUsers() {
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN permissions p ON rp.permission_id = p.id
                 LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
-                WHERE u.deleted_at IS NULL
+                WHERE u.$whereClause
                 GROUP BY u.id, u.email, u.first_name, u.last_name, u.password_hash,
-                         u.is_active, u.last_login, u.created_at, r.name, r.description,
+                         u.is_active, u.last_login, u.created_at, u.deleted_at, r.name, r.description,
                          unp.email_enabled, unp.sms_enabled, unp.push_enabled,
                          unp.notify_battery_low, unp.notify_device_offline, 
                          unp.notify_abnormal_flow, unp.notify_new_patient

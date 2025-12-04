@@ -39,6 +39,7 @@ function Accordion({ title, children, defaultOpen = false }) {
  * @param {string} props.API_URL - URL de l'API
  * @param {Array} props.patients - Liste des patients disponibles
  * @param {Array} props.allDevices - Liste de tous les dispositifs (pour vérifier les doublons)
+ * @param {Function} props.appendLog - Fonction pour ajouter un log au terminal USB (optionnel)
  */
 export default function DeviceModal({
   isOpen,
@@ -48,7 +49,8 @@ export default function DeviceModal({
   fetchWithAuth,
   API_URL,
   patients = [],
-  allDevices = []
+  allDevices = [],
+  appendLog = null
 }) {
   const [formData, setFormData] = useState({
     device_name: '',
@@ -60,7 +62,8 @@ export default function DeviceModal({
     sleep_minutes: null,
     measurement_duration_ms: null,
     send_every_n_wakeups: 1,
-    calibration_coefficients: [0, 1, 0]
+    calibration_coefficients: [0, 1, 0],
+    gps_enabled: false
   })
   const [formErrors, setFormErrors] = useState({})
   const [formError, setFormError] = useState(null)
@@ -145,7 +148,8 @@ export default function DeviceModal({
           sleep_minutes: data.config.sleep_minutes || null,
           measurement_duration_ms: data.config.measurement_duration_ms || null,
           send_every_n_wakeups: data.config.send_every_n_wakeups || 1,
-          calibration_coefficients: data.config.calibration_coefficients || [0, 1, 0]
+          calibration_coefficients: data.config.calibration_coefficients || [0, 1, 0],
+          gps_enabled: data.config.gps_enabled || false
         }))
       }
     } catch (err) {
@@ -254,6 +258,9 @@ export default function DeviceModal({
       if (formData.calibration_coefficients && Array.isArray(formData.calibration_coefficients)) {
         configPayload.calibration_coefficients = formData.calibration_coefficients
       }
+      if (formData.gps_enabled != null) {
+        configPayload.gps_enabled = formData.gps_enabled
+      }
 
       if (editingItem) {
         // Modification
@@ -281,6 +288,21 @@ export default function DeviceModal({
               },
               { requiresAuth: true }
             )
+            
+            // Afficher un log bleu dans le terminal pour confirmer
+            if (appendLog) {
+              const configSummary = Object.entries(configPayload)
+                .map(([key, val]) => {
+                  if (key === 'gps_enabled') return `GPS: ${val ? 'ON' : 'OFF'}`
+                  if (key === 'sleep_minutes') return `Sleep: ${val}min`
+                  if (key === 'measurement_duration_ms') return `Mesure: ${val}ms`
+                  if (key === 'calibration_coefficients') return `Cal: [${val.join(',')}]`
+                  return `${key}: ${val}`
+                })
+                .join(', ')
+              
+              appendLog(`📤 [CONFIG] UPDATE_CONFIG → ${configSummary}`, 'dashboard')
+            }
           } catch (configErr) {
             logger.warn('⚠️ Erreur mise à jour configuration:', configErr)
             // Ne pas bloquer si la config échoue
@@ -445,11 +467,12 @@ export default function DeviceModal({
                 onChange={handleInputChange}
                 className="input w-full"
               >
-                <option value="inactive">Inactif</option>
-                <option value="active">Actif</option>
-                <option value="usb_connected">Connecté USB</option>
-                <option value="maintenance">Maintenance</option>
+                <option value="inactive">⏸️ Inactif</option>
+                <option value="active">✅ Actif</option>
               </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Le statut USB est détecté automatiquement lors de la connexion
+              </p>
             </div>
           </div>
 
@@ -569,6 +592,31 @@ export default function DeviceModal({
                     min="1"
                   />
                 </div>
+              </div>
+
+              {/* GPS Toggle */}
+              <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-gray-50 dark:bg-slate-800/50">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📍</span>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      GPS
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {formData.gps_enabled ? '✅ Géolocalisation active' : '⚠️ OFF (économie batterie)'}
+                    </p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="gps_enabled"
+                    checked={formData.gps_enabled || false}
+                    onChange={(e) => setFormData(prev => ({ ...prev, gps_enabled: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
               </div>
 
               {/* Deuxième ligne : Envoyer toutes les N réveils */}

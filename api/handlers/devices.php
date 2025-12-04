@@ -13,6 +13,9 @@ function handleGetDevices() {
     // OU avec auth JWT pour dashboard
     $user = getCurrentUser();
     
+    // Paramètre pour inclure les devices archivés (soft-deleted)
+    $includeDeleted = isset($_GET['include_deleted']) && $_GET['include_deleted'] === 'true';
+    
     // Pagination
     $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
@@ -27,7 +30,8 @@ function handleGetDevices() {
     $cacheKey = SimpleCache::key('devices', [
         'limit' => $limit,
         'offset' => $offset,
-        'user_id' => $user ? $user['id'] : null
+        'include_deleted' => $includeDeleted,
+        'user_id' => $user ? $user ['id'] : null
     ]);
     
     // Essayer de récupérer depuis le cache
@@ -38,11 +42,14 @@ function handleGetDevices() {
     }
     
     try {
+        // Condition WHERE selon le paramètre include_deleted
+        $whereClause = $includeDeleted ? "d.deleted_at IS NOT NULL" : "d.deleted_at IS NULL";
+        
         // Compter le total
         $countStmt = $pdo->prepare("
             SELECT COUNT(*) 
             FROM devices d
-            WHERE d.deleted_at IS NULL
+            WHERE $whereClause
         ");
         $countStmt->execute();
         $total = intval($countStmt->fetchColumn());
@@ -66,6 +73,7 @@ function handleGetDevices() {
                 d.longitude,
                 d.created_at,
                 d.updated_at,
+                d.deleted_at,
                 p.first_name, 
                 p.last_name,
                 COALESCE(d.firmware_version, dc.firmware_version) as firmware_version,
@@ -73,8 +81,8 @@ function handleGetDevices() {
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
-            WHERE d.deleted_at IS NULL
-            ORDER BY d.last_seen DESC NULLS LAST, d.created_at DESC
+            WHERE $whereClause
+            ORDER BY " . ($includeDeleted ? "d.deleted_at DESC" : "d.last_seen DESC NULLS LAST, d.created_at DESC") . "
             LIMIT :limit OFFSET :offset
         ");
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -1774,6 +1782,9 @@ function handleGetAlerts() {
 function handleGetPatients() {
     global $pdo;
     
+    // Paramètre pour inclure les patients archivés (soft-deleted)
+    $includeDeleted = isset($_GET['include_deleted']) && $_GET['include_deleted'] === 'true';
+    
     // Pagination
     $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
@@ -1782,8 +1793,11 @@ function handleGetPatients() {
         // Vérifier si la table existe (utilise helper)
         $hasNotificationsTable = tableExists('patient_notifications_preferences');
         
-        // Compter le total AVANT la requête principale (exclure soft delete)
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE deleted_at IS NULL");
+        // Condition WHERE selon le paramètre include_deleted
+        $whereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
+        
+        // Compter le total AVANT la requête principale
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE $whereClause");
         $countStmt->execute();
         $total = intval($countStmt->fetchColumn());
         
@@ -1807,8 +1821,8 @@ function handleGetPatients() {
                        COALESCE(pnp.notify_alert_critical, FALSE) as notify_alert_critical
                 FROM patients p
                 LEFT JOIN patient_notifications_preferences pnp ON p.id = pnp.patient_id
-                WHERE p.deleted_at IS NULL
-                ORDER BY p.last_name, p.first_name
+                WHERE p.$whereClause
+                ORDER BY " . ($includeDeleted ? "p.deleted_at DESC" : "p.last_name, p.first_name") . "
                 LIMIT :limit OFFSET :offset
             ");
         } else {
@@ -1828,8 +1842,8 @@ function handleGetPatients() {
                        FALSE as notify_abnormal_flow,
                        FALSE as notify_alert_critical
                 FROM patients p
-                WHERE p.deleted_at IS NULL
-                ORDER BY p.last_name, p.first_name
+                WHERE p.$whereClause
+                ORDER BY " . ($includeDeleted ? "p.deleted_at DESC" : "p.last_name, p.first_name") . "
                 LIMIT :limit OFFSET :offset
             ");
         }
@@ -2184,6 +2198,11 @@ function handleGetDeviceConfig($device_id) {
         $pdo->prepare("UPDATE device_configurations SET config_applied_at = NOW() WHERE device_id = :device_id")
             ->execute(['device_id' => $device_id]);
         
+        // Désérialiser calibration_coefficients si c'est un JSON string
+        if (isset($config['calibration_coefficients']) && is_string($config['calibration_coefficients'])) {
+            $config['calibration_coefficients'] = json_decode($config['calibration_coefficients'], true);
+        }
+        
         echo json_encode(['success' => true, 'config' => $config]);
         
     } catch(PDOException $e) {
@@ -2206,7 +2225,7 @@ function handleUpdateDeviceConfig($device_id) {
         $updates = [];
         $params = ['device_id' => $device_id];
         
-        foreach(['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients'] as $field) {
+        foreach(['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients', 'gps_enabled'] as $field) {
             if (array_key_exists($field, $input)) {
                 if ($input[$field] === null) {
                     // Permettre de mettre à NULL pour réinitialiser
@@ -2224,8 +2243,28 @@ function handleUpdateDeviceConfig($device_id) {
             $stmt = $pdo->prepare("UPDATE device_configurations SET " . implode(', ', $updates) . " WHERE device_id = :device_id");
             $stmt->execute($params);
             
+            // Créer une commande UPDATE_CONFIG pour envoyer la nouvelle config au firmware
+            $configPayload = [];
+            foreach(['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients', 'gps_enabled'] as $field) {
+                if (array_key_exists($field, $input) && $input[$field] !== null) {
+                    $configPayload[$field] = $input[$field];
+                }
+            }
+            
+            if (!empty($configPayload)) {
+                $cmdStmt = $pdo->prepare("
+                    INSERT INTO device_commands (device_id, command, payload, status, created_at)
+                    VALUES (:device_id, 'UPDATE_CONFIG', :payload::jsonb, 'pending', NOW())
+                ");
+                $cmdStmt->execute([
+                    'device_id' => $device_id,
+                    'payload' => json_encode($configPayload)
+                ]);
+                error_log("[Config Update] Commande UPDATE_CONFIG créée pour dispositif $device_id : " . json_encode($configPayload));
+            }
+            
             auditLog('device.config_updated', 'device', $device_id, $old_config, $input);
-            echo json_encode(['success' => true]);
+            echo json_encode(['success' => true, 'command_created' => !empty($configPayload)]);
         } else {
             http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'No fields to update']);
