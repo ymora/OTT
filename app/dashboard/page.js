@@ -320,7 +320,7 @@ export default function DashboardPage() {
           {kpiAccordions.alerts && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {useMemo(() => {
+                {(() => {
                   // Optimisation : créer un Map pour éviter find() à chaque itération
                   const devicesMap = new Map(devices.map(d => [d.id, d]))
                   return alerts.filter(a => a.severity === 'critical').map(alert => {

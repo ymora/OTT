@@ -1019,31 +1019,6 @@ export default function DatabaseViewPage() {
       </div>
     )
   }
-  
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'users':
-        return renderUsersTable()
-      case 'devices':
-        return renderDevicesTable()
-      case 'patients':
-        return renderPatientsTable()
-      case 'roles':
-        return renderRolesTable()
-      case 'alerts':
-        return renderAlertsTable()
-      case 'firmwares':
-        return renderFirmwaresTable()
-      case 'usb_logs':
-        return renderUsbLogsTable()
-      case 'archives':
-        return renderArchivesTab()
-      case 'audit':
-        return renderAuditTable()
-      default:
-        return renderUsersTable()
-    }
-  }
 
   const renderAuditTable = () => (
     <div className="overflow-x-auto">
@@ -1063,7 +1038,7 @@ export default function DatabaseViewPage() {
           {loading ? (
             <tr>
               <td colSpan="7" className="py-8 text-center text-gray-500">
-                <LoadingSpinner size="sm" text="Chargement des logs d'audit..." />
+                <LoadingSpinner size="sm" text="Chargement des logs d&apos;audit..." />
               </td>
             </tr>
           ) : auditLogs.length === 0 ? (
@@ -1104,8 +1079,8 @@ export default function DatabaseViewPage() {
     <div className="overflow-x-auto">
       <div className="alert alert-info mb-4">
         <strong>ℹ️ Logs USB Streaming</strong><br />
-        Les logs USB sont automatiquement streamés en temps réel dans l'onglet <strong>Dispositifs OTT</strong>.
-        Cette table stocke l'historique des 7 derniers jours pour audit et debugging.
+        Les logs USB sont automatiquement streamés en temps réel dans l&apos;onglet <strong>Dispositifs OTT</strong>.
+        Cette table stocke l&apos;historique des 7 derniers jours pour audit et debugging.
       </div>
       <table className="w-full">
         <thead>
@@ -1119,7 +1094,7 @@ export default function DatabaseViewPage() {
         <tbody>
           <tr>
             <td colSpan="4" className="py-8 text-center text-gray-500">
-              <p className="mb-2">📊 Consultez les logs USB en temps réel dans l'onglet <strong>Dispositifs OTT</strong></p>
+              <p className="mb-2">📊 Consultez les logs USB en temps réel dans l&apos;onglet <strong>Dispositifs OTT</strong></p>
               <p className="text-sm text-gray-400">Table usb_logs disponible pour requêtes SQL personnalisées</p>
             </td>
           </tr>

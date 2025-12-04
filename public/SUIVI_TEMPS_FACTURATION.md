@@ -1,10 +1,10 @@
 # Suivi du Temps - Projet OTT
 ## Journal de travail pour facturation (Genere automatiquement)
 
-**Periode analysee** : 2025-11-14 - 2025-12-03
+**Periode analysee** : 2025-11-14 - 2025-12-04
 **Developpeur** : ymora
 **Projet** : OTT - Dispositif Medical IoT
-**Total commits analyses** : 662
+**Total commits analyses** : 689
 
 ---
 
@@ -30,18 +30,19 @@
 | 2025-11-30 | ~10h | 77 | 21 | 48 | 6 | 4 | 8 | 0 | 15 | 1 |
 | 2025-12-01 | ~8h | 14 | 1 | 1 | 0 | 5 | 3 | 0 | 1 | 3 |
 | 2025-12-02 | ~10h | 50 | 0 | 11 | 0 | 9 | 0 | 0 | 8 | 4 |
-| 2025-12-03 | ~10h | 75 | 15 | 26 | 4 | 8 | 2 | 2 | 13 | 3 |
+| 2025-12-03 | ~10h | 85 | 20 | 30 | 4 | 10 | 2 | 2 | 13 | 4 |
+| 2025-12-04 | ~8h | 17 | 5 | 8 | 0 | 2 | 3 | 0 | 2 | 0 |
 
 ---
 
 ## Resume
 
-- **Total estime** : ~162 heures
-- **Jours travailles** : 20 jours
+- **Total estime** : ~170 heures
+- **Jours travailles** : 21 jours
 - **Moyenne** : ~8.1h/jour
-- **Periode** : 2025-11-14 -> 2025-12-03
+- **Periode** : 2025-11-14 -> 2025-12-04
 
 ---
 
-_Rapport genere automatiquement le 2025-12-03 22:37_
+_Rapport genere automatiquement le 2025-12-04 08:48_
 _Base sur l'analyse Git des commits de ymora_

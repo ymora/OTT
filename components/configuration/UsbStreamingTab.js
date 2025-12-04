@@ -1369,7 +1369,7 @@ export default function DebugTab() {
                             <span className="text-4xl">🔌</span>
                             <p className="text-sm font-medium">Aucun dispositif enregistré</p>
                             <p className="text-xs text-gray-400 dark:text-gray-500">
-                              Connectez un dispositif USB pour l'enregistrer automatiquement
+                              Connectez un dispositif USB pour l&apos;enregistrer automatiquement
                             </p>
                           </div>
                         </td>
