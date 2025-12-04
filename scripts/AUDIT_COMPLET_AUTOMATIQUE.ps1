@@ -807,7 +807,69 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # ===============================================================================
 # PHASE 16 : ORGANISATION ET NETTOYAGE
 # ===============================================================================
-Write-Section "[16/16] Organisation Projet et Nettoyage"
+Write-Section "[16/17] Documentation - Cohérence et Accessibilité"
+
+# Vérifier que tous les docs du menu existent et sont accessibles
+$docMapping = @{
+    'presentation' = 'public/docs/DOCUMENTATION_PRESENTATION.html'
+    'developpeurs' = 'public/docs/DOCUMENTATION_DEVELOPPEURS.html'
+    'commerciale' = 'public/docs/DOCUMENTATION_COMMERCIALE.html'
+    'suivi-temps' = 'public/SUIVI_TEMPS_FACTURATION.md'
+}
+
+$docIssues = 0
+foreach ($docKey in $docMapping.Keys) {
+    $docPath = $docMapping[$docKey]
+    if (-not (Test-Path $docPath)) {
+        Write-Error "Doc '$docKey' manquant: $docPath"
+        $auditResults.Errors += "Documentation manquante: $docKey → $docPath"
+        $docIssues++
+    }
+}
+
+if ($docIssues -eq 0) {
+    Write-OK "Tous les docs du menu existent ($($docMapping.Count) docs)"
+} else {
+    Write-Error "$docIssues doc(s) manquant(s)"
+}
+
+# Vérifier les docs orphelins (fichiers qui ne sont pas dans le menu)
+$docsInFolder = Get-ChildItem -Path "public/docs" -Filter "*.html" -ErrorAction SilentlyContinue
+$linkedDocs = $docMapping.Values | Where-Object { $_ -match "public/docs/" } | ForEach-Object { Split-Path $_ -Leaf }
+$orphanDocs = $docsInFolder | Where-Object { $linkedDocs -notcontains $_.Name }
+
+if ($orphanDocs.Count -gt 0) {
+    Write-Warn "$($orphanDocs.Count) doc(s) orphelin(s) (non lié au menu)"
+    $auditResults.Warnings += "Docs orphelins: " + ($orphanDocs.Name -join ", ")
+} else {
+    Write-OK "Aucun doc orphelin"
+}
+
+# Vérifier la cohérence des liens dans Sidebar.js
+$sidebarContent = Get-Content "components/Sidebar.js" -Raw -ErrorAction SilentlyContinue
+if ($sidebarContent) {
+    $expectedLinks = @('presentation', 'developpeurs', 'commerciale', 'suivi-temps')
+    $missingLinks = @()
+    
+    foreach ($link in $expectedLinks) {
+        if ($sidebarContent -notmatch "doc:\s*['\`"]$link['\`"]") {
+            $missingLinks += $link
+        }
+    }
+    
+    if ($missingLinks.Count -gt 0) {
+        Write-Warn "Liens manquants dans Sidebar: " + ($missingLinks -join ", ")
+        $auditResults.Warnings += "Sidebar: liens manquants"
+    } else {
+        Write-OK "Tous les liens présents dans Sidebar"
+    }
+} else {
+    Write-Warn "Impossible de vérifier Sidebar.js"
+}
+
+Write-Info "Documentation analysée"
+
+Write-Section "[17/17] Organisation Projet et Nettoyage"
 
 # Vérifier l'organisation des dossiers
 $expectedDirs = @("app", "components", "contexts", "hooks", "lib", "api", "sql", "scripts", "public")
