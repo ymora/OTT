@@ -908,7 +908,7 @@ function MarkdownViewer({ fileName }) {
             }
           })
           
-          console.log('📊 byDayOfWeek calculé:', byDay)
+          logger.debug('📊 byDayOfWeek calculé:', byDay)
           return byDay
         })()
       }
@@ -989,7 +989,7 @@ function MarkdownViewer({ fileName }) {
   // Graphique par jour de la semaine
   const dayOfWeekChartData = useMemo(() => {
     if (!stats || !stats.byDayOfWeek) {
-      console.log('⚠️ Stats ou byDayOfWeek manquant:', { hasStats: !!stats, byDayOfWeek: stats?.byDayOfWeek })
+      logger.warn('⚠️ Stats ou byDayOfWeek manquant:', { hasStats: !!stats, byDayOfWeek: stats?.byDayOfWeek })
       return null
     }
     
@@ -1008,7 +1008,7 @@ function MarkdownViewer({ fileName }) {
         return parseFloat(average.toFixed(1))
       })
       
-      console.log('📊 Day of week chart data:', { labels, data, byDayOfWeek: stats.byDayOfWeek })
+      logger.debug('📊 Day of week chart data:', { labels, data, byDayOfWeek: stats.byDayOfWeek })
       
       return {
         labels: labels,
