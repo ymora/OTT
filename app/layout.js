@@ -43,6 +43,8 @@ export default function RootLayout({ children }) {
         {/* Production (en ligne) : Service worker activé automatiquement ci-dessous */}
         {!isProduction && (
           <script
+            // eslint-disable-next-line react/no-danger
+            // SAFE: Script statique, pas de contenu utilisateur
             dangerouslySetInnerHTML={{
               __html: `
                 (function() {
@@ -63,6 +65,8 @@ export default function RootLayout({ children }) {
         {/* Production (version en ligne) : Activer le service worker */}
         {isProduction && (
           <script
+            // eslint-disable-next-line react/no-danger
+            // SAFE: Script statique, pas de contenu utilisateur
             dangerouslySetInnerHTML={{
               __html: `
                 (function() {

@@ -303,7 +303,7 @@ Write-Section "[5/15] Routes et Navigation - Verification Pages Menu"
 try {
     $menuPages = @(
         @{Route="/dashboard"; File="app/dashboard/page.js"; Name="Vue Ensemble"},
-        @{Route="/dashboard/outils"; File="app/dashboard/outils/page.js"; Name="Dispositifs OTT"},
+        @{Route="/dashboard/dispositifs"; File="app/dashboard/dispositifs/page.js"; Name="Dispositifs OTT"},
         @{Route="/dashboard/patients"; File="app/dashboard/patients/page.js"; Name="Patients"},
         @{Route="/dashboard/users"; File="app/dashboard/users/page.js"; Name="Utilisateurs"},
         @{Route="/dashboard/admin/database-view"; File="app/dashboard/admin/database-view/page.js"; Name="Base Donnees"},
