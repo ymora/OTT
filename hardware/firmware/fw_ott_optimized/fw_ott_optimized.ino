@@ -846,11 +846,21 @@ void handleSerialCommand(const String& command)
         }
       }
       
+      if (payloadDoc.containsKey("gps_enabled")) {
+        bool newGpsState = payloadDoc["gps_enabled"].as<bool>();
+        if (newGpsState != gpsEnabled) {
+          gpsEnabled = newGpsState;
+          configUpdated = true;
+          Serial.printf("✅ GPS: %s\n", gpsEnabled ? "ON" : "OFF");
+        }
+      }
+      
       if (configUpdated) {
         saveConfig();
-        Serial.printf("✅ Config: ⏰%lu min | ⏱️%lu ms\n",
+        Serial.printf("✅ Config: ⏰%lu min | ⏱️%lu ms | 📡 GPS: %s\n",
                       static_cast<unsigned long>(configuredSleepMinutes),
-                      static_cast<unsigned long>(airflowSampleDelayMs));
+                      static_cast<unsigned long>(airflowSampleDelayMs),
+                      gpsEnabled ? "ON" : "OFF");
       }
     }
           return;

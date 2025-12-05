@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useSerialPort } from '@/components/SerialPortManager'
+import { useAuth } from '@/contexts/AuthContext'
 import logger from '@/lib/logger'
 import { getUsbPortSharing } from '@/lib/usbPortSharing'
 
@@ -9,6 +10,7 @@ const UsbContext = createContext()
 
 export function UsbProvider({ children }) {
   const { port, isConnected, isSupported, requestPort, connect, disconnect, startReading, write } = useSerialPort()
+  const { fetchWithAuth, API_URL } = useAuth()
   
   // État USB global
   const [usbConnectedDevice, setUsbConnectedDevice] = useState(null)
@@ -198,6 +200,54 @@ export function UsbProvider({ children }) {
       }
     }
   }, [sendLogsToServer])
+  
+  // Vérifier et envoyer les commandes UPDATE_CONFIG via USB
+  useEffect(() => {
+    if (!isConnected || !usbConnectedDevice || !write || !fetchWithAuth || !API_URL) return
+    
+    const checkAndSendCommands = async () => {
+      try {
+        // Récupérer l'ICCID ou serial pour identifier le device
+        const device = usbConnectedDevice.sim_iccid || usbConnectedDevice.device_serial
+        if (!device) return
+        
+        // Récupérer les commandes en attente via ICCID (comme le firmware)
+        const response = await fetchWithAuth(
+          `${API_URL}/api.php/devices/${device}/commands?status=pending&limit=5`,
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        
+        if (!response.ok) return
+        const data = await response.json()
+        if (!data.success || !data.commands || data.commands.length === 0) return
+        
+        // Envoyer chaque commande UPDATE_CONFIG via USB
+        for (const cmd of data.commands) {
+          if (cmd.command === 'UPDATE_CONFIG' && cmd.payload) {
+            const payload = typeof cmd.payload === 'string' 
+              ? JSON.parse(cmd.payload) 
+              : cmd.payload
+            
+            // Formater la commande pour le firmware (format: config {...})
+            const commandLine = `config ${JSON.stringify(payload)}\n`
+            await write(commandLine)
+            
+            logger.log(`📤 [USB] Commande UPDATE_CONFIG envoyée:`, payload)
+          }
+        }
+      } catch (err) {
+        logger.debug('Erreur vérification commandes USB:', err)
+      }
+    }
+    
+    // Vérifier toutes les 5 secondes
+    const interval = setInterval(checkAndSendCommands, 5000)
+    // Exécuter immédiatement au démarrage
+    checkAndSendCommands()
+    
+    return () => clearInterval(interval)
+  }, [isConnected, usbConnectedDevice, write, fetchWithAuth, API_URL])
   
   // Fonction pour envoyer une mesure à l'API avec retry et validation
   const sendMeasurementToApi = useCallback(async (measurement, device) => {
