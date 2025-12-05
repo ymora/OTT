@@ -645,7 +645,15 @@ if ($hasIndexes) {
 
 # 3. Vérifier pagination API
 Write-Host "`n3. Pagination API:" -ForegroundColor Yellow
-$paginatedEndpoints = @($phpFiles | Select-String -Pattern 'LIMIT\s+\d+|OFFSET\s+\d+|page|limit|offset', -CaseSensitive:$false | Select-Object -Unique)
+$paginatedEndpoints = @()
+foreach ($file in $phpFiles) {
+    $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+    if ($content) {
+        if ($content -match 'LIMIT\s+\d+|OFFSET\s+\d+|page|limit|offset') {
+            $paginatedEndpoints += $file.Name
+        }
+    }
+}
 if ($paginatedEndpoints.Count -gt 5) {
     Write-OK "  Pagination présente dans $($paginatedEndpoints.Count) endpoints"
 } else {
