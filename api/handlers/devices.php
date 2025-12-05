@@ -545,19 +545,30 @@ function handleUpdateDevice($device_id) {
 
 function handleDeleteDevice($device_id) {
     global $pdo;
-    requirePermission('devices.delete');
     
-    // Vérifier si c'est une suppression permanente (depuis archives)
-    $isPermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
+    $user = getCurrentUser();
+    $isAdmin = $user && $user['role_name'] === 'admin';
+    
+    // Vérifier si c'est un archivage forcé (pour admins qui veulent archiver au lieu de supprimer)
+    $forceArchive = isset($_GET['archive']) && $_GET['archive'] === 'true';
+    $forcePermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
+    
+    // Pour la suppression définitive, nécessite devices.delete (admins seulement)
+    // Pour l'archivage, nécessite devices.edit (admins et techniciens)
+    if ($forcePermanent && $isAdmin) {
+        requirePermission('devices.delete');
+    } else {
+        // Archivage : nécessite devices.edit (que les techniciens ont)
+        requirePermission('devices.edit');
+    }
     
     try {
-        // Chercher le dispositif (y compris les archivés si permanent)
-        $whereClause = $isPermanent ? "WHERE d.id = :id" : "WHERE d.id = :id AND d.deleted_at IS NULL";
+        // Chercher le dispositif
         $stmt = $pdo->prepare("
             SELECT d.*, p.first_name, p.last_name
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
-            $whereClause
+            WHERE d.id = :id AND d.deleted_at IS NULL
         ");
         $stmt->execute(['id' => $device_id]);
         $device = $stmt->fetch();
@@ -568,15 +579,15 @@ function handleDeleteDevice($device_id) {
             return;
         }
         
-        // SUPPRESSION PERMANENTE (hard delete)
-        if ($isPermanent) {
-            // Vérifier que le device est déjà archivé
-            if (!$device['deleted_at']) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Le dispositif doit être archivé avant suppression permanente']);
-                return;
-            }
-            
+        // Si le dispositif est assigné, on le désassigne d'abord
+        if ($device['patient_id']) {
+            $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE id = :id")
+                ->execute(['id' => $device_id]);
+        }
+        
+        // Si permanent=true est passé, supprimer définitivement (admins seulement)
+        if ($forcePermanent && $isAdmin) {
+            // SUPPRESSION DÉFINITIVE
             // Supprimer les données associées dans l'ordre (contraintes FK)
             $pdo->prepare("DELETE FROM device_events WHERE device_id = :id")->execute(['id' => $device_id]);
             $pdo->prepare("DELETE FROM device_configurations WHERE device_id = :id")->execute(['id' => $device_id]);
@@ -590,35 +601,28 @@ function handleDeleteDevice($device_id) {
             
             auditLog('device.permanently_deleted', 'device', $device_id, $device, null);
             
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Dispositif supprimé définitivement',
-                'permanent' => true
-            ]);
-            return;
-        }
-        
-        // SUPPRESSION NORMALE (soft delete)
-        // Si le dispositif est assigné, on le désassigne d'abord
-        if ($device['patient_id']) {
-            $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE id = :id")
+            $message = $device['patient_id'] 
+                ? 'Dispositif supprimé définitivement (désassigné du patient ' . ($device['first_name'] ?? '') . ' ' . ($device['last_name'] ?? '') . ')'
+                : 'Dispositif supprimé définitivement';
+            $permanent = true;
+        } else {
+            // ARCHIVAGE (soft delete) - autorisé pour admins et techniciens
+            $pdo->prepare("UPDATE devices SET deleted_at = NOW() WHERE id = :id")
                 ->execute(['id' => $device_id]);
+            
+            auditLog('device.deleted', 'device', $device_id, $device, null);
+            
+            $message = $device['patient_id'] 
+                ? 'Dispositif archivé avec succès (désassigné du patient ' . ($device['first_name'] ?? '') . ' ' . ($device['last_name'] ?? '') . ')'
+                : 'Dispositif archivé avec succès';
+            $permanent = false;
         }
-        
-        // Soft delete : mettre deleted_at à NOW()
-        $pdo->prepare("UPDATE devices SET deleted_at = NOW() WHERE id = :id")
-            ->execute(['id' => $device_id]);
-        
-        auditLog('device.deleted', 'device', $device_id, $device, null);
-        
-        $message = $device['patient_id'] 
-            ? 'Dispositif archivé avec succès (désassigné du patient ' . ($device['first_name'] ?? '') . ' ' . ($device['last_name'] ?? '') . ')'
-            : 'Dispositif archivé avec succès';
         
         echo json_encode([
             'success' => true, 
             'message' => $message,
-            'was_assigned' => (bool)$device['patient_id']
+            'was_assigned' => (bool)$device['patient_id'],
+            'permanent' => $permanent
         ]);
     } catch(PDOException $e) {
         http_response_code(500);
@@ -630,7 +634,8 @@ function handleDeleteDevice($device_id) {
 
 function handleRestoreDevice($device_id) {
     global $pdo;
-    requirePermission('devices.delete');
+    // Restaurer nécessite devices.edit (admins et techniciens peuvent restaurer)
+    requirePermission('devices.edit');
 
     try {
         // Vérifier que le dispositif existe et est archivé
@@ -2141,12 +2146,17 @@ function handleUpdatePatient($patient_id) {
 function handleDeletePatient($patient_id) {
     global $pdo;
     requirePermission('patients.edit');
-
-    $isPermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
+    
+    $user = getCurrentUser();
+    $isAdmin = $user && $user['role_name'] === 'admin';
+    
+    // Vérifier si c'est un archivage forcé (pour admins qui veulent archiver au lieu de supprimer)
+    $forceArchive = isset($_GET['archive']) && $_GET['archive'] === 'true';
+    $forcePermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
 
     try {
         // Vérifier que le patient existe
-        $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id");
+        $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id AND deleted_at IS NULL");
         $stmt->execute(['id' => $patient_id]);
         $patient = $stmt->fetch();
 
@@ -2156,28 +2166,6 @@ function handleDeletePatient($patient_id) {
             return;
         }
 
-        // SUPPRESSION PERMANENTE
-        if ($isPermanent) {
-            if (!$patient['deleted_at']) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Le patient doit être archivé avant suppression permanente']);
-                return;
-            }
-            
-            // Supprimer les données associées
-            $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :id")->execute(['id' => $patient_id]);
-            $pdo->prepare("DELETE FROM patients WHERE id = :id")->execute(['id' => $patient_id]);
-            
-            auditLog('patient.permanently_deleted', 'patient', $patient_id, $patient, null);
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Patient supprimé définitivement',
-                'permanent' => true
-            ]);
-            return;
-        }
-
-        // SUPPRESSION NORMALE (soft delete)
         // Vérifier s'il y a des dispositifs assignés et les désassigner automatiquement
         $deviceStmt = $pdo->prepare("SELECT id, sim_iccid, device_name FROM devices WHERE patient_id = :patient_id AND deleted_at IS NULL");
         $deviceStmt->execute(['patient_id' => $patient_id]);
@@ -2194,21 +2182,44 @@ function handleDeletePatient($patient_id) {
             }
         }
 
-        // Supprimer les préférences de notifications
-        try {
-            $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :patient_id")->execute(['patient_id' => $patient_id]);
-        } catch(PDOException $e) {
-            error_log('[handleDeletePatient] Could not delete notification preferences: ' . $e->getMessage());
+        // Si permanent=true est passé, supprimer définitivement (admins seulement)
+        if ($forcePermanent && $isAdmin) {
+            // SUPPRESSION DÉFINITIVE
+            // Supprimer les préférences de notifications
+            try {
+                $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :patient_id")->execute(['patient_id' => $patient_id]);
+            } catch(PDOException $e) {
+                error_log('[handleDeletePatient] Could not delete notification preferences: ' . $e->getMessage());
+            }
+
+            // Supprimer définitivement
+            $pdo->prepare("DELETE FROM patients WHERE id = :id")->execute(['id' => $patient_id]);
+
+            auditLog('patient.permanently_deleted', 'patient', $patient_id, $patient, null);
+            $message = 'Patient supprimé définitivement' . ($wasAssigned ? ' (dispositifs désassignés automatiquement)' : '');
+            $permanent = true;
+        } else {
+            // ARCHIVAGE (soft delete)
+            // Supprimer les préférences de notifications
+            try {
+                $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :patient_id")->execute(['patient_id' => $patient_id]);
+            } catch(PDOException $e) {
+                error_log('[handleDeletePatient] Could not delete notification preferences: ' . $e->getMessage());
+            }
+
+            // Soft delete
+            $pdo->prepare("UPDATE patients SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $patient_id]);
+
+            auditLog('patient.deleted', 'patient', $patient_id, $patient, null);
+            $message = 'Patient archivé avec succès' . ($wasAssigned ? ' (dispositifs désassignés automatiquement)' : '');
+            $permanent = false;
         }
 
-        // Soft delete
-        $pdo->prepare("UPDATE patients SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $patient_id]);
-
-        auditLog('patient.deleted', 'patient', $patient_id, $patient, null);
         echo json_encode([
             'success' => true, 
-            'message' => 'Patient archivé avec succès' . ($wasAssigned ? ' (dispositifs désassignés automatiquement)' : ''),
-            'devices_unassigned' => $wasAssigned ? count($assignedDevices) : 0
+            'message' => $message,
+            'devices_unassigned' => $wasAssigned ? count($assignedDevices) : 0,
+            'permanent' => $permanent
         ]);
     } catch(PDOException $e) {
         http_response_code(500);

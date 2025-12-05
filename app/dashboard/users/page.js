@@ -18,6 +18,13 @@ import logger from '@/lib/logger'
 
 export default function UsersPage() {
   const { fetchWithAuth, API_URL, user: currentUser } = useAuth()
+  
+  // Helper pour vérifier les permissions
+  const hasPermission = (permission) => {
+    if (!permission) return true
+    if (currentUser?.role_name === 'admin') return true
+    return currentUser?.permissions?.includes(permission) || false
+  }
   const [actionError, setActionError] = useState(null)
   const [success, setSuccess] = useState(null)
   
@@ -25,20 +32,26 @@ export default function UsersPage() {
   const { isOpen: showModal, editingItem, openCreate: openCreateModal, openEdit: openEditModal, close: closeModal } = useEntityModal()
   
   // Modal de suppression
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  // Plus de modal - actions directes
   const [userToDelete, setUserToDelete] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [restoringUser, setRestoringUser] = useState(null)
 
   // Charger les données avec useApiData
-  const { data, loading, error, refetch } = useApiData(
+  const { data, loading, error, refetch, invalidateCache } = useApiData(
     [
       showArchived ? '/api.php/users?include_deleted=true' : '/api.php/users',
       '/api.php/roles'
     ],
     { requiresAuth: true }
   )
+
+  // Recharger automatiquement les données quand le toggle change
+  useEffect(() => {
+    invalidateCache()
+    refetch()
+  }, [showArchived, invalidateCache, refetch])
 
   const allUsers = data?.users?.users || []
   const roles = data?.roles?.roles || []
@@ -76,30 +89,31 @@ export default function UsersPage() {
   }
 
   // Fonctions de suppression
-  const handleDeleteClick = (user) => {
-    setUserToDelete(user)
-    setShowDeleteModal(true)
-  }
-  
-  const handleArchive = async () => {
-    if (!userToDelete) return
+  const handleArchive = async (user = null) => {
+    const targetUser = user || userToDelete
+    if (!targetUser) return
+    setUserToDelete(targetUser)
     
     try {
       setDeleteLoading(true)
       setActionError(null)
+      // Forcer l'archivage avec ?archive=true pour les admins, ou DELETE normal pour les non-admins
+      const userId = targetUser.id
+      const url = currentUser?.role_name === 'admin' 
+        ? `/api.php/users/${userId}?archive=true`
+        : `/api.php/users/${userId}`
       const response = await fetchJson(
         fetchWithAuth,
         API_URL,
-        `/api.php/users/${userToDelete.id}`,
+        url,
         { method: 'DELETE' },
         { requiresAuth: true }
       )
       if (response.success) {
         setSuccess('✅ Utilisateur archivé avec succès')
         refetch()
-        setShowDeleteModal(false)
         setUserToDelete(null)
-        if (showModal && editingItem && editingItem.id === userToDelete.id) {
+        if (showModal && editingItem && editingItem.id === targetUser.id) {
           closeModal()
         }
       } else {
@@ -113,29 +127,31 @@ export default function UsersPage() {
     }
   }
   
-  const handlePermanentDelete = async () => {
-    if (!userToDelete) return
+  const handlePermanentDelete = async (user = null) => {
+    const targetUser = user || userToDelete
+    if (!targetUser) return
+    setUserToDelete(targetUser)
     
+    // Suppression définitive sans confirmation pour les admins
     try {
       setDeleteLoading(true)
       setActionError(null)
-      const response = await fetchWithAuth(
-        `${API_URL}/api.php/users/${userToDelete.id}?permanent=true`,
-        {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
-        },
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/users/${targetUser.id}?permanent=true`,
+        { method: 'DELETE' },
         { requiresAuth: true }
       )
-      
-      if (response.ok) {
+      if (response.success) {
         setSuccess('✅ Utilisateur supprimé définitivement')
         refetch()
-        setShowDeleteModal(false)
         setUserToDelete(null)
+        if (showModal && editingItem && editingItem.id === targetUser.id) {
+          closeModal()
+        }
       } else {
-        const errorData = await response.json().catch(() => ({}))
-        setActionError(errorData.error || 'Erreur lors de la suppression')
+        setActionError(response.error || 'Erreur lors de la suppression')
       }
     } catch (err) {
       setActionError(err.message || 'Erreur lors de la suppression')
@@ -161,9 +177,9 @@ export default function UsersPage() {
       )
       
       if (response.ok) {
-        setSuccess('✅ Utilisateur restauré avec succès !')
+        setSuccess('✅ Utilisateur restauré avec succès')
+        invalidateCache()
         await refetch()
-        createTimeoutWithCleanup(() => setSuccess(null), 5000)
       } else {
         const errorData = await response.json().catch(() => ({}))
         setActionError(errorData.error || 'Erreur lors de la restauration')
@@ -252,20 +268,20 @@ export default function UsersPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4">Nom</th>
-                  <th className="text-left py-3 px-4">Rôle</th>
-                  <th className="text-left py-3 px-4">Email</th>
-                  <th className="text-left py-3 px-4">Téléphone</th>
-                  <th className="text-left py-3 px-4">Statut</th>
-                  <th className="text-left py-3 px-4">Dernière connexion</th>
-                  <th className="text-right py-3 px-4">Actions</th>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Nom</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Rôle</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Email</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Téléphone</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Statut</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Dernière connexion</th>
+                  <th className="text-right py-3 px-4 text-gray-700 dark:text-gray-300">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="py-8 text-center text-muted">
+                    <td colSpan="7" className="py-8 text-center text-gray-500 dark:text-gray-400">
                       Aucun utilisateur trouvé
                     </td>
                   </tr>
@@ -279,10 +295,12 @@ export default function UsersPage() {
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
                       <td className="py-3 px-4 font-medium">
-                        {user.first_name} {user.last_name}
-                        {isArchived && (
-                          <span className="ml-2 badge bg-gray-100 text-gray-600 text-xs">🗄️ Archivé</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <span>{user.first_name} {user.last_name}</span>
+                          {isArchived && (
+                            <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
@@ -312,9 +330,9 @@ export default function UsersPage() {
                         <div className="flex items-center justify-end gap-2">
                           {isArchived ? (
                             <button
-                              className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
                               onClick={() => handleRestoreUser(user)}
                               disabled={restoringUser === user.id}
+                              className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50"
                               title="Restaurer l'utilisateur"
                             >
                               <span className="text-lg">{restoringUser === user.id ? '⏳' : '♻️'}</span>
@@ -328,17 +346,45 @@ export default function UsersPage() {
                               >
                                 <span className="text-lg">✏️</span>
                               </button>
-                              <button
-                                className={`p-2 rounded-lg transition-colors ${
-                                  user.id === currentUser?.id 
-                                    ? 'opacity-50 cursor-not-allowed' 
-                                    : 'hover:bg-red-100'
-                                }`}
-                                onClick={() => handleDeleteClick(user)}
-                                disabled={deleteLoading || currentUser?.role_name !== 'admin' || user.id === currentUser?.id}
-                                title={currentUser?.role_name === 'admin' && user.id !== currentUser?.id ? "Supprimer l'utilisateur" : user.id === currentUser?.id ? "Vous ne pouvez pas supprimer votre propre compte" : "Réservé aux administrateurs"}
-                              >
-                                {user.id === currentUser?.id ? (
+                              {user.id !== currentUser?.id && hasPermission('users.manage') && (
+                                <>
+                                  {currentUser?.role_name === 'admin' ? (
+                                    <>
+                                      <button
+                                        className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
+                                        onClick={() => handleArchive(user)}
+                                        disabled={deleteLoading}
+                                        title="Archiver l'utilisateur"
+                                      >
+                                        <span className="text-lg">{deleteLoading ? '⏳' : '🗄️'}</span>
+                                      </button>
+                                      <button
+                                        className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                        onClick={() => handlePermanentDelete(user)}
+                                        disabled={deleteLoading}
+                                        title="Supprimer définitivement l'utilisateur"
+                                      >
+                                        <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
+                                      onClick={() => handleArchive(user)}
+                                      disabled={deleteLoading}
+                                      title="Archiver l'utilisateur"
+                                    >
+                                      <span className="text-lg">{deleteLoading ? '⏳' : '🗄️'}</span>
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {user.id === currentUser?.id && (
+                                <button
+                                  className="p-2 opacity-50 cursor-not-allowed rounded-lg"
+                                  disabled
+                                  title="Vous ne pouvez pas supprimer votre propre compte"
+                                >
                                   <span className="text-lg relative inline-block">
                                     <span className="text-red-500">🗑️</span>
                                     <span 
@@ -350,10 +396,8 @@ export default function UsersPage() {
                                       ✖
                                     </span>
                                   </span>
-                                ) : (
-                                  <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
-                                )}
-                              </button>
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
@@ -379,27 +423,7 @@ export default function UsersPage() {
         currentUser={currentUser}
       />
 
-      {/* Modal de suppression unifié */}
-      <ConfirmModal
-        isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false)
-          setUserToDelete(null)
-        }}
-        onConfirm={handleArchive}
-        onSecondAction={currentUser?.role_name === 'admin' ? handlePermanentDelete : null}
-        title={currentUser?.role_name === 'admin' ? '⚠️ Supprimer ou archiver ?' : 'Supprimer l\'utilisateur'}
-        message={`Utilisateur : ${userToDelete?.first_name} ${userToDelete?.last_name}\n${userToDelete?.email}\n\n${
-          currentUser?.role_name === 'admin'
-            ? 'Choisissez une action :\n\n🗄️ Archiver : L\'utilisateur peut être restauré\n🗑️ Supprimer définitivement : IRRÉVERSIBLE'
-            : 'Cette action supprimera l\'utilisateur.'
-        }`}
-        confirmText={currentUser?.role_name === 'admin' ? '🗄️ Archiver' : '🗑️ Supprimer'}
-        secondActionText={currentUser?.role_name === 'admin' ? '🗑️ Supprimer définitivement' : null}
-        variant={currentUser?.role_name === 'admin' ? 'warning' : 'danger'}
-        secondActionVariant="danger"
-        loading={deleteLoading}
-      />
+      {/* Plus de modal - actions directes selon le rôle */}
 
     </div>
   )

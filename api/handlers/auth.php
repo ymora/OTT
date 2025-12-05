@@ -468,15 +468,20 @@ function handleDeleteUser($user_id) {
     global $pdo;
     requirePermission('users.manage');
     
-    $isPermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
+    $user = getCurrentUser();
+    $isAdmin = $user && $user['role_name'] === 'admin';
+    
+    // Vérifier si c'est un archivage forcé (pour admins qui veulent archiver au lieu de supprimer)
+    $forceArchive = isset($_GET['archive']) && $_GET['archive'] === 'true';
+    $forcePermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
     
     try {
         // Vérifier que l'utilisateur existe
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id");
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id AND deleted_at IS NULL");
         $stmt->execute(['id' => $user_id]);
-        $user = $stmt->fetch();
+        $userToDelete = $stmt->fetch();
         
-        if (!$user) {
+        if (!$userToDelete) {
             http_response_code(404);
             echo json_encode(['success' => false, 'error' => 'Utilisateur introuvable']);
             return;
@@ -490,14 +495,9 @@ function handleDeleteUser($user_id) {
             return;
         }
         
-        // SUPPRESSION PERMANENTE
-        if ($isPermanent) {
-            if (!$user['deleted_at']) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'L\'utilisateur doit être archivé avant suppression permanente']);
-                return;
-            }
-            
+        // Si permanent=true est passé, supprimer définitivement (admins seulement)
+        if ($forcePermanent && $isAdmin) {
+            // SUPPRESSION DÉFINITIVE
             // Supprimer les données associées
             try {
                 $pdo->prepare("DELETE FROM user_notifications_preferences WHERE user_id = :user_id")->execute(['user_id' => $user_id]);
@@ -515,31 +515,38 @@ function handleDeleteUser($user_id) {
             // Supprimer définitivement
             $pdo->prepare("DELETE FROM users WHERE id = :id")->execute(['id' => $user_id]);
             
-            auditLog('user.permanently_deleted', 'user', $user_id, $user, null);
-            echo json_encode(['success' => true, 'message' => 'Utilisateur supprimé définitivement', 'permanent' => true]);
-            return;
+            auditLog('user.permanently_deleted', 'user', $user_id, $userToDelete, null);
+            $message = 'Utilisateur supprimé définitivement';
+            $permanent = true;
+        } else {
+            // ARCHIVAGE (soft delete)
+            // Supprimer les préférences de notifications
+            try {
+                $pdo->prepare("DELETE FROM user_notifications_preferences WHERE user_id = :user_id")->execute(['user_id' => $user_id]);
+            } catch(PDOException $e) {
+                error_log('[handleDeleteUser] Could not delete notification preferences: ' . $e->getMessage());
+            }
+            
+            // Mettre à jour les logs d'audit pour mettre user_id à NULL (garder l'historique)
+            try {
+                $pdo->prepare("UPDATE audit_logs SET user_id = NULL WHERE user_id = :user_id")->execute(['user_id' => $user_id]);
+            } catch(PDOException $e) {
+                error_log('[handleDeleteUser] Could not update audit logs: ' . $e->getMessage());
+            }
+            
+            // Soft delete
+            $pdo->prepare("UPDATE users SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $user_id]);
+            
+            auditLog('user.deleted', 'user', $user_id, $userToDelete, null);
+            $message = 'Utilisateur archivé avec succès';
+            $permanent = false;
         }
         
-        // SUPPRESSION NORMALE (soft delete)
-        // Supprimer les préférences de notifications
-        try {
-            $pdo->prepare("DELETE FROM user_notifications_preferences WHERE user_id = :user_id")->execute(['user_id' => $user_id]);
-        } catch(PDOException $e) {
-            error_log('[handleDeleteUser] Could not delete notification preferences: ' . $e->getMessage());
-        }
-        
-        // Mettre à jour les logs d'audit pour mettre user_id à NULL (garder l'historique)
-        try {
-            $pdo->prepare("UPDATE audit_logs SET user_id = NULL WHERE user_id = :user_id")->execute(['user_id' => $user_id]);
-        } catch(PDOException $e) {
-            error_log('[handleDeleteUser] Could not update audit logs: ' . $e->getMessage());
-        }
-        
-        // Soft delete
-        $pdo->prepare("UPDATE users SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $user_id]);
-        
-        auditLog('user.deleted', 'user', $user_id, $user, null);
-        echo json_encode(['success' => true, 'message' => 'Utilisateur archivé avec succès']);
+        echo json_encode([
+            'success' => true, 
+            'message' => $message,
+            'permanent' => $permanent
+        ]);
         
     } catch(PDOException $e) {
         http_response_code(500);

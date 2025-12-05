@@ -86,6 +86,13 @@ export default function DebugTab() {
   
   const { fetchWithAuth, API_URL, user } = useAuth()
   
+  // Helper pour vérifier les permissions
+  const hasPermission = (permission) => {
+    if (!permission) return true
+    if (user?.role_name === 'admin') return true
+    return user?.permissions?.includes(permission) || false
+  }
+  
   // Toggle pour afficher les archives
   const [showArchived, setShowArchived] = useState(false)
   const [restoringDevice, setRestoringDevice] = useState(null)
@@ -95,6 +102,14 @@ export default function DebugTab() {
     [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'],
     { requiresAuth: true, autoLoad: !!user }
   )
+
+  // Recharger automatiquement les données quand le toggle change
+  useEffect(() => {
+    if (user) {
+      invalidateCache()
+      refetchDevices()
+    }
+  }, [showArchived, invalidateCache, refetchDevices, user])
   const allDevicesFromApi = devicesData?.devices?.devices || []
   
   // Séparer les dispositifs actifs et archivés
@@ -453,8 +468,6 @@ export default function DebugTab() {
   const compiledFirmwares = (firmwaresData?.firmwares?.firmwares || []).filter(fw => fw.status === 'compiled')
   
   // États pour la suppression
-  const [deviceToDelete, setDeviceToDelete] = useState(null)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [successMessage, setSuccessMessage] = useState(null)
   
@@ -1010,32 +1023,56 @@ export default function DebugTab() {
   )
 
   // Fonction pour supprimer un dispositif
-  const handleDeleteDevice = useCallback(async (device, skipConfirm = false) => {
-    // Si le dispositif est assigné et qu'on ne skip pas la confirmation, afficher la modal
-    if (device.patient_id && !skipConfirm) {
-      setDeviceToDelete(device)
-      setShowDeleteModal(true)
-      return
-    }
-    
-    // Suppression directe si non assigné ou confirmation validée
+  const handleArchiveDevice = useCallback(async (device) => {
     setDeleting(true)
     try {
+      const isAdmin = user?.role_name === 'admin'
+      const url = isAdmin 
+        ? `/api.php/devices/${device.id}?archive=true`
+        : `/api.php/devices/${device.id}`
       const response = await fetchJson(
         fetchWithAuth,
         API_URL,
-        `/api.php/devices/${device.id}`,
+        url,
         { method: 'DELETE' },
         { requiresAuth: true }
       )
       
       if (response.success) {
-        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé avec succès`)
-        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé`, 'dashboard')
-        // Recharger la liste des dispositifs
+        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`)
+        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`, 'dashboard')
+        setSuccessMessage('✅ Dispositif archivé')
         refetchDevices()
-        setShowDeleteModal(false)
-        setDeviceToDelete(null)
+        createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
+      } else {
+        logger.error('Erreur archivage dispositif:', response.error)
+        appendUsbStreamLog(`❌ Erreur archivage: ${response.error}`, 'dashboard')
+      }
+    } catch (err) {
+      logger.error('Erreur archivage dispositif:', err)
+      appendUsbStreamLog(`❌ Erreur archivage: ${err.message || err}`, 'dashboard')
+    } finally {
+      setDeleting(false)
+    }
+  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog, user, createTimeoutWithCleanup, setSuccessMessage])
+  
+  const handlePermanentDeleteDevice = useCallback(async (device) => {
+    setDeleting(true)
+    try {
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${device.id}?permanent=true`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      
+      if (response.success) {
+        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`)
+        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`, 'dashboard')
+        setSuccessMessage('✅ Dispositif supprimé définitivement')
+        refetchDevices()
+        createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
       } else {
         logger.error('Erreur suppression dispositif:', response.error)
         appendUsbStreamLog(`❌ Erreur suppression: ${response.error}`, 'dashboard')
@@ -1046,51 +1083,9 @@ export default function DebugTab() {
     } finally {
       setDeleting(false)
     }
-  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
+  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog, createTimeoutWithCleanup, setSuccessMessage])
   
-  // Confirmer la suppression depuis la modal
-  const confirmDelete = useCallback(() => {
-    if (deviceToDelete) {
-      handleDeleteDevice(deviceToDelete, true)
-    }
-  }, [deviceToDelete, handleDeleteDevice])
-  
-  // Suppression permanente (admins seulement)
-  const handlePermanentDeleteDevice = useCallback(async () => {
-    if (!deviceToDelete) return
-    
-    setDeleting(true)
-    try {
-      const response = await fetchWithAuth(
-        `${API_URL}/api.php/devices/${deviceToDelete.id}?permanent=true`,
-        {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
-        },
-        { requiresAuth: true }
-      )
-      
-      if (response.ok) {
-        logger.log(`✅ Dispositif "${deviceToDelete.device_name || deviceToDelete.sim_iccid}" supprimé définitivement`)
-        appendUsbStreamLog(`✅ Dispositif supprimé définitivement`, 'dashboard')
-        setSuccessMessage('✅ Dispositif supprimé définitivement')
-        refetchDevices()
-        setShowDeleteModal(false)
-        setDeviceToDelete(null)
-        createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        const errorMessage = errorData.error || 'Suppression impossible'
-        logger.error('Erreur suppression définitive:', errorMessage)
-        appendUsbStreamLog(`❌ Erreur: ${errorMessage}`, 'dashboard')
-      }
-    } catch (err) {
-      logger.error('Erreur suppression définitive:', err)
-      appendUsbStreamLog(`❌ Erreur: ${err.message || err}`, 'dashboard')
-    } finally {
-      setDeleting(false)
-    }
-  }, [deviceToDelete, fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
+  // Plus de modal - actions directes
   
   // Restaurer un dispositif archivé
   const handleRestoreDeviceDirect = useCallback(async (device) => {
@@ -1109,8 +1104,8 @@ export default function DebugTab() {
       if (response.ok) {
         logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré avec succès`)
         appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré`, 'dashboard')
-        await refetchDevices()
         invalidateCache()
+        await refetchDevices()
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || 'Erreur lors de la restauration'
@@ -1360,31 +1355,7 @@ export default function DebugTab() {
         appendLog={appendUsbStreamLog}
       />
       
-      {/* Modal de confirmation de suppression unifié */}
-      <ConfirmModal
-        isOpen={showDeleteModal}
-        onClose={() => {
-          setShowDeleteModal(false)
-          setDeviceToDelete(null)
-        }}
-        onConfirm={confirmDelete}
-        onSecondAction={user?.role_name === 'admin' ? handlePermanentDeleteDevice : null}
-        title={user?.role_name === 'admin' ? '⚠️ Supprimer ou archiver ?' : 'Supprimer le dispositif'}
-        message={`Dispositif : ${deviceToDelete?.device_name || deviceToDelete?.sim_iccid || 'inconnu'}\n\n${
-          deviceToDelete?.patient_id
-            ? `⚠️ Attention : Ce dispositif est assigné au patient ${deviceToDelete?.first_name} ${deviceToDelete?.last_name}.\nLe dispositif sera désassigné automatiquement.\n\n`
-            : ''
-        }${
-          user?.role_name === 'admin'
-            ? 'Choisissez une action :\n\n🗄️ Archiver : Le dispositif peut être restauré plus tard\n🗑️ Supprimer définitivement : Action IRRÉVERSIBLE !'
-            : 'Cette action supprimera le dispositif.'
-        }`}
-        confirmText={user?.role_name === 'admin' ? '🗄️ Archiver' : '🗑️ Supprimer'}
-        secondActionText={user?.role_name === 'admin' ? '🗑️ Supprimer définitivement' : null}
-        variant={user?.role_name === 'admin' ? 'warning' : 'danger'}
-        secondActionVariant="danger"
-        loading={deleting}
-      />
+      {/* Plus de modal - actions directes selon le rôle */}
 
       <div className="card">
         {!isSupported && (
@@ -1532,7 +1503,7 @@ export default function DebugTab() {
                             {deviceName || 'N/A'}
                           </span>
                           {isArchived && (
-                            <span className="ml-2 badge bg-gray-100 text-gray-600 text-xs">🗄️ Archivé</span>
+                            <span className="ml-2 badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
                           )}
                           {isDeviceUsbConnected && (
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-green-500 text-white rounded animate-pulse">
@@ -1568,16 +1539,22 @@ export default function DebugTab() {
                         {hasPatient ? (
                           <span className="badge badge-success text-xs">{patientName}</span>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setDeviceToAssign(device)
-                              setShowAssignPatientModal(true)
-                            }}
-                            className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs hover:bg-orange-200 dark:hover:bg-orange-900/40 cursor-pointer transition-colors"
-                            title="Cliquer pour assigner un patient"
-                          >
-                            Non assigné
-                          </button>
+                          isArchived ? (
+                            <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">
+                              Non assigné
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setDeviceToAssign(device)
+                                setShowAssignPatientModal(true)
+                              }}
+                              className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs hover:bg-orange-200 dark:hover:bg-orange-900/40 cursor-pointer transition-colors"
+                              title="Cliquer pour assigner un patient"
+                            >
+                              Non assigné
+                            </button>
+                          )
                         )}
                       </div>
                     )
@@ -1594,7 +1571,11 @@ export default function DebugTab() {
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
-                          {canFlash ? (
+                          {isArchived ? (
+                            <span className={`text-xs font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
+                              {firmwareVersion || 'N/A'}
+                            </span>
+                          ) : canFlash ? (
                             <button
                               onClick={() => handleOpenFlashModal(device)}
                               className={`text-xs font-semibold hover:underline transition-colors ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300' : 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 cursor-pointer'}`}
@@ -1863,14 +1844,16 @@ export default function DebugTab() {
                 <td className="px-3 py-1.5">
                   <div className="flex items-center justify-end gap-2">
                     {isArchived ? (
-                      <button
-                        onClick={() => handleRestoreDeviceDirect(device)}
-                        disabled={restoringDevice === device.id}
-                        className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50"
-                        title="Restaurer le dispositif"
-                      >
-                        <span className="text-lg">{restoringDevice === device.id ? '⏳' : '♻️'}</span>
-                      </button>
+                      hasPermission('devices.edit') && (
+                        <button
+                          onClick={() => handleRestoreDeviceDirect(device)}
+                          disabled={restoringDevice === device.id}
+                          className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50"
+                          title="Restaurer le dispositif"
+                        >
+                          <span className="text-lg">{restoringDevice === device.id ? '⏳' : '♻️'}</span>
+                        </button>
+                      )
                     ) : (
                       <>
                         <button
@@ -1891,17 +1874,41 @@ export default function DebugTab() {
                         >
                           <span className="text-lg">🚀</span>
                         </button>
-                        <button
-                          onClick={() => {
-                            setDeviceToDelete(device)
-                            setShowDeleteModal(true)
-                          }}
-                          disabled={deleting}
-                          className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
-                        >
-                          <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
-                        </button>
+                        {hasPermission('devices.edit') && (
+                          <>
+                            {user?.role_name === 'admin' ? (
+                              <>
+                                <button
+                                  onClick={() => handleArchiveDevice(device)}
+                                  disabled={deleting}
+                                  className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Archiver le dispositif"
+                                >
+                                  <span className="text-lg">{deleting ? '⏳' : '🗄️'}</span>
+                                </button>
+                                {hasPermission('devices.delete') && (
+                                  <button
+                                    onClick={() => handlePermanentDeleteDevice(device)}
+                                    disabled={deleting}
+                                    className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Supprimer définitivement le dispositif"
+                                  >
+                                    <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => handleArchiveDevice(device)}
+                                disabled={deleting}
+                                className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Archiver le dispositif"
+                              >
+                                <span className="text-lg">{deleting ? '⏳' : '🗄️'}</span>
+                              </button>
+                            )}
+                          </>
+                        )}
                       </>
                     )}
                   </div>

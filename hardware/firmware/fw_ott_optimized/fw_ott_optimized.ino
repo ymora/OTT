@@ -371,6 +371,35 @@ void loop()
   // MODE USB ACTIF : Envoi continu
   // =========================================================================
   if (usbModeActive) {
+    // Initialiser le modem en arrière-plan si nécessaire (pour GPS/RSSI)
+    static unsigned long lastModemInitAttempt = 0;
+    static bool modemInitInProgress = false;
+    
+    if (!modemReady && !modemInitInProgress && (gpsEnabled || now - lastModemInitAttempt > 30000)) {
+      // Essayer d'initialiser le modem toutes les 30 secondes si GPS activé ou si 30s écoulées
+      lastModemInitAttempt = now;
+      modemInitInProgress = true;
+      if (gpsEnabled) {
+        Serial.println(F("[MODEM] Initialisation modem en arrière-plan (GPS activé)..."));
+      } else {
+        Serial.println(F("[MODEM] Initialisation modem en arrière-plan (pour RSSI)..."));
+      }
+      // Note: startModem() est bloquant, mais en mode USB on peut se le permettre
+      // car on est en streaming continu
+      if (startModem()) {
+        Serial.println(F("[MODEM] ✅ Modem initialisé en arrière-plan"));
+        if (gpsEnabled) {
+          Serial.println(F("[GPS] ⏱️  Le GPS sera activé automatiquement"));
+        }
+      } else {
+        Serial.println(F("[MODEM] ⚠️ Échec initialisation modem (réessai dans 30s)"));
+        if (gpsEnabled) {
+          Serial.println(F("[GPS] ⚠️  GPS ne pourra pas fonctionner sans modem"));
+        }
+      }
+      modemInitInProgress = false;
+    }
+    
     static uint32_t usbSequence = 0;
     static unsigned long lastUsbSend = 0;
     
@@ -680,6 +709,38 @@ bool startModem()
   netClient.setInsecure();
 #endif
   modemReady = true;
+  
+  // Activer le GPS si configuré
+  if (gpsEnabled) {
+    Serial.println(F("[GPS] ========================================"));
+    Serial.println(F("[GPS] Activation du GPS sur le modem..."));
+    Serial.printf("[GPS] État config: gpsEnabled=%s, modemReady=%s\n", 
+                  gpsEnabled ? "true" : "false", 
+                  modemReady ? "true" : "false");
+    
+    if (modem.enableGPS()) {
+      Serial.println(F("[GPS] ✅ GPS activé avec succès sur le modem"));
+      Serial.println(F("[GPS] ⏱️  Le premier fix peut prendre 30-60 secondes"));
+      Serial.println(F("[GPS] 💡 Placez le dispositif en extérieur avec vue dégagée"));
+      Serial.println(F("[GPS] ========================================"));
+      sendLog("INFO", "GPS activé sur le modem");
+    } else {
+      Serial.println(F("[GPS] ❌ ÉCHEC activation GPS sur le modem"));
+      Serial.println(F("[GPS] Diagnostics possibles:"));
+      Serial.println(F("[GPS]   - Le modem ne supporte peut-être pas le GPS"));
+      Serial.println(F("[GPS]   - L'antenne GPS n'est peut-être pas connectée"));
+      Serial.println(F("[GPS]   - Problème de communication avec le modem"));
+      Serial.println(F("[GPS] ========================================"));
+      sendLog("ERROR", "Échec activation GPS - vérifier antenne et modem");
+    }
+  } else {
+    // S'assurer que le GPS est désactivé
+    modem.disableGPS();
+    if (!isUsbMode) {
+      Serial.println(F("[GPS] GPS désactivé (config: gps_enabled=false)"));
+    }
+  }
+  
   flushOfflineLogs();
   sendLog("INFO", "Modem connecté");
   return true;
@@ -687,6 +748,11 @@ bool startModem()
 
 void stopModem()
 {
+  // Désactiver le GPS avant d'arrêter le modem (économie d'énergie)
+  if (gpsEnabled) {
+    Serial.println(F("[GPS] Désactivation GPS (arrêt modem)"));
+    modem.disableGPS();
+  }
   modem.gprsDisconnect();
   modemReady = false;
 }
@@ -852,6 +918,26 @@ void handleSerialCommand(const String& command)
           gpsEnabled = newGpsState;
           configUpdated = true;
           Serial.printf("✅ GPS: %s\n", gpsEnabled ? "ON" : "OFF");
+          
+          // Activer/désactiver le GPS sur le modem si le modem est prêt
+          if (modemReady) {
+            if (gpsEnabled) {
+              Serial.println(F("[GPS] Activation GPS sur le modem (via USB)..."));
+              if (modem.enableGPS()) {
+                Serial.println(F("[GPS] ✅ GPS activé avec succès"));
+                Serial.println(F("[GPS] ⏱️  Le premier fix peut prendre 30-60 secondes"));
+              } else {
+                Serial.println(F("[GPS] ❌ ÉCHEC activation GPS"));
+                Serial.println(F("[GPS]   Vérifier: antenne GPS connectée, modem compatible"));
+              }
+            } else {
+              Serial.println(F("[GPS] Désactivation GPS..."));
+              modem.disableGPS();
+              Serial.println(F("[GPS] ✅ GPS désactivé"));
+            }
+          } else {
+            Serial.println(F("[GPS] ⚠️  Modem non prêt - GPS sera activé au prochain démarrage modem"));
+          }
         }
       }
       
@@ -1453,8 +1539,16 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   
   // Position GPS/réseau cellulaire
   if (latitude != nullptr && longitude != nullptr) {
-    doc["latitude"] = *latitude;
-    doc["longitude"] = *longitude;
+    // Valider que les coordonnées ne sont pas nulles (0,0) avant d'envoyer
+    if (*latitude != 0.0 || *longitude != 0.0) {
+      doc["latitude"] = *latitude;
+      doc["longitude"] = *longitude;
+      Serial.printf("[API] 📍 Coordonnées GPS incluses: %.6f, %.6f\n", *latitude, *longitude);
+    } else {
+      Serial.println(F("[API] ⚠️  Coordonnées GPS nulles (0,0) - non incluses dans l'envoi"));
+    }
+  } else {
+    Serial.println(F("[API] ℹ️  Pas de coordonnées GPS disponibles pour cette mesure"));
   }
   
   // Configuration actuelle
@@ -1706,6 +1800,30 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
         Serial.printf("✅ [CMD] GPS changé: %s → %s\n", 
                       gpsEnabled ? "OFF" : "ON", 
                       gpsEnabled ? "ON" : "OFF");
+        
+        // Activer/désactiver le GPS sur le modem si le modem est prêt
+        if (modemReady) {
+          if (gpsEnabled) {
+            Serial.println(F("[GPS] Activation GPS sur le modem (via OTA)..."));
+            if (modem.enableGPS()) {
+              Serial.println(F("[GPS] ✅ GPS activé avec succès"));
+              Serial.println(F("[GPS] ⏱️  Le premier fix peut prendre 30-60 secondes"));
+              sendLog("INFO", "GPS activé via commande OTA");
+            } else {
+              Serial.println(F("[GPS] ❌ ÉCHEC activation GPS"));
+              Serial.println(F("[GPS]   Vérifier: antenne GPS connectée, modem compatible"));
+              sendLog("ERROR", "Échec activation GPS via commande OTA - vérifier antenne");
+            }
+          } else {
+            Serial.println(F("[GPS] Désactivation GPS..."));
+            modem.disableGPS();
+            Serial.println(F("[GPS] ✅ GPS désactivé"));
+            sendLog("INFO", "GPS désactivé via commande OTA");
+          }
+        } else {
+          Serial.println(F("[GPS] ⚠️  Modem non prêt - GPS sera activé au prochain démarrage modem"));
+          sendLog("WARN", "GPS activé mais modem non prêt - activation différée");
+        }
       }
     }
     if (payloadDoc.containsKey("ota_primary_url")) {
@@ -2217,6 +2335,11 @@ bool getDeviceLocationFast(float* latitude, float* longitude)
     return false; // Pas de log pour ne pas polluer
   }
   
+  // Vérifier que le GPS est activé
+  if (!gpsEnabled) {
+    return false; // Pas de log pour ne pas polluer
+  }
+  
   static float cached_lat = 0.0, cached_lon = 0.0;
   static bool has_cached = false;
   static unsigned long last_gps_attempt = 0;
@@ -2279,9 +2402,17 @@ bool getDeviceLocationFast(float* latitude, float* longitude)
   
   consecutive_failures++;
   
-  // Si premier échec, logger
+  // Si premier échec, logger avec plus de détails
   if (consecutive_failures == 1) {
-    Serial.println(F("[GPS] ⏱️ Pas de fix (timeout 500ms) - Acquisition en cours..."));
+    Serial.println(F("[GPS] ⏱️ Pas de fix GPS (timeout 500ms) - Acquisition en cours..."));
+    Serial.println(F("[GPS]   💡 Le GPS peut prendre 30-60 secondes pour un premier fix"));
+    Serial.println(F("[GPS]   💡 Assurez-vous d'être en extérieur avec vue dégagée du ciel"));
+  }
+  
+  // Logger périodiquement pour rassurer que le GPS fonctionne
+  if (consecutive_failures > 0 && consecutive_failures % 20 == 0) {
+    Serial.printf("[GPS] ⏱️ Fix GPS en cours... (tentative %d)\n", consecutive_failures);
+    Serial.println(F("[GPS]   Le GPS est activé mais attend un fix satellite"));
   }
   
   // Utiliser cache si disponible
@@ -2316,6 +2447,12 @@ bool getDeviceLocation(float* latitude, float* longitude)
     return false;
   }
   
+  // Vérifier que le GPS est activé
+  if (!gpsEnabled) {
+    Serial.println(F("[GPS] ⚠️  GPS désactivé dans la configuration"));
+    return false;
+  }
+  
   // Essayer d'abord le GPS (plus précis mais peut être plus lent)
   float lat = 0.0, lon = 0.0;
   float speed = 0.0, alt = 0.0;
@@ -2323,7 +2460,7 @@ bool getDeviceLocation(float* latitude, float* longitude)
   float accuracy = 0.0;
   
   // Tentative GPS avec timeout de 3 secondes (réduit de 10s)
-  Serial.println(F("[GPS] Tentative acquisition..."));
+  Serial.println(F("[GPS] Tentative acquisition GPS..."));
   unsigned long gpsStart = millis();
   bool gpsSuccess = false;
   
@@ -2347,7 +2484,13 @@ bool getDeviceLocation(float* latitude, float* longitude)
   }
   
   // Si GPS échoue, essayer la localisation réseau cellulaire (plus rapide mais moins précis)
-  Serial.println(F("[GPS] GPS indisponible, tentative réseau cellulaire..."));
+  Serial.println(F("[GPS] ⚠️  GPS fix non disponible, tentative réseau cellulaire..."));
+  Serial.printf("[GPS]   Satellites visibles: %d, utilisés: %d\n", vsat, usat);
+  if (usat == 0) {
+    Serial.println(F("[GPS]   ⚠️  Aucun satellite utilisé - Le GPS peut nécessiter plus de temps pour un premier fix"));
+    Serial.println(F("[GPS]   💡 Conseil: Attendre 30-60 secondes en extérieur pour le premier fix GPS"));
+  }
+  
   lat = 0.0;
   lon = 0.0;
   float gsmAccuracy = 0.0;
@@ -2358,12 +2501,37 @@ bool getDeviceLocation(float* latitude, float* longitude)
         lat != 0.0 && lon != 0.0) {
       *latitude = lat;
       *longitude = lon;
-      Serial.printf("[GPS] Position réseau cellulaire obtenue: %.6f, %.6f (précision: %.0fm)\n", 
+      Serial.printf("[GPS] ✅ Position réseau cellulaire obtenue: %.6f, %.6f (précision: %.0fm)\n", 
                     lat, lon, gsmAccuracy);
       return true;
     }
   }
   
-  Serial.println(F("[GPS] Aucune position disponible (GPS et réseau cellulaire échoués)"));
+  Serial.println(F("[GPS] ❌ Aucune position disponible (GPS et réseau cellulaire échoués)"));
+  Serial.println(F("[GPS] ========================================"));
+  Serial.println(F("[GPS] DIAGNOSTIC:"));
+  Serial.printf("[GPS]   ✓ GPS activé dans config: %s\n", gpsEnabled ? "OUI" : "NON");
+  Serial.printf("[GPS]   ✓ Modem prêt: %s\n", modemReady ? "OUI" : "NON");
+  Serial.printf("[GPS]   ✓ Satellites visibles: %d\n", vsat);
+  Serial.printf("[GPS]   ✓ Satellites utilisés: %d\n", usat);
+  Serial.println(F("[GPS] CAUSES POSSIBLES:"));
+  if (!gpsEnabled) {
+    Serial.println(F("[GPS]   ❌ GPS désactivé dans la configuration"));
+    Serial.println(F("[GPS]   → Activer avec: config {\"gps_enabled\": true}"));
+  }
+  if (!modemReady) {
+    Serial.println(F("[GPS]   ❌ Modem non démarré"));
+    Serial.println(F("[GPS]   → Le modem doit être démarré pour utiliser le GPS"));
+  }
+  if (usat == 0 && vsat == 0) {
+    Serial.println(F("[GPS]   ❌ Aucun satellite détecté"));
+    Serial.println(F("[GPS]   → Vérifier l'antenne GPS"));
+    Serial.println(F("[GPS]   → Placer le dispositif en extérieur avec vue dégagée"));
+  } else if (usat == 0 && vsat > 0) {
+    Serial.println(F("[GPS]   ⚠️  Satellites visibles mais non utilisés"));
+    Serial.println(F("[GPS]   → Le GPS est en cours d'acquisition (premier fix)"));
+    Serial.println(F("[GPS]   → Attendre 30-60 secondes en extérieur"));
+  }
+  Serial.println(F("[GPS] ========================================"));
   return false;
 }

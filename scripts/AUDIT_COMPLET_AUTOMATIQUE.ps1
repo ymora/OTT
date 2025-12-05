@@ -4,7 +4,7 @@
 # HAPPLYZ MEDICAL SAS
 # Version 2.1 - Analyse exhaustive optimisee
 #
-# Ce script effectue un audit 360 degres couvrant 15 domaines
+# Ce script effectue un audit 360 degres couvrant 16 domaines
 # Usage : .\scripts\AUDIT_COMPLET_AUTOMATIQUE.ps1 [-Verbose]
 # ===============================================================================
 
@@ -306,7 +306,6 @@ try {
         @{Route="/dashboard/dispositifs"; File="app/dashboard/dispositifs/page.js"; Name="Dispositifs OTT"},
         @{Route="/dashboard/patients"; File="app/dashboard/patients/page.js"; Name="Patients"},
         @{Route="/dashboard/users"; File="app/dashboard/users/page.js"; Name="Utilisateurs"},
-        @{Route="/dashboard/admin/database-view"; File="app/dashboard/admin/database-view/page.js"; Name="Base Donnees"},
         @{Route="/dashboard/documentation"; File="app/dashboard/documentation/page.js"; Name="Documentation"}
     )
     
@@ -1557,6 +1556,226 @@ if ($warnings.Count -gt 0) {
 }
 
 $auditResults.Scores["Structure API"] = $structureScore
+
+# ===============================================================================
+# PHASE 16 : VÉRIFICATION UNIFORMISATION UI/UX
+# ===============================================================================
+
+Write-Section "[16/16] Uniformisation UI/UX - Badges, Tables, Modals"
+
+$uiScore = 10.0
+$uiIssues = @()
+$uiWarnings = @()
+
+# Fichiers à vérifier
+$uiFiles = @(
+    "app/dashboard/users/page.js",
+    "app/dashboard/patients/page.js",
+    "components/configuration/UsbStreamingTab.js",
+    "components/UserPatientModal.js",
+    "components/DeviceModal.js"
+)
+
+$filesChecked = 0
+$filesWithIssues = 0
+
+foreach ($file in $uiFiles) {
+    if (-not (Test-Path $file)) {
+        Write-Warn "$file : Fichier introuvable"
+        $uiWarnings += "$file introuvable"
+        $uiScore -= 0.5
+        continue
+    }
+    
+    $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
+    if (-not $content) {
+        continue
+    }
+    
+    $filesChecked++
+    $fileIssues = @()
+    
+    # Vérifier badges
+    if ($file -match "(users|patients|UsbStreamingTab)") {
+        # Vérifier badge "Archivé"
+        if ($content -match "Archivé") {
+            if ($content -notmatch "badge.*bg-gray-100.*text-gray-600.*dark:bg-gray-800.*dark:text-gray-400" -and 
+                $content -notmatch "badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400") {
+                $fileIssues += "Badge 'Archivé' non standardisé dans $file"
+                $uiIssues += "$file : Badge 'Archivé' non uniforme"
+            }
+        }
+        
+        # Vérifier badge "Actif"
+        if ($content -match "Actif") {
+            if ($content -notmatch "badge-success" -and $content -notmatch "badge badge-success") {
+                $fileIssues += "Badge 'Actif' non standardisé dans $file"
+                $uiIssues += "$file : Badge 'Actif' non uniforme"
+            }
+        }
+        
+        # Vérifier badge "Inactif"
+        if ($content -match "Inactif") {
+            if ($content -notmatch "badge.*text-gray-600.*bg-gray-100" -and $content -notmatch "badge text-gray-600 bg-gray-100") {
+                $fileIssues += "Badge 'Inactif' non standardisé dans $file"
+                $uiIssues += "$file : Badge 'Inactif' non uniforme"
+            }
+        }
+    }
+    
+    # Vérifier classes de table
+    if ($file -match "(users|patients|UsbStreamingTab)") {
+        # Vérifier table-row
+        if ($content -match "className.*table|table.*className") {
+            if ($content -notmatch "table-row") {
+                $fileIssues += "Classe 'table-row' manquante dans $file"
+                $uiIssues += "$file : Classe 'table-row' non utilisée"
+            }
+        }
+        
+        # Vérifier table-cell
+        if ($content -match "table-row") {
+            if ($content -notmatch "table-cell") {
+                $fileIssues += "Classe 'table-cell' manquante dans $file"
+                $uiIssues += "$file : Classe 'table-cell' non utilisée"
+            }
+        }
+        
+        # Vérifier opacity-60 pour lignes archivées
+        if ($content -match "deleted_at|isArchived") {
+            if ($content -notmatch "opacity-60") {
+                $fileIssues += "Opacité 'opacity-60' manquante pour lignes archivées dans $file"
+                $uiIssues += "$file : Opacité pour archives non uniforme"
+            }
+        }
+        
+        # Vérifier hover standardisé
+        if ($content -match "table-row") {
+            if ($content -notmatch "hover:bg-gray-50.*dark:hover") {
+                $fileIssues += "Hover non standardisé dans $file"
+                $uiWarnings += "$file : Hover table non uniforme"
+            }
+        }
+    }
+    
+    # Vérifier modals
+    if ($file -match "Modal") {
+        # Vérifier overlay
+        if ($content -match "fixed.*inset-0") {
+            if ($content -notmatch "bg-black/50.*dark:bg-black/60.*z-\[100\]|bg-black/50.*dark:bg-black/60.*z-50") {
+                $fileIssues += "Overlay modal non standardisé dans $file"
+                $uiIssues += "$file : Overlay modal non uniforme"
+            }
+        }
+        
+        # Vérifier container
+        if ($content -match "bg-white.*dark:bg") {
+            if ($content -notmatch "dark:bg-\[rgb\(var\(--night-surface\)\)\]|dark:bg-gray-900") {
+                $fileIssues += "Container modal non standardisé dans $file"
+                $uiIssues += "$file : Container modal non uniforme"
+            }
+        }
+        
+        # Vérifier close button
+        if ($content -match "onClose|close|×") {
+            if ($content -notmatch "text-gray-400.*hover:text-gray-600.*dark:hover:text-gray-300") {
+                $fileIssues += "Bouton fermer modal non standardisé dans $file"
+                $uiWarnings += "$file : Bouton fermer modal non uniforme"
+            }
+        }
+    }
+    
+    if ($fileIssues.Count -gt 0) {
+        $filesWithIssues++
+        $uiScore -= ($fileIssues.Count * 0.3)
+    } else {
+        Write-OK "$file : Uniformisation OK"
+    }
+}
+
+# Vérifier cohérence globale entre fichiers
+if ($filesChecked -gt 1) {
+    Write-Info "Vérification cohérence croisée..."
+    
+    $usersContent = Get-Content "app/dashboard/users/page.js" -Raw -ErrorAction SilentlyContinue
+    $patientsContent = Get-Content "app/dashboard/patients/page.js" -Raw -ErrorAction SilentlyContinue
+    $devicesContent = Get-Content "components/configuration/UsbStreamingTab.js" -Raw -ErrorAction SilentlyContinue
+    
+    if ($usersContent -and $patientsContent -and $devicesContent) {
+        # Extraire les patterns de badges
+        $usersBadges = [regex]::Matches($usersContent, "badge[^>]*Archivé[^<]*</span>")
+        $patientsBadges = [regex]::Matches($patientsContent, "badge[^>]*Archivé[^<]*</span>")
+        $devicesBadges = [regex]::Matches($devicesContent, "badge[^>]*Archivé[^<]*</span>")
+        
+        # Comparer les patterns
+        if ($usersBadges.Count -gt 0 -and $patientsBadges.Count -gt 0) {
+            $usersBadgeClass = [regex]::Match($usersBadges[0].Value, 'className="([^"]*)"')
+            $patientsBadgeClass = [regex]::Match($patientsBadges[0].Value, 'className="([^"]*)"')
+            
+            if ($usersBadgeClass.Success -and $patientsBadgeClass.Success) {
+                if ($usersBadgeClass.Groups[1].Value -ne $patientsBadgeClass.Groups[1].Value) {
+                    Write-Warn "Badges 'Archivé' non identiques entre users et patients"
+                    $uiWarnings += "Incohérence badges 'Archivé' entre users et patients"
+                    $uiScore -= 0.5
+                } else {
+                    Write-OK "Badges 'Archivé' cohérents entre users et patients"
+                }
+            }
+        }
+        
+        # Vérifier cohérence table-row et table-cell
+        $hasTableRow = @(
+            ($usersContent -match "table-row"),
+            ($patientsContent -match "table-row"),
+            ($devicesContent -match "table-row")
+        )
+        
+        if (($hasTableRow[0] -and -not $hasTableRow[1]) -or ($hasTableRow[1] -and -not $hasTableRow[2])) {
+            Write-Warn "Usage incohérent de 'table-row' entre fichiers"
+            $uiWarnings += "Usage incohérent de 'table-row'"
+            $uiScore -= 0.5
+        } else {
+            Write-OK "Classe 'table-row' utilisée de manière cohérente"
+        }
+        
+        # Vérifier cohérence opacity-60
+        $hasOpacity = @(
+            ($usersContent -match "opacity-60"),
+            ($patientsContent -match "opacity-60"),
+            ($devicesContent -match "opacity-60")
+        )
+        
+        if (($hasOpacity[0] -and -not $hasOpacity[1]) -or ($hasOpacity[1] -and -not $hasOpacity[2])) {
+            Write-Warn "Usage incohérent de 'opacity-60' entre fichiers"
+            $uiWarnings += "Usage incohérent de 'opacity-60'"
+            $uiScore -= 0.5
+        } else {
+            Write-OK "Classe 'opacity-60' utilisée de manière cohérente"
+        }
+    }
+}
+
+Write-Host ""
+if ($uiIssues.Count -eq 0 -and $uiWarnings.Count -eq 0) {
+    Write-OK "Uniformisation UI/UX parfaite - Score: $([math]::Round($uiScore, 1))/10"
+} else {
+    if ($uiIssues.Count -gt 0) {
+        Write-Err "Problèmes d'uniformisation détectés:"
+        $uiIssues | Select-Object -First 10 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+        if ($uiIssues.Count -gt 10) {
+            Write-Host "  ... et $($uiIssues.Count - 10) autres problèmes" -ForegroundColor Red
+        }
+    }
+    if ($uiWarnings.Count -gt 0) {
+        Write-Warn "Avertissements d'uniformisation:"
+        $uiWarnings | Select-Object -First 5 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    }
+    Write-Host "[SCORE UI/UX] $([math]::Round($uiScore, 1))/10" -ForegroundColor Yellow
+}
+
+$auditResults.Scores["Uniformisation UI/UX"] = $uiScore
+$auditResults.Issues += $uiIssues
+$auditResults.Warnings += $uiWarnings
 
 Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray

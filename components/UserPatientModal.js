@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
 import { isValidEmail, isValidPhone } from '@/lib/utils'
@@ -11,7 +11,7 @@ function Accordion({ title, children, defaultOpen = false }) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
   
   return (
-    <div className="border border-gray-200 dark:border-slate-700 rounded-lg">
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -71,15 +71,29 @@ export default function UserPatientModal({
     notify_alert_critical: type === 'patient' ? true : false
   })
   const [notificationErrors, setNotificationErrors] = useState({})
+  
+  // Références pour stocker les valeurs initiales (pour détecter les modifications)
+  const initialFormDataRef = useRef(null)
+  const initialNotificationPrefsRef = useRef(null)
+  const initialPasswordRef = useRef(null)
 
   // Initialiser le formulaire
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      // Réinitialiser les refs quand le modal se ferme
+      initialFormDataRef.current = null
+      initialNotificationPrefsRef.current = null
+      initialPasswordRef.current = null
+      return
+    }
 
     if (editingItem) {
       // Mode édition
+      let initialFormData
+      let initialNotificationPrefs
+      
       if (type === 'user') {
-        setFormData({
+        initialFormData = {
           first_name: editingItem.first_name || '',
           last_name: editingItem.last_name || '',
           email: editingItem.email || '',
@@ -87,10 +101,11 @@ export default function UserPatientModal({
           password: undefined, // Ne pas initialiser le mot de passe en mode édition
           role_id: roles.find(r => r.name === editingItem.role_name)?.id || '',
           is_active: Boolean(editingItem.is_active)
-        })
+        }
+        setFormData(initialFormData)
         setPasswordConfirm('')
       } else {
-        setFormData({
+        initialFormData = {
           first_name: editingItem.first_name || '',
           last_name: editingItem.last_name || '',
           birth_date: editingItem.birth_date ? editingItem.birth_date.split('T')[0] : '',
@@ -98,14 +113,15 @@ export default function UserPatientModal({
           email: editingItem.email || '',
           city: editingItem.city || '',
           postal_code: editingItem.postal_code || ''
-        })
+        }
+        setFormData(initialFormData)
       }
       
       // Initialiser les préférences de notifications directement depuis editingItem si disponibles
       // Cela évite le chargement en 2 temps
       if (editingItem.email_enabled !== undefined || editingItem.sms_enabled !== undefined) {
         // Les données de notifications sont déjà dans editingItem
-        setNotificationPrefs({
+        initialNotificationPrefs = {
           email_enabled: Boolean(editingItem.email_enabled),
           sms_enabled: Boolean(editingItem.sms_enabled),
           push_enabled: Boolean(editingItem.push_enabled),
@@ -117,11 +133,18 @@ export default function UserPatientModal({
           phone_number: editingItem.phone_number || '',
           quiet_hours_start: editingItem.quiet_hours_start || '',
           quiet_hours_end: editingItem.quiet_hours_end || ''
-        })
+        }
+        setNotificationPrefs(initialNotificationPrefs)
+        // Sauvegarder les valeurs initiales
+        initialNotificationPrefsRef.current = JSON.parse(JSON.stringify(initialNotificationPrefs))
       } else {
         // Si les données ne sont pas disponibles, charger depuis l'API
         loadNotificationPrefs()
       }
+      
+      // Sauvegarder les valeurs initiales pour comparaison
+      initialFormDataRef.current = JSON.parse(JSON.stringify(initialFormData))
+      initialPasswordRef.current = undefined
     } else {
       // Mode création
       if (type === 'user') {
@@ -158,6 +181,11 @@ export default function UserPatientModal({
         notify_new_patient: false,
         notify_alert_critical: false
       })
+      
+      // En mode création, pas de valeurs initiales (toujours considéré comme modifié)
+      initialFormDataRef.current = null
+      initialNotificationPrefsRef.current = null
+      initialPasswordRef.current = null
     }
     
     setFormErrors({})
@@ -200,6 +228,8 @@ export default function UserPatientModal({
           })
         )
         setNotificationPrefs(loadedPrefs)
+        // Sauvegarder les valeurs initiales après chargement
+        initialNotificationPrefsRef.current = JSON.parse(JSON.stringify(loadedPrefs))
       }
     } catch (err) {
       logger.warn('Erreur chargement préférences:', err)
@@ -207,6 +237,37 @@ export default function UserPatientModal({
       setLoadingNotifPrefs(false)
     }
   }
+  
+  // Détecter si des modifications ont été faites (uniquement en mode édition)
+  const hasChanges = useMemo(() => {
+    if (!editingItem || !initialFormDataRef.current) {
+      // En mode création, toujours considéré comme modifié
+      return true
+    }
+    
+    // Comparer formData
+    const currentFormDataStr = JSON.stringify(formData)
+    const initialFormDataStr = JSON.stringify(initialFormDataRef.current)
+    if (currentFormDataStr !== initialFormDataStr) {
+      return true
+    }
+    
+    // Comparer notificationPrefs si disponible
+    if (initialNotificationPrefsRef.current) {
+      const currentNotifPrefsStr = JSON.stringify(notificationPrefs)
+      const initialNotifPrefsStr = JSON.stringify(initialNotificationPrefsRef.current)
+      if (currentNotifPrefsStr !== initialNotifPrefsStr) {
+        return true
+      }
+    }
+    
+    // Comparer mot de passe si modifié (seulement pour users)
+    if (type === 'user' && formData.password && formData.password.length > 0) {
+      return true
+    }
+    
+    return false
+  }, [formData, notificationPrefs, editingItem, type])
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -214,6 +275,12 @@ export default function UserPatientModal({
       ...formData,
       [name]: type === 'checkbox' ? checked : value
     }
+    
+    // Si c'est le mot de passe, mettre à jour la référence initiale
+    if (name === 'password' && value && value.length > 0) {
+      initialPasswordRef.current = value
+    }
+    
     setFormData(newFormData)
     
     // Effacer l'erreur du champ modifié
@@ -1208,7 +1275,8 @@ export default function UserPatientModal({
             <button
               type="submit"
               className="btn-primary"
-              disabled={saving}
+              disabled={saving || (editingItem && !hasChanges)}
+              title={editingItem && !hasChanges ? 'Aucune modification détectée' : undefined}
             >
               {saving ? (editingItem ? 'Enregistrement…' : 'Création…') : (editingItem ? 'Enregistrer' : 'Créer')}
             </button>

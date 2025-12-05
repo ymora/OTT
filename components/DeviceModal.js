@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
 import logger from '@/lib/logger'
@@ -10,7 +10,7 @@ function Accordion({ title, children, defaultOpen = false }) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
   
   return (
-    <div className="border border-gray-200 dark:border-slate-700 rounded-lg">
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -74,6 +74,9 @@ export default function DeviceModal({
   // Utiliser un ref pour éviter les réinitialisations lors de changements
   const lastOpenStateRef = useRef(false)
   
+  // Références pour stocker les valeurs initiales (pour détecter les modifications)
+  const initialFormDataRef = useRef(null)
+  
   useEffect(() => {
     // Ne réinitialiser QUE quand le modal passe de fermé à ouvert
     // Pas quand le modal est déjà ouvert
@@ -87,7 +90,7 @@ export default function DeviceModal({
       // NE JAMAIS pré-remplir avec les données USB, même en mode édition si c'est un dispositif USB virtuel
       if (editingItem && editingItem.id && !editingItem.isVirtual) {
         // Mode édition - charger les données du dispositif EXISTANT en base (pas virtuel)
-        setFormData({
+        const initialFormData = {
           device_name: editingItem.device_name || '',
           sim_iccid: editingItem.sim_iccid || '',
           device_serial: editingItem.device_serial || '',
@@ -97,10 +100,14 @@ export default function DeviceModal({
           sleep_minutes: null,
           measurement_duration_ms: null,
           send_every_n_wakeups: 1,
-          calibration_coefficients: [0, 1, 0]
-        })
+          calibration_coefficients: [0, 1, 0],
+          gps_enabled: false
+        }
+        setFormData(initialFormData)
+        // Sauvegarder les valeurs initiales pour comparaison
+        initialFormDataRef.current = JSON.parse(JSON.stringify(initialFormData))
 
-        // Charger la configuration si disponible
+        // Charger la configuration si disponible (mettra à jour initialFormDataRef après)
         loadDeviceConfig(editingItem.id)
       } else {
         // Mode création OU dispositif virtuel - FORMULAIRE TOUJOURS VIDE
@@ -115,15 +122,19 @@ export default function DeviceModal({
           sleep_minutes: null,
           measurement_duration_ms: null,
           send_every_n_wakeups: 1,
-          calibration_coefficients: [0, 1, 0]
+          calibration_coefficients: [0, 1, 0],
+          gps_enabled: false
         })
+        // En mode création, pas de valeurs initiales (toujours considéré comme modifié)
+        initialFormDataRef.current = null
       }
 
       setFormErrors({})
       setFormError(null)
     } else if (!isOpen && lastOpenStateRef.current) {
-      // Modal vient de se fermer - réinitialiser le flag
+      // Modal vient de se fermer - réinitialiser le flag et les refs
       lastOpenStateRef.current = false
+      initialFormDataRef.current = null
     }
     // Si le modal est déjà ouvert, ne rien faire (pas de réinitialisation)
     // NE JAMAIS réinitialiser le formulaire après l'ouverture, même si editingItem change
@@ -143,14 +154,24 @@ export default function DeviceModal({
       )
 
       if (data.config) {
-        setFormData(prev => ({
-          ...prev,
+        const configData = {
           sleep_minutes: data.config.sleep_minutes || null,
           measurement_duration_ms: data.config.measurement_duration_ms || null,
           send_every_n_wakeups: data.config.send_every_n_wakeups || 1,
           calibration_coefficients: data.config.calibration_coefficients || [0, 1, 0],
           gps_enabled: data.config.gps_enabled || false
+        }
+        setFormData(prev => ({
+          ...prev,
+          ...configData
         }))
+        // Mettre à jour les valeurs initiales avec la configuration chargée
+        if (initialFormDataRef.current) {
+          initialFormDataRef.current = JSON.parse(JSON.stringify({
+            ...initialFormDataRef.current,
+            ...configData
+          }))
+        }
       }
     } catch (err) {
       logger.warn('Erreur chargement configuration:', err)
@@ -186,6 +207,19 @@ export default function DeviceModal({
       calibration_coefficients: newCoefficients
     }))
   }
+  
+  // Détecter si des modifications ont été faites (uniquement en mode édition)
+  const hasChanges = useMemo(() => {
+    if (!editingItem || !initialFormDataRef.current) {
+      // En mode création, toujours considéré comme modifié
+      return true
+    }
+    
+    // Comparer formData
+    const currentFormDataStr = JSON.stringify(formData)
+    const initialFormDataStr = JSON.stringify(initialFormDataRef.current)
+    return currentFormDataStr !== initialFormDataStr
+  }, [formData, editingItem])
 
   const validateForm = () => {
     const errors = {}
@@ -418,17 +452,20 @@ export default function DeviceModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
             {editingItem ? '✏️ Modifier le dispositif' : '➕ Créer un nouveau dispositif'}
           </h2>
           <button
-            className="text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100 text-2xl transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             onClick={onClose}
+            title="Fermer"
+            aria-label="Fermer"
+            disabled={saving}
           >
-            ✖
+            <span className="text-2xl font-bold leading-none">×</span>
           </button>
         </div>
 
@@ -595,7 +632,7 @@ export default function DeviceModal({
               </div>
 
               {/* GPS Toggle */}
-              <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-gray-50 dark:bg-slate-800/50">
+              <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-slate-800/50">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">📍</span>
                   <div>
@@ -657,7 +694,7 @@ export default function DeviceModal({
           </Accordion>
 
           {/* Boutons */}
-          <div className="flex gap-2 justify-end pt-4 border-t border-gray-200 dark:border-slate-700">
+          <div className="flex gap-2 justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               className="btn-secondary"
@@ -669,7 +706,8 @@ export default function DeviceModal({
             <button
               type="submit"
               className="btn-primary"
-              disabled={saving || loadingConfig}
+              disabled={saving || loadingConfig || (editingItem && !hasChanges)}
+              title={editingItem && !hasChanges ? 'Aucune modification détectée' : undefined}
             >
               {saving ? '⏳ Enregistrement...' : (editingItem ? '💾 Enregistrer les modifications' : '✅ Créer le dispositif')}
             </button>
