@@ -988,8 +988,18 @@ function MarkdownViewer({ fileName }) {
 
   // Graphique par jour de la semaine
   const dayOfWeekChartData = useMemo(() => {
-    if (!stats || !stats.byDayOfWeek) {
-      logger.warn('⚠️ Stats ou byDayOfWeek manquant:', { hasStats: !!stats, byDayOfWeek: stats?.byDayOfWeek })
+    // Pendant le chargement, retourner null sans warning (c'est normal)
+    if (!chartData || !stats) {
+      return null
+    }
+    
+    // Si les données sont chargées mais byDayOfWeek est manquant, c'est anormal
+    if (!stats.byDayOfWeek) {
+      logger.warn('⚠️ byDayOfWeek manquant alors que chartData est chargé:', { 
+        hasStats: !!stats, 
+        hasChartData: !!chartData,
+        dailyDataLength: chartData?.dailyData?.length 
+      })
       return null
     }
     
@@ -1025,7 +1035,7 @@ function MarkdownViewer({ fileName }) {
       logger.error('Erreur calcul dayOfWeekChartData:', error)
       return null
     }
-  }, [stats])
+  }, [stats, chartData])
 
   // Histogramme des heures (distribution)
   const hoursDistributionData = useMemo(() => {

@@ -28,6 +28,27 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
   const [firmwareToDelete, setFirmwareToDelete] = useState(null)
   const [deletingFirmware, setDeletingFirmware] = useState(null)
+  
+  // Références pour stocker les timeouts et les nettoyer
+  const timeoutRefs = useRef([])
+  
+  // Nettoyer tous les timeouts au démontage
+  useEffect(() => {
+    return () => {
+      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
+      timeoutRefs.current = []
+    }
+  }, [])
+  
+  // Fonction utilitaire pour créer un timeout avec cleanup
+  const createTimeoutWithCleanup = (callback, delay) => {
+    const timeoutId = setTimeout(() => {
+      callback()
+      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
+    }, delay)
+    timeoutRefs.current.push(timeoutId)
+    return timeoutId
+  }
   const [editorMinimized, setEditorMinimized] = useState(true)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
@@ -148,7 +169,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
               fileInputRef.current.value = ''
             }
             // Rafraîchir après un court délai pour laisser le temps au serveur
-            setTimeout(() => {
+            createTimeoutWithCleanup(() => {
               refetch().catch((err) => {
                 logger.error('Erreur lors du rafraîchissement:', err)
               })
@@ -369,7 +390,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
         if (!versionExists && !existingFirmware) {
           logger.debug('[InoEditorTab] Version n\'existe pas, lancement automatique de l\'upload...')
           // Attendre un court instant pour s'assurer que les états sont bien mis à jour
-          setTimeout(() => {
+          createTimeoutWithCleanup(() => {
             logger.debug('[InoEditorTab] Appel handleUpload avec file et content')
             handleUpload(file, content)
           }, 100)
@@ -453,7 +474,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
         setIsEdited(false)
         setEditingFirmwareId(null)
         // Rafraîchir après un court délai pour laisser le temps au serveur
-        setTimeout(() => {
+        createTimeoutWithCleanup(() => {
           refetch().catch((err) => {
             logger.error('Erreur lors du rafraîchissement:', err)
           })
@@ -507,7 +528,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
       setEditorMinimized(false) // S'assurer que l'éditeur est ouvert
 
       // Scroll vers l'éditeur et focus après un court délai pour que le DOM soit mis à jour
-      setTimeout(() => {
+      createTimeoutWithCleanup(() => {
         if (textareaRef.current) {
           textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
           // Focus sur le textarea pour faciliter l'édition
@@ -563,7 +584,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
       
       // Invalider le cache et rafraîchir la liste pour mettre à jour le tableau
       invalidateCache()
-      setTimeout(() => {
+      createTimeoutWithCleanup(() => {
         refetch().catch((err) => {
           logger.error('Erreur lors du rafraîchissement après suppression:', err)
         })
@@ -728,7 +749,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
           // Si la connexion est fermée (readyState === 2), vérifier le statut du firmware
           if (eventSource.readyState === EventSource.CLOSED) {
             // Vérifier le statut du firmware après 5 secondes
-            setTimeout(async () => {
+            createTimeoutWithCleanup(async () => {
               try {
                 const response = await fetchWithAuth(`/api.php/firmwares`)
                 const data = await response.json()
@@ -803,7 +824,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
     navigator.clipboard.writeText(logsText).then(() => {
       setCopyLogsSuccess(true)
-      setTimeout(() => setCopyLogsSuccess(false), 2000)
+      createTimeoutWithCleanup(() => setCopyLogsSuccess(false), 2000)
     }).catch(err => {
       setError('Erreur lors de la copie des logs')
     })
@@ -1191,11 +1212,11 @@ export default function InoEditorTab({ onUploadSuccess }) {
                     setPendingFile(null)
                     
                     if (fileToUpload) {
-                      setTimeout(() => {
+                      createTimeoutWithCleanup(() => {
                         handleUpload(fileToUpload)
                       }, 500)
                     } else if (inoContent) {
-                      setTimeout(() => {
+                      createTimeoutWithCleanup(() => {
                         handleUpload(null, inoContent)
                       }, 500)
                     }

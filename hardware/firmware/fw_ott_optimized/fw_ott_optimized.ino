@@ -1813,6 +1813,40 @@ void loadConfig()
   // Note: JWT retiré - authentification par ICCID uniquement
   DEVICE_ICCID = prefs.getString("iccid", DEVICE_ICCID);
   DEVICE_SERIAL = prefs.getString("serial", DEVICE_SERIAL);
+  
+  // Réinitialiser le serial si c'est un ancien format (pas OTT-XX-XXX ni OTT-YY-NNN)
+  // Format valide : OTT-XX-XXX (temporaire) ou OTT-YY-NNN (définitif, ex: OTT-25-001)
+  bool isValidFormat = false;
+  if (DEVICE_SERIAL == "OTT-XX-XXX") {
+    isValidFormat = true;
+  } else if (DEVICE_SERIAL.startsWith("OTT-") && DEVICE_SERIAL.length() == 11) {
+    // Vérifier format OTT-YY-NNN (ex: OTT-25-001)
+    String yearPart = DEVICE_SERIAL.substring(4, 6);
+    String numPart = DEVICE_SERIAL.substring(7);
+    bool yearIsNumeric = true;
+    bool numIsNumeric = true;
+    for (int i = 0; i < yearPart.length(); i++) {
+      if (!isDigit(yearPart.charAt(i))) {
+        yearIsNumeric = false;
+        break;
+      }
+    }
+    for (int i = 0; i < numPart.length(); i++) {
+      if (!isDigit(numPart.charAt(i))) {
+        numIsNumeric = false;
+        break;
+      }
+    }
+    if (yearIsNumeric && numIsNumeric && DEVICE_SERIAL.charAt(6) == '-') {
+      isValidFormat = true;
+    }
+  }
+  
+  if (!isValidFormat && DEVICE_SERIAL.length() > 0) {
+    Serial.printf("[CFG] ⚠️ Serial invalide détecté: %s → Réinitialisation à OTT-XX-XXX\n", DEVICE_SERIAL.c_str());
+    DEVICE_SERIAL = OTT_DEFAULT_SERIAL;
+    prefs.putString("serial", DEVICE_SERIAL);
+  }
   SIM_PIN = prefs.getString("sim_pin", SIM_PIN);
   CAL_OVERRIDE_A0 = prefs.getFloat("cal_a0", NAN);
   CAL_OVERRIDE_A1 = prefs.getFloat("cal_a1", NAN);

@@ -856,7 +856,8 @@ if (Test-Path "env.example") {
     # Vérifier que les variables critiques sont documentées
     $criticalEnvVars = @("DATABASE_URL", "JWT_SECRET", "NEXT_PUBLIC_API_URL")
     foreach ($var in $criticalEnvVars) {
-        if ($envExample -match "^$var=" -or $envExample -match "#.*$var") {
+        # Rechercher avec regex plus flexible (peut être commenté ou avec espaces)
+        if ($envExample -match "(?m)^\s*$var\s*=" -or $envExample -match "(?m)^#.*$var") {
             Write-OK "    Variable $var documentée"
         } else {
             Write-Warn "    Variable $var non documentée dans env.example"
@@ -964,7 +965,7 @@ if ($envExample) {
 }
 
 if ($nextConfig) {
-    $apiUrlMatch = [regex]::Match($nextConfig, 'NEXT_PUBLIC_API_URL["\']?\s*[:=]\s*["\']?([^"\']+)')
+    $apiUrlMatch = [regex]::Match($nextConfig, 'NEXT_PUBLIC_API_URL["'']?\s*[:=]\s*["'']?([^"'']+)')
     if ($apiUrlMatch.Success) {
         $apiUrlInNextConfig = $apiUrlMatch.Groups[1].Value.Trim()
     }

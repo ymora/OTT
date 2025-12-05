@@ -3,7 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener } from '@/hooks'
@@ -33,10 +33,15 @@ export default function PatientsPage() {
   const [showDeletePatientModal, setShowDeletePatientModal] = useState(false)
   const [patientToDelete, setPatientToDelete] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
+  const [restoringPatient, setRestoringPatient] = useState(null)
 
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
-    ['/api.php/patients', '/api.php/devices'],
+    [
+      showArchived ? '/api.php/patients?include_deleted=true' : '/api.php/patients',
+      '/api.php/devices'
+    ],
     { requiresAuth: true }
   )
 
@@ -46,8 +51,18 @@ export default function PatientsPage() {
   // Utiliser le hook useDevicesUpdateListener pour écouter les événements
   useDevicesUpdateListener(refetch)
 
-  const patients = data?.patients?.patients || []
+  const allPatients = data?.patients?.patients || []
   const allDevices = data?.devices?.devices || []
+  
+  // Séparer les patients actifs et archivés
+  const patients = useMemo(() => {
+    return allPatients.filter(p => !p.deleted_at)
+  }, [allPatients])
+  
+  const archivedPatients = useMemo(() => {
+    return allPatients.filter(p => p.deleted_at)
+  }, [allPatients])
+  
   // Filtrer uniquement les dispositifs assignés aux patients
   const devices = useMemo(() => {
     return (allDevices || []).filter(d => d.patient_id)
@@ -59,11 +74,12 @@ export default function PatientsPage() {
   }, [allDevices])
 
   // Utiliser useFilter pour la recherche
+  const patientsToDisplay = showArchived ? allPatients : patients
   const {
     searchTerm,
     setSearchTerm,
     filteredItems: filteredPatients
-  } = useFilter(patients, {
+  } = useFilter(patientsToDisplay, {
     searchFn: (items, term) => {
       const needle = term.toLowerCase()
       return items.filter(p => {
@@ -305,20 +321,23 @@ export default function PatientsPage() {
     try {
       setDeleteLoading(true)
       setActionError(null)
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/patients/${patientToDelete.id}?permanent=true`,
-        { method: 'DELETE' },
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/patients/${patientToDelete.id}?permanent=true`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        },
         { requiresAuth: true }
       )
-      if (response.success) {
+      
+      if (response.ok) {
         setSuccess('✅ Patient supprimé définitivement')
         refetch()
         setShowDeletePatientModal(false)
         setPatientToDelete(null)
       } else {
-        setActionError(response.error || 'Erreur lors de la suppression')
+        const errorData = await response.json().catch(() => ({}))
+        setActionError(errorData.error || 'Erreur lors de la suppression')
       }
     } catch (err) {
       setActionError(err.message || 'Erreur lors de la suppression')
@@ -327,6 +346,55 @@ export default function PatientsPage() {
       setDeleteLoading(false)
     }
   }
+  
+  // Restaurer un patient archivé
+  const handleRestorePatient = async (patient) => {
+    try {
+      setRestoringPatient(patient.id)
+      setActionError(null)
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/patients/${patient.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleted_at: null })
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        setSuccess('✅ Patient restauré avec succès !')
+        await refetch()
+        createTimeoutWithCleanup(() => setSuccess(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setActionError(errorData.error || 'Erreur lors de la restauration')
+      }
+    } catch (err) {
+      setActionError(err.message || 'Erreur lors de la restauration')
+      logger.error('Erreur restauration patient:', err)
+    } finally {
+      setRestoringPatient(null)
+    }
+  }
+  
+  // Fonction utilitaire pour créer un timeout avec cleanup
+  const timeoutRefs = useRef([])
+  useEffect(() => {
+    return () => {
+      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
+      timeoutRefs.current = []
+    }
+  }, [])
+  
+  const createTimeoutWithCleanup = (callback, delay) => {
+    const timeoutId = setTimeout(() => {
+      callback()
+      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
+    }, delay)
+    timeoutRefs.current.push(timeoutId)
+    return timeoutId
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -334,7 +402,7 @@ export default function PatientsPage() {
         <h1 className="text-3xl font-bold">👥 Patients</h1>
       </div>
 
-      {/* Recherche et Nouveau Patient sur la même ligne */}
+      {/* Recherche, Toggle Archives et Nouveau Patient sur la même ligne */}
       <div className="flex flex-col md:flex-row gap-3">
         <div className="flex-1">
           <SearchBar
@@ -342,6 +410,19 @@ export default function PatientsPage() {
             onChange={setSearchTerm}
             placeholder="Rechercher un patient..."
           />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              🗄️ Afficher les archives
+            </span>
+          </label>
         </div>
         <button className="btn-primary" onClick={openCreateModal}>
           ➕ Nouveau Patient
@@ -377,13 +458,20 @@ export default function PatientsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredPatients.map((p, i) => (
+                  filteredPatients.map((p, i) => {
+                    const isArchived = !!p.deleted_at
+                    return (
                     <tr 
                       key={p.id} 
-                      className="table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800" 
+                      className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${isArchived ? 'opacity-60' : ''}`}
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
-                      <td className="py-3 px-4 font-medium text-primary">{p.first_name} {p.last_name}</td>
+                      <td className="py-3 px-4 font-medium text-primary">
+                        {p.first_name} {p.last_name}
+                        {isArchived && (
+                          <span className="ml-2 badge bg-gray-100 text-gray-600 text-xs">🗄️ Archivé</span>
+                        )}
+                      </td>
                       <td className="table-cell">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
                       <td className="table-cell">{p.email || '-'}</td>
                       <td className="table-cell text-sm">{p.phone || '-'}</td>
@@ -432,28 +520,41 @@ export default function PatientsPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                            onClick={() => openEditModal(p)}
-                            title="Modifier le patient"
-                          >
-                            <span className="text-lg">✏️</span>
-                          </button>
-                          <button
-                            className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                            onClick={() => {
-                              setPatientToDelete(p)
-                              setShowDeletePatientModal(true)
-                            }}
-                            disabled={deleteLoading}
-                            title={devices.some(d => d.patient_id === p.id) ? "Supprimer le patient (le dispositif sera désassigné automatiquement)" : "Supprimer le patient"}
-                          >
-                            <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
-                          </button>
+                          {isArchived ? (
+                            <button
+                              className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+                              onClick={() => handleRestorePatient(p)}
+                              disabled={restoringPatient === p.id}
+                              title="Restaurer le patient"
+                            >
+                              <span className="text-lg">{restoringPatient === p.id ? '⏳' : '♻️'}</span>
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                                onClick={() => openEditModal(p)}
+                                title="Modifier le patient"
+                              >
+                                <span className="text-lg">✏️</span>
+                              </button>
+                              <button
+                                className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                onClick={() => {
+                                  setPatientToDelete(p)
+                                  setShowDeletePatientModal(true)
+                                }}
+                                disabled={deleteLoading}
+                                title={devices.some(d => d.patient_id === p.id) ? "Supprimer le patient (le dispositif sera désassigné automatiquement)" : "Supprimer le patient"}
+                              >
+                                <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))
+                  )})
                 )}
               </tbody>
             </table>
@@ -615,7 +716,7 @@ export default function PatientsPage() {
             : ''
         }${
           currentUser?.role_name === 'admin'
-            ? 'Choisissez une action :\n\n🗄️ Archiver : L\'utilisateur peut être restauré\n🗑️ Supprimer définitivement : IRRÉVERSIBLE'
+            ? 'Choisissez une action :\n\n🗄️ Archiver : Le patient peut être restauré\n🗑️ Supprimer définitivement : IRRÉVERSIBLE'
             : 'Cette action supprimera le patient.'
         }`}
         confirmText={currentUser?.role_name === 'admin' ? '🗄️ Archiver' : '🗑️ Supprimer'}

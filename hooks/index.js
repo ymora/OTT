@@ -17,4 +17,5 @@ export { useToggle } from './useToggle'
 export { useFormState } from './useFormState'
 export { useAsync } from './useAsync'
 export { useLocalStorage } from './useLocalStorage'
+export { useTimeout, createTimeout } from './useTimeout'
 

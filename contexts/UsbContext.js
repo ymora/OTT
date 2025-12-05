@@ -1262,7 +1262,7 @@ export function UsbProvider({ children }) {
                 appendUsbStreamLog('✅ Connexion automatique au dispositif USB établie', 'dashboard')
                 
                 // Démarrer automatiquement le streaming après connexion
-                setTimeout(async () => {
+                const streamTimeoutId = setTimeout(async () => {
                   if (isMounted && !usbStreamStopRef.current) {
                     try {
                       logger.log('📡 [USB] Démarrage automatique du streaming...')
@@ -1272,6 +1272,8 @@ export function UsbProvider({ children }) {
                     }
                   }
                 }, 500)
+                // Stocker dans une référence pour cleanup si nécessaire
+                // Note: Si le composant se démonte avant 500ms, isMounted sera false donc pas de problème
                 
                 connectionAttemptInProgress = false
                 return
@@ -1291,7 +1293,7 @@ export function UsbProvider({ children }) {
                 appendUsbStreamLog('✅ Connexion automatique au dispositif USB établie', 'dashboard')
                 
                 // Démarrer automatiquement le streaming après connexion
-                setTimeout(async () => {
+                const streamTimeoutId = setTimeout(async () => {
                   if (isMounted && !usbStreamStopRef.current) {
                     try {
                       logger.log('📡 [USB] Démarrage automatique du streaming...')
@@ -1301,6 +1303,8 @@ export function UsbProvider({ children }) {
                     }
                   }
                 }, 500)
+                // Stocker dans une référence pour cleanup si nécessaire
+                // Note: Si le composant se démonte avant 500ms, isMounted sera false donc pas de problème
                 
                 connectionAttemptInProgress = false
                 return

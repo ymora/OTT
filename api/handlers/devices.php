@@ -174,6 +174,7 @@ function handleRestoreOrCreateDevice() {
             ON CONFLICT (sim_iccid) DO UPDATE SET
                 device_name = COALESCE(EXCLUDED.device_name, devices.device_name),
                 -- Mettre à jour device_serial SI ancien format (pas OTT-YY-NNN)
+                -- Utiliser toujours EXCLUDED.device_serial car il contient le nouveau serial généré si nécessaire
                 device_serial = CASE 
                     WHEN devices.device_serial ~ '^OTT-[0-9]{2}-[0-9]{3}$' THEN devices.device_serial
                     ELSE EXCLUDED.device_serial
@@ -1904,43 +1905,89 @@ function handleGetPatients() {
         // Utiliser COALESCE pour retourner les valeurs par défaut du schéma si NULL
         // TOUJOURS utiliser la version sans JOIN si la table n'existe pas
         if ($hasNotificationsTable) {
+            // Optimisation : Utiliser LEFT JOIN avec DISTINCT ON au lieu de sous-requêtes corrélées (évite N+1)
             $stmt = $pdo->prepare("
-                SELECT p.*, 
-                       (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
-                       (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d,
-                       (SELECT id FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_id,
-                       (SELECT device_name FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_name,
-                       (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid,
-                       COALESCE(pnp.email_enabled, FALSE) as email_enabled,
-                       COALESCE(pnp.sms_enabled, FALSE) as sms_enabled,
-                       COALESCE(pnp.push_enabled, FALSE) as push_enabled,
-                       COALESCE(pnp.notify_battery_low, FALSE) as notify_battery_low,
-                       COALESCE(pnp.notify_device_offline, FALSE) as notify_device_offline,
-                       COALESCE(pnp.notify_abnormal_flow, FALSE) as notify_abnormal_flow,
-                       COALESCE(pnp.notify_alert_critical, FALSE) as notify_alert_critical
+                WITH device_stats AS (
+                    SELECT 
+                        patient_id,
+                        COUNT(*) as device_count,
+                        COUNT(CASE WHEN m.timestamp >= NOW() - INTERVAL '7 DAYS' THEN 1 END) as measurements_7d
+                    FROM devices d
+                    LEFT JOIN measurements m ON d.id = m.device_id
+                    GROUP BY patient_id
+                ),
+                latest_devices AS (
+                    SELECT DISTINCT ON (patient_id)
+                        patient_id,
+                        id AS device_id,
+                        device_name,
+                        sim_iccid
+                    FROM devices
+                    WHERE patient_id IS NOT NULL
+                    ORDER BY patient_id, updated_at DESC NULLS LAST
+                )
+                SELECT 
+                    p.*,
+                    COALESCE(ds.device_count, 0) as device_count,
+                    COALESCE(ds.measurements_7d, 0) as measurements_7d,
+                    ld.device_id,
+                    ld.device_name,
+                    ld.sim_iccid,
+                    COALESCE(pnp.email_enabled, FALSE) as email_enabled,
+                    COALESCE(pnp.sms_enabled, FALSE) as sms_enabled,
+                    COALESCE(pnp.push_enabled, FALSE) as push_enabled,
+                    COALESCE(pnp.notify_battery_low, FALSE) as notify_battery_low,
+                    COALESCE(pnp.notify_device_offline, FALSE) as notify_device_offline,
+                    COALESCE(pnp.notify_abnormal_flow, FALSE) as notify_abnormal_flow,
+                    COALESCE(pnp.notify_alert_critical, FALSE) as notify_alert_critical
                 FROM patients p
                 LEFT JOIN patient_notifications_preferences pnp ON p.id = pnp.patient_id
+                LEFT JOIN device_stats ds ON p.id = ds.patient_id
+                LEFT JOIN latest_devices ld ON p.id = ld.patient_id
                 WHERE p.$whereClause
                 ORDER BY " . ($includeDeleted ? "p.deleted_at DESC" : "p.last_name, p.first_name") . "
                 LIMIT :limit OFFSET :offset
             ");
         } else {
             // Fallback si la table n'existe pas encore
+            // Optimisation : Utiliser LEFT JOIN avec DISTINCT ON au lieu de sous-requêtes corrélées (évite N+1)
             $stmt = $pdo->prepare("
-                SELECT p.*, 
-                       (SELECT COUNT(*) FROM devices WHERE patient_id = p.id) as device_count,
-                       (SELECT COUNT(*) FROM measurements m JOIN devices d ON m.device_id = d.id WHERE d.patient_id = p.id AND m.timestamp >= NOW() - INTERVAL '7 DAYS') as measurements_7d,
-                       (SELECT id FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_id,
-                       (SELECT device_name FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS device_name,
-                       (SELECT sim_iccid FROM devices WHERE patient_id = p.id ORDER BY updated_at DESC NULLS LAST LIMIT 1) AS sim_iccid,
-                       FALSE as email_enabled,
-                       FALSE as sms_enabled,
-                       FALSE as push_enabled,
-                       FALSE as notify_battery_low,
-                       FALSE as notify_device_offline,
-                       FALSE as notify_abnormal_flow,
-                       FALSE as notify_alert_critical
+                WITH device_stats AS (
+                    SELECT 
+                        patient_id,
+                        COUNT(*) as device_count,
+                        COUNT(CASE WHEN m.timestamp >= NOW() - INTERVAL '7 DAYS' THEN 1 END) as measurements_7d
+                    FROM devices d
+                    LEFT JOIN measurements m ON d.id = m.device_id
+                    GROUP BY patient_id
+                ),
+                latest_devices AS (
+                    SELECT DISTINCT ON (patient_id)
+                        patient_id,
+                        id AS device_id,
+                        device_name,
+                        sim_iccid
+                    FROM devices
+                    WHERE patient_id IS NOT NULL
+                    ORDER BY patient_id, updated_at DESC NULLS LAST
+                )
+                SELECT 
+                    p.*,
+                    COALESCE(ds.device_count, 0) as device_count,
+                    COALESCE(ds.measurements_7d, 0) as measurements_7d,
+                    ld.device_id,
+                    ld.device_name,
+                    ld.sim_iccid,
+                    FALSE as email_enabled,
+                    FALSE as sms_enabled,
+                    FALSE as push_enabled,
+                    FALSE as notify_battery_low,
+                    FALSE as notify_device_offline,
+                    FALSE as notify_abnormal_flow,
+                    FALSE as notify_alert_critical
                 FROM patients p
+                LEFT JOIN device_stats ds ON p.id = ds.patient_id
+                LEFT JOIN latest_devices ld ON p.id = ld.patient_id
                 WHERE p.$whereClause
                 ORDER BY " . ($includeDeleted ? "p.deleted_at DESC" : "p.last_name, p.first_name") . "
                 LIMIT :limit OFFSET :offset

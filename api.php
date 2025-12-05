@@ -866,12 +866,26 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 } elseif(preg_match('#^/docs/([^/]+\.md)$#', $path, $m) && $method === 'GET') {
     $fileName = $m[1];
     
+    // SÉCURITÉ: Valider le nom de fichier pour éviter path traversal
+    if (strpos($fileName, '..') !== false || strpos($fileName, '/') !== false || strpos($fileName, '\\') !== false) {
+        http_response_code(400);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'Invalid file name.']);
+        exit;
+    }
+    
     // Chercher le fichier dans plusieurs emplacements possibles
+    // Ordre optimisé : public/ en premier (fichiers statiques) pour meilleure performance
     $possiblePaths = [
+        __DIR__ . '/../public/' . $fileName,          // Dossier public (prioritaire pour performance)
         __DIR__ . '/' . $fileName,                    // Racine du projet API
         __DIR__ . '/../' . $fileName,                 // Racine du projet (parent)
-        __DIR__ . '/../public/' . $fileName,          // Dossier public
     ];
+    
+    // SÉCURITÉ: Ajouter scripts/ uniquement pour SUIVI_TEMPS_FACTURATION.md spécifiquement
+    if ($fileName === 'SUIVI_TEMPS_FACTURATION.md') {
+        $possiblePaths[] = __DIR__ . '/../scripts/' . $fileName;
+    }
     
     $filePath = null;
     foreach ($possiblePaths as $path) {

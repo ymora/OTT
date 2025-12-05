@@ -12,9 +12,37 @@ import Modal from '@/components/Modal'
 import ConfirmModal from '@/components/ConfirmModal'
 import FlashModal from '@/components/FlashModal'
 import DeviceModal from '@/components/DeviceModal'
+import SuccessMessage from '@/components/SuccessMessage'
 
 export default function DebugTab() {
   const usbContext = useUsb()
+  
+  // Références pour gérer les timeouts avec cleanup
+  const timeoutRefs = useRef([])
+  const isMountedRef = useRef(true)
+  
+  // Nettoyer tous les timeouts au démontage
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
+      timeoutRefs.current = []
+    }
+  }, [])
+  
+  // Fonction utilitaire pour créer un timeout avec cleanup
+  const createTimeoutWithCleanup = (callback, delay) => {
+    if (!isMountedRef.current) return null
+    const timeoutId = setTimeout(() => {
+      if (isMountedRef.current) {
+        callback()
+      }
+      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
+    }, delay)
+    timeoutRefs.current.push(timeoutId)
+    return timeoutId
+  }
   
   const {
     usbConnectedDevice,
@@ -58,12 +86,32 @@ export default function DebugTab() {
   
   const { fetchWithAuth, API_URL, user } = useAuth()
   
+  // Toggle pour afficher les archives
+  const [showArchived, setShowArchived] = useState(false)
+  const [restoringDevice, setRestoringDevice] = useState(null)
+  
   // Charger tous les dispositifs pour le tableau
   const { data: devicesData, loading: devicesLoading, refetch: refetchDevices, invalidateCache } = useApiData(
-    ['/api.php/devices'],
+    [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'],
     { requiresAuth: true, autoLoad: !!user }
   )
-  const allDevices = devicesData?.devices?.devices || []
+  const allDevicesFromApi = devicesData?.devices?.devices || []
+  
+  // Séparer les dispositifs actifs et archivés
+  const allDevices = useMemo(() => {
+    return allDevicesFromApi
+  }, [allDevicesFromApi])
+  
+  const devices = useMemo(() => {
+    return allDevices.filter(d => !d.deleted_at)
+  }, [allDevices])
+  
+  const archivedDevices = useMemo(() => {
+    return allDevices.filter(d => d.deleted_at)
+  }, [allDevices])
+  
+  // Dispositifs à afficher selon le toggle
+  const devicesToDisplay = showArchived ? allDevices : devices
   
   // ========== STREAMING LOGS EN TEMPS RÉEL (pour admin à distance) ==========
   const [remoteLogs, setRemoteLogs] = useState([])
@@ -249,7 +297,7 @@ export default function DebugTab() {
         logger.log('✅ Mesure USB enregistrée:', result)
         
         // Rafraîchir les données après l'enregistrement
-        setTimeout(() => {
+        createTimeoutWithCleanup(() => {
           logger.log('🔄 Rafraîchissement des dispositifs...')
           refetchDevices()
           notifyDevicesUpdated()
@@ -318,7 +366,7 @@ export default function DebugTab() {
               logger.log('✅ [AUTO-CREATE] Dispositif créé avec succès:', result.device)
               
               // Rafraîchir la liste des dispositifs
-              setTimeout(() => {
+              createTimeoutWithCleanup(() => {
                 refetchDevices()
                 notifyDevicesUpdated()
               }, 500)
@@ -352,7 +400,7 @@ export default function DebugTab() {
         
         if (response.ok) {
           logger.log(`✅ [AUTO-UPDATE] Dispositif ${device.id} mis à jour`)
-          setTimeout(() => {
+          createTimeoutWithCleanup(() => {
             refetchDevices()
             notifyDevicesUpdated()
           }, 500)
@@ -408,6 +456,7 @@ export default function DebugTab() {
   const [deviceToDelete, setDeviceToDelete] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [successMessage, setSuccessMessage] = useState(null)
   
   // État pour le modal RAZ console
   const [showClearLogsModal, setShowClearLogsModal] = useState(false)
@@ -520,7 +569,7 @@ export default function DebugTab() {
               setUsbVirtualDevice(null)
               
               // Recharger UNE SEULE FOIS après un délai (laisser le temps à la base)
-              setTimeout(() => {
+              createTimeoutWithCleanup(() => {
                 refetchDevices()
                 invalidateCache()
               }, 1000)
@@ -837,7 +886,11 @@ export default function DebugTab() {
       const commandWithNewline = command + '\n'
       appendUsbStreamLog(`📤 Envoi commande: ${command}`, 'dashboard')
       const result = await write(commandWithNewline)
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Petit délai pour laisser le temps à l'écriture de se terminer
+      await new Promise(resolve => {
+        const timeoutId = setTimeout(resolve, 100)
+        // Pas besoin de cleanup car la Promise se résout rapidement
+      })
       if (result) {
         appendUsbStreamLog(`✅ Commande "${command}" envoyée`, 'dashboard')
       } else {
@@ -1008,23 +1061,28 @@ export default function DebugTab() {
     
     setDeleting(true)
     try {
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${deviceToDelete.id}?permanent=true`,
-        { method: 'DELETE' },
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/devices/${deviceToDelete.id}?permanent=true`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        },
         { requiresAuth: true }
       )
       
-      if (response.success) {
+      if (response.ok) {
         logger.log(`✅ Dispositif "${deviceToDelete.device_name || deviceToDelete.sim_iccid}" supprimé définitivement`)
         appendUsbStreamLog(`✅ Dispositif supprimé définitivement`, 'dashboard')
+        setSuccessMessage('✅ Dispositif supprimé définitivement')
         refetchDevices()
         setShowDeleteModal(false)
         setDeviceToDelete(null)
+        createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
       } else {
-        logger.error('Erreur suppression définitive:', response.error)
-        appendUsbStreamLog(`❌ Erreur: ${response.error}`, 'dashboard')
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || 'Suppression impossible'
+        logger.error('Erreur suppression définitive:', errorMessage)
+        appendUsbStreamLog(`❌ Erreur: ${errorMessage}`, 'dashboard')
       }
     } catch (err) {
       logger.error('Erreur suppression définitive:', err)
@@ -1033,6 +1091,39 @@ export default function DebugTab() {
       setDeleting(false)
     }
   }, [deviceToDelete, fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
+  
+  // Restaurer un dispositif archivé
+  const handleRestoreDeviceDirect = useCallback(async (device) => {
+    try {
+      setRestoringDevice(device.id)
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/devices/${device.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleted_at: null })
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré avec succès`)
+        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré`, 'dashboard')
+        await refetchDevices()
+        invalidateCache()
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || 'Erreur lors de la restauration'
+        logger.error('Erreur restauration device:', errorMessage)
+        appendUsbStreamLog(`❌ Erreur restauration: ${errorMessage}`, 'dashboard')
+      }
+    } catch (err) {
+      logger.error('Erreur restauration device:', err)
+      appendUsbStreamLog(`❌ Erreur restauration: ${err.message || err}`, 'dashboard')
+    } finally {
+      setRestoringDevice(null)
+    }
+  }, [fetchWithAuth, API_URL, refetchDevices, invalidateCache, appendUsbStreamLog])
   
   // Créer les dispositifs fictifs
   const [creatingTestDevices, setCreatingTestDevices] = useState(false)
@@ -1126,6 +1217,14 @@ export default function DebugTab() {
 
   return (
     <div className="space-y-6">
+      {/* Message de succès */}
+      {successMessage && (
+        <SuccessMessage 
+          message={successMessage} 
+          onDismiss={() => setSuccessMessage(null)} 
+        />
+      )}
+      
       {/* Modal d'assignation de patient */}
       <Modal
         isOpen={showAssignPatientModal}
@@ -1317,6 +1416,19 @@ export default function DebugTab() {
               Dernières valeurs enregistrées en base de données.
             </p>
             </div>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showArchived}
+                  onChange={(e) => setShowArchived(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  🗄️ Afficher les archives
+                </span>
+              </label>
+            </div>
           </div>
           <div className="overflow-x-auto">
             {devicesLoading ? (
@@ -1386,7 +1498,8 @@ export default function DebugTab() {
                         </td>
                       </tr>
                     ) : (
-                      allDevices.map((device) => {
+                      devicesToDisplay.map((device) => {
+                  const isArchived = !!device.deleted_at
                   // Vérifier si ce dispositif est connecté en USB (données temps réel)
                   const isDeviceUsbConnected = isConnected && (
                     usbDeviceInfo?.sim_iccid === device.sim_iccid ||
@@ -1404,7 +1517,7 @@ export default function DebugTab() {
                   const deviceDbData = device
                   
                   return (
-                    <tr key={device.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    <tr key={device.id} className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${isArchived ? 'opacity-60' : ''}`}>
                 {/* Identifiant */}
                 <td className="px-3 py-1.5">
                   {(() => {
@@ -1418,6 +1531,9 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${!deviceName ? 'text-gray-400 dark:text-gray-500' : 'text-orange-600 dark:text-orange-400'}`}>
                             {deviceName || 'N/A'}
                           </span>
+                          {isArchived && (
+                            <span className="ml-2 badge bg-gray-100 text-gray-600 text-xs">🗄️ Archivé</span>
+                          )}
                           {isDeviceUsbConnected && (
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-green-500 text-white rounded animate-pulse">
                               <span className="w-1 h-1 bg-white rounded-full"></span>
@@ -1746,35 +1862,48 @@ export default function DebugTab() {
                 {/* Actions */}
                 <td className="px-3 py-1.5">
                   <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => {
-                        setEditingDevice(device)
-                        setShowDeviceModal(true)
-                      }}
-                      className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                      title="Modifier le dispositif (données et configuration)"
-                    >
-                      <span className="text-lg">✏️</span>
-                    </button>
-                    <button
-                      onClick={() => handleOpenFlashModal(device)}
-                      disabled={compiledFirmwares.length === 0}
-                      className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={compiledFirmwares.length === 0 ? 'Aucun firmware compilé disponible. Compilez d\'abord un firmware dans l\'onglet "Upload INO".' : 'Flasher le firmware'}
-                    >
-                      <span className="text-lg">🚀</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDeviceToDelete(device)
-                        setShowDeleteModal(true)
-                      }}
-                      disabled={deleting}
-                      className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
-                    >
-                      <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
-                    </button>
+                    {isArchived ? (
+                      <button
+                        onClick={() => handleRestoreDeviceDirect(device)}
+                        disabled={restoringDevice === device.id}
+                        className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50"
+                        title="Restaurer le dispositif"
+                      >
+                        <span className="text-lg">{restoringDevice === device.id ? '⏳' : '♻️'}</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            setEditingDevice(device)
+                            setShowDeviceModal(true)
+                          }}
+                          className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                          title="Modifier le dispositif (données et configuration)"
+                        >
+                          <span className="text-lg">✏️</span>
+                        </button>
+                        <button
+                          onClick={() => handleOpenFlashModal(device)}
+                          disabled={compiledFirmwares.length === 0}
+                          className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={compiledFirmwares.length === 0 ? 'Aucun firmware compilé disponible. Compilez d\'abord un firmware dans l\'onglet "Upload INO".' : 'Flasher le firmware'}
+                        >
+                          <span className="text-lg">🚀</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeviceToDelete(device)
+                            setShowDeleteModal(true)
+                          }}
+                          disabled={deleting}
+                          className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}
+                        >
+                          <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

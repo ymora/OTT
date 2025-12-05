@@ -28,6 +28,28 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
   const [otaStats, setOtaStats] = useState({ lastCheck: null, attempts: 0 })
   const stopReadingRef = useRef(null)
   const otaCheckIntervalRef = useRef(null)
+  const timeoutRefs = useRef([])
+  
+  // Nettoyer tous les timeouts au démontage
+  useEffect(() => {
+    return () => {
+      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
+      timeoutRefs.current = []
+      if (otaCheckIntervalRef.current) {
+        clearInterval(otaCheckIntervalRef.current)
+      }
+    }
+  }, [])
+  
+  // Fonction utilitaire pour créer un timeout avec cleanup
+  const createTimeoutWithCleanup = (callback, delay) => {
+    const timeoutId = setTimeout(() => {
+      callback()
+      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
+    }, delay)
+    timeoutRefs.current.push(timeoutId)
+    return timeoutId
+  }
 
   // Utiliser le contexte USB partagé
   const {
@@ -456,7 +478,7 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
           }
         }, 500)
 
-        setTimeout(() => {
+        createTimeoutWithCleanup(() => {
           clearInterval(responseCheck)
           if (!hasResponse) {
             setDeviceAlive(false)

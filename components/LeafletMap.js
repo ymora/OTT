@@ -3,7 +3,7 @@
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useState, useRef } from 'react'
 
 const statusColors = {
   online: '#22c55e',
@@ -246,7 +246,10 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
                 markerElement.classList.remove('marker-hovered')
               }
               // Délai pour éviter la disparition lors du passage vers le popup
-              setTimeout(() => setHoveredDeviceId(null), 150)
+              if (hoverTimeoutRef.current) {
+                clearTimeout(hoverTimeoutRef.current)
+              }
+              hoverTimeoutRef.current = setTimeout(() => setHoveredDeviceId(null), 150)
             }
           }}
         >
@@ -352,6 +355,17 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
 }
 
 export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
+  const hoverTimeoutRef = useRef(null)
+  
+  // Cleanup timeout au démontage
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current)
+      }
+    }
+  }, [])
+  
   const center = useMemo(() => {
     if (devices.length === 0) {
       return [46.2276, 2.2137] // Centre de la France par défaut

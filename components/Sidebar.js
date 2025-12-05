@@ -35,13 +35,6 @@ const menuStructure = [
     permission: 'users.view',
     description: 'Gestion des utilisateurs'
   },
-  {
-    name: 'Base de Données',
-    icon: '🗄️',
-    path: '/dashboard/admin/database-view',
-    permission: null, // Vérifié dans la page (admin uniquement)
-    description: 'Vue complète de la base de données'
-  },
 ]
 
 export default function Sidebar() {
@@ -101,13 +94,6 @@ export default function Sidebar() {
           // Vérification spéciale pour le menu Dispositifs OTT (admin ou technicien uniquement)
           if (item.path === '/dashboard/dispositifs') {
             if (user?.role_name !== 'admin' && user?.role_name !== 'technicien') {
-              return null
-            }
-          }
-          
-          // Vérification spéciale pour Base de Données (admin uniquement)
-          if (item.path === '/dashboard/admin/database-view') {
-            if (user?.role_name !== 'admin') {
               return null
             }
           }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -11,6 +11,16 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const redirectTimeoutRef = useRef(null)
+  
+  // Cleanup timeout au démontage
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -23,7 +33,10 @@ export default function Login() {
     try {
       await login(email, password)
       // Redirection avec Next.js router pour gérer automatiquement le basePath
-      setTimeout(() => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current)
+      }
+      redirectTimeoutRef.current = setTimeout(() => {
         router.push('/dashboard')
       }, 100)
     } catch (err) {

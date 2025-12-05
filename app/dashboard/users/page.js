@@ -3,7 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiData, useFilter, useEntityModal } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -28,22 +28,37 @@ export default function UsersPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [userToDelete, setUserToDelete] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
+  const [restoringUser, setRestoringUser] = useState(null)
 
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
-    ['/api.php/users', '/api.php/roles'],
+    [
+      showArchived ? '/api.php/users?include_deleted=true' : '/api.php/users',
+      '/api.php/roles'
+    ],
     { requiresAuth: true }
   )
 
-  const users = data?.users?.users || []
+  const allUsers = data?.users?.users || []
   const roles = data?.roles?.roles || []
+  
+  // Séparer les utilisateurs actifs et archivés
+  const users = useMemo(() => {
+    return allUsers.filter(u => !u.deleted_at)
+  }, [allUsers])
+  
+  const archivedUsers = useMemo(() => {
+    return allUsers.filter(u => u.deleted_at)
+  }, [allUsers])
 
   // Utiliser useFilter pour la recherche
+  const usersToDisplay = showArchived ? allUsers : users
   const {
     searchTerm,
     setSearchTerm,
     filteredItems: filteredUsers
-  } = useFilter(users, {
+  } = useFilter(usersToDisplay, {
     searchFn: (items, term) => {
       const needle = term.toLowerCase()
       return items.filter(user => {
@@ -104,20 +119,23 @@ export default function UsersPage() {
     try {
       setDeleteLoading(true)
       setActionError(null)
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/users/${userToDelete.id}?permanent=true`,
-        { method: 'DELETE' },
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/users/${userToDelete.id}?permanent=true`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        },
         { requiresAuth: true }
       )
-      if (response.success) {
+      
+      if (response.ok) {
         setSuccess('✅ Utilisateur supprimé définitivement')
         refetch()
         setShowDeleteModal(false)
         setUserToDelete(null)
       } else {
-        setActionError(response.error || 'Erreur lors de la suppression')
+        const errorData = await response.json().catch(() => ({}))
+        setActionError(errorData.error || 'Erreur lors de la suppression')
       }
     } catch (err) {
       setActionError(err.message || 'Erreur lors de la suppression')
@@ -125,6 +143,55 @@ export default function UsersPage() {
     } finally {
       setDeleteLoading(false)
     }
+  }
+  
+  // Restaurer un utilisateur archivé
+  const handleRestoreUser = async (user) => {
+    try {
+      setRestoringUser(user.id)
+      setActionError(null)
+      const response = await fetchWithAuth(
+        `${API_URL}/api.php/users/${user.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleted_at: null })
+        },
+        { requiresAuth: true }
+      )
+      
+      if (response.ok) {
+        setSuccess('✅ Utilisateur restauré avec succès !')
+        await refetch()
+        createTimeoutWithCleanup(() => setSuccess(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setActionError(errorData.error || 'Erreur lors de la restauration')
+      }
+    } catch (err) {
+      setActionError(err.message || 'Erreur lors de la restauration')
+      logger.error('Erreur restauration user:', err)
+    } finally {
+      setRestoringUser(null)
+    }
+  }
+  
+  // Fonction utilitaire pour créer un timeout avec cleanup
+  const timeoutRefs = useRef([])
+  useEffect(() => {
+    return () => {
+      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
+      timeoutRefs.current = []
+    }
+  }, [])
+  
+  const createTimeoutWithCleanup = (callback, delay) => {
+    const timeoutId = setTimeout(() => {
+      callback()
+      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
+    }, delay)
+    timeoutRefs.current.push(timeoutId)
+    return timeoutId
   }
 
 
@@ -143,7 +210,7 @@ export default function UsersPage() {
         <h1 className="text-3xl font-bold">👥 Utilisateurs</h1>
       </div>
 
-      {/* Recherche et Nouvel Utilisateur sur la même ligne */}
+      {/* Recherche, Toggle Archives et Nouvel Utilisateur sur la même ligne */}
       <div className="flex flex-col md:flex-row gap-3">
         <div className="flex-1">
           <SearchBar
@@ -151,6 +218,19 @@ export default function UsersPage() {
             onChange={setSearchTerm}
             placeholder="Rechercher un utilisateur..."
           />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              🗄️ Afficher les archives
+            </span>
+          </label>
         </div>
         <button 
           className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" 
@@ -190,13 +270,20 @@ export default function UsersPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map((user, i) => (
+                  filteredUsers.map((user, i) => {
+                    const isArchived = !!user.deleted_at
+                    return (
                     <tr 
                       key={user.id} 
-                      className="table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800"
+                      className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${isArchived ? 'opacity-60' : ''}`}
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
-                      <td className="py-3 px-4 font-medium">{user.first_name} {user.last_name}</td>
+                      <td className="py-3 px-4 font-medium">
+                        {user.first_name} {user.last_name}
+                        {isArchived && (
+                          <span className="ml-2 badge bg-gray-100 text-gray-600 text-xs">🗄️ Archivé</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4">
                         <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
                           {user.role_name}
@@ -223,43 +310,56 @@ export default function UsersPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                            onClick={() => openEditModal(user)}
-                            title="Modifier l'utilisateur"
-                          >
-                            <span className="text-lg">✏️</span>
-                          </button>
-                          <button
-                            className={`p-2 rounded-lg transition-colors ${
-                              user.id === currentUser?.id 
-                                ? 'opacity-50 cursor-not-allowed' 
-                                : 'hover:bg-red-100'
-                            }`}
-                            onClick={() => handleDeleteClick(user)}
-                            disabled={deleteLoading || currentUser?.role_name !== 'admin' || user.id === currentUser?.id}
-                            title={currentUser?.role_name === 'admin' && user.id !== currentUser?.id ? "Supprimer l'utilisateur" : user.id === currentUser?.id ? "Vous ne pouvez pas supprimer votre propre compte" : "Réservé aux administrateurs"}
-                          >
-                            {user.id === currentUser?.id ? (
-                              <span className="text-lg relative inline-block">
-                                <span className="text-red-500">🗑️</span>
-                                <span 
-                                  className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center text-red-600 text-lg font-bold leading-none"
-                                  style={{
-                                    textShadow: '0 0 2px white, 0 0 2px white'
-                                  }}
-                                >
-                                  ✖
-                                </span>
-                              </span>
-                            ) : (
-                              <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
-                            )}
-                          </button>
+                          {isArchived ? (
+                            <button
+                              className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+                              onClick={() => handleRestoreUser(user)}
+                              disabled={restoringUser === user.id}
+                              title="Restaurer l'utilisateur"
+                            >
+                              <span className="text-lg">{restoringUser === user.id ? '⏳' : '♻️'}</span>
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                                onClick={() => openEditModal(user)}
+                                title="Modifier l'utilisateur"
+                              >
+                                <span className="text-lg">✏️</span>
+                              </button>
+                              <button
+                                className={`p-2 rounded-lg transition-colors ${
+                                  user.id === currentUser?.id 
+                                    ? 'opacity-50 cursor-not-allowed' 
+                                    : 'hover:bg-red-100'
+                                }`}
+                                onClick={() => handleDeleteClick(user)}
+                                disabled={deleteLoading || currentUser?.role_name !== 'admin' || user.id === currentUser?.id}
+                                title={currentUser?.role_name === 'admin' && user.id !== currentUser?.id ? "Supprimer l'utilisateur" : user.id === currentUser?.id ? "Vous ne pouvez pas supprimer votre propre compte" : "Réservé aux administrateurs"}
+                              >
+                                {user.id === currentUser?.id ? (
+                                  <span className="text-lg relative inline-block">
+                                    <span className="text-red-500">🗑️</span>
+                                    <span 
+                                      className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center text-red-600 text-lg font-bold leading-none"
+                                      style={{
+                                        textShadow: '0 0 2px white, 0 0 2px white'
+                                      }}
+                                    >
+                                      ✖
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
+                                )}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))
+                  )})
                 )}
               </tbody>
             </table>
