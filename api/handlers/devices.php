@@ -306,14 +306,23 @@ function handleCreateDevice() {
             ->execute(['device_id' => $device['id']]);
 
         auditLog('device.created', 'device', $device['id'], null, $device);
+        
+        // Invalider le cache des devices après création
+        SimpleCache::clear();
+        
         echo json_encode(['success' => true, 'device' => $device]);
     } catch(PDOException $e) {
         if ($e->getCode() === '23505') {
             http_response_code(409);
+            error_log('[handleCreateDevice] ⚠️ Conflit ICCID: ' . $e->getMessage());
             echo json_encode(['success' => false, 'error' => 'SIM ICCID déjà utilisé']);
         } else {
             http_response_code(500);
-            echo json_encode(['success' => false, 'error' => 'Database error']);
+            $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+            error_log('[handleCreateDevice] ❌ Erreur DB: ' . $e->getMessage());
+            error_log('[handleCreateDevice] Code erreur: ' . $e->getCode());
+            error_log('[handleCreateDevice] Stack trace: ' . $e->getTraceAsString());
+            echo json_encode(['success' => false, 'error' => $errorMsg]);
         }
     }
 }
@@ -508,10 +517,19 @@ function handleUpdateDevice($device_id) {
         $updated = $stmt->fetch();
 
         auditLog('device.updated', 'device', $device_id, $device, $updated);
+        
+        // Invalider le cache des devices après modification
+        SimpleCache::clear();
+        
         echo json_encode(['success' => true, 'device' => $updated]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleUpdateDevice] ❌ Erreur DB: ' . $e->getMessage());
+        error_log('[handleUpdateDevice] SQL: ' . ($sql ?? 'N/A'));
+        error_log('[handleUpdateDevice] Params: ' . json_encode($params ?? []));
+        error_log('[handleUpdateDevice] Stack trace: ' . $e->getTraceAsString());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
 

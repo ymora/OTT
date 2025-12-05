@@ -4,6 +4,9 @@
  * Version complète avec JWT, multi-users, OTA, notifications, audit
  */
 
+// ⚠️ MODE DEBUG ACTIVÉ - À DÉSACTIVER EN PRODUCTION ⚠️
+putenv('DEBUG_ERRORS=true');
+
 require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
 require_once __DIR__ . '/api/helpers.php';
@@ -267,6 +270,76 @@ function handleRunMigration() {
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Migration failed';
         error_log('[handleRunMigration] Error: ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
+function handleRunCompleteMigration() {
+    global $pdo;
+    
+    // Vérifier les permissions : admin requis OU endpoint autorisé
+    $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? null;
+    $allowWithoutAuth = in_array($remoteAddr, ['127.0.0.1', '::1', 'localhost'], true) || AUTH_DISABLED || getenv('ALLOW_MIGRATION_ENDPOINT') === 'true';
+    $currentUser = getCurrentUser();
+    $isAdmin = $currentUser && $currentUser['role_name'] === 'admin';
+    
+    if (!$allowWithoutAuth && !$isAdmin) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Forbidden - Admin access required']);
+        return;
+    }
+    
+    try {
+        $migrationFile = 'MIGRATION_COMPLETE_PRODUCTION.sql';
+        $filePath = SQL_BASE_DIR . '/' . $migrationFile;
+        
+        if (!file_exists($filePath) || !is_readable($filePath)) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Migration file not found: ' . $migrationFile]);
+            return;
+        }
+        
+        // Protection contre path traversal
+        $realPath = realpath($filePath);
+        $basePath = realpath(SQL_BASE_DIR);
+        if ($realPath === false || $basePath === false || strpos($realPath, $basePath) !== 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid file path']);
+            return;
+        }
+        
+        // Exécuter la migration
+        error_log('[handleRunCompleteMigration] Début de la migration complète...');
+        runSqlFile($pdo, $migrationFile);
+        error_log('[handleRunCompleteMigration] Migration complète terminée avec succès');
+        
+        // Vérifier le résultat
+        $checkStmt = $pdo->query("
+            SELECT 
+                'MIGRATION COMPLÈTE' as status,
+                (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) as users_actifs,
+                (SELECT COUNT(*) FROM patients WHERE deleted_at IS NULL) as patients_actifs,
+                (SELECT COUNT(*) FROM devices WHERE deleted_at IS NULL) as devices_actifs,
+                (SELECT COUNT(*) FROM device_configurations WHERE gps_enabled IS NOT NULL) as configs_gps_ready,
+                (SELECT COUNT(*) FROM usb_logs) as usb_logs_count
+        ");
+        $result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Migration complète exécutée avec succès',
+            'verification' => $result
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
+    } catch(Exception $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Migration failed';
+        error_log('[handleRunCompleteMigration] Erreur: ' . $e->getMessage());
+        error_log('[handleRunCompleteMigration] Stack trace: ' . $e->getTraceAsString());
+        echo json_encode([
+            'success' => false,
+            'error' => $errorMsg,
+            'details' => getenv('DEBUG_ERRORS') === 'true' ? $e->getTraceAsString() : null
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 }
 
@@ -911,6 +984,11 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     // Route pour la visualisation de la base de données
     error_log('[ROUTER] ✅ Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
     handleDatabaseView();
+    exit;
+// Migration complète - Route pour exécuter la migration complète
+} elseif(($method === 'POST' || $method === 'GET') && ($path === '/admin/migrate-complete' || preg_match('#^/admin/migrate-complete/?$#', $path))) {
+    error_log('[ROUTER] ✅ Route /admin/migrate-complete matchée - Path: ' . $path . ' Method: ' . $method);
+    handleRunCompleteMigration();
     exit;
 
 // Health check
