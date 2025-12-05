@@ -8,7 +8,7 @@ Write-Host "╚═════════════════════�
 
 # DATABASE_URL configurée
 $DATABASE_URL = "postgresql://ott_data_user:lxNCXElZadbthGiOgT3cg2Y6JmMeMqUM@dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com/ott_data"
-$MIGRATION_FILE = "sql\MIGRATION_COMPLETE_PRODUCTION.sql"
+$MIGRATION_FILE = "sql\migration.sql"
 
 Write-Host "✅ Configuration automatique`n" -ForegroundColor Green
 

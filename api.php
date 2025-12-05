@@ -325,8 +325,18 @@ ADD COLUMN IF NOT EXISTS last_ip VARCHAR(45),
 ADD COLUMN IF NOT EXISTS warranty_expiry DATE,
 ADD COLUMN IF NOT EXISTS purchase_date DATE,
 ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(10,2),
-ADD COLUMN IF NOT EXISTS imei VARCHAR(15) UNIQUE,
-ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Europe/Paris';
+ADD COLUMN IF NOT EXISTS imei VARCHAR(15),
+ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'Europe/Paris',
+ADD COLUMN IF NOT EXISTS last_battery FLOAT,
+ADD COLUMN IF NOT EXISTS last_flowrate FLOAT,
+ADD COLUMN IF NOT EXISTS last_rssi INTEGER,
+ADD COLUMN IF NOT EXISTS min_flowrate NUMERIC(5,2),
+ADD COLUMN IF NOT EXISTS max_flowrate NUMERIC(5,2),
+ADD COLUMN IF NOT EXISTS min_battery NUMERIC(5,2),
+ADD COLUMN IF NOT EXISTS max_battery NUMERIC(5,2),
+ADD COLUMN IF NOT EXISTS min_rssi INT,
+ADD COLUMN IF NOT EXISTS max_rssi INT,
+ADD COLUMN IF NOT EXISTS min_max_updated_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS usb_logs (
     id SERIAL PRIMARY KEY,
@@ -353,11 +363,6 @@ UPDATE device_configurations
 SET gps_enabled = false 
 WHERE gps_enabled IS NULL;
 
-ALTER TABLE devices
-ADD COLUMN IF NOT EXISTS last_battery FLOAT,
-ADD COLUMN IF NOT EXISTS last_flowrate FLOAT,
-ADD COLUMN IF NOT EXISTS last_rssi INTEGER;
-
 ALTER TABLE device_configurations
 ADD COLUMN IF NOT EXISTS min_battery_pct INTEGER DEFAULT 20,
 ADD COLUMN IF NOT EXISTS max_temp_celsius INTEGER DEFAULT 50;
@@ -365,9 +370,9 @@ ADD COLUMN IF NOT EXISTS max_temp_celsius INTEGER DEFAULT 50;
 DO \$\$ 
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns 
-               WHERE table_name = 'firmwares' AND column_name = 'status') THEN
-        ALTER TABLE firmwares DROP CONSTRAINT IF EXISTS firmwares_status_check;
-        ALTER TABLE firmwares 
+               WHERE table_name = 'firmware_versions' AND column_name = 'status') THEN
+        ALTER TABLE firmware_versions DROP CONSTRAINT IF EXISTS firmwares_status_check;
+        ALTER TABLE firmware_versions 
         ADD CONSTRAINT firmwares_status_check 
         CHECK (status IN ('pending', 'pending_compilation', 'compiling', 'compiled', 'error', 'active'));
     END IF;
@@ -378,6 +383,54 @@ CREATE INDEX IF NOT EXISTS idx_patients_deleted_at ON patients(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);
 CREATE INDEX IF NOT EXISTS idx_measurements_timestamp ON measurements(timestamp);
+
+CREATE OR REPLACE FUNCTION update_device_min_max()
+RETURNS TRIGGER AS \$\$
+BEGIN
+  UPDATE devices SET
+    min_flowrate = CASE 
+      WHEN NEW.flowrate IS NOT NULL THEN
+        LEAST(COALESCE(min_flowrate, NEW.flowrate), NEW.flowrate)
+      ELSE min_flowrate
+    END,
+    max_flowrate = CASE 
+      WHEN NEW.flowrate IS NOT NULL THEN
+        GREATEST(COALESCE(max_flowrate, NEW.flowrate), NEW.flowrate)
+      ELSE max_flowrate
+    END,
+    min_battery = CASE 
+      WHEN NEW.battery IS NOT NULL THEN
+        LEAST(COALESCE(min_battery, NEW.battery), NEW.battery)
+      ELSE min_battery
+    END,
+    max_battery = CASE 
+      WHEN NEW.battery IS NOT NULL THEN
+        GREATEST(COALESCE(max_battery, NEW.battery), NEW.battery)
+      ELSE max_battery
+    END,
+    min_rssi = CASE 
+      WHEN NEW.signal_strength IS NOT NULL THEN
+        LEAST(COALESCE(min_rssi, NEW.signal_strength), NEW.signal_strength)
+      ELSE min_rssi
+    END,
+    max_rssi = CASE 
+      WHEN NEW.signal_strength IS NOT NULL THEN
+        GREATEST(COALESCE(max_rssi, NEW.signal_strength), NEW.signal_strength)
+      ELSE max_rssi
+    END,
+    min_max_updated_at = NOW()
+  WHERE id = NEW.device_id;
+  
+  RETURN NEW;
+END;
+\$\$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_update_device_min_max ON measurements;
+CREATE TRIGGER trg_update_device_min_max
+AFTER INSERT ON measurements
+FOR EACH ROW
+WHEN (NEW.flowrate IS NOT NULL OR NEW.battery IS NOT NULL OR NEW.signal_strength IS NOT NULL)
+EXECUTE FUNCTION update_device_min_max();
 ";
         
         // Exécuter la migration avec SQL corrigé directement

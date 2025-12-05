@@ -34,9 +34,7 @@ if (-not $DATABASE_URL) {
     # $PSScriptRoot = scripts\db, donc on remonte 2 niveaux pour arriver à la racine
     $rootDir = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $SCHEMA_FILE = Join-Path $rootDir "sql\schema.sql"
-    $MIGRATION_FILE = Join-Path $rootDir "sql\migration_optimisations.sql"
-    $PHONE_MIGRATION_FILE = Join-Path $rootDir "sql\migration_add_phone_users.sql"
-    $LAST_VALUES_MIGRATION_FILE = Join-Path $rootDir "sql\migration_add_last_values.sql"
+    $MIGRATION_FILE = Join-Path $rootDir "sql\migration.sql"
     
     # Résoudre les chemins absolus si les fichiers existent
     if (Test-Path $SCHEMA_FILE) {
@@ -44,12 +42,6 @@ if (-not $DATABASE_URL) {
     }
     if (Test-Path $MIGRATION_FILE) {
         $MIGRATION_FILE = Resolve-Path $MIGRATION_FILE
-    }
-    if (Test-Path $PHONE_MIGRATION_FILE) {
-        $PHONE_MIGRATION_FILE = Resolve-Path $PHONE_MIGRATION_FILE
-    }
-    if (Test-Path $LAST_VALUES_MIGRATION_FILE) {
-        $LAST_VALUES_MIGRATION_FILE = Resolve-Path $LAST_VALUES_MIGRATION_FILE
     }
 
 if (-not (Test-Path $SCHEMA_FILE)) {
@@ -115,42 +107,18 @@ try {
     Write-Host "   ✅ Schéma appliqué" -ForegroundColor Green
     Write-Host ""
 
-    # 2. Appliquer les optimisations
+    # 2. Appliquer la migration (pour BDD existantes)
     if (Test-Path $MIGRATION_FILE) {
-        Write-Host "2️⃣  Application des optimisations..." -ForegroundColor Yellow
+        Write-Host "2️⃣  Application de la migration..." -ForegroundColor Yellow
         $migrationResult = Invoke-PSQL -DatabaseUrl $DATABASE_URL -File $MIGRATION_FILE 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ Erreur lors de l'application des optimisations:" -ForegroundColor Red
+            Write-Host "❌ Erreur lors de l'application de la migration:" -ForegroundColor Red
             Write-Host $migrationResult -ForegroundColor Red
             exit 1
         }
-        Write-Host "   ✅ Optimisations appliquées" -ForegroundColor Green
+        Write-Host "   ✅ Migration appliquée" -ForegroundColor Green
     } else {
-        Write-Host "⚠️  Fichier migration_optimisations.sql introuvable, ignoré" -ForegroundColor Yellow
-    }
-    Write-Host ""
-
-    # 2.5. Appliquer la migration phone (si nécessaire)
-    if (Test-Path $PHONE_MIGRATION_FILE) {
-        Write-Host "2️⃣.5 Application de la migration phone (users)..." -ForegroundColor Yellow
-        $phoneMigrationResult = Invoke-PSQL -DatabaseUrl $DATABASE_URL -File $PHONE_MIGRATION_FILE 2>&1
-        if ($LASTEXITCODE -eq 0 -or $phoneMigrationResult -match "NOTICE.*ajoutée|NOTICE.*existe") {
-            Write-Host "   ✅ Migration phone appliquée" -ForegroundColor Green
-        } else {
-            Write-Host "   ⚠️  Migration phone (vérifiez les messages)" -ForegroundColor Yellow
-        }
-    }
-    Write-Host ""
-
-    # 2.6. Appliquer la migration last_flowrate et last_rssi (si nécessaire)
-    if (Test-Path $LAST_VALUES_MIGRATION_FILE) {
-        Write-Host "2️⃣.6 Application de la migration last_flowrate et last_rssi..." -ForegroundColor Yellow
-        $lastValuesMigrationResult = Invoke-PSQL -DatabaseUrl $DATABASE_URL -File $LAST_VALUES_MIGRATION_FILE 2>&1
-        if ($LASTEXITCODE -eq 0 -or $lastValuesMigrationResult -match "already exists|déjà existe") {
-            Write-Host "   ✅ Migration last_flowrate et last_rssi appliquée" -ForegroundColor Green
-        } else {
-            Write-Host "   ⚠️  Migration last_flowrate et last_rssi (vérifiez les messages)" -ForegroundColor Yellow
-        }
+        Write-Host "⚠️  Fichier migration.sql introuvable, ignoré" -ForegroundColor Yellow
     }
     Write-Host ""
 
