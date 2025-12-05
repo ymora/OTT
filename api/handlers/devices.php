@@ -432,7 +432,7 @@ function handleUpdateDevice($device_id) {
             return;
         }
 
-        $fields = ['device_name', 'status', 'installation_date', 'first_use_date', 'latitude', 'longitude', 'firmware_version'];
+        $fields = ['status', 'installation_date', 'first_use_date', 'latitude', 'longitude', 'firmware_version'];
         $updates = [];
         $params = ['id' => $device_id];
         
@@ -463,8 +463,16 @@ function handleUpdateDevice($device_id) {
             }
         }
 
+        // Gestion de device_name manuellement (en dehors de la boucle pour éviter conflit avec patient_id)
+        // Si patient_id est modifié, device_name sera géré dans la section patient ci-dessous
+        $patientIdBeingUpdated = array_key_exists('patient_id', $input);
+        if (array_key_exists('device_name', $input) && !$patientIdBeingUpdated) {
+            $updates[] = "device_name = :device_name";
+            $params['device_name'] = $input['device_name'];
+        }
+
         // Gestion de l'attribution/désattribution patient avec mise à jour automatique du device_name
-        if (array_key_exists('patient_id', $input)) {
+        if ($patientIdBeingUpdated) {
             if ($input['patient_id'] === null || $input['patient_id'] === '') {
                 // Désattribution : réinitialiser le nom au serial
                 $updates[] = "patient_id = NULL";

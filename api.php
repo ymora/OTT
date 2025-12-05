@@ -4,8 +4,8 @@
  * Version complète avec JWT, multi-users, OTA, notifications, audit
  */
 
-// ⚠️ MODE DEBUG ACTIVÉ - À DÉSACTIVER EN PRODUCTION ⚠️
-putenv('DEBUG_ERRORS=true');
+// Mode DEBUG activable via variable d'environnement (désactivé par défaut)
+// Pour activer : mettre DEBUG_ERRORS=true dans .env ou variable d'environnement
 
 require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
@@ -722,17 +722,14 @@ function parseRequestPath() {
 $path = parseRequestPath();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-// Debug pour /admin/database-view
-if (strpos($path, 'database-view') !== false) {
-    error_log('[DEBUG] Path: ' . $path . ' | Method: ' . $method . ' | URI: ' . ($_SERVER['REQUEST_URI'] ?? 'N/A'));
-    error_log('[DEBUG] Pattern test 1: ' . (preg_match('#^/admin/database-view#', $path) ? 'MATCH' : 'NO MATCH'));
-    error_log('[DEBUG] Pattern test 2: ' . (preg_match('#^/admin/database-view/?$#', $path) ? 'MATCH' : 'NO MATCH'));
-}
-
-// Debug pour /devices/test/create
-if (strpos($path, 'test/create') !== false) {
-    error_log('[DEBUG] Path: ' . $path . ' | Method: ' . $method . ' | URI: ' . ($_SERVER['REQUEST_URI'] ?? 'N/A'));
-    error_log('[DEBUG] Pattern test: ' . (preg_match('#^/devices/test/create/?$#', $path) ? 'MATCH' : 'NO MATCH'));
+// Debug conditionnel pour certaines routes (seulement si DEBUG_ERRORS est activé)
+if (getenv('DEBUG_ERRORS') === 'true') {
+    if (strpos($path, 'database-view') !== false) {
+        error_log('[DEBUG] Path: ' . $path . ' | Method: ' . $method);
+    }
+    if (strpos($path, 'test/create') !== false) {
+        error_log('[DEBUG] Path: ' . $path . ' | Method: ' . $method);
+    }
 }
 
 // Définir Content-Type selon le type de route
@@ -1143,50 +1140,19 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
            }
            exit;
        } else {
-    // Debug: logger le chemin et la méthode pour comprendre pourquoi l'endpoint n'est pas trouvé
-    $debugInfo = [
-        'path' => $path,
-        'method' => $method,
-        'uri' => $_SERVER['REQUEST_URI'] ?? 'N/A',
-        'script_name' => $_SERVER['SCRIPT_NAME'] ?? 'N/A',
-        'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'N/A'
-    ];
-    
-    // Log spécifique pour les routes firmwares/ino qui ne matchent pas
-    if (preg_match('#/firmwares.*ino#', $path)) {
-        error_log("[API Router] Route firmwares/ino non matchée: " . json_encode($debugInfo));
+    // Log de debug conditionnel (seulement si DEBUG_ERRORS est activé)
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        $debugInfo = [
+            'path' => $path,
+            'method' => $method,
+            'uri' => $_SERVER['REQUEST_URI'] ?? 'N/A'
+        ];
+        error_log("[API Router] Path not matched: " . json_encode($debugInfo));
     }
     
-    // Log spécifique pour la route database-view
-    if (preg_match('#/admin/database-view#', $path)) {
-        error_log("[API Router] Route /admin/database-view non matchée: " . json_encode($debugInfo));
-        error_log("[API Router] Path exact: '" . $path . "' Method: " . $method);
-        error_log("[API Router] Pattern test 1: " . (preg_match('#^/admin/database-view/?$#', $path) ? 'MATCH' : 'NO MATCH'));
-        error_log("[API Router] Pattern test 2: " . (preg_match('#/admin/database-view#', $path) ? 'MATCH' : 'NO MATCH'));
-    }
-    
-    // Log spécifique pour la route devices/test/create
-    if (preg_match('#/devices/test/create#', $path)) {
-        error_log("[API Router] Route /devices/test/create non matchée: " . json_encode($debugInfo));
-        error_log("[API Router] Path exact: '" . $path . "' Method: " . $method);
-        error_log("[API Router] Pattern test 1: " . (($path === '/devices/test/create') ? 'MATCH' : 'NO MATCH'));
-        error_log("[API Router] Pattern test 2: " . (preg_match('#^/devices/test/create/?$#', $path) ? 'MATCH' : 'NO MATCH'));
-        error_log("[API Router] Pattern test 3: " . (preg_match('#/devices/test/create#', $path) ? 'MATCH' : 'NO MATCH'));
-    }
-    
-    // Log spécifique pour la route regenerate-time-tracking
-    if (preg_match('#/docs/regenerate-time-tracking#', $path)) {
-        error_log("[API Router] Route /docs/regenerate-time-tracking non matchée: " . json_encode($debugInfo));
-        error_log("[API Router] Path exact: '" . $path . "' Method: " . $method);
-        error_log("[API Router] Pattern test 1: " . (preg_match('#^/docs/regenerate-time-tracking/?$#', $path) ? 'MATCH' : 'NO MATCH'));
-        error_log("[API Router] Pattern test 2: " . (preg_match('#/docs/regenerate-time-tracking#', $path) ? 'MATCH' : 'NO MATCH'));
-    }
-    
-    error_log("[API Router] Path not matched: " . json_encode($debugInfo));
     http_response_code(404);
     echo json_encode([
         'success' => false, 
-        'error' => 'Endpoint not found',
-        'debug' => $debugInfo
+        'error' => 'Endpoint not found'
     ]);
 }
