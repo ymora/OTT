@@ -162,32 +162,12 @@ END $$;
 -- ═══════════════════════════════════════════════════════════════════
 -- ÉTAPE 12: NETTOYAGE - Suppression valeurs par défaut inutiles
 -- ═══════════════════════════════════════════════════════════════════
-
--- Devices
-ALTER TABLE devices 
-ALTER COLUMN firmware_version DROP DEFAULT,
-ALTER COLUMN latitude DROP DEFAULT,
-ALTER COLUMN longitude DROP DEFAULT;
-
--- Device configurations
-ALTER TABLE device_configurations
-ALTER COLUMN firmware_version DROP DEFAULT;
-
--- Alerts
-ALTER TABLE alerts
-ALTER COLUMN resolved_at DROP DEFAULT;
-
--- Notifications queue
-ALTER TABLE notifications_queue
-ALTER COLUMN sent_at DROP DEFAULT,
-ALTER COLUMN error_message DROP DEFAULT;
-
--- Device commands
-ALTER TABLE device_commands
-ALTER COLUMN execute_after DROP DEFAULT,
-ALTER COLUMN expires_at DROP DEFAULT,
-ALTER COLUMN executed_at DROP DEFAULT,
-ALTER COLUMN result DROP DEFAULT;
+-- NOTE: Cette étape a été désactivée car non essentielle et peut causer
+-- des erreurs sur certaines configurations. Les valeurs par défaut ne sont
+-- pas problématiques et peuvent être utiles.
+-- 
+-- Si vous souhaitez nettoyer les valeurs par défaut, vous pouvez le faire
+-- manuellement après la migration principale.
 
 -- ═══════════════════════════════════════════════════════════════════
 -- ÉTAPE 13: INDEX PERFORMANCE
