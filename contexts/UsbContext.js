@@ -252,6 +252,12 @@ export function UsbProvider({ children }) {
         timestamp: new Date(measurement.timestamp).toISOString(),
         status: 'USB'
       }
+      
+      // Inclure les coordonnées GPS si disponibles (même pour USB)
+      if (measurement.latitude != null && measurement.longitude != null) {
+        measurementData.latitude = measurement.latitude
+        measurementData.longitude = measurement.longitude
+      }
 
       logger.debug('📤 Envoi mesure USB à l\'API:', measurementData)
       

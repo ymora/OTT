@@ -78,7 +78,8 @@ function handleGetDevices() {
                 p.first_name, 
                 p.last_name,
                 COALESCE(d.firmware_version, dc.firmware_version) as firmware_version,
-                COALESCE(dc.ota_pending, FALSE) as ota_pending
+                COALESCE(dc.ota_pending, FALSE) as ota_pending,
+                COALESCE(dc.gps_enabled, FALSE) as gps_enabled
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
@@ -791,10 +792,19 @@ function handlePostMeasurement() {
                 }
                 
                 // Gestion de la position
-                // Pour OTA : utiliser latitude/longitude envoyées par le firmware (GPS ou réseau cellulaire)
-                // Pour USB : utiliser l'IP du client pour géolocaliser
-                if ($isUsbMeasurement) {
-                    // Dispositif USB : géolocaliser via IP du client
+                // Priorité : coordonnées GPS/réseau cellulaire envoyées par le firmware (OTA ou USB)
+                // Fallback : géolocalisation via IP du client (seulement si pas de GPS)
+                if ($latitude !== null && $longitude !== null) {
+                    // Utiliser les coordonnées GPS/réseau cellulaire envoyées (OTA ou USB avec GPS activé)
+                    // Valider les coordonnées (latitude: -90 à 90, longitude: -180 à 180)
+                    if ($latitude >= -90 && $latitude <= 90 && $longitude >= -180 && $longitude <= 180) {
+                        $updateFields[] = 'latitude = :latitude';
+                        $updateFields[] = 'longitude = :longitude';
+                        $updateParams['latitude'] = $latitude;
+                        $updateParams['longitude'] = $longitude;
+                    }
+                } elseif ($isUsbMeasurement) {
+                    // Fallback pour USB : géolocaliser via IP du client seulement si pas de GPS
                     $clientIp = getClientIp();
                     if ($clientIp) {
                         $ipLocation = getLocationFromIp($clientIp);
@@ -803,17 +813,6 @@ function handlePostMeasurement() {
                             $updateFields[] = 'longitude = :longitude';
                             $updateParams['latitude'] = $ipLocation['latitude'];
                             $updateParams['longitude'] = $ipLocation['longitude'];
-                        }
-                    }
-                } else {
-                    // Dispositif OTA : utiliser les coordonnées GPS/réseau cellulaire envoyées
-                    if ($latitude !== null && $longitude !== null) {
-                        // Valider les coordonnées (latitude: -90 à 90, longitude: -180 à 180)
-                        if ($latitude >= -90 && $latitude <= 90 && $longitude >= -180 && $longitude <= 180) {
-                            $updateFields[] = 'latitude = :latitude';
-                            $updateFields[] = 'longitude = :longitude';
-                            $updateParams['latitude'] = $latitude;
-                            $updateParams['longitude'] = $longitude;
                         }
                     }
                 }
