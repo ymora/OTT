@@ -590,6 +590,190 @@ $auditResults.Scores["BestPractices"] = 9
 Write-OK "Best Practices: Conformite elevee"
 
 # ===============================================================================
+# PHASE OPTIMISATION AVANCÉE : VÉRIFICATIONS DÉTAILLÉES
+# ===============================================================================
+
+Write-Section "[OPTIMISATION] Vérifications avancées - Performance et Conception"
+
+$optimizationIssues = @()
+$optimizationScore = 10.0
+
+# 1. Vérifier requêtes SQL N+1 dans PHP (backend)
+Write-Host "`n1. Requêtes SQL Backend (N+1):" -ForegroundColor Yellow
+$phpFiles = @(Get-ChildItem -Path api -Recurse -File -Include *.php -ErrorAction SilentlyContinue)
+$nPlusOnePatterns = @()
+foreach ($file in $phpFiles) {
+    $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+    if ($content) {
+        # Chercher des patterns de requêtes dans des boucles
+        $loops = [regex]::Matches($content, '(foreach|while|for)\s*\([^)]*\)\s*\{[^}]*->(query|prepare|execute)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        if ($loops.Count -gt 0) {
+            foreach ($loop in $loops) {
+                $line = ($content.Substring(0, $loop.Index) -split "`n").Count
+                $nPlusOnePatterns += "$($file.Name):$line"
+            }
+        }
+    }
+}
+
+if ($nPlusOnePatterns.Count -gt 0) {
+    Write-Warn "  $($nPlusOnePatterns.Count) requêtes SQL potentiellement N+1 détectées"
+    $optimizationIssues += "Backend: $($nPlusOnePatterns.Count) requêtes SQL dans loops"
+    $optimizationScore -= 1.0
+} else {
+    Write-OK "  Aucun pattern N+1 détecté dans PHP"
+}
+
+# 2. Vérifier index SQL manquants
+Write-Host "`n2. Index SQL:" -ForegroundColor Yellow
+$sqlFiles = @(Get-ChildItem -Path sql -File -Include *.sql -ErrorAction SilentlyContinue)
+$hasIndexes = $false
+foreach ($file in $sqlFiles) {
+    $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+    if ($content -and ($content -match 'CREATE\s+INDEX|CREATE\s+UNIQUE\s+INDEX')) {
+        $hasIndexes = $true
+        break
+    }
+}
+
+if ($hasIndexes) {
+    Write-OK "  Index SQL présents dans les migrations"
+} else {
+    Write-Warn "  Aucun index SQL explicite trouvé (peut être normal si créés ailleurs)"
+    $optimizationScore -= 0.5
+}
+
+# 3. Vérifier pagination API
+Write-Host "`n3. Pagination API:" -ForegroundColor Yellow
+$paginatedEndpoints = @($phpFiles | Select-String -Pattern 'LIMIT\s+\d+|OFFSET\s+\d+|page|limit|offset', -CaseSensitive:$false | Select-Object -Unique)
+if ($paginatedEndpoints.Count -gt 5) {
+    Write-OK "  Pagination présente dans $($paginatedEndpoints.Count) endpoints"
+} else {
+    Write-Warn "  Pagination limitée - à vérifier pour les grandes listes"
+    $optimizationScore -= 0.5
+}
+
+# 4. Vérifier imports inutilisés React
+Write-Host "`n4. Imports React:" -ForegroundColor Yellow
+$jsFiles = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+    $_.FullName -match '\\app\\|\\components\\|\\hooks\\' -and
+    $_.FullName -notmatch 'node_modules' -and
+    $_.FullName -notmatch '\\\.next\\'
+})
+
+$unusedImports = 0
+foreach ($file in $jsFiles) {
+    $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+    if ($content) {
+        # Extraire les imports
+        $imports = [regex]::Matches($content, 'import\s+\{([^}]+)\}\s+from')
+        foreach ($imp in $imports) {
+            $importedNames = $imp.Groups[1].Value -split ',' | ForEach-Object { $_.Trim() -replace 'as\s+\w+', '' }
+            foreach ($name in $importedNames) {
+                $cleanName = $name.Trim()
+                if ($cleanName -and $cleanName -ne 'type' -and $cleanName.Length -gt 2) {
+                    # Vérifier si utilisé dans le fichier (hors import)
+                    $contentWithoutImports = $content -replace 'import[^;]+;', ''
+                    if ($contentWithoutImports -notmatch "\b$([regex]::Escape($cleanName))\b") {
+                        $unusedImports++
+                    }
+                }
+            }
+        }
+    }
+}
+
+if ($unusedImports -gt 10) {
+    Write-Warn "  $unusedImports imports potentiellement inutilisés (à vérifier manuellement)"
+    $optimizationScore -= 0.3
+} else {
+    Write-OK "  Imports optimisés (< 10 suspects)"
+}
+
+# 5. Vérifier composants non mémorisés avec props complexes
+Write-Host "`n5. Mémorisation composants:" -ForegroundColor Yellow
+$componentsWithoutMemo = @($jsFiles | Where-Object { 
+    $content = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
+    $content -and 
+    $content -match 'export\s+(default\s+)?function\s+\w+' -and
+    $content -match 'props|props\s*=\s*\{' -and
+    $content -notmatch 'React\.memo|memo\('
+})
+if ($componentsWithoutMemo.Count -gt 20) {
+    Write-Warn "  $($componentsWithoutMemo.Count) composants avec props non mémorisés (potentiel)"
+    $optimizationScore -= 0.3
+} else {
+    Write-OK "  Composants bien mémorisés ou props simples"
+}
+
+# 6. Vérifier gestion mémoire (setInterval/setTimeout sans cleanup)
+Write-Host "`n6. Gestion mémoire (timers):" -ForegroundColor Yellow
+$timersWithoutCleanup = @($jsFiles | Select-String -Pattern 'setInterval|setTimeout' | 
+    ForEach-Object { 
+        $content = Get-Content $_.Path -Raw -ErrorAction SilentlyContinue
+        $lineNum = $_.LineNumber
+        # Vérifier s'il y a un cleanup dans useEffect ou componentWillUnmount
+        $context = ($content -split "`n")[[Math]::Max(0, $lineNum - 30)..[Math]::Min($content.Length, $lineNum + 30)] -join "`n"
+        if ($context -notmatch 'clearInterval|clearTimeout|return\s+\(\)\s*=>|useEffect.*return') {
+            $_
+        }
+    })
+if ($timersWithoutCleanup.Count -gt 0) {
+    Write-Warn "  $($timersWithoutCleanup.Count) timers potentiellement sans cleanup"
+    $optimizationIssues += "Frontend: $($timersWithoutCleanup.Count) setInterval/setTimeout sans cleanup"
+    $optimizationScore -= 0.5
+} else {
+    Write-OK "  Tous les timers ont un cleanup approprié"
+}
+
+# 7. Vérifier dépendances inutilisées (package.json)
+Write-Host "`n7. Dépendances:" -ForegroundColor Yellow
+if (Test-Path "package.json") {
+    $packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
+    $deps = if ($packageJson.dependencies) { $packageJson.dependencies.PSObject.Properties.Name } else { @() }
+    $devDeps = if ($packageJson.devDependencies) { $packageJson.devDependencies.PSObject.Properties.Name } else { @() }
+    Write-OK "  $($deps.Count) dépendances production, $($devDeps.Count) dev"
+    if ($deps.Count -gt 50) {
+        Write-Warn "  Nombre élevé de dépendances ($($deps.Count)) - à auditer régulièrement"
+        $optimizationScore -= 0.2
+    }
+} else {
+    Write-Warn "  package.json introuvable"
+}
+
+# 8. Vérifier requêtes API frontend avec filtres/pagination
+Write-Host "`n8. Optimisation requêtes API:" -ForegroundColor Yellow
+$apiCalls = @($jsFiles | Select-String -Pattern 'fetchJson|fetch\(|axios\.(get|post)' -CaseSensitive:$false)
+$unoptimizedCalls = @($apiCalls | Where-Object {
+    $content = Get-Content $_.Path -Raw -ErrorAction SilentlyContinue
+    $line = $_.Line
+    # Vérifier si la requête charge toutes les données sans limite
+    $context = ($content -split "`n")[[Math]::Max(0, $_.LineNumber - 5)..[Math]::Min($content.Length, $_.LineNumber + 5)] -join "`n"
+    $context -match '/devices' -or $context -match '/patients' -or $context -match '/users' -or $context -match '/alerts'
+})
+if ($unoptimizedCalls.Count -gt 10) {
+    $withLimit = @($unoptimizedCalls | Where-Object { 
+        $content = Get-Content $_.Path -Raw -ErrorAction SilentlyContinue
+        $context = ($content -split "`n")[[Math]::Max(0, $_.LineNumber - 5)..[Math]::Min($content.Length, $_.LineNumber + 5)] -join "`n"
+        $context -match 'limit|LIMIT|pagination|page'
+    })
+    if ($withLimit.Count -lt ($unoptimizedCalls.Count * 0.5)) {
+        Write-Warn "  $($unoptimizedCalls.Count) requêtes API potentiellement non paginées"
+        $optimizationScore -= 0.4
+    } else {
+        Write-OK "  La majorité des requêtes utilise la pagination"
+    }
+} else {
+    Write-OK "  Requêtes API optimisées"
+}
+
+# Score final optimisation
+$auditResults.Scores["Optimisation"] = [Math]::Max($optimizationScore, 0)
+if ($optimizationIssues.Count -gt 0) {
+    $auditResults.Warnings += $optimizationIssues
+}
+
+# ===============================================================================
 
 # ===============================================================================
 # GENERATION SUIVI TEMPS (INTEGRE)
@@ -770,6 +954,7 @@ $scoreWeights = @{
     "Database" = 1.0
     "Securite" = 2.0
     "Performance" = 1.0
+    "Optimisation" = 1.2
     "Tests" = 0.8
     "Documentation" = 0.5
     "Imports" = 0.5
@@ -1007,31 +1192,45 @@ $warnings = @()
 if (Test-Path "api.php") {
     $apiContent = Get-Content "api.php" -Raw
     
-    # Extraire toutes les routes
-    $routePattern = "elseif\(preg_match\('#([^']+)'#.*\) && \`$method === '([^']+)'\) \{[^\}]*handle(\w+)\("
-    $routes = [regex]::Matches($apiContent, $routePattern)
+    # Extraire toutes les routes - Pattern amélioré pour capturer toutes les variantes
+    # Chercher les patterns: elseif(preg_match('#...', $path, $m) && $method === '...')
+    $routePatterns = @(
+        "elseif\(preg_match\('#([^']+)'#.*\) && \`$method === '([^']+)'\) \{[^\}]*handle(\w+)\(",
+        "elseif\(preg_match\('#([^']+)'#.*\$path.*\) && \$method === '([^']+)'\) \{[^\}]*handle(\w+)\("
+    )
     
     $routesByEndpoint = @{}
     $handlersCalled = @{}
     
-    foreach ($route in $routes) {
-        $path = $route.Groups[1].Value
-        $method = $route.Groups[2].Value
-        $handler = "handle" + $route.Groups[3].Value
-        $key = "$method $path"
-        
-        if (-not $routesByEndpoint.ContainsKey($path)) {
-            $routesByEndpoint[$path] = @{}
+    foreach ($pattern in $routePatterns) {
+        $matches = [regex]::Matches($apiContent, $pattern)
+        foreach ($match in $matches) {
+            $path = $match.Groups[1].Value
+            $method = $match.Groups[2].Value
+            $handler = "handle" + $match.Groups[3].Value
+            
+            # Normaliser le path (enlever les anchors regex)
+            $normalizedPath = $path -replace '\$$', '' -replace '^\^', ''
+            
+            if (-not $routesByEndpoint.ContainsKey($normalizedPath)) {
+                $routesByEndpoint[$normalizedPath] = @{}
+            }
+            $routesByEndpoint[$normalizedPath][$method] = $handler
+            $handlersCalled[$handler] = $true
         }
-        $routesByEndpoint[$path][$method] = $handler
-        $handlersCalled[$handler] = $true
     }
     
-    Write-Info "Routes trouvées: $($routes.Count)"
+    Write-Info "Routes trouvées: $($handlersCalled.Keys.Count)"
     
-    # Vérifier handlers définis
+    # Vérifier handlers définis - Tous les fichiers handlers
     $handlersDefined = @{}
-    $handlerFiles = @("api/handlers/auth.php", "api/handlers/devices.php")
+    $handlerFiles = @(
+        "api/handlers/auth.php",
+        "api/handlers/devices.php",
+        "api/handlers/firmwares.php",
+        "api/handlers/notifications.php",
+        "api/handlers/usb_logs.php"
+    )
     
     foreach ($file in $handlerFiles) {
         if (Test-Path $file) {
@@ -1068,18 +1267,26 @@ if (Test-Path "api.php") {
     
     foreach ($ep in $criticalEndpoints) {
         $found = $false
-        foreach ($path in $routesByEndpoint.Keys) {
-            if ($path -match $ep.Endpoint -and $routesByEndpoint[$path].ContainsKey($ep.Method)) {
-                $handler = $routesByEndpoint[$path][$ep.Method]
-                if ($handler -eq $ep.Handler) {
-                    Write-OK "$($ep.Name): $($ep.Method) $path → $handler"
+        # Vérifier directement dans api.php avec recherche directe
+        # Chercher pattern: preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH'
+        $searchPattern = $ep.Endpoint -replace '\(\\d\+\)', '\(\\d\+\)'
+        $fullPattern = "preg_match\('#$searchPattern'#" -replace '\\\\', '\\'
+        
+        # Vérifier que la route existe avec la méthode correcte ET le handler
+        if ($apiContent -match $fullPattern) {
+            # Vérifier que c'est bien avec la bonne méthode
+            $routeBlock = [regex]::Match($apiContent, "$fullPattern.*?\`$method === '$($ep.Method)'", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            if ($routeBlock.Success) {
+                # Vérifier que le handler est présent dans ce bloc
+                if ($routeBlock.Value -match $ep.Handler) {
+                    Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
                     $found = $true
-                    break
                 }
             }
         }
+        
         if (-not $found) {
-            Write-Err "$($ep.Name): Route MANQUANTE"
+            Write-Err "$($ep.Name): Route MANQUANTE ou non détectée"
             $criticalIssues += "$($ep.Name) manquante"
             $structureScore -= 2.0
         }
