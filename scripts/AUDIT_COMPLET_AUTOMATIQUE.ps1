@@ -782,6 +782,223 @@ if ($optimizationIssues.Count -gt 0) {
 }
 
 # ===============================================================================
+# VÉRIFICATION COHÉRENCE CONFIGURATION DÉPLOIEMENT
+# ===============================================================================
+
+Write-Section "[CONFIG] Cohérence Configuration Déploiement - Local vs Production"
+
+$configScore = 10.0
+$configIssues = @()
+$configWarnings = @()
+
+# 1. Vérifier render.yaml existe et est valide
+Write-Host "`n1. Fichiers de configuration:" -ForegroundColor Yellow
+if (Test-Path "render.yaml") {
+    $renderYaml = Get-Content "render.yaml" -Raw -ErrorAction SilentlyContinue
+    if ($renderYaml) {
+        Write-OK "  render.yaml présent"
+        
+        # Vérifier que les variables d'environnement nécessaires sont listées
+        $requiredVars = @("DATABASE_URL", "JWT_SECRET")
+        foreach ($var in $requiredVars) {
+            if ($renderYaml -match "key:\s*$var" -or $renderYaml -match "`"$var`"") {
+                Write-OK "    Variable $var documentée dans render.yaml"
+            } else {
+                Write-Warn "    Variable $var manquante dans render.yaml"
+                $configWarnings += "Variable $var non documentée dans render.yaml"
+                $configScore -= 0.2
+            }
+        }
+    } else {
+        Write-Warn "  render.yaml vide ou non lisible"
+        $configScore -= 1.0
+    }
+} else {
+    Write-Warn "  render.yaml manquant"
+    $configIssues += "render.yaml manquant"
+    $configScore -= 2.0
+}
+
+# 2. Vérifier docker-compose.yml
+if (Test-Path "docker-compose.yml") {
+    $dockerCompose = Get-Content "docker-compose.yml" -Raw -ErrorAction SilentlyContinue
+    if ($dockerCompose) {
+        Write-OK "  docker-compose.yml présent"
+        
+        # Vérifier cohérence des variables avec render.yaml
+        if ($renderYaml) {
+            # Extraire variables de render.yaml
+            $renderVars = [regex]::Matches($renderYaml, 'key:\s*([A-Z_]+)') | ForEach-Object { $_.Groups[1].Value }
+            
+            # Vérifier que les variables critiques sont dans docker-compose
+            $criticalVars = @("DATABASE_URL", "JWT_SECRET")
+            foreach ($var in $criticalVars) {
+                if ($dockerCompose -match $var) {
+                    Write-OK "    Variable $var présente dans docker-compose.yml"
+                } else {
+                    Write-Warn "    Variable $var absente de docker-compose.yml (acceptable pour dev)"
+                }
+            }
+        }
+    } else {
+        Write-Warn "  docker-compose.yml vide"
+    }
+} else {
+    Write-Warn "  docker-compose.yml manquant (acceptable si non utilisé)"
+}
+
+# 3. Vérifier env.example
+Write-Host "`n2. Variables d'environnement:" -ForegroundColor Yellow
+if (Test-Path "env.example") {
+    $envExample = Get-Content "env.example" -Raw -ErrorAction SilentlyContinue
+    Write-OK "  env.example présent"
+    
+    # Vérifier que les variables critiques sont documentées
+    $criticalEnvVars = @("DATABASE_URL", "JWT_SECRET", "NEXT_PUBLIC_API_URL")
+    foreach ($var in $criticalEnvVars) {
+        if ($envExample -match "^$var=" -or $envExample -match "#.*$var") {
+            Write-OK "    Variable $var documentée"
+        } else {
+            Write-Warn "    Variable $var non documentée dans env.example"
+            $configWarnings += "Variable $var manquante dans env.example"
+            $configScore -= 0.3
+        }
+    }
+    
+    # Comparer avec render.yaml
+    if ($renderYaml) {
+        $envExampleVars = [regex]::Matches($envExample, '^([A-Z_]+)=') | ForEach-Object { $_.Groups[1].Value }
+        $renderVars = [regex]::Matches($renderYaml, 'key:\s*([A-Z_]+)') | ForEach-Object { $_.Groups[1].Value }
+        
+        # Variables dans render mais pas dans env.example
+        $missingInExample = $renderVars | Where-Object { $_ -notin $envExampleVars }
+        if ($missingInExample.Count -gt 0) {
+            Write-Warn "    Variables dans render.yaml mais absentes de env.example: $($missingInExample -join ', ')"
+            $configScore -= 0.5
+        }
+    }
+} else {
+    Write-Warn "  env.example manquant"
+    $configIssues += "env.example manquant"
+    $configScore -= 2.0
+}
+
+# 4. Vérifier next.config.js cohérence
+Write-Host "`n3. Configuration Next.js:" -ForegroundColor Yellow
+if (Test-Path "next.config.js") {
+    $nextConfig = Get-Content "next.config.js" -Raw -ErrorAction SilentlyContinue
+    Write-OK "  next.config.js présent"
+    
+    # Vérifier que basePath est cohérent avec NEXT_PUBLIC_BASE_PATH
+    if ($nextConfig -match 'basePath' -or $nextConfig -match 'NEXT_PUBLIC_BASE_PATH') {
+        Write-OK "    Configuration basePath présente"
+    } else {
+        Write-Warn "    Configuration basePath absente (peut être intentionnel)"
+    }
+    
+    # Vérifier configuration export statique
+    if ($nextConfig -match 'output.*export' -or $nextConfig -match 'NEXT_STATIC_EXPORT') {
+        Write-OK "    Configuration export statique présente"
+    }
+} else {
+    Write-Warn "  next.config.js manquant"
+    $configIssues += "next.config.js manquant"
+    $configScore -= 2.0
+}
+
+# 5. Vérifier package.json scripts de déploiement
+Write-Host "`n4. Scripts de déploiement:" -ForegroundColor Yellow
+if (Test-Path "package.json") {
+    $packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
+    $scripts = $packageJson.scripts
+    
+    $requiredScripts = @("build", "start")
+    foreach ($script in $requiredScripts) {
+        if ($scripts.PSObject.Properties.Name -contains $script) {
+            Write-OK "    Script '$script' présent"
+        } else {
+            Write-Warn "    Script '$script' manquant"
+            $configScore -= 0.5
+        }
+    }
+    
+    # Vérifier script export si basePath est configuré
+    if ($nextConfig -match 'basePath' -and $scripts.PSObject.Properties.Name -notcontains "export") {
+        Write-Warn "    Script 'export' recommandé pour déploiement statique"
+        $configScore -= 0.3
+    }
+} else {
+    Write-Warn "  package.json manquant"
+    $configScore -= 2.0
+}
+
+# 6. Vérifier Dockerfiles
+Write-Host "`n5. Dockerfiles:" -ForegroundColor Yellow
+$dockerfiles = @(Get-ChildItem -File -Filter "Dockerfile*" -ErrorAction SilentlyContinue)
+if ($dockerfiles.Count -gt 0) {
+    Write-OK "  $($dockerfiles.Count) Dockerfile(s) présent(s)"
+    
+    foreach ($dockerfile in $dockerfiles) {
+        $content = Get-Content $dockerfile.FullName -Raw -ErrorAction SilentlyContinue
+        # Vérifier que les variables d'environnement critiques sont mentionnées
+        if ($content -match "ENV|ARG" -or $content -match "DATABASE|JWT") {
+            Write-OK "    $($dockerfile.Name) semble configuré"
+        } else {
+            Write-Warn "    $($dockerfile.Name) pourrait manquer de variables d'environnement"
+        }
+    }
+} else {
+    Write-Warn "  Aucun Dockerfile trouvé (acceptable si non utilisé)"
+}
+
+# 7. Vérifier cohérence API_URL entre configs
+Write-Host "`n6. Cohérence URLs API:" -ForegroundColor Yellow
+$apiUrlInExample = $null
+$apiUrlInNextConfig = $null
+
+if ($envExample) {
+    $apiUrlMatch = [regex]::Match($envExample, 'NEXT_PUBLIC_API_URL=(.+)')
+    if ($apiUrlMatch.Success) {
+        $apiUrlInExample = $apiUrlMatch.Groups[1].Value.Trim()
+    }
+}
+
+if ($nextConfig) {
+    $apiUrlMatch = [regex]::Match($nextConfig, 'NEXT_PUBLIC_API_URL["\']?\s*[:=]\s*["\']?([^"\']+)')
+    if ($apiUrlMatch.Success) {
+        $apiUrlInNextConfig = $apiUrlMatch.Groups[1].Value.Trim()
+    }
+}
+
+if ($apiUrlInExample -and $apiUrlInNextConfig) {
+    if ($apiUrlInExample -eq $apiUrlInNextConfig) {
+        Write-OK "    API_URL cohérente entre env.example et next.config.js"
+    } else {
+        Write-Warn "    API_URL différente: env.example=$apiUrlInExample vs next.config.js=$apiUrlInNextConfig"
+        $configWarnings += "API_URL incohérente entre configs"
+        $configScore -= 0.5
+    }
+} else {
+    if ($apiUrlInExample) {
+        Write-OK "    API_URL définie dans env.example"
+    } elseif ($apiUrlInNextConfig) {
+        Write-OK "    API_URL définie dans next.config.js"
+    } else {
+        Write-Warn "    API_URL non trouvée dans les configs"
+        $configScore -= 0.3
+    }
+}
+
+# Score final
+$auditResults.Scores["Configuration"] = [Math]::Max($configScore, 0)
+if ($configIssues.Count -gt 0) {
+    $auditResults.Issues += $configIssues
+}
+if ($configWarnings.Count -gt 0) {
+    $auditResults.Warnings += $configWarnings
+}
+
+# ===============================================================================
 
 # ===============================================================================
 # GENERATION SUIVI TEMPS (INTEGRE)
@@ -963,6 +1180,7 @@ $scoreWeights = @{
     "Securite" = 2.0
     "Performance" = 1.0
     "Optimisation" = 1.2
+    "Configuration" = 1.0
     "Tests" = 0.8
     "Documentation" = 0.5
     "Imports" = 0.5
