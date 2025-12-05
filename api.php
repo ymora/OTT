@@ -839,6 +839,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleUpdateDevice($m[1]);
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteDevice($m[1]);
+} elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PATCH') {
+    handleRestoreDevice($m[1]);
 } elseif(preg_match('#/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'GET') {
     handleGetDeviceConfig($m[1]);
 } elseif(preg_match('#/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'PUT') {

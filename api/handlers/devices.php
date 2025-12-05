@@ -600,6 +600,46 @@ function handleDeleteDevice($device_id) {
     }
 }
 
+function handleRestoreDevice($device_id) {
+    global $pdo;
+    requirePermission('devices.delete');
+
+    try {
+        // Vérifier que le dispositif existe et est archivé
+        $stmt = $pdo->prepare("SELECT * FROM devices WHERE id = :id");
+        $stmt->execute(['id' => $device_id]);
+        $device = $stmt->fetch();
+
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Dispositif introuvable']);
+            return;
+        }
+
+        if (!$device['deleted_at']) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Le dispositif n\'est pas archivé']);
+            return;
+        }
+
+        // Restaurer le dispositif (soft delete = NULL)
+        $stmt = $pdo->prepare("UPDATE devices SET deleted_at = NULL WHERE id = :id");
+        $stmt->execute(['id' => $device_id]);
+
+        auditLog('device.restored', 'device', $device_id, $device, ['deleted_at' => null]);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Dispositif restauré avec succès'
+        ]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleRestoreDevice] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
 function handlePostMeasurement() {
     global $pdo;
     
