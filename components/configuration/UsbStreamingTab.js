@@ -1530,7 +1530,7 @@ export default function DebugTab() {
                   })()}
                 </td>
                 
-                {/* GPS - USB en priorité, puis DB */}
+                {/* GPS - Statut ON/OFF/N/A + Coordonnées */}
                 <td className="px-3 py-1.5">
                   {(() => {
                     // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
@@ -1550,17 +1550,37 @@ export default function DebugTab() {
                     )
                     const lat = latInfo.value ?? usbLat ?? deviceDbData?.latitude ?? null
                     const lon = lonInfo.value ?? usbLon ?? deviceDbData?.longitude ?? null
-                    const hasGps = lat != null && lon != null && lat !== 0 && lon !== 0 && !isNaN(lat) && !isNaN(lon)
+                    const hasCoordinates = lat != null && lon != null && lat !== 0 && lon !== 0 && !isNaN(lat) && !isNaN(lon)
+                    const gpsEnabled = deviceDbData?.gps_enabled ?? false
                     const source = latInfo.source || lonInfo.source || (usbLat != null ? 'usb' : null)
                     const timestamp = latInfo.timestamp || lonInfo.timestamp || deviceUsbMeasurement?.timestamp
+                    
+                    // Déterminer le statut GPS
+                    let status, statusColor, statusText
+                    if (gpsEnabled) {
+                      if (hasCoordinates) {
+                        status = 'ON'
+                        statusColor = 'text-green-600 dark:text-green-400'
+                        statusText = `${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}`
+                      } else {
+                        status = 'N/A'
+                        statusColor = 'text-yellow-600 dark:text-yellow-400'
+                        statusText = 'GPS activé, fix en cours...'
+                      }
+                    } else {
+                      status = 'OFF'
+                      statusColor = 'text-gray-400 dark:text-gray-500'
+                      statusText = 'Désactivé'
+                    }
+                    
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
-                          <span className={`text-xs font-semibold ${!hasGps || isNaN(lat) || isNaN(lon) ? 'text-gray-400 dark:text-gray-500' : 'text-green-600 dark:text-green-400'}`}>
-                            {hasGps && !isNaN(lat) && !isNaN(lon) ? `${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}` : 'N/A'}
+                          <span className={`text-xs font-semibold ${statusColor}`}>
+                            {status === 'ON' ? statusText : `${status}: ${statusText}`}
                           </span>
                         </div>
-                        {hasGps && timestamp && (
+                        {hasCoordinates && timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
                             {formatTime(timestamp)}
                           </span>
