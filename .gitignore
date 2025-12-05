@@ -54,6 +54,14 @@ backup_*.sql
 *.orig
 *.bak
 
+# Scripts de test temporaires
+scripts/test-*.js
+scripts/test-*.php
+
+# Rapports temporaires (SUIVI_TEMPS généré automatiquement)
+SUIVI_TEMPS_FACTURATION.md
+public/SUIVI_TEMPS_FACTURATION.md
+
 # Binaires locaux (optionnel - peut être versionné)
 # bin/arduino-cli*
 

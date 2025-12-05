@@ -13,11 +13,12 @@ import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
 import Modal from '@/components/Modal'
+import ConfirmModal from '@/components/ConfirmModal'
 import { isTrue } from '@/lib/utils'
 import logger from '@/lib/logger'
 
 export default function PatientsPage() {
-  const { fetchWithAuth, API_URL } = useAuth()
+  const { user: currentUser, fetchWithAuth, API_URL } = useAuth()
   const [success, setSuccess] = useState(null)
   const [actionError, setActionError] = useState(null)
   
@@ -264,12 +265,68 @@ export default function PatientsPage() {
     }
   }
   
-  // Confirmer la suppression depuis la modal
-  const confirmDeletePatient = useCallback(() => {
-    if (patientToDelete) {
-      handleDelete(patientToDelete, true)
+  // Archiver le patient (soft delete)
+  const handleArchivePatient = async () => {
+    if (!patientToDelete) return
+    
+    try {
+      setDeleteLoading(true)
+      setActionError(null)
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/patients/${patientToDelete.id}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      if (response.success) {
+        setSuccess(response.message || '✅ Patient archivé avec succès')
+        refetch()
+        setShowDeletePatientModal(false)
+        setPatientToDelete(null)
+        if (showModal && editingItem && editingItem.id === patientToDelete.id) {
+          closeModal()
+        }
+      } else {
+        setActionError(response.error || 'Erreur lors de l\'archivage')
+      }
+    } catch (err) {
+      setActionError(err.message || 'Erreur lors de l\'archivage')
+      logger.error('Erreur archivage patient:', err)
+    } finally {
+      setDeleteLoading(false)
     }
-  }, [patientToDelete])
+  }
+  
+  // Suppression définitive (admins seulement)
+  const handlePermanentDeletePatient = async () => {
+    if (!patientToDelete) return
+    
+    try {
+      setDeleteLoading(true)
+      setActionError(null)
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/patients/${patientToDelete.id}?permanent=true`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      if (response.success) {
+        setSuccess('✅ Patient supprimé définitivement')
+        refetch()
+        setShowDeletePatientModal(false)
+        setPatientToDelete(null)
+      } else {
+        setActionError(response.error || 'Erreur lors de la suppression')
+      }
+    } catch (err) {
+      setActionError(err.message || 'Erreur lors de la suppression')
+      logger.error('Erreur suppression définitive patient:', err)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -384,7 +441,10 @@ export default function PatientsPage() {
                           </button>
                           <button
                             className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                            onClick={() => handleDelete(p)}
+                            onClick={() => {
+                              setPatientToDelete(p)
+                              setShowDeletePatientModal(true)
+                            }}
                             disabled={deleteLoading}
                             title={devices.some(d => d.patient_id === p.id) ? "Supprimer le patient (le dispositif sera désassigné automatiquement)" : "Supprimer le patient"}
                           >
@@ -540,52 +600,30 @@ export default function PatientsPage() {
       </Modal>
 
       {/* Modal de confirmation de suppression de patient avec dispositif assigné */}
-      <Modal
+      <ConfirmModal
         isOpen={showDeletePatientModal}
         onClose={() => {
           setShowDeletePatientModal(false)
           setPatientToDelete(null)
         }}
-        title="Confirmer la suppression"
-        maxWidth="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-700 dark:text-gray-300">
-            Êtes-vous sûr de vouloir supprimer le patient <strong>{patientToDelete?.first_name} {patientToDelete?.last_name}</strong> ?
-          </p>
-          
-          {patientToDelete && devices.some(d => d.patient_id === patientToDelete.id) && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <p className="text-sm text-amber-800 dark:text-amber-300">
-                ⚠️ <strong>Attention :</strong> Ce patient a un dispositif assigné.
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-400 mt-2">
-                Le dispositif sera désassigné automatiquement avant suppression.
-              </p>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 mt-6">
-            <button
-              onClick={() => {
-                setShowDeletePatientModal(false)
-                setPatientToDelete(null)
-              }}
-              className="btn-secondary"
-              disabled={deleteLoading}
-            >
-              Annuler
-            </button>
-            <button
-              onClick={confirmDeletePatient}
-              className="btn-danger"
-              disabled={deleteLoading}
-            >
-              {deleteLoading ? '⏳ Suppression...' : '🗑️ Supprimer'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={handleArchivePatient}
+        onSecondAction={currentUser?.role_name === 'admin' ? handlePermanentDeletePatient : null}
+        title={currentUser?.role_name === 'admin' ? '⚠️ Supprimer ou archiver ?' : 'Supprimer le patient'}
+        message={`Patient : ${patientToDelete?.first_name || ''} ${patientToDelete?.last_name || ''}\n${patientToDelete?.email || ''}\n\n${
+          patientToDelete && devices.some(d => d.patient_id === patientToDelete.id)
+            ? '⚠️ Attention : Ce patient a un dispositif assigné.\nLe dispositif sera désassigné automatiquement.\n\n'
+            : ''
+        }${
+          currentUser?.role_name === 'admin'
+            ? 'Choisissez une action :\n\n🗄️ Archiver : L\'utilisateur peut être restauré\n🗑️ Supprimer définitivement : IRRÉVERSIBLE'
+            : 'Cette action supprimera le patient.'
+        }`}
+        confirmText={currentUser?.role_name === 'admin' ? '🗄️ Archiver' : '🗑️ Supprimer'}
+        secondActionText={currentUser?.role_name === 'admin' ? '🗑️ Supprimer définitivement' : null}
+        variant={currentUser?.role_name === 'admin' ? 'warning' : 'danger'}
+        secondActionVariant="danger"
+        loading={deleteLoading}
+      />
     </div>
   )
 }

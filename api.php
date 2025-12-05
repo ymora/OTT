@@ -797,6 +797,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleUpdateUser($m[1]);
 } elseif(preg_match('#/users/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteUser($m[1]);
+} elseif(preg_match('#/users/(\d+)$#', $path, $m) && $method === 'PATCH') {
+    handleRestoreUser($m[1]);
 } elseif(preg_match('#/users/(\d+)/notifications$#', $path, $m) && $method === 'GET') {
     handleGetUserNotifications($m[1]);
 } elseif(preg_match('#/users/(\d+)/notifications$#', $path, $m) && $method === 'PUT') {
@@ -940,6 +942,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleUpdatePatient($m[1]);
 } elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeletePatient($m[1]);
+} elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH') {
+    handleRestorePatient($m[1]);
 } elseif(preg_match('#/patients/(\d+)/notifications$#', $path, $m) && $method === 'GET') {
     handleGetPatientNotifications($m[1]);
 } elseif(preg_match('#/patients/(\d+)/notifications$#', $path, $m) && $method === 'PUT') {

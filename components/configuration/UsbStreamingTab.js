@@ -9,6 +9,7 @@ import { createUpdateConfigCommand, createUpdateCalibrationCommand } from '@/lib
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
+import ConfirmModal from '@/components/ConfirmModal'
 import FlashModal from '@/components/FlashModal'
 import DeviceModal from '@/components/DeviceModal'
 
@@ -1001,6 +1002,38 @@ export default function DebugTab() {
     }
   }, [deviceToDelete, handleDeleteDevice])
   
+  // Suppression permanente (admins seulement)
+  const handlePermanentDeleteDevice = useCallback(async () => {
+    if (!deviceToDelete) return
+    
+    setDeleting(true)
+    try {
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${deviceToDelete.id}?permanent=true`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      
+      if (response.success) {
+        logger.log(`✅ Dispositif "${deviceToDelete.device_name || deviceToDelete.sim_iccid}" supprimé définitivement`)
+        appendUsbStreamLog(`✅ Dispositif supprimé définitivement`, 'dashboard')
+        refetchDevices()
+        setShowDeleteModal(false)
+        setDeviceToDelete(null)
+      } else {
+        logger.error('Erreur suppression définitive:', response.error)
+        appendUsbStreamLog(`❌ Erreur: ${response.error}`, 'dashboard')
+      }
+    } catch (err) {
+      logger.error('Erreur suppression définitive:', err)
+      appendUsbStreamLog(`❌ Erreur: ${err.message || err}`, 'dashboard')
+    } finally {
+      setDeleting(false)
+    }
+  }, [deviceToDelete, fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
+  
   // Créer les dispositifs fictifs
   const [creatingTestDevices, setCreatingTestDevices] = useState(false)
   const handleCreateTestDevices = useCallback(async () => {
@@ -1228,53 +1261,31 @@ export default function DebugTab() {
         appendLog={appendUsbStreamLog}
       />
       
-      {/* Modal de confirmation de suppression */}
-      <Modal
+      {/* Modal de confirmation de suppression unifié */}
+      <ConfirmModal
         isOpen={showDeleteModal}
         onClose={() => {
           setShowDeleteModal(false)
           setDeviceToDelete(null)
         }}
-        title="Confirmer la suppression"
-        maxWidth="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-700 dark:text-gray-300">
-            Êtes-vous sûr de vouloir supprimer le dispositif <strong>{deviceToDelete?.device_name || deviceToDelete?.sim_iccid}</strong> ?
-          </p>
-          
-          {deviceToDelete?.patient_id && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-              <p className="text-sm text-amber-800 dark:text-amber-300">
-                ⚠️ <strong>Attention :</strong> Ce dispositif est assigné au patient <strong>{deviceToDelete?.first_name} {deviceToDelete?.last_name}</strong>.
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-400 mt-2">
-                Le dispositif sera désassigné automatiquement avant suppression.
-              </p>
-            </div>
-          )}
-          
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={() => {
-                setShowDeleteModal(false)
-                setDeviceToDelete(null)
-              }}
-              disabled={deleting}
-              className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
-            >
-              Annuler
-            </button>
-            <button
-              onClick={confirmDelete}
-              disabled={deleting}
-              className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {deleting ? '⏳ Suppression...' : '🗑️ Supprimer'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={confirmDelete}
+        onSecondAction={user?.role_name === 'admin' ? handlePermanentDeleteDevice : null}
+        title={user?.role_name === 'admin' ? '⚠️ Supprimer ou archiver ?' : 'Supprimer le dispositif'}
+        message={`Dispositif : ${deviceToDelete?.device_name || deviceToDelete?.sim_iccid || 'inconnu'}\n\n${
+          deviceToDelete?.patient_id
+            ? `⚠️ Attention : Ce dispositif est assigné au patient ${deviceToDelete?.first_name} ${deviceToDelete?.last_name}.\nLe dispositif sera désassigné automatiquement.\n\n`
+            : ''
+        }${
+          user?.role_name === 'admin'
+            ? 'Choisissez une action :\n\n🗄️ Archiver : Le dispositif peut être restauré plus tard\n🗑️ Supprimer définitivement : Action IRRÉVERSIBLE !'
+            : 'Cette action supprimera le dispositif.'
+        }`}
+        confirmText={user?.role_name === 'admin' ? '🗄️ Archiver' : '🗑️ Supprimer'}
+        secondActionText={user?.role_name === 'admin' ? '🗑️ Supprimer définitivement' : null}
+        variant={user?.role_name === 'admin' ? 'warning' : 'danger'}
+        secondActionVariant="danger"
+        loading={deleting}
+      />
 
       <div className="card">
         {!isSupported && (
@@ -1734,7 +1745,10 @@ export default function DebugTab() {
                       <span className="text-lg">🚀</span>
                     </button>
                     <button
-                      onClick={() => handleDeleteDevice(device)}
+                      onClick={() => {
+                        setDeviceToDelete(device)
+                        setShowDeleteModal(true)
+                      }}
                       disabled={deleting}
                       className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title={device.patient_id ? 'Supprimer (nécessite confirmation)' : 'Supprimer'}

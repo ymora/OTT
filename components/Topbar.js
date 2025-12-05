@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import ConfirmModal from '@/components/ConfirmModal'
 import logger from '@/lib/logger'
 
 export default function Topbar() {
@@ -10,6 +11,7 @@ export default function Topbar() {
   const router = useRouter()
   const [showMenu, setShowMenu] = useState(false)
   const [isDark, setIsDark] = useState(false)
+  const [showClearCacheModal, setShowClearCacheModal] = useState(false)
 
   useEffect(() => {
     // Vérifier la préférence sauvegardée ou la préférence système
@@ -50,7 +52,6 @@ export default function Topbar() {
   }
 
   const handleClearCache = async () => {
-    if (!confirm('Vider le cache et recharger la page ?')) return
     
     try {
       // Désinscrire tous les service workers
@@ -71,7 +72,8 @@ export default function Topbar() {
       setTimeout(() => window.location.reload(true), 500)
     } catch (err) {
       logger.error('❌ Erreur lors du nettoyage:', err)
-      alert('Erreur lors du nettoyage du cache')
+    } finally {
+      setShowClearCacheModal(false)
     }
   }
 
@@ -127,7 +129,7 @@ export default function Topbar() {
               <div className="absolute right-0 top-full mt-2 w-48 bg-gradient-to-br from-white to-gray-50/80 dark:from-[rgb(var(--night-surface))] dark:via-[rgb(var(--night-bg-mid))] dark:to-[rgb(var(--night-blue-start))]/20 rounded-lg shadow-xl border border-gray-100/80 dark:border-[rgb(var(--night-border))] animate-slide-down backdrop-blur-md">
                 <button
                   onClick={() => {
-                    handleClearCache()
+                    setShowClearCacheModal(true)
                     setShowMenu(false)
                   }}
                   className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-300 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-50/50 dark:hover:from-gray-800/20 dark:hover:to-gray-800/10 rounded-lg transition-all duration-200"
@@ -148,6 +150,17 @@ export default function Topbar() {
           </div>
         </div>
       </div>
+
+      {/* Modal de confirmation vider cache */}
+      <ConfirmModal
+        isOpen={showClearCacheModal}
+        onClose={() => setShowClearCacheModal(false)}
+        onConfirm={handleClearCache}
+        title="Vider le cache"
+        message="Cette action va vider tous les caches et service workers, puis recharger la page. Continuer ?"
+        confirmText="Vider et recharger"
+        variant="warning"
+      />
     </header>
   )
 }

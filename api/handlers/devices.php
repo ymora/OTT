@@ -2106,6 +2106,46 @@ function handleDeletePatient($patient_id) {
     }
 }
 
+function handleRestorePatient($patient_id) {
+    global $pdo;
+    requirePermission('patients.edit');
+
+    try {
+        // Vérifier que le patient existe et est archivé
+        $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id");
+        $stmt->execute(['id' => $patient_id]);
+        $patient = $stmt->fetch();
+
+        if (!$patient) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Patient introuvable']);
+            return;
+        }
+
+        if (!$patient['deleted_at']) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Le patient n\'est pas archivé']);
+            return;
+        }
+
+        // Restaurer le patient (soft delete = NULL)
+        $stmt = $pdo->prepare("UPDATE patients SET deleted_at = NULL WHERE id = :id");
+        $stmt->execute(['id' => $patient_id]);
+
+        auditLog('patient.restored', 'patient', $patient_id, $patient, ['deleted_at' => null]);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Patient restauré avec succès'
+        ]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleRestorePatient] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
 function handleGetReportsOverview() {
     global $pdo;
     requirePermission('reports.view');

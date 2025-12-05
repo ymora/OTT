@@ -549,6 +549,46 @@ function handleDeleteUser($user_id) {
     }
 }
 
+function handleRestoreUser($user_id) {
+    global $pdo;
+    requirePermission('users.manage');
+
+    try {
+        // Vérifier que l'utilisateur existe et est archivé
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id");
+        $stmt->execute(['id' => $user_id]);
+        $user = $stmt->fetch();
+
+        if (!$user) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Utilisateur introuvable']);
+            return;
+        }
+
+        if (!$user['deleted_at']) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'L\'utilisateur n\'est pas archivé']);
+            return;
+        }
+
+        // Restaurer l'utilisateur (soft delete = NULL)
+        $stmt = $pdo->prepare("UPDATE users SET deleted_at = NULL WHERE id = :id");
+        $stmt->execute(['id' => $user_id]);
+
+        auditLog('user.restored', 'user', $user_id, $user, ['deleted_at' => null]);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Utilisateur restauré avec succès'
+        ]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleRestoreUser] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
 // ============================================================================
 // HANDLERS - ROLES & PERMISSIONS
 // ============================================================================

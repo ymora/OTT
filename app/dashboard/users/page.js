@@ -5,13 +5,15 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useApiData, useFilter, useEntityModal, useEntityDelete } from '@/hooks'
+import { useApiData, useFilter, useEntityModal } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
+import ConfirmModal from '@/components/ConfirmModal'
 import { isTrue } from '@/lib/utils'
+import { fetchJson } from '@/lib/api'
 import logger from '@/lib/logger'
 
 export default function UsersPage() {
@@ -21,6 +23,11 @@ export default function UsersPage() {
   
   // Utiliser le hook useEntityModal pour gérer le modal
   const { isOpen: showModal, editingItem, openCreate: openCreateModal, openEdit: openEditModal, close: closeModal } = useEntityModal()
+  
+  // Modal de suppression
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [userToDelete, setUserToDelete] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -53,24 +60,73 @@ export default function UsersPage() {
     // viewer supprimé
   }
 
-  // Utiliser le hook useEntityDelete pour gérer la suppression
-  const { deleteLoading, deleteError, handleDelete } = useEntityDelete({
-    fetchWithAuth,
-    API_URL,
-    refetch,
-    entityName: 'utilisateur',
-    getEntityName: (user) => `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'cet utilisateur',
-    onCloseModal: (deletedId) => {
-      if (showModal && editingItem && editingItem.id === deletedId) {
-        closeModal()
-      }
-    }
-  })
-
-  // Utiliser deleteError pour actionError
-  if (deleteError && !actionError) {
-    setActionError(deleteError)
+  // Fonctions de suppression
+  const handleDeleteClick = (user) => {
+    setUserToDelete(user)
+    setShowDeleteModal(true)
   }
+  
+  const handleArchive = async () => {
+    if (!userToDelete) return
+    
+    try {
+      setDeleteLoading(true)
+      setActionError(null)
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/users/${userToDelete.id}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      if (response.success) {
+        setSuccess('✅ Utilisateur archivé avec succès')
+        refetch()
+        setShowDeleteModal(false)
+        setUserToDelete(null)
+        if (showModal && editingItem && editingItem.id === userToDelete.id) {
+          closeModal()
+        }
+      } else {
+        setActionError(response.error || 'Erreur lors de l\'archivage')
+      }
+    } catch (err) {
+      setActionError(err.message || 'Erreur lors de l\'archivage')
+      logger.error('Erreur archivage user:', err)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+  
+  const handlePermanentDelete = async () => {
+    if (!userToDelete) return
+    
+    try {
+      setDeleteLoading(true)
+      setActionError(null)
+      const response = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/users/${userToDelete.id}?permanent=true`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      if (response.success) {
+        setSuccess('✅ Utilisateur supprimé définitivement')
+        refetch()
+        setShowDeleteModal(false)
+        setUserToDelete(null)
+      } else {
+        setActionError(response.error || 'Erreur lors de la suppression')
+      }
+    } catch (err) {
+      setActionError(err.message || 'Erreur lors de la suppression')
+      logger.error('Erreur suppression user:', err)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
 
   const handleModalSave = async () => {
     setSuccess(editingItem ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
@@ -180,7 +236,7 @@ export default function UsersPage() {
                                 ? 'opacity-50 cursor-not-allowed' 
                                 : 'hover:bg-red-100'
                             }`}
-                            onClick={() => handleDelete(user)}
+                            onClick={() => handleDeleteClick(user)}
                             disabled={deleteLoading || currentUser?.role_name !== 'admin' || user.id === currentUser?.id}
                             title={currentUser?.role_name === 'admin' && user.id !== currentUser?.id ? "Supprimer l'utilisateur" : user.id === currentUser?.id ? "Vous ne pouvez pas supprimer votre propre compte" : "Réservé aux administrateurs"}
                           >
@@ -221,6 +277,28 @@ export default function UsersPage() {
         API_URL={API_URL}
         roles={roles}
         currentUser={currentUser}
+      />
+
+      {/* Modal de suppression unifié */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setUserToDelete(null)
+        }}
+        onConfirm={handleArchive}
+        onSecondAction={currentUser?.role_name === 'admin' ? handlePermanentDelete : null}
+        title={currentUser?.role_name === 'admin' ? '⚠️ Supprimer ou archiver ?' : 'Supprimer l\'utilisateur'}
+        message={`Utilisateur : ${userToDelete?.first_name} ${userToDelete?.last_name}\n${userToDelete?.email}\n\n${
+          currentUser?.role_name === 'admin'
+            ? 'Choisissez une action :\n\n🗄️ Archiver : L\'utilisateur peut être restauré\n🗑️ Supprimer définitivement : IRRÉVERSIBLE'
+            : 'Cette action supprimera l\'utilisateur.'
+        }`}
+        confirmText={currentUser?.role_name === 'admin' ? '🗄️ Archiver' : '🗑️ Supprimer'}
+        secondActionText={currentUser?.role_name === 'admin' ? '🗑️ Supprimer définitivement' : null}
+        variant={currentUser?.role_name === 'admin' ? 'warning' : 'danger'}
+        secondActionVariant="danger"
+        loading={deleteLoading}
       />
 
     </div>

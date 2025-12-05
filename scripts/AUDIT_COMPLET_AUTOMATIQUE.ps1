@@ -994,6 +994,68 @@ if ($auditResults.Recommendations.Count -gt 0 -and $auditResults.Recommendations
     }
 }
 
+# ===============================================================================
+# PHASE BONUS : VÉRIFICATION STRUCTURE API
+# ===============================================================================
+
+Write-Section "STRUCTURE API & COHÉRENCE HANDLERS"
+
+$structureScore = 10.0
+$criticalIssues = @()
+
+# Vérifier routes PATCH pour restauration
+if (Test-Path "api.php") {
+    $apiContent = Get-Content "api.php" -Raw
+    
+    # Vérifier PATCH patients (recherche sur plusieurs lignes)
+    if (($apiContent -match '\$method === ''PATCH''') -and ($apiContent -match 'handleRestorePatient')) {
+        Write-OK "Route PATCH /patients/:id (restauration) presente"
+    } else {
+        Write-Err "Route PATCH /patients/:id MANQUANTE"
+        $criticalIssues += "Route restauration patients manquante"
+        $structureScore -= 2.0
+    }
+    
+    # Vérifier PATCH users (recherche sur plusieurs lignes)
+    if (($apiContent -match '\$method === ''PATCH''') -and ($apiContent -match 'handleRestoreUser')) {
+        Write-OK "Route PATCH /users/:id (restauration) presente"
+    } else {
+        Write-Err "Route PATCH /users/:id MANQUANTE"
+        $criticalIssues += "Route restauration users manquante"
+        $structureScore -= 2.0
+    }
+}
+
+# Vérifier fonctions handlers
+$handlersToCheck = @(
+    @{ File = "api/handlers/devices.php"; Function = "handleRestorePatient"; Name = "Restauration patients" }
+    @{ File = "api/handlers/auth.php"; Function = "handleRestoreUser"; Name = "Restauration users" }
+)
+
+foreach ($handler in $handlersToCheck) {
+    if (Test-Path $handler.File) {
+        $content = Get-Content $handler.File -Raw
+        if ($content -match "function $($handler.Function)\(") {
+            Write-OK "$($handler.Name): $($handler.Function)() definie"
+        } else {
+            Write-Err "$($handler.Name): $($handler.Function)() MANQUANTE"
+            $criticalIssues += "$($handler.Function) non defini"
+            $structureScore -= 2.0
+        }
+    }
+}
+
+Write-Host ""
+if ($criticalIssues.Count -eq 0) {
+    Write-Host "[OK] Structure API coherente - Score: $structureScore/10" -ForegroundColor Green
+} else {
+    Write-Host "[ERREUR] Problemes structurels detectes:" -ForegroundColor Red
+    $criticalIssues | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+    Write-Host "[SCORE STRUCTURE] $structureScore/10" -ForegroundColor Yellow
+}
+
+$auditResults.Scores["Structure API"] = $structureScore
+
 Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 

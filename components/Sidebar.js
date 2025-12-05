@@ -17,7 +17,7 @@ const menuStructure = [
   {
     name: 'Dispositifs OTT',
     icon: '🔌',
-    path: '/dashboard/outils',
+    path: '/dashboard/dispositifs',
     permission: null, // Vérifié dans la page (admin/technicien)
     description: 'Upload firmware, flash USB et streaming'
   },
@@ -99,7 +99,7 @@ export default function Sidebar() {
           if (!hasPermission(item.permission)) return null
           
           // Vérification spéciale pour le menu Dispositifs OTT (admin ou technicien uniquement)
-          if (item.path === '/dashboard/outils') {
+          if (item.path === '/dashboard/dispositifs') {
             if (user?.role_name !== 'admin' && user?.role_name !== 'technicien') {
               return null
             }
