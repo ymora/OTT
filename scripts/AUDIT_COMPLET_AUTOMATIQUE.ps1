@@ -1002,56 +1002,124 @@ Write-Section "STRUCTURE API & COHÉRENCE HANDLERS"
 
 $structureScore = 10.0
 $criticalIssues = @()
+$warnings = @()
 
-# Vérifier routes PATCH pour restauration
 if (Test-Path "api.php") {
     $apiContent = Get-Content "api.php" -Raw
     
-    # Vérifier PATCH patients (recherche sur plusieurs lignes)
-    if (($apiContent -match '\$method === ''PATCH''') -and ($apiContent -match 'handleRestorePatient')) {
-        Write-OK "Route PATCH /patients/:id (restauration) presente"
-    } else {
-        Write-Err "Route PATCH /patients/:id MANQUANTE"
-        $criticalIssues += "Route restauration patients manquante"
-        $structureScore -= 2.0
+    # Extraire toutes les routes
+    $routePattern = "elseif\(preg_match\('#([^']+)'#.*\) && \`$method === '([^']+)'\) \{[^\}]*handle(\w+)\("
+    $routes = [regex]::Matches($apiContent, $routePattern)
+    
+    $routesByEndpoint = @{}
+    $handlersCalled = @{}
+    
+    foreach ($route in $routes) {
+        $path = $route.Groups[1].Value
+        $method = $route.Groups[2].Value
+        $handler = "handle" + $route.Groups[3].Value
+        $key = "$method $path"
+        
+        if (-not $routesByEndpoint.ContainsKey($path)) {
+            $routesByEndpoint[$path] = @{}
+        }
+        $routesByEndpoint[$path][$method] = $handler
+        $handlersCalled[$handler] = $true
     }
     
-    # Vérifier PATCH users (recherche sur plusieurs lignes)
-    if (($apiContent -match '\$method === ''PATCH''') -and ($apiContent -match 'handleRestoreUser')) {
-        Write-OK "Route PATCH /users/:id (restauration) presente"
-    } else {
-        Write-Err "Route PATCH /users/:id MANQUANTE"
-        $criticalIssues += "Route restauration users manquante"
-        $structureScore -= 2.0
+    Write-Info "Routes trouvées: $($routes.Count)"
+    
+    # Vérifier handlers définis
+    $handlersDefined = @{}
+    $handlerFiles = @("api/handlers/auth.php", "api/handlers/devices.php")
+    
+    foreach ($file in $handlerFiles) {
+        if (Test-Path $file) {
+            $content = Get-Content $file -Raw
+            $functions = [regex]::Matches($content, "function (handle\w+)\(")
+            foreach ($func in $functions) {
+                $handlersDefined[$func.Groups[1].Value] = $file
+            }
+        }
     }
-}
-
-# Vérifier fonctions handlers
-$handlersToCheck = @(
-    @{ File = "api/handlers/devices.php"; Function = "handleRestorePatient"; Name = "Restauration patients" }
-    @{ File = "api/handlers/auth.php"; Function = "handleRestoreUser"; Name = "Restauration users" }
-)
-
-foreach ($handler in $handlersToCheck) {
-    if (Test-Path $handler.File) {
-        $content = Get-Content $handler.File -Raw
-        if ($content -match "function $($handler.Function)\(") {
-            Write-OK "$($handler.Name): $($handler.Function)() definie"
-        } else {
-            Write-Err "$($handler.Name): $($handler.Function)() MANQUANTE"
-            $criticalIssues += "$($handler.Function) non defini"
+    
+    # Vérifier cohérence (appelés vs définis)
+    foreach ($handler in $handlersCalled.Keys) {
+        if (-not $handlersDefined.ContainsKey($handler)) {
+            Write-Err "Handler appelé mais non défini: $handler"
+            $criticalIssues += "Handler $handler appelé mais NON DÉFINI"
+            $structureScore -= 1.0
+        }
+    }
+    
+    # Handlers définis mais jamais appelés
+    $unusedHandlers = $handlersDefined.Keys | Where-Object { -not $handlersCalled.ContainsKey($_) }
+    if ($unusedHandlers.Count -gt 0) {
+        Write-Warn "$($unusedHandlers.Count) handlers définis mais jamais appelés"
+        $warnings += "Handlers inutilisés: $($unusedHandlers -join ', ')"
+        $structureScore -= 0.5
+    }
+    
+    # Vérifier endpoints critiques (restauration)
+    $criticalEndpoints = @(
+        @{ Endpoint = "/patients/(\d+)"; Method = "PATCH"; Handler = "handleRestorePatient"; Name = "Restaurer patient" }
+        @{ Endpoint = "/users/(\d+)"; Method = "PATCH"; Handler = "handleRestoreUser"; Name = "Restaurer utilisateur" }
+    )
+    
+    foreach ($ep in $criticalEndpoints) {
+        $found = $false
+        foreach ($path in $routesByEndpoint.Keys) {
+            if ($path -match $ep.Endpoint -and $routesByEndpoint[$path].ContainsKey($ep.Method)) {
+                $handler = $routesByEndpoint[$path][$ep.Method]
+                if ($handler -eq $ep.Handler) {
+                    Write-OK "$($ep.Name): $($ep.Method) $path → $handler"
+                    $found = $true
+                    break
+                }
+            }
+        }
+        if (-not $found) {
+            Write-Err "$($ep.Name): Route MANQUANTE"
+            $criticalIssues += "$($ep.Name) manquante"
             $structureScore -= 2.0
         }
     }
+    
+    # Vérifier fonctions handlers critiques
+    $handlersToCheck = @(
+        @{ File = "api/handlers/devices.php"; Function = "handleRestorePatient"; Name = "Restauration patients" }
+        @{ File = "api/handlers/auth.php"; Function = "handleRestoreUser"; Name = "Restauration users" }
+    )
+    
+    foreach ($handler in $handlersToCheck) {
+        if (Test-Path $handler.File) {
+            $content = Get-Content $handler.File -Raw
+            if ($content -match "function $($handler.Function)\(") {
+                Write-OK "$($handler.Name): $($handler.Function)() definie"
+            } else {
+                Write-Err "$($handler.Name): $($handler.Function)() MANQUANTE"
+                $criticalIssues += "$($handler.Function) non defini"
+                $structureScore -= 2.0
+            }
+        }
+    }
+} else {
+    Write-Err "api.php introuvable !"
+    $criticalIssues += "api.php introuvable"
+    $structureScore = 0
 }
 
 Write-Host ""
 if ($criticalIssues.Count -eq 0) {
-    Write-Host "[OK] Structure API coherente - Score: $structureScore/10" -ForegroundColor Green
+    Write-OK "Structure API coherente - Score: $structureScore/10"
 } else {
-    Write-Host "[ERREUR] Problemes structurels detectes:" -ForegroundColor Red
+    Write-Err "Problemes structurels detectes:"
     $criticalIssues | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
     Write-Host "[SCORE STRUCTURE] $structureScore/10" -ForegroundColor Yellow
+}
+
+if ($warnings.Count -gt 0) {
+    $warnings | ForEach-Object { Write-Warn $_ }
 }
 
 $auditResults.Scores["Structure API"] = $structureScore
