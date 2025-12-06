@@ -1587,7 +1587,7 @@ export default function DebugTab() {
                       </tr>
                     ) : (
                       devicesToDisplay.map((device) => {
-                  const isArchived = !!device.deleted_at
+                  const isArchived = device.deleted_at !== null && device.deleted_at !== undefined && device.deleted_at !== ''
                   // Vérifier si ce dispositif est connecté en USB (données temps réel)
                   const isDeviceUsbConnected = isConnected && (
                     usbDeviceInfo?.sim_iccid === device.sim_iccid ||
