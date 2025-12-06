@@ -43,19 +43,15 @@ export default function PatientsPage() {
   const [restoringPatient, setRestoringPatient] = useState(null)
 
   // Charger les données avec useApiData
+  // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
+  // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
   const { data, loading, error, refetch, invalidateCache } = useApiData(
-    [
+    useMemo(() => [
       showArchived ? '/api.php/patients?include_deleted=true' : '/api.php/patients',
       '/api.php/devices'
-    ],
+    ], [showArchived]),
     { requiresAuth: true }
   )
-
-  // Recharger automatiquement les données quand le toggle change
-  useEffect(() => {
-    invalidateCache()
-    refetch()
-  }, [showArchived, invalidateCache, refetch])
 
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
   useAutoRefresh(refetch, 30000)
@@ -353,11 +349,13 @@ export default function PatientsPage() {
                       className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${isArchived ? 'opacity-60' : ''}`}
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
-                      <td className="py-3 px-4 font-medium text-primary">
+                      <td className="table-cell py-3 px-4 font-medium text-primary">
                         <div className="flex items-center gap-2">
                           <span>{p.first_name} {p.last_name}</span>
-                          {isArchived && (
+                          {isArchived ? (
                             <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
+                          ) : (
+                            <span className="badge badge-success">✅ Actif</span>
                           )}
                         </div>
                       </td>
@@ -366,7 +364,7 @@ export default function PatientsPage() {
                       <td className="table-cell text-sm">{p.phone || '-'}</td>
                       <td className="table-cell text-sm">{p.city || '-'}</td>
                       <td className="table-cell text-sm">{p.postal_code || '-'}</td>
-                      <td className="py-3 px-4">
+                      <td className="table-cell py-3 px-4">
                         <div className="flex items-center gap-2">
                           {(() => {
                             const assignedDevice = devices.find(d => d.patient_id === p.id)
@@ -407,7 +405,7 @@ export default function PatientsPage() {
                           })()}
                         </div>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="table-cell py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
                           {isArchived ? (
                             <button
@@ -429,6 +427,7 @@ export default function PatientsPage() {
                               </button>
                               {hasPermission('patients.edit') && (
                                 <>
+                                  {/* Administrateurs : Archive + Suppression définitive */}
                                   {currentUser?.role_name === 'admin' ? (
                                     <>
                                       <button
@@ -449,6 +448,7 @@ export default function PatientsPage() {
                                       </button>
                                     </>
                                   ) : (
+                                    /* Non-administrateurs : Archive uniquement (pas de suppression définitive) */
                                     <button
                                       className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
                                       onClick={() => handleArchive(p)}

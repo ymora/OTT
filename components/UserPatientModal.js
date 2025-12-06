@@ -628,7 +628,7 @@ export default function UserPatientModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 overflow-y-auto backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 my-8">
+      <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4 my-8">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
@@ -640,7 +640,7 @@ export default function UserPatientModal({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 w-8 h-8 flex items-center justify-center rounded-full transition-colors"
             title="Fermer"
             aria-label="Fermer"
             disabled={saving}

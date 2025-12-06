@@ -4,7 +4,7 @@
  * @module hooks/useDevicesUpdateListener
  */
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 /**
  * Hook pour écouter les événements de mise à jour des dispositifs
@@ -12,16 +12,23 @@ import { useEffect } from 'react'
  * @param {boolean} enabled - Activer/désactiver l'écoute (défaut: true)
  */
 export function useDevicesUpdateListener(refetch, enabled = true) {
+  const refetchRef = useRef(refetch)
+  
+  // Mettre à jour la référence à chaque changement
   useEffect(() => {
-    if (!enabled || !refetch || typeof window === 'undefined') return
+    refetchRef.current = refetch
+  }, [refetch])
+  
+  useEffect(() => {
+    if (!enabled || !refetchRef.current || typeof window === 'undefined') return
 
     const handleDevicesUpdated = () => {
-      refetch()
+      refetchRef.current()
     }
 
     const handleStorageUpdate = (event) => {
       if (event.key === 'ott-devices-last-update') {
-        refetch()
+        refetchRef.current()
       }
     }
 
@@ -32,6 +39,6 @@ export function useDevicesUpdateListener(refetch, enabled = true) {
       window.removeEventListener('ott-devices-updated', handleDevicesUpdated)
       window.removeEventListener('storage', handleStorageUpdate)
     }
-  }, [refetch, enabled])
+  }, [enabled]) // Ne pas inclure refetch pour éviter les boucles
 }
 

@@ -92,24 +92,137 @@ export default function DebugTab() {
     if (user?.role_name === 'admin') return true
     return user?.permissions?.includes(permission) || false
   }
+
+  // Fonction pour formater le JSON de manière lisible
+  const formatJsonLog = useCallback((logLine) => {
+    // Détecter si c'est un JSON compact (commence par { et contient usb_stream)
+    if (!logLine?.trim().startsWith('{') || !logLine.includes('usb_stream')) {
+      return null // Pas un JSON USB stream
+    }
+    
+    try {
+      const json = JSON.parse(logLine.trim())
+      
+      // Formater de manière concise et lisible sur une seule ligne
+      const parts = []
+      if (json.seq) parts.push(`Seq=${json.seq}`)
+      if (json.flow_lpm != null || json.flowrate != null) {
+        parts.push(`Flow=${((json.flow_lpm || json.flowrate || 0).toFixed(2))} L/min`)
+      }
+      if (json.battery_percent != null || json.battery != null) {
+        parts.push(`Bat=${((json.battery_percent || json.battery || 0).toFixed(1))}%`)
+      }
+      if (json.rssi != null) parts.push(`RSSI=${json.rssi} dBm`)
+      if (json.latitude != null && json.longitude != null) {
+        parts.push(`GPS=${json.latitude.toFixed(4)},${json.longitude.toFixed(4)}`)
+      }
+      if (json.device_name || json.device_serial) {
+        parts.push(`Device=${json.device_name || json.device_serial || 'N/A'}`)
+      }
+      
+      return parts.length > 0 ? `[USB_STREAM] ${parts.join(' | ')}` : null
+    } catch (e) {
+      return null // JSON invalide, afficher tel quel
+    }
+  }, [])
+
+  // Fonction pour analyser et catégoriser un log (comme le script PowerShell)
+  const analyzeLogCategory = useCallback((logLine) => {
+    if (!logLine) return 'default'
+    
+    const line = logLine.toUpperCase()
+    
+    // Erreurs (priorité haute)
+    const errorPatterns = [
+      'ERROR', '❌', 'ÉCHEC', 'FAIL', 'FATAL', 'EXCEPTION',
+      'ERREUR JSON', 'ERREUR PARSING', 'DATABASE ERROR'
+    ]
+    if (errorPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
+      return 'error'
+    }
+    
+    // Avertissements
+    const warningPatterns = [
+      'WARN', '⚠️', 'WARNING', 'ATTENTION', 'TIMEOUT',
+      'COMMANDE INCONNUE', 'NON DISPONIBLE'
+    ]
+    if (warningPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
+      return 'warning'
+    }
+    
+    // GPS (doit venir avant Sensor car Sensor peut contenir d'autres mots)
+    const gpsPatterns = [
+      '[GPS]', 'GPS', 'LATITUDE', 'LONGITUDE', 'SATELLITE',
+      'FIX', 'COORDONNÉES', 'GÉOLOCALISATION'
+    ]
+    if (gpsPatterns.some(pattern => line.includes(pattern))) {
+      return 'gps'
+    }
+    
+    // Modem
+    const modemPatterns = [
+      '[MODEM]', 'MODEM', 'SIM', 'CSQ', 'RSSI', 'SIGNAL',
+      'OPÉRATEUR', 'ATTACHÉ', 'ENREGISTREMENT', 'APN'
+    ]
+    if (modemPatterns.some(pattern => line.includes(pattern))) {
+      return 'modem'
+    }
+    
+    // Sensor
+    const sensorPatterns = [
+      '[SENSOR]', 'AIRFLOW', 'FLOW', 'BATTERY', 'BATTERIE',
+      'MESURE', 'CAPTURE', 'ADC', 'V_ADC', 'V_BATT'
+    ]
+    if (sensorPatterns.some(pattern => line.includes(pattern))) {
+      return 'sensor'
+    }
+    
+    // USB
+    const usbPatterns = [
+      'USB_STREAM', 'USB STREAM', 'USB', 'SERIAL', 'SÉRIE'
+    ]
+    if (usbPatterns.some(pattern => line.includes(pattern))) {
+      return 'usb'
+    }
+    
+    return 'default'
+  }, [])
+
+  // Fonction pour obtenir la classe CSS selon la catégorie
+  const getLogColorClass = useCallback((category, isDashboard) => {
+    if (isDashboard) {
+      return 'text-blue-400 dark:text-blue-300' // Logs du dashboard en bleu
+    }
+    
+    switch (category) {
+      case 'error':
+        return 'text-red-400 dark:text-red-300'
+      case 'warning':
+        return 'text-yellow-400 dark:text-yellow-300'
+      case 'gps':
+        return 'text-cyan-400 dark:text-cyan-300'
+      case 'modem':
+        return 'text-purple-400 dark:text-purple-300'
+      case 'sensor':
+        return 'text-green-400 dark:text-green-300'
+      case 'usb':
+        return 'text-blue-400 dark:text-blue-300'
+      default:
+        return 'text-gray-300 dark:text-gray-400'
+    }
+  }, [])
   
   // Toggle pour afficher les archives
   const [showArchived, setShowArchived] = useState(false)
   const [restoringDevice, setRestoringDevice] = useState(null)
   
   // Charger tous les dispositifs pour le tableau
+  // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
+  // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
   const { data: devicesData, loading: devicesLoading, refetch: refetchDevices, invalidateCache } = useApiData(
-    [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'],
-    { requiresAuth: true, autoLoad: !!user }
+    useMemo(() => [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'], [showArchived]),
+    { requiresAuth: true, autoLoad: !!user, cacheTTL: 30000 } // Cache de 30 secondes pour éviter les refetch intempestifs
   )
-
-  // Recharger automatiquement les données quand le toggle change
-  useEffect(() => {
-    if (user) {
-      invalidateCache()
-      refetchDevices()
-    }
-  }, [showArchived, invalidateCache, refetchDevices, user])
   const allDevicesFromApi = devicesData?.devices?.devices || []
   
   // Séparer les dispositifs actifs et archivés
@@ -901,8 +1014,13 @@ export default function DebugTab() {
       const result = await write(commandWithNewline)
       // Petit délai pour laisser le temps à l'écriture de se terminer
       await new Promise(resolve => {
-        const timeoutId = setTimeout(resolve, 100)
-        // Pas besoin de cleanup car la Promise se résout rapidement
+        const timeoutId = setTimeout(() => {
+          resolve()
+        }, 100)
+        // Cleanup automatique si le composant se démonte
+        if (!isMountedRef.current) {
+          clearTimeout(timeoutId)
+        }
       })
       if (result) {
         appendUsbStreamLog(`✅ Commande "${command}" envoyée`, 'dashboard')
@@ -1007,14 +1125,14 @@ export default function DebugTab() {
 
   // Composant pour une ligne d'action dans le tableau (simplifié - données uniquement)
   const ActionRow = ({ icon, label, value, colorClass }) => (
-    <tr className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-      <td className="px-4 py-1.5">
+    <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
+      <td className="table-cell px-4 py-1.5">
         <div className="flex items-center gap-2">
           <span className="text-lg">{icon}</span>
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
         </div>
       </td>
-      <td className="px-4 py-1.5">
+      <td className="table-cell px-4 py-1.5">
         <span className={`text-sm font-semibold ${colorClass || 'text-gray-600 dark:text-gray-400'}`}>
           {value}
         </span>
@@ -1042,7 +1160,11 @@ export default function DebugTab() {
         logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`)
         appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`, 'dashboard')
         setSuccessMessage('✅ Dispositif archivé')
-        refetchDevices()
+        // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
+        invalidateCache()
+        createTimeoutWithCleanup(() => {
+          refetchDevices()
+        }, 500)
         createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
       } else {
         logger.error('Erreur archivage dispositif:', response.error)
@@ -1071,7 +1193,11 @@ export default function DebugTab() {
         logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`)
         appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`, 'dashboard')
         setSuccessMessage('✅ Dispositif supprimé définitivement')
-        refetchDevices()
+        // Debounce pour éviter les refetch multiples rapides
+        invalidateCache()
+        createTimeoutWithCleanup(() => {
+          refetchDevices()
+        }, 300)
         createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
       } else {
         logger.error('Erreur suppression dispositif:', response.error)
@@ -1104,8 +1230,11 @@ export default function DebugTab() {
       if (response.ok) {
         logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré avec succès`)
         appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré`, 'dashboard')
+        // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
         invalidateCache()
-        await refetchDevices()
+        createTimeoutWithCleanup(async () => {
+          await refetchDevices()
+        }, 500)
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || 'Erreur lors de la restauration'
@@ -1430,8 +1559,8 @@ export default function DebugTab() {
                       d.sim_iccid === usbVirtualDevice.sim_iccid || 
                       d.device_serial === usbVirtualDevice.device_serial
                     ) && (
-                      <tr key={usbVirtualDevice.id} className="border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20 animate-pulse">
-                        <td className="px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
+                      <tr key={usbVirtualDevice.id} className="table-row bg-blue-50 dark:bg-blue-900/20 animate-pulse">
+                        <td className="table-cell px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                           <div className="flex items-center gap-2">
                             <span className="text-blue-500 text-lg animate-spin">⏳</span>
                             <span className="font-medium">{usbVirtualDevice.device_name}</span>
@@ -1441,24 +1570,24 @@ export default function DebugTab() {
                             ICCID: {usbVirtualDevice.sim_iccid || 'N/A'}
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">-</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbVirtualDevice.firmware_version || 'N/A'}</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">USB</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">-</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.flowrate?.toFixed(2) || '-'}</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.battery?.toFixed(0) || '-'}%</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.rssi || '-'}</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamMeasurements.length}</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">Temps réel</td>
-                        <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">-</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbVirtualDevice.firmware_version || 'N/A'}</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">USB</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">-</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.flowrate?.toFixed(2) || '-'}</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.battery?.toFixed(0) || '-'}%</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamLastMeasurement?.rssi || '-'}</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbStreamMeasurements.length}</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">Temps réel</td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
                           <span className="text-xs text-gray-500 italic">Auto...</span>
                         </td>
                       </tr>
                     )}
                     
                     {allDevices.length === 0 && !usbVirtualDevice ? (
-                      <tr>
-                        <td colSpan="11" className="px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                      <tr className="table-row">
+                        <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex flex-col items-center gap-3">
                             <span className="text-4xl">🔌</span>
                             <p className="text-sm font-medium">Aucun dispositif enregistré</p>
@@ -1488,9 +1617,9 @@ export default function DebugTab() {
                   const deviceDbData = device
                   
                   return (
-                    <tr key={device.id} className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${isArchived ? 'opacity-60' : ''}`}>
+                    <tr key={device.id} className={`table-row hover:bg-gray-50 dark:hover:bg-gray-800 ${isArchived ? 'opacity-60' : ''}`}>
                 {/* Identifiant */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     const deviceName = deviceUsbInfo?.device_name || deviceDbData?.device_name
                     const identifier = deviceUsbInfo?.sim_iccid || deviceUsbInfo?.device_serial || deviceDbData?.sim_iccid || deviceDbData?.device_serial
@@ -1528,7 +1657,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* Patient */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     const patientName = deviceDbData?.first_name && deviceDbData?.last_name 
                       ? `${deviceDbData.first_name} ${deviceDbData.last_name}` 
@@ -1562,7 +1691,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* Firmware - USB en priorité, puis DB */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     const firmwareVersion = deviceUsbMeasurement?.raw?.firmware_version || deviceUsbMeasurement?.firmware_version || deviceUsbInfo?.firmware_version || deviceDbData?.firmware_version
                     const source = deviceUsbMeasurement?.firmware_version || deviceUsbInfo?.firmware_version ? 'usb' : (deviceDbData?.firmware_version ? 'database' : null)
@@ -1600,7 +1729,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* Modem */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     const hasModemData = (deviceUsbMeasurement?.rssi != null && deviceUsbMeasurement?.rssi !== -999) || 
                                         (deviceUsbInfo?.rssi != null && deviceUsbInfo?.rssi !== -999) ||
@@ -1628,7 +1757,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* GPS - Statut ON/OFF/N/A + Coordonnées */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
                     const usbLat = deviceUsbMeasurement?.latitude ?? deviceUsbInfo?.latitude
@@ -1688,7 +1817,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* Débit - USB en priorité */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
                     const usbFlowrate = deviceUsbMeasurement?.flowrate ?? deviceUsbInfo?.flowrate
@@ -1717,7 +1846,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* Batterie - USB en priorité */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
                     const usbBattery = deviceUsbMeasurement?.battery ?? deviceUsbInfo?.last_battery
@@ -1754,7 +1883,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* RSSI - USB en priorité */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     // Priorité : deviceUsbMeasurement > deviceUsbInfo > deviceDbData
                     const usbRssi = deviceUsbMeasurement?.rssi ?? deviceUsbInfo?.rssi
@@ -1791,7 +1920,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* Mesures reçues */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     const usbCount = isDeviceUsbConnected ? (usbStreamMeasurements?.length || 0) : 0
                     const dbCount = deviceDbData ? 1 : 0  // Si données DB, au moins 1 mesure
@@ -1815,7 +1944,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* Dernière mise à jour */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   {(() => {
                     const usbTimestamp = isDeviceUsbConnected ? (usbStreamLastUpdate || deviceUsbMeasurement?.timestamp || deviceUsbInfo?.last_seen) : null
                     const dbTimestamp = deviceDbData?.last_seen
@@ -1841,7 +1970,7 @@ export default function DebugTab() {
                 </td>
                 
                 {/* Actions */}
-                <td className="px-3 py-1.5">
+                <td className="table-cell px-3 py-1.5">
                   <div className="flex items-center justify-end gap-2">
                     {isArchived ? (
                       hasPermission('devices.edit') && (
@@ -1876,6 +2005,7 @@ export default function DebugTab() {
                         </button>
                         {hasPermission('devices.edit') && (
                           <>
+                            {/* Administrateurs : Archive + Suppression définitive */}
                             {user?.role_name === 'admin' ? (
                               <>
                                 <button
@@ -1886,18 +2016,17 @@ export default function DebugTab() {
                                 >
                                   <span className="text-lg">{deleting ? '⏳' : '🗄️'}</span>
                                 </button>
-                                {hasPermission('devices.delete') && (
-                                  <button
-                                    onClick={() => handlePermanentDeleteDevice(device)}
-                                    disabled={deleting}
-                                    className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Supprimer définitivement le dispositif"
-                                  >
-                                    <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => handlePermanentDeleteDevice(device)}
+                                  disabled={deleting}
+                                  className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Supprimer définitivement le dispositif"
+                                >
+                                  <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
+                                </button>
                               </>
                             ) : (
+                              /* Non-administrateurs : Archive uniquement (pas de suppression définitive) */
                               <button
                                 onClick={() => handleArchiveDevice(device)}
                                 disabled={deleting}
@@ -2028,15 +2157,19 @@ export default function DebugTab() {
                 {[...allLogs].reverse().map((log) => {
                   const isDashboard = log.source === 'dashboard'
                   const isRemote = log.isRemote
+                  
+                  // Essayer de formater le JSON si c'est un USB stream
+                  const formattedJson = formatJsonLog(log.line)
+                  const displayLine = formattedJson || log.line
+                  
+                  const category = analyzeLogCategory(displayLine)
+                  const colorClass = getLogColorClass(category, isDashboard)
                   return (
                   <div key={log.id} className="whitespace-pre-wrap">
                     <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
                     {isRemote && <span className="text-purple-400 text-xs mr-2">📡</span>}
-                    <span className={isDashboard 
-                      ? 'text-blue-400 dark:text-blue-300' 
-                      : 'text-green-400 dark:text-green-300'
-                    }>
-                      {log.line}
+                    <span className={colorClass}>
+                      {displayLine}
                     </span>
                   </div>
                   )

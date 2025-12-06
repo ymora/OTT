@@ -4,7 +4,7 @@
  * @module hooks/useAutoRefresh
  */
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 /**
  * Hook pour rafraîchir automatiquement les données à intervalles réguliers
@@ -13,14 +13,21 @@ import { useEffect } from 'react'
  * @param {boolean} enabled - Activer/désactiver le rafraîchissement automatique (défaut: true)
  */
 export function useAutoRefresh(refetch, intervalMs = 30000, enabled = true) {
+  const refetchRef = useRef(refetch)
+  
+  // Mettre à jour la référence à chaque changement
   useEffect(() => {
-    if (!enabled || !refetch) return
+    refetchRef.current = refetch
+  }, [refetch])
+  
+  useEffect(() => {
+    if (!enabled || !refetchRef.current) return
 
     const interval = setInterval(() => {
-      refetch()
+      refetchRef.current()
     }, intervalMs)
     
     return () => clearInterval(interval)
-  }, [refetch, intervalMs, enabled])
+  }, [intervalMs, enabled]) // Ne pas inclure refetch pour éviter les boucles
 }
 

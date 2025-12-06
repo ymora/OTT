@@ -206,6 +206,18 @@ void logRuntimeConfig();
 void logRadioSnapshot(const char* stage);
 static const char* regStatusToString(RegStatus status);
 
+// Fonction utilitaire pour formater le temps depuis millis() en HH:MM:SS
+String formatTimeFromMillis(unsigned long ms) {
+  unsigned long seconds = ms / 1000;
+  unsigned long hours = seconds / 3600;
+  unsigned long minutes = (seconds % 3600) / 60;
+  unsigned long secs = seconds % 60;
+  
+  char buffer[9];
+  snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", hours, minutes, secs);
+  return String(buffer);
+}
+
 float measureBattery();
 float measureAirflowRaw();
 float airflowToLpm(float raw);
@@ -423,6 +435,10 @@ void loop()
       bool hasLocation = false;
       if (modemReady && gpsEnabled) {
         hasLocation = getDeviceLocationFast(&latitude, &longitude);
+        if (hasLocation) {
+          String timeStr = formatTimeFromMillis(millis());
+          Serial.printf("%s[USB] 📍 GPS: %.4f,%.4f\n", timeStr.c_str(), latitude, longitude);
+        }
       }
       
       // Envoyer via USB
@@ -430,7 +446,17 @@ void loop()
       
       // Envoyer via réseau si disponible
       if (modemReady && modem.isNetworkConnected()) {
-        sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr, "USB_STREAM");
+        bool sent = sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr, "USB_STREAM");
+        if (sent) {
+          // Log seulement toutes les 10 mesures pour ne pas surcharger
+          if (usbSequence % 10 == 0) {
+            String timeStr = formatTimeFromMillis(millis());
+            Serial.printf("%s[USB] ✅ Envoi réseau OK (seq=%lu)\n", timeStr.c_str(), usbSequence);
+          }
+        } else {
+          String timeStr = formatTimeFromMillis(millis());
+          Serial.printf("%s[USB] ❌ Échec envoi réseau\n", timeStr.c_str());
+        }
       }
       
       // Vérifier commandes OTA (toutes les 30s)
@@ -440,7 +466,11 @@ void loop()
         Command cmds[5];
         int count = fetchCommands(cmds, 5);
         if (count > 0) {
-          Serial.printf("📡 [OTA] %d commande(s) en attente\n", count);
+          String timeStr = formatTimeFromMillis(millis());
+          Serial.printf("%s[OTA] 📡 %d commande(s) en attente\n", timeStr.c_str(), count);
+          for (int i = 0; i < count && i < 5; i++) {
+            Serial.printf("%s[OTA]   → %s (ID: %d)\n", timeStr.c_str(), cmds[i].verb.c_str(), cmds[i].id);
+          }
         }
       }
     }
@@ -482,8 +512,9 @@ void loop()
   
   if (flowChange > FLOW_CHANGE_THRESHOLD && (now - lastMeasurementTime >= MIN_INTERVAL_MS)) {
     shouldMeasure = true;
-    Serial.printf("[SENSOR] ⚡ Changement détecté: %.2f → %.2f L/min (Δ=%.2f)\n",
-                  lastFlowValue, currentFlow, flowChange);
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[SENSOR] Changement: %.2f→%.2f L/min (Δ%.2f)\n",
+                  timeStr.c_str(), lastFlowValue, currentFlow, flowChange);
   }
   
   // Si changement détecté, mesurer et envoyer
@@ -516,10 +547,12 @@ void loop()
     if (sent) {
       lastFlowValue = currentFlow;
       lastMeasurementTime = now;
-      Serial.printf("[SENSOR] ✅ Mesure envoyée (flow=%.2f L/min, batt=%.1f%%, rssi=%d dBm)\n", 
-                    m.flow, m.battery, m.rssi);
+      String timeStr = formatTimeFromMillis(millis());
+      Serial.printf("%s[SENSOR] ✅ Envoyé: %.2f L/min | %.0f%% | %d dBm\n", 
+                    timeStr.c_str(), m.flow, m.battery, m.rssi);
     } else {
-      Serial.println(F("[SENSOR] ⚠️ Échec envoi, réessai au prochain changement"));
+      String timeStr = formatTimeFromMillis(millis());
+      Serial.printf("%s[SENSOR] ⚠️ Échec envoi\n", timeStr.c_str());
     }
     
     // Traiter les commandes OTA périodiquement
@@ -712,25 +745,12 @@ bool startModem()
   
   // Activer le GPS si configuré
   if (gpsEnabled) {
-    Serial.println(F("[GPS] ========================================"));
-    Serial.println(F("[GPS] Activation du GPS sur le modem..."));
-    Serial.printf("[GPS] État config: gpsEnabled=%s, modemReady=%s\n", 
-                  gpsEnabled ? "true" : "false", 
-                  modemReady ? "true" : "false");
-    
+    // Logs GPS simplifiés et concis
     if (modem.enableGPS()) {
-      Serial.println(F("[GPS] ✅ GPS activé avec succès sur le modem"));
-      Serial.println(F("[GPS] ⏱️  Le premier fix peut prendre 30-60 secondes"));
-      Serial.println(F("[GPS] 💡 Placez le dispositif en extérieur avec vue dégagée"));
-      Serial.println(F("[GPS] ========================================"));
+      Serial.println(F("[GPS] ✅ Activé | Fix: 30-60s"));
       sendLog("INFO", "GPS activé sur le modem");
     } else {
-      Serial.println(F("[GPS] ❌ ÉCHEC activation GPS sur le modem"));
-      Serial.println(F("[GPS] Diagnostics possibles:"));
-      Serial.println(F("[GPS]   - Le modem ne supporte peut-être pas le GPS"));
-      Serial.println(F("[GPS]   - L'antenne GPS n'est peut-être pas connectée"));
-      Serial.println(F("[GPS]   - Problème de communication avec le modem"));
-      Serial.println(F("[GPS] ========================================"));
+      Serial.println(F("[GPS] ❌ Échec activation"));
       sendLog("ERROR", "Échec activation GPS - vérifier antenne et modem");
     }
   } else {
@@ -856,22 +876,15 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   Serial.print(jsonOutput);  // Envoyer tout d'un coup
   Serial.flush();     // Forcer l'envoi immédiat
   
-  // Message de debug simplifié (seulement toutes les 10 mesures pour réduire le bruit)
-  if (sequence % 10 == 0) {
+  // Message de debug simplifié (seulement toutes les 20 mesures pour réduire le bruit)
+  if (sequence % 20 == 0) {
+    String timeStr = formatTimeFromMillis(millis());
     if (latitude != nullptr && longitude != nullptr) {
-      Serial.printf("[#%lu] 💧%.2f L/min | 🔋%.0f%% | 📡%d dBm | 📍%.4f,%.4f\n",
-                    static_cast<unsigned long>(sequence),
-                    m.flow,
-                    m.battery,
-                    m.rssi,
-                    *latitude,
-                    *longitude);
+      Serial.printf("%s[USB] Flow=%.2f L/min | Bat=%.0f%% | RSSI=%d dBm | GPS=%.4f,%.4f\n",
+                    timeStr.c_str(), m.flow, m.battery, m.rssi, *latitude, *longitude);
     } else {
-      Serial.printf("[#%lu] 💧%.2f L/min | 🔋%.0f%% | 📡%d dBm\n",
-                    static_cast<unsigned long>(sequence),
-                    m.flow,
-                    m.battery,
-                    m.rssi);
+      Serial.printf("%s[USB] Flow=%.2f L/min | Bat=%.0f%% | RSSI=%d dBm\n",
+                    timeStr.c_str(), m.flow, m.battery, m.rssi);
     }
   }
 }
@@ -880,6 +893,25 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
 // Gérer les commandes série (config, calibration, etc.)
 void handleSerialCommand(const String& command)
 {
+  // Ignorer les lignes qui sont du JSON (données de streaming sortantes)
+  // Les lignes JSON commencent par '{' et ne sont pas des commandes
+  String trimmed = command;
+  trimmed.trim();
+  
+  // Ignorer les lignes JSON complètes (commencent par '{')
+  if (trimmed.startsWith("{")) {
+    // C'est du JSON de streaming, pas une commande - ignorer silencieusement
+    return;
+  }
+  
+  // Ignorer les fragments de JSON (fins de tableaux, etc.)
+  // Exemples: "0,1,0]}", "]}" , etc.
+  if (trimmed.endsWith("]}") || trimmed.endsWith("}") || 
+      (trimmed.indexOf(',') >= 0 && trimmed.indexOf(']') >= 0)) {
+    // C'est probablement un fragment de JSON, ignorer silencieusement
+    return;
+  }
+  
   String lowered = command;
   lowered.toLowerCase();
   
@@ -1349,13 +1381,14 @@ float measureBattery()
   if (pct < 0.0f) pct = 0.0f;
   if (pct > 100.0f) pct = 100.0f;
   
-  // Affichage détaillé pour debug/monitoring
-  Serial.printf("[SENSOR] Batterie ADC=%d | V_adc=%.3fV | V_batt=%.3fV | Charge=%.1f%%\n", 
-                raw, adcVoltage, batteryVoltage, pct);
+  // Log concis et lisible (format optimisé - même format que l'exemple)
+  String timeStr = formatTimeFromMillis(millis());
+  Serial.printf("%s[SENSOR] Batterie ADC=%d | V_adc=%.3fV | V_batt=%.3fV | Charge=%.1f%%\n", 
+                timeStr.c_str(), raw, adcVoltage, batteryVoltage, pct);
   
-  // Avertissement si batterie faible
+  // Avertissement si batterie faible (seulement si nécessaire)
   if (batteryVoltage < 3.2f) {
-    Serial.println(F("[SENSOR] ⚠️  BATTERIE FAIBLE ! Recharger rapidement."));
+    Serial.printf("%s[SENSOR] ⚠️  BATTERIE FAIBLE !\n", timeStr.c_str());
   }
   
   return pct;
@@ -1367,7 +1400,26 @@ float measureAirflowRaw()
   uint16_t passes = std::max<uint16_t>(static_cast<uint16_t>(1), airflowPasses);
   uint16_t samples = std::max<uint16_t>(static_cast<uint16_t>(1), airflowSamplesPerPass);
   uint32_t totalSamples = static_cast<uint32_t>(passes) * static_cast<uint32_t>(samples);
-  Serial.printf("[SENSOR] Airflow passes=%u samples/passe=%u delay=%ums\n", passes, samples, airflowSampleDelayMs);
+  
+  // Afficher les paramètres seulement la première fois ou si changés (réduire verbosité)
+  static uint16_t lastPasses = 0;
+  static uint16_t lastSamples = 0;
+  static uint16_t lastDelay = 0;
+  static unsigned long lastConfigLog = 0;
+  
+  bool configChanged = (lastPasses != passes || lastSamples != samples || lastDelay != airflowSampleDelayMs);
+  bool shouldLogConfig = configChanged || (millis() - lastConfigLog > 60000); // Log toutes les 60s max
+  
+  if (shouldLogConfig) {
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[SENSOR] Airflow passes=%u samples/passe=%u delay=%ums\n", 
+                  timeStr.c_str(), passes, samples, airflowSampleDelayMs);
+    lastPasses = passes;
+    lastSamples = samples;
+    lastDelay = airflowSampleDelayMs;
+    lastConfigLog = millis();
+  }
+  
   for (uint16_t ii = 0; ii < passes; ++ii) {
     feedWatchdog();
     for (uint16_t i = 0; i < samples; ++i) {
@@ -1376,7 +1428,8 @@ float measureAirflowRaw()
       feedWatchdog();
     }
   }
-  Serial.printf("[SENSOR] Airflow raw=%.1f\n", totalSamples > 0 ? total / static_cast<float>(totalSamples) : 0.0f);
+  float rawValue = totalSamples > 0 ? total / static_cast<float>(totalSamples) : 0.0f;
+  Serial.printf("%s[SENSOR] Airflow raw=%.1f\n", formatTimeFromMillis(millis()).c_str(), rawValue);
   return totalSamples > 0 ? total / static_cast<float>(totalSamples) : 0.0f;
 }
 
@@ -1896,10 +1949,21 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     otaInProgress = true;
     saveConfig();
     
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[OTA] 📨 Commande OTA_REQUEST reçue\n", timeStr.c_str());
+    Serial.printf("%s[OTA]   URL: %s\n", timeStr.c_str(), url.c_str());
+    if (expectedVersion.length() > 0) {
+      Serial.printf("%s[OTA]   Version: %s\n", timeStr.c_str(), expectedVersion.c_str());
+    }
+    if (md5.length() == 32) {
+      Serial.printf("%s[OTA]   MD5: %s\n", timeStr.c_str(), md5.c_str());
+    }
+    
     sendLog("INFO", "OTA request: " + url + (expectedVersion.length() ? " (v" + expectedVersion + ")" : ""), "ota");
     if (performOtaUpdate(url, md5, expectedVersion)) {
       acknowledgeCommand(cmd, true, "ota applied");
       sendLog("INFO", "OTA appliquée, reboot", "ota");
+      Serial.printf("%s[OTA] ✅ Mise à jour réussie, redémarrage...\n", formatTimeFromMillis(millis()).c_str());
       stopModem();
       delay(250);
       esp_restart();
@@ -1909,6 +1973,7 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       saveConfig();
       acknowledgeCommand(cmd, false, "ota failed");
       sendLog("ERROR", "OTA échouée", "ota");
+      Serial.printf("%s[OTA] ❌ Mise à jour échouée\n", formatTimeFromMillis(millis()).c_str());
     }
   } else {
     acknowledgeCommand(cmd, false, "verb not supported");
@@ -2199,12 +2264,16 @@ void rollbackToPreviousFirmware()
 
 bool performOtaUpdate(const String& url, const String& expectedMd5, const String& expectedVersion)
 {
+  String timeStr = formatTimeFromMillis(millis());
+  Serial.printf("%s[OTA] 🚀 Démarrage mise à jour firmware\n", timeStr.c_str());
+  Serial.printf("%s[OTA] 📍 URL: %s\n", timeStr.c_str(), url.c_str());
+  
   bool secure = true;
   String host;
   String path;
   uint16_t port = 443;
   if (!parseUrl(url, secure, host, port, path)) {
-    Serial.println(F("[OTA] URL invalide"));
+    Serial.println(F("[OTA] ❌ URL invalide"));
     return false;
   }
 
@@ -2213,15 +2282,18 @@ bool performOtaUpdate(const String& url, const String& expectedMd5, const String
     client->stop();
     delay(50);
   }
-  Serial.printf("[OTA] Connexion %s:%u%s\n", host.c_str(), port, secure ? " (TLS)" : "");
+  Serial.printf("%s[OTA] 🔌 Connexion à %s:%u%s\n", timeStr.c_str(), host.c_str(), port, secure ? " (TLS)" : "");
   if (!client->connect(host.c_str(), port)) {
-    Serial.println(F("[OTA] Connexion impossible"));
+    Serial.println(F("[OTA] ❌ Connexion impossible"));
     return false;
   }
+  Serial.printf("%s[OTA] ✅ Connexion établie\n", formatTimeFromMillis(millis()).c_str());
 
+  Serial.printf("%s[OTA] 📤 Envoi requête HTTP...\n", formatTimeFromMillis(millis()).c_str());
   String request = String("GET ") + path + " HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n";
   client->print(request);
 
+  Serial.printf("%s[OTA] ⏳ Réception en-têtes HTTP...\n", formatTimeFromMillis(millis()).c_str());
   int status = -1;
   size_t contentLength = 0;
   while (client->connected()) {
@@ -2242,38 +2314,49 @@ bool performOtaUpdate(const String& url, const String& expectedMd5, const String
   }
 
   if (status != 200) {
-    Serial.printf("[OTA] HTTP %d\n", status);
+    Serial.printf("%s[OTA] ❌ HTTP %d\n", formatTimeFromMillis(millis()).c_str(), status);
     client->stop();
     return false;
   }
+  Serial.printf("%s[OTA] ✅ HTTP 200 OK | Taille: %lu octets\n", formatTimeFromMillis(millis()).c_str(), contentLength);
 
   if (contentLength == 0) {
     contentLength = UPDATE_SIZE_UNKNOWN;
+    Serial.printf("%s[OTA] ⚠️ Taille inconnue\n", formatTimeFromMillis(millis()).c_str());
   }
+  
+  Serial.printf("%s[OTA] 💾 Initialisation partition flash...\n", formatTimeFromMillis(millis()).c_str());
   if (!Update.begin(contentLength)) {
-    Serial.println(F("[OTA] Update.begin KO"));
+    Serial.println(F("[OTA] ❌ Échec initialisation partition"));
+    Update.printError(Serial);
     client->stop();
     return false;
   }
+  Serial.printf("%s[OTA] ✅ Partition flash prête\n", formatTimeFromMillis(millis()).c_str());
+  
   if (expectedMd5.length() == 32) {
     Update.setMD5(expectedMd5.c_str());
-    Serial.printf("[OTA] MD5 attendu: %s\n", expectedMd5.c_str());
+    Serial.printf("%s[OTA] 🔒 MD5 attendu: %s\n", formatTimeFromMillis(millis()).c_str(), expectedMd5.c_str());
   } else {
-    Serial.println(F("[OTA] Avertissement: pas de MD5 fourni"));
+    Serial.printf("%s[OTA] ⚠️ Pas de MD5 fourni\n", formatTimeFromMillis(millis()).c_str());
   }
   
   if (expectedVersion.length() > 0) {
-    Serial.printf("[OTA] Version attendue: %s\n", expectedVersion.c_str());
+    Serial.printf("%s[OTA] 📌 Version attendue: %s\n", formatTimeFromMillis(millis()).c_str(), expectedVersion.c_str());
   }
 
+  Serial.printf("%s[OTA] 📥 Téléchargement firmware...\n", formatTimeFromMillis(millis()).c_str());
   uint8_t buffer[512];
   size_t written = 0;
   unsigned long lastRead = millis();
+  unsigned long lastProgressLog = 0;
+  uint8_t lastPercent = 0;
+  
   while (client->connected() || client->available()) {
     int len = client->read(buffer, sizeof(buffer));
     if (len > 0) {
       if (Update.write(buffer, len) != len) {
-        Serial.println(F("[OTA] Write stream KO"));
+        Serial.println(F("[OTA] ❌ Échec écriture flash"));
         client->stop();
         Update.end();
         return false;
@@ -2281,9 +2364,22 @@ bool performOtaUpdate(const String& url, const String& expectedMd5, const String
       written += len;
       lastRead = millis();
       feedWatchdog();
+      
+      // Log progression toutes les 10% ou toutes les 10 secondes
+      if (contentLength > 0) {
+        uint8_t percent = (written * 100) / contentLength;
+        bool shouldLog = (percent >= lastPercent + 10) || (millis() - lastProgressLog > 10000);
+        
+        if (shouldLog && percent != lastPercent) {
+          Serial.printf("%s[OTA] 📥 Progression: %lu/%lu octets (%d%%)\n", 
+                       formatTimeFromMillis(millis()).c_str(), written, contentLength, percent);
+          lastPercent = percent;
+          lastProgressLog = millis();
+        }
+      }
     } else {
       if (millis() - lastRead > OTA_STREAM_TIMEOUT_MS) {
-        Serial.println(F("[OTA] Timeout flux"));
+        Serial.println(F("[OTA] ❌ Timeout téléchargement"));
         client->stop();
         Update.end();
         return false;
@@ -2291,19 +2387,23 @@ bool performOtaUpdate(const String& url, const String& expectedMd5, const String
       delay(10);
     }
   }
+  Serial.printf("%s[OTA] ✅ Téléchargement terminé: %lu octets\n", formatTimeFromMillis(millis()).c_str(), written);
   client->stop();
 
+  Serial.printf("%s[OTA] 💾 Finalisation écriture flash...\n", formatTimeFromMillis(millis()).c_str());
   if (!Update.end()) {
-    Serial.println(F("[OTA] Fin update KO"));
+    Serial.println(F("[OTA] ❌ Échec finalisation flash"));
     Update.printError(Serial);
     return false;
   }
+  Serial.printf("%s[OTA] ✅ Flash écrit avec succès\n", formatTimeFromMillis(millis()).c_str());
+  
   if (!Update.isFinished()) {
-    Serial.println(F("[OTA] Flash incomplet"));
+    Serial.println(F("[OTA] ❌ Flash incomplet"));
     return false;
   }
   
-  Serial.printf("[OTA] %u octets flashés avec succès\n", static_cast<unsigned>(written));
+  Serial.printf("%s[OTA] ✅ %u octets flashés avec succès\n", formatTimeFromMillis(millis()).c_str(), static_cast<unsigned>(written));
   
   // Si une version était attendue, on la sauvegarde pour validation au prochain boot
   if (expectedVersion.length() > 0) {
@@ -2402,17 +2502,11 @@ bool getDeviceLocationFast(float* latitude, float* longitude)
   
   consecutive_failures++;
   
-  // Si premier échec, logger avec plus de détails
-  if (consecutive_failures == 1) {
-    Serial.println(F("[GPS] ⏱️ Pas de fix GPS (timeout 500ms) - Acquisition en cours..."));
-    Serial.println(F("[GPS]   💡 Le GPS peut prendre 30-60 secondes pour un premier fix"));
-    Serial.println(F("[GPS]   💡 Assurez-vous d'être en extérieur avec vue dégagée du ciel"));
-  }
-  
-  // Logger périodiquement pour rassurer que le GPS fonctionne
+  // Logger périodiquement (seulement toutes les 20 tentatives pour réduire le bruit)
   if (consecutive_failures > 0 && consecutive_failures % 20 == 0) {
-    Serial.printf("[GPS] ⏱️ Fix GPS en cours... (tentative %d)\n", consecutive_failures);
-    Serial.println(F("[GPS]   Le GPS est activé mais attend un fix satellite"));
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[GPS] ⏱️ Fix en cours... (tentative %d)\n", 
+                  timeStr.c_str(), consecutive_failures);
   }
   
   // Utiliser cache si disponible
@@ -2476,21 +2570,15 @@ bool getDeviceLocation(float* latitude, float* longitude)
         lat != 0.0 && lon != 0.0) {
       *latitude = lat;
       *longitude = lon;
-      Serial.printf("[GPS] ✅ Position: %.6f, %.6f (acc: %.1fm, sat: %d)\n", 
-                    lat, lon, accuracy, usat);
+      String timeStr = formatTimeFromMillis(millis());
+      Serial.printf("%s[GPS] ✅ %.6f, %.6f (acc: %.0fm, sat: %d)\n", 
+                    timeStr.c_str(), lat, lon, accuracy, usat);
       gpsSuccess = true;
       return true;
     }
   }
   
   // Si GPS échoue, essayer la localisation réseau cellulaire (plus rapide mais moins précis)
-  Serial.println(F("[GPS] ⚠️  GPS fix non disponible, tentative réseau cellulaire..."));
-  Serial.printf("[GPS]   Satellites visibles: %d, utilisés: %d\n", vsat, usat);
-  if (usat == 0) {
-    Serial.println(F("[GPS]   ⚠️  Aucun satellite utilisé - Le GPS peut nécessiter plus de temps pour un premier fix"));
-    Serial.println(F("[GPS]   💡 Conseil: Attendre 30-60 secondes en extérieur pour le premier fix GPS"));
-  }
-  
   lat = 0.0;
   lon = 0.0;
   float gsmAccuracy = 0.0;
@@ -2501,37 +2589,20 @@ bool getDeviceLocation(float* latitude, float* longitude)
         lat != 0.0 && lon != 0.0) {
       *latitude = lat;
       *longitude = lon;
-      Serial.printf("[GPS] ✅ Position réseau cellulaire obtenue: %.6f, %.6f (précision: %.0fm)\n", 
-                    lat, lon, gsmAccuracy);
+      String timeStr = formatTimeFromMillis(millis());
+      Serial.printf("%s[GPS] ✅ Réseau: %.6f, %.6f (%.0fm)\n", 
+                    timeStr.c_str(), lat, lon, gsmAccuracy);
       return true;
     }
   }
   
-  Serial.println(F("[GPS] ❌ Aucune position disponible (GPS et réseau cellulaire échoués)"));
-  Serial.println(F("[GPS] ========================================"));
-  Serial.println(F("[GPS] DIAGNOSTIC:"));
-  Serial.printf("[GPS]   ✓ GPS activé dans config: %s\n", gpsEnabled ? "OUI" : "NON");
-  Serial.printf("[GPS]   ✓ Modem prêt: %s\n", modemReady ? "OUI" : "NON");
-  Serial.printf("[GPS]   ✓ Satellites visibles: %d\n", vsat);
-  Serial.printf("[GPS]   ✓ Satellites utilisés: %d\n", usat);
-  Serial.println(F("[GPS] CAUSES POSSIBLES:"));
-  if (!gpsEnabled) {
-    Serial.println(F("[GPS]   ❌ GPS désactivé dans la configuration"));
-    Serial.println(F("[GPS]   → Activer avec: config {\"gps_enabled\": true}"));
+  // Log concis en cas d'échec (seulement si pas déjà loggé précédemment)
+  static unsigned long lastGpsErrorLog = 0;
+  if (millis() - lastGpsErrorLog > 10000) {  // Logger seulement toutes les 10 secondes
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[GPS] ❌ Pas de position (sat: %d/%d)\n", 
+                  timeStr.c_str(), usat, vsat);
+    lastGpsErrorLog = millis();
   }
-  if (!modemReady) {
-    Serial.println(F("[GPS]   ❌ Modem non démarré"));
-    Serial.println(F("[GPS]   → Le modem doit être démarré pour utiliser le GPS"));
-  }
-  if (usat == 0 && vsat == 0) {
-    Serial.println(F("[GPS]   ❌ Aucun satellite détecté"));
-    Serial.println(F("[GPS]   → Vérifier l'antenne GPS"));
-    Serial.println(F("[GPS]   → Placer le dispositif en extérieur avec vue dégagée"));
-  } else if (usat == 0 && vsat > 0) {
-    Serial.println(F("[GPS]   ⚠️  Satellites visibles mais non utilisés"));
-    Serial.println(F("[GPS]   → Le GPS est en cours d'acquisition (premier fix)"));
-    Serial.println(F("[GPS]   → Attendre 30-60 secondes en extérieur"));
-  }
-  Serial.println(F("[GPS] ========================================"));
   return false;
 }
