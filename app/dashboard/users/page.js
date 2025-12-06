@@ -3,128 +3,63 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState, useEffect, useRef } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
-import { useApiData, useFilter, useEntityModal, useEntityRestore, useEntityArchive, useEntityPermanentDelete } from '@/hooks'
+import { useMemo } from 'react'
+import { useEntityPage } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
-import ConfirmModal from '@/components/ConfirmModal'
-import { isTrue, isArchived as isEntityArchived } from '@/lib/utils'
-import { fetchJson } from '@/lib/api'
 import logger from '@/lib/logger'
 
 export default function UsersPage() {
-  const { fetchWithAuth, API_URL, user: currentUser } = useAuth()
-  
-  // Helper pour vérifier les permissions
-  const hasPermission = (permission) => {
-    if (!permission) return true
-    if (currentUser?.role_name === 'admin') return true
-    return currentUser?.permissions?.includes(permission) || false
-  }
-  
-  // Alias pour la fonction utilitaire unifiée
-  const isUserArchived = isEntityArchived
-  const [actionError, setActionError] = useState(null)
-  const [success, setSuccess] = useState(null)
-  
-  // Utiliser le hook useEntityModal pour gérer le modal
-  const { isOpen: showModal, editingItem, openCreate: openCreateModal, openEdit: openEditModal, close: closeModal } = useEntityModal()
-  
-  // Modal de suppression
-  // Plus de modal - actions directes
-  const [showArchived, setShowArchived] = useState(false)
-
-  // Charger les données avec useApiData
-  // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
-  // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
-  const { data, loading, error, refetch, invalidateCache } = useApiData(
-    useMemo(() => [
-      showArchived ? '/api.php/users?include_deleted=true' : '/api.php/users',
-      '/api.php/roles'
-    ], [showArchived]),
-    { requiresAuth: true }
-  )
-
-  // Invalider le cache explicitement quand showArchived change pour forcer le rechargement
-  useEffect(() => {
-    invalidateCache()
-    refetch()
-  }, [showArchived, invalidateCache, refetch])
-
-  // Utiliser le hook unifié pour la restauration
-  const { restore: handleRestoreUser, restoring: restoringUser } = useEntityRestore('users', {
-    onSuccess: () => {
-      setSuccess('✅ Utilisateur restauré avec succès')
-    },
-    onError: (errorMessage) => {
-      setActionError(errorMessage)
-    },
-    invalidateCache,
-    refetch
-  })
-
-  // Utiliser le hook unifié pour l'archivage
-  const { archive: handleArchive, archiving } = useEntityArchive({
-    fetchWithAuth,
-    API_URL,
-    entityType: 'users',
-    refetch,
-    onSuccess: () => {
-      setSuccess('✅ Utilisateur archivé avec succès')
-    },
-    onError: (errorMessage) => {
-      setActionError(errorMessage)
-    },
-    invalidateCache,
-    currentUser,
-    onCloseModal: closeModal,
-    editingItem
-  })
-
-  // Utiliser le hook unifié pour la suppression définitive
-  const { permanentDelete: handlePermanentDelete, deleting: deletingPermanent } = useEntityPermanentDelete({
-    fetchWithAuth,
-    API_URL,
-    entityType: 'users',
-    refetch,
-    onSuccess: () => {
-      setSuccess('✅ Utilisateur supprimé définitivement')
-    },
-    onError: (errorMessage) => {
-      setActionError(errorMessage)
-    },
-    invalidateCache,
-    onCloseModal: closeModal,
-    editingItem
-  })
-
-  const allUsers = data?.users?.users || []
-  const roles = data?.roles?.roles || []
-  
-  // Séparer les utilisateurs actifs et archivés
-  const users = useMemo(() => {
-    return allUsers.filter(u => !isUserArchived(u))
-  }, [allUsers])
-
-  // Utiliser useFilter pour la recherche
-  const usersToDisplay = showArchived ? allUsers : users
+  // Utiliser le hook unifié pour toute la logique commune
   const {
+    allItems: allUsers,
+    items: users,
+    filteredItems: filteredUsers,
     searchTerm,
     setSearchTerm,
-    filteredItems: filteredUsers
-  } = useFilter(usersToDisplay, {
+    loading,
+    error,
+    success,
+    actionError,
+    setSuccess,
+    setActionError,
+    resetMessages,
+    showArchived,
+    toggleShowArchived,
+    showModal,
+    editingItem,
+    openCreateModal,
+    openEditModal,
+    closeModal,
+    restore: handleRestoreUser,
+    restoring: restoringUser,
+    archive: handleArchive,
+    archiving,
+    permanentDelete: handlePermanentDelete,
+    deleting: deletingPermanent,
+    hasPermission,
+    isArchived,
+    currentUser,
+    fetchWithAuth,
+    API_URL,
+    refetch,
+    additionalData
+  } = useEntityPage({
+    entityType: 'users',
+    additionalEndpoints: ['/api.php/roles'],
     searchFn: (items, term) => {
       const needle = term.toLowerCase()
       return items.filter(user => {
         const haystack = `${user.first_name || ''} ${user.last_name || ''} ${user.email || ''} ${user.phone || ''} ${user.role_name || ''}`.toLowerCase()
         return haystack.includes(needle)
       })
-      }
-    })
+    }
+  })
+  
+  const roles = additionalData.roles || []
 
   const roleColors = {
     admin: 'bg-purple-100 text-purple-700',
@@ -134,18 +69,16 @@ export default function UsersPage() {
   }
 
   const handleModalSave = async () => {
-    await withErrorHandling(async () => {
+    try {
       setSuccess(editingItem ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
       // Attendre un peu pour s'assurer que la base de données est bien mise à jour
       // puis refetch pour recharger les données avec les notifications mises à jour
       await new Promise(resolve => setTimeout(resolve, 100))
       await refetch()
-    }, {
-      errorMessage: 'Erreur lors de la sauvegarde',
-      onError: (err) => {
-        setActionError(err.message || 'Erreur lors de la sauvegarde')
-      }
-    })
+    } catch (err) {
+      setActionError(err.message || 'Erreur lors de la sauvegarde')
+      logger.error('Erreur sauvegarde utilisateur:', err)
+    }
   }
 
 
@@ -217,17 +150,17 @@ export default function UsersPage() {
                 ) : (
                   filteredUsers.map((user, i) => {
                     // Vérifier de manière plus robuste si l'utilisateur est archivé
-                    const isArchived = isUserArchived(user)
+                    const userIsArchived = isArchived(user)
                     return (
                     <tr 
                       key={user.id} 
-                      className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${isArchived ? 'opacity-60' : ''}`}
+                      className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${userIsArchived ? 'opacity-60' : ''}`}
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
                       <td className="table-cell py-3 px-4 font-medium">
                         <div className="flex items-center gap-2">
                           <span>{user.first_name} {user.last_name}</span>
-                          {isArchived && (
+                          {userIsArchived && (
                             <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
                           )}
                         </div>
@@ -258,7 +191,7 @@ export default function UsersPage() {
                       </td>
                       <td className="table-cell py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
-                          {isArchived ? (
+                          {userIsArchived ? (
                             // Utilisateurs archivés : uniquement le bouton de restauration
                             <button
                               onClick={() => handleRestoreUser(user)}

@@ -6,111 +6,72 @@ export const dynamic = 'force-dynamic'
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useToggle, useAsyncState } from '@/hooks'
-import { withErrorHandling } from '@/lib/errorHandler'
-import { safeApiCall } from '@/lib/apiHelpers'
+import { useEntityPage, useAutoRefresh, useDevicesUpdateListener, useToggle } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
 import Modal from '@/components/Modal'
-import ConfirmModal from '@/components/ConfirmModal'
-import { isTrue, isArchived as isEntityArchived } from '@/lib/utils'
 import logger from '@/lib/logger'
 
 export default function PatientsPage() {
-  const { user: currentUser, fetchWithAuth, API_URL } = useAuth()
+  // Utiliser le hook unifié pour toute la logique commune
+  const {
+    allItems: allPatients,
+    items: patients,
+    filteredItems: filteredPatients,
+    searchTerm,
+    setSearchTerm,
+    loading,
+    error,
+    success,
+    actionError,
+    setSuccess,
+    setActionError,
+    resetMessages,
+    showArchived,
+    toggleShowArchived,
+    showModal,
+    editingItem,
+    openCreateModal,
+    openEditModal,
+    closeModal,
+    restore: handleRestorePatient,
+    restoring: restoringPatient,
+    archive: handleArchive,
+    archiving,
+    permanentDelete: handlePermanentDelete,
+    deleting: deletingPermanent,
+    hasPermission,
+    isArchived,
+    currentUser,
+    fetchWithAuth,
+    API_URL,
+    refetch,
+    invalidateCache,
+    additionalData
+  } = useEntityPage({
+    entityType: 'patients',
+    additionalEndpoints: ['/api.php/devices'],
+    searchFn: (items, term) => {
+      const needle = term.toLowerCase()
+      return items.filter(p => {
+        const haystack = `${p.first_name || ''} ${p.last_name || ''} ${p.email || ''} ${p.phone || ''} ${p.device_name || ''}`.toLowerCase()
+        return haystack.includes(needle)
+      })
+    }
+  })
   
-  // Helper pour vérifier les permissions
-  const hasPermission = (permission) => {
-    if (!permission) return true
-    if (currentUser?.role_name === 'admin') return true
-    return currentUser?.permissions?.includes(permission) || false
-  }
+  const allDevices = additionalData.devices || []
   
-  // Alias pour la fonction utilitaire unifiée
-  const isArchived = isEntityArchived
-  const isPatientArchived = isEntityArchived
-  
-  // Utiliser useAsyncState pour gérer success/error
-  const asyncState = useAsyncState()
-  const { success, error: actionError, setSuccess, setError: setActionError, reset: resetMessages } = asyncState
-  
-  // Utiliser le hook useEntityModal pour gérer le modal
-  const { isOpen: showModal, editingItem, openCreate: openCreateModal, openEdit: openEditModal, close: closeModal } = useEntityModal()
+  // États spécifiques aux patients (assignation de dispositifs)
   const [unassigningDevice, setUnassigningDevice] = useState(null)
   const [assigningDevice, setAssigningDevice] = useState(null)
-  const [showAssignModal, , , setShowAssignModalFalse] = useToggle(false)
+  const [showAssignModal, , setShowAssignModalTrue, setShowAssignModalFalse] = useToggle(false)
   const [selectedPatientForAssign, setSelectedPatientForAssign] = useState(null)
-  const [showUnassignModal, , , setShowUnassignModalFalse] = useToggle(false)
+  const [showUnassignModal, , setShowUnassignModalTrue, setShowUnassignModalFalse] = useToggle(false)
   const [selectedDeviceForUnassign, setSelectedDeviceForUnassign] = useState(null)
-  // Plus de modal - actions directes
-  const [showArchived, , toggleShowArchived] = useToggle(false)
-
-  // Charger les données avec useApiData
-  // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
-  // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
-  const { data, loading, error, refetch, invalidateCache } = useApiData(
-    useMemo(() => [
-      showArchived ? '/api.php/patients?include_deleted=true' : '/api.php/patients',
-      '/api.php/devices'
-    ], [showArchived]),
-    { requiresAuth: true }
-  )
-
-  // Invalider le cache explicitement quand showArchived change pour forcer le rechargement
-  useEffect(() => {
-    invalidateCache()
-    refetch()
-  }, [showArchived, invalidateCache, refetch])
-
-  // Utiliser le hook unifié pour la restauration
-  const { restore: handleRestorePatient, restoring: restoringPatient } = useEntityRestore('patients', {
-    onSuccess: () => {
-      setSuccess('✅ Patient restauré avec succès')
-    },
-    onError: (errorMessage) => {
-      setActionError(errorMessage)
-    },
-    invalidateCache,
-    refetch
-  })
-
-  // Utiliser le hook unifié pour l'archivage
-  const { archive: handleArchive, archiving } = useEntityArchive({
-    fetchWithAuth,
-    API_URL,
-    entityType: 'patients',
-    refetch,
-    onSuccess: () => {
-      setSuccess('✅ Patient archivé avec succès')
-    },
-    onError: (errorMessage) => {
-      setActionError(errorMessage)
-    },
-    invalidateCache,
-    currentUser,
-    onCloseModal: closeModal,
-    editingItem
-  })
-
-  // Utiliser le hook unifié pour la suppression définitive
-  const { permanentDelete: handlePermanentDelete, deleting: deletingPermanent } = useEntityPermanentDelete({
-    fetchWithAuth,
-    API_URL,
-    entityType: 'patients',
-    refetch,
-    onSuccess: () => {
-      setSuccess('✅ Patient supprimé définitivement')
-    },
-    onError: (errorMessage) => {
-      setActionError(errorMessage)
-    },
-    invalidateCache,
-    onCloseModal: closeModal,
-    editingItem
-  })
 
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
   useAutoRefresh(refetch, 30000)
@@ -118,14 +79,6 @@ export default function PatientsPage() {
   // Utiliser le hook useDevicesUpdateListener pour écouter les événements
   useDevicesUpdateListener(refetch)
 
-  const allPatients = data?.patients?.patients || []
-  const allDevices = data?.devices?.devices || []
-  
-  // Séparer les patients actifs et archivés
-  const patients = useMemo(() => {
-    return allPatients.filter(p => !isPatientArchived(p))
-  }, [allPatients])
-  
   // Filtrer uniquement les dispositifs assignés aux patients (non archivés)
   const devices = useMemo(() => {
     return (allDevices || []).filter(d => d.patient_id && !isArchived(d))
@@ -135,22 +88,6 @@ export default function PatientsPage() {
   const freeDevices = useMemo(() => {
     return (allDevices || []).filter(d => !d.patient_id && !isArchived(d))
   }, [allDevices])
-
-  // Utiliser useFilter pour la recherche
-  const patientsToDisplay = showArchived ? allPatients : patients
-  const {
-    searchTerm,
-    setSearchTerm,
-    filteredItems: filteredPatients
-  } = useFilter(patientsToDisplay, {
-    searchFn: (items, term) => {
-      const needle = term.toLowerCase()
-      return items.filter(p => {
-        const haystack = `${p.first_name || ''} ${p.last_name || ''} ${p.email || ''} ${p.phone || ''} ${p.device_name || ''}`.toLowerCase()
-        return haystack.includes(needle)
-      })
-    }
-  })
 
 
   const handleAssignDevice = async (patient, deviceId) => {
@@ -353,17 +290,17 @@ export default function PatientsPage() {
                 ) : (
                   filteredPatients.map((p, i) => {
                     // Vérifier de manière plus robuste si le patient est archivé
-                    const isArchived = isPatientArchived(p)
+                    const patientIsArchived = isArchived(p)
                     return (
                     <tr 
                       key={p.id} 
-                      className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${isArchived ? 'opacity-60' : ''}`}
+                      className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${patientIsArchived ? 'opacity-60' : ''}`}
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
                       <td className="table-cell py-3 px-4 font-medium text-primary">
                         <div className="flex items-center gap-2">
                           <span>{p.first_name} {p.last_name}</span>
-                          {isArchived ? (
+                          {patientIsArchived ? (
                             <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
                           ) : (
                             <span className="badge badge-success">✅ Actif</span>
@@ -379,7 +316,7 @@ export default function PatientsPage() {
                         <div className="flex items-center gap-2">
                           {(() => {
                             // Pour les patients archivés, afficher uniquement les infos (pas d'actions)
-                            if (isArchived) {
+                            if (patientIsArchived) {
                               const assignedDevice = devices.find(d => d.patient_id === p.id)
                               if (assignedDevice) {
                                 return (
@@ -433,7 +370,7 @@ export default function PatientsPage() {
                       </td>
                       <td className="table-cell py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
-                          {isArchived ? (
+                          {patientIsArchived ? (
                             <button
                               onClick={() => handleRestorePatient(p)}
                               disabled={restoringPatient === p.id}
