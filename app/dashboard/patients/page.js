@@ -467,10 +467,10 @@ export default function PatientsPage() {
                                       <button
                                         className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
                                         onClick={() => handleArchive(p)}
-                                        disabled={deleteLoading || archiving === p.id}
+                                        disabled={archiving === p.id}
                                         title="Archiver le patient"
                                       >
-                                        <span className="text-lg">{(deleteLoading || archiving === p.id) ? '⏳' : '🗄️'}</span>
+                                        <span className="text-lg">{archiving === p.id ? '⏳' : '🗄️'}</span>
                                       </button>
                                       <button
                                         className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
@@ -486,10 +486,10 @@ export default function PatientsPage() {
                                       <button
                                         className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
                                         onClick={() => handleArchive(p)}
-                                        disabled={deleteLoading || archiving === p.id}
+                                        disabled={archiving === p.id}
                                         title="Archiver le patient"
                                       >
-                                        <span className="text-lg">{(deleteLoading || archiving === p.id) ? '⏳' : '🗄️'}</span>
+                                        <span className="text-lg">{archiving === p.id ? '⏳' : '🗄️'}</span>
                                       </button>
                                   )}
                                 </>

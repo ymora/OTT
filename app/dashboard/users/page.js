@@ -290,10 +290,10 @@ export default function UsersPage() {
                                       <button
                                         className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
                                         onClick={() => handleArchive(user)}
-                                        disabled={deleteLoading}
+                                        disabled={archiving === user.id}
                                         title="Archiver l'utilisateur"
                                       >
-                                        <span className="text-lg">{deleteLoading ? '⏳' : '🗄️'}</span>
+                                        <span className="text-lg">{archiving === user.id ? '⏳' : '🗄️'}</span>
                                       </button>
                                       <button
                                         className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
