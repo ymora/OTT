@@ -1243,6 +1243,96 @@ $duration = ($endTime - $startTime).TotalSeconds
 Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 
+# ===============================================================================
+# PHASE 16 : VÉRIFICATION UNIFORMISATION UI/UX (AVANT LES SCORES FINAUX)
+# ===============================================================================
+
+Write-Section "[16/16] Uniformisation UI/UX - Badges, Tables, Modals"
+
+$uiScore = 10.0
+$uiIssues = @()
+$uiWarnings = @()
+
+# Fichiers à vérifier
+$uiFiles = @(
+    "app/dashboard/users/page.js",
+    "app/dashboard/patients/page.js",
+    "components/configuration/UsbStreamingTab.js"
+)
+
+# Vérifier uniformisation des badges
+foreach ($file in $uiFiles) {
+    if (Test-Path $file) {
+        $content = Get-Content $file -Raw
+        if ($content -match "badge.*success|badge.*danger|badge.*warning") {
+            Write-OK "$file : Uniformisation OK"
+        }
+    }
+}
+
+# Vérifier uniformisation des tables
+$usersContent = Get-Content "app/dashboard/users/page.js" -Raw -ErrorAction SilentlyContinue
+$patientsContent = Get-Content "app/dashboard/patients/page.js" -Raw -ErrorAction SilentlyContinue
+$devicesContent = Get-Content "components/configuration/UsbStreamingTab.js" -Raw -ErrorAction SilentlyContinue
+
+if ($usersContent -and $patientsContent -and $devicesContent) {
+    # Vérifier cohérence table-row
+    $hasTableRow = @(
+        ($usersContent -match "table-row"),
+        ($patientsContent -match "table-row"),
+        ($devicesContent -match "table-row")
+    )
+    
+    if (($hasTableRow[0] -and -not $hasTableRow[1]) -or ($hasTableRow[1] -and -not $hasTableRow[2])) {
+        Write-Warn "Usage incohérent de 'table-row' entre fichiers"
+        $uiWarnings += "Usage incohérent de 'table-row'"
+        $uiScore -= 0.5
+    } else {
+        Write-OK "Classe 'table-row' utilisée de manière cohérente"
+    }
+    
+    # Vérifier cohérence opacity-60
+    $hasOpacity = @(
+        ($usersContent -match "opacity-60"),
+        ($patientsContent -match "opacity-60"),
+        ($devicesContent -match "opacity-60")
+    )
+    
+    if (($hasOpacity[0] -and -not $hasOpacity[1]) -or ($hasOpacity[1] -and -not $hasOpacity[2])) {
+        Write-Warn "Usage incohérent de 'opacity-60' entre fichiers"
+        $uiWarnings += "Usage incohérent de 'opacity-60'"
+        $uiScore -= 0.5
+    } else {
+        Write-OK "Classe 'opacity-60' utilisée de manière cohérente"
+    }
+}
+
+Write-Host ""
+if ($uiIssues.Count -eq 0 -and $uiWarnings.Count -eq 0) {
+    Write-OK "Uniformisation UI/UX parfaite - Score: $([math]::Round($uiScore, 1))/10"
+} else {
+    if ($uiIssues.Count -gt 0) {
+        Write-Err "Problèmes d'uniformisation détectés:"
+        $uiIssues | Select-Object -First 10 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+        if ($uiIssues.Count -gt 10) {
+            Write-Host "  ... et $($uiIssues.Count - 10) autres problèmes" -ForegroundColor Red
+        }
+    }
+    if ($uiWarnings.Count -gt 0) {
+        Write-Warn "Avertissements d'uniformisation:"
+        $uiWarnings | Select-Object -First 5 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    }
+    Write-Host "[SCORE UI/UX] $([math]::Round($uiScore, 1))/10" -ForegroundColor Yellow
+}
+
+# S'assurer que le score ne peut pas être négatif et est arrondi
+$uiScoreFinal = [Math]::Max(0, [Math]::Round($uiScore, 1))
+# Assigner le score AVANT l'affichage des scores finaux
+$auditResults.Scores["Uniformisation UI/UX"] = $uiScoreFinal
+
+Write-Host ""
+Write-Host ("=" * 80) -ForegroundColor Gray
+
 Write-Section "SCORES FINAUX"
 
 $scoreWeights = @{
@@ -1774,8 +1864,11 @@ if (Test-Path "api.php") {
                 # 1. La route avec le pattern
                 # 2. La méthode PATCH
                 # 3. Le handler est appelé
-                $hasRoute = $context -match "preg_match.*#.*$routePattern.*\$#"
-                $hasMethod = $context -match "\`\$method === '$($ep.Method)'"
+                # Pattern plus flexible pour la route (peut être sur plusieurs lignes)
+                $hasRoute = $context -match "preg_match.*#.*$routePattern" -or $context -match "#.*$routePattern.*\$#"
+                # Méthode PATCH
+                $hasMethod = $context -match "\`\$method === '$($ep.Method)'" -or $context -match "method === '$($ep.Method)'"
+                # Handler appelé
                 $hasHandler = $context -match $ep.Handler
                 
                 if ($hasRoute -and $hasMethod -and $hasHandler) {
