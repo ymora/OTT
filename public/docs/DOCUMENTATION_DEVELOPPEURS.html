@@ -879,6 +879,29 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li><strong>Alertes</strong> : Gestion des alertes (batterie faible, offline, etc.) avec résolution</li>
         <li><strong>Audit</strong> : Logs d'audit de toutes les actions (admin uniquement)</li>
     </ul>
+    
+    <h3>🔧 Architecture Frontend</h3>
+    
+    <h4>Hooks & Utilitaires</h4>
+    <ul>
+        <li><strong><code>hooks/useTimer.js</code></strong> : Gestion timers avec cleanup automatique (<code>useTimeout</code>, <code>useInterval</code>, <code>useTimers</code>)</li>
+        <li><strong><code>lib/apiHelpers.js</code></strong> : Wrappers API (<code>safeApiCall</code>, <code>apiCallWithRetry</code>, <code>batchApiCalls</code>)</li>
+        <li><strong><code>lib/errorHandler.js</code></strong> : Gestion d'erreurs standardisée (<code>withErrorHandling</code>, <code>createErrorHandler</code>)</li>
+    </ul>
+    
+    <h4>Gestion des Archives</h4>
+    <ul>
+        <li>Éléments archivés : seule action de restauration disponible</li>
+        <li>Exclusion automatique des statistiques et fonctionnalités actives</li>
+        <li>Affichage visuel avec badge "🗄️ Archivé"</li>
+    </ul>
+    
+    <h4>Déploiement</h4>
+    <ul>
+        <li>Mode serveur : Docker standalone (port 3000)</li>
+        <li>Mode statique : GitHub Pages (export Next.js)</li>
+        <li>Scripts d'export : <code>export_static.sh</code> et <code>export_static.ps1</code></li>
+    </ul>
 </section>
 
 <section id="deployment" class="section">
@@ -1979,61 +2002,29 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
 </section>
 
 <section id="measurements-queue" class="section">
-    <h2>📊 Système de Queue de Mesures (IndexedDB)</h2>
+    <h2>📊 Système de Queue de Mesures</h2>
     
-    <h3>🔄 Mécanisme de Retry Robuste</h3>
-    <p>Le système implémente un mécanisme robuste pour garantir l'envoi des mesures même en cas de problème réseau :</p>
-    
-    <h4>1. Queue Locale (IndexedDB)</h4>
+    <h3>Mécanisme de Retry</h3>
     <ul>
-        <li>Les mesures sont stockées localement dans IndexedDB si le réseau est indisponible</li>
-        <li>La queue est persistante (survit aux redémarrages du navigateur)</li>
-        <li>Les mesures sont automatiquement réessayées lorsque le réseau revient</li>
+        <li>Queue locale IndexedDB (persistante)</li>
+        <li>Retry avec exponential backoff (1s, 2s, 4s, 8s, 16s, 32s max)</li>
+        <li>Maximum 5 tentatives</li>
+        <li>Validation des données avant envoi</li>
     </ul>
     
-    <h4>2. Retry avec Exponential Backoff</h4>
+    <h3>Statistiques Graphiques</h3>
     <ul>
-        <li>En cas d'échec, le système attend avant de réessayer</li>
-        <li>Le délai d'attente augmente exponentiellement : 1s, 2s, 4s, 8s, 16s, 32s (max)</li>
-        <li>Maximum 5 tentatives avant de considérer l'échec comme définitif</li>
-    </ul>
-    
-    <h4>3. Validation des Données</h4>
-    <ul>
-        <li>Les données sont validées avant l'envoi (ICCID requis, valeurs numériques valides)</li>
-        <li>Les mesures invalides sont rejetées et ne sont pas ajoutées à la queue</li>
-    </ul>
-    
-    <h3>📈 Améliorations des Statistiques</h3>
-    <p>Les graphiques ont été améliorés pour afficher plus d'informations :</p>
-    
-    <h4>Statistiques Affichées</h4>
-    <ul>
-        <li><strong>Min</strong> : Valeur minimale sur la période</li>
-        <li><strong>Max</strong> : Valeur maximale sur la période</li>
-        <li><strong>Moy</strong> : Valeur moyenne sur la période</li>
-        <li><strong>Dernier</strong> : Dernière valeur enregistrée</li>
-    </ul>
-    
-    <h4>Prévention du Débordement</h4>
-    <ul>
-        <li>Les graphiques ont des limites définies pour éviter le débordement</li>
-        <li>L'axe Y est limité à 0-100% pour la batterie</li>
-        <li>Le nombre de ticks sur l'axe X est limité à 10 pour éviter l'encombrement</li>
-    </ul>
-    
-    <h4>Tooltips Améliorés</h4>
-    <ul>
-        <li>Les tooltips affichent les unités (L/min ou %)</li>
-        <li>Formatage des nombres avec séparateurs de milliers</li>
+        <li>Affichage : Min, Max, Moyenne, Dernier</li>
+        <li>Limites définies pour éviter débordement</li>
+        <li>Tooltips avec unités et formatage</li>
     </ul>
 </section>
 
 <section id="roadmap" class="section">
-    <h2>🚀 Roadmap & Améliorations Futures</h2>
+    <h2>🚀 Roadmap</h2>
     
     <div class="alert alert-success">
-        <strong>✅ Version 1.0 Production (Actuelle - Décembre 2025)</strong><br>
+        <strong>✅ Version 1.0 Production (Actuelle)</strong><br>
         Version actuellement déployée avec les fonctionnalités suivantes :
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
             <li>✅ Pagination complète sur tous les endpoints de liste</li>
@@ -2050,6 +2041,11 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
             <li>✅ Mise à jour OTA (Over-The-Air) du firmware</li>
             <li>✅ Carte interactive Leaflet avec géolocalisation</li>
             <li>✅ Système d'alertes et notifications</li>
+            <li>✅ <strong>Uniformisation UI/UX (Score 10/10)</strong> - Badges et tables cohérents</li>
+            <li>✅ <strong>Gestion des timers avec cleanup automatique</strong> - Hooks <code>useTimer</code></li>
+            <li>✅ <strong>Utilitaires de refactoring</strong> - <code>apiHelpers</code> et <code>errorHandler</code></li>
+            <li>✅ <strong>Gestion des archives</strong> - Seule restauration disponible pour éléments archivés</li>
+            <li>✅ <strong>Configuration serveur 3000</strong> - Support Docker standalone + GitHub Pages</li>
         </ul>
     </div>
     
@@ -2119,7 +2115,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
 
 <div class="footer">
     <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
-    <p>OTT - Version 1.0 Production | Documentation Développeurs</p>
+    <p>OTT - Version 1.0 Production (Décembre 2024) | Documentation Développeurs</p>
     <p style="margin-top: 1rem; font-size: 1rem; font-weight: bold;">
         📚 Documentation :
         <a href="DOCUMENTATION_PRESENTATION.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">📸 Présentation</a> | 

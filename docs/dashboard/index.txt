@@ -1,0 +1,32 @@
+2:I[9107,[],"ClientPageRoot"]
+3:I[4057,["7410","static/chunks/7410-10483458c404e90a.js","4767","static/chunks/4767-9b62a6a584a455c4.js","7702","static/chunks/app/dashboard/page-3e0c1674cb64bf58.js"],"default",1]
+4:I[6424,["7648","static/chunks/7648-729d24daf52f4f0a.js","4767","static/chunks/4767-9b62a6a584a455c4.js","7663","static/chunks/app/dashboard/layout-71e4e8b7fbdc57b0.js"],"default",1]
+5:I[4707,[],""]
+6:I[6423,[],""]
+8:I[9999,["3185","static/chunks/app/layout-87ec96bdaa645458.js"],"AuthProvider"]
+9:I[3334,["7601","static/chunks/app/error-42f509d51650eacb.js"],"default"]
+a:I[6359,["7648","static/chunks/7648-729d24daf52f4f0a.js","9160","static/chunks/app/not-found-3e84b82b26e5ca71.js"],"default"]
+7:{}
+b:T442,
+                (function() {
+                  if ('serviceWorker' in navigator) {
+                    const swPath = "/OTT/sw.js";
+                    
+                    // Enregistrer le service worker uniquement en production (version en ligne)
+                    window.addEventListener('load', () => {
+                      navigator.serviceWorker.register(swPath)
+                        .catch(function(err) {
+                          // Logger l'erreur sans polluer la console en production
+                          // Note: logger n'est pas disponible dans ce contexte (script inline)
+                          // Le warning est conditionnel à NODE_ENV === 'development'
+                          if (process.env.NODE_ENV === 'development') {
+                            // Utilisation de console.warn acceptable ici (script inline, pas de logger disponible)
+                            console.warn('[SW] Échec enregistrement:', err);
+                          }
+                        });
+                    });
+                  }
+                })();
+              0:["build-1765019052127",[[["",{"children":["dashboard",{"children":["__PAGE__",{}]}]},"$undefined","$undefined",true],["",{"children":["dashboard",{"children":["__PAGE__",{},[["$L1",["$","$L2",null,{"props":{"params":{},"searchParams":{}},"Component":"$3"}],null],null],null]},[[null,["$","$L4",null,{"children":["$","$L5",null,{"parallelRouterKey":"children","segmentPath":["children","dashboard","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L6",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}],"params":"$7"}]],null],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/OTT/_next/static/css/54bdbf20f5eca02d.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"fr","children":[["$","head",null,{"children":[["$","meta",null,{"name":"viewport","content":"width=device-width, initial-scale=1, maximum-scale=1"}],["$","meta",null,{"name":"theme-color","content":"#667eea"}],["$","link",null,{"rel":"manifest","href":"/OTT/manifest.json"}],["$","link",null,{"rel":"icon","href":"/OTT/icon-192.png"}],["$","link",null,{"rel":"apple-touch-icon","href":"/OTT/icon-192.png"}],["$","link",null,{"rel":"apple-touch-icon","sizes":"512x512","href":"/OTT/icon-512.png"}]]}],["$","body",null,{"className":"__className_e97114","children":[["$","$L8",null,{"children":["$","$L5",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$9","errorStyles":[],"errorScripts":[],"template":["$","$L6",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":["$","$La",null,{}],"notFoundStyles":[]}]}],false,["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$b"}}]]}]]}]],null],null],["$Lc",null]]]]
+c:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"name":"theme-color","content":"#667eea"}],["$","meta","2",{"charSet":"utf-8"}],["$","title","3",{"children":"OTT Dashboard - HAPPLYZ Medical"}],["$","meta","4",{"name":"description","content":"Plateforme de suivi dispositifs OTT en temps réel"}]]
+1:null

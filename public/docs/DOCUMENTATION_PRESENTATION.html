@@ -540,61 +540,26 @@
         <li>✅ <strong>Mise à jour OTA</strong> (Over-The-Air) du firmware</li>
     </ul>
     
-    <h3>🎉 Version 1.0 Production - Décembre 2025 (Score: 9.2/10)</h3>
+    <h3>📋 Fonctionnalités Actuelles</h3>
     <div class="alert alert-success">
-        <strong>🚀 Firmware v1.0 - Architecture Production-Ready</strong>
+        <strong>✅ Version 1.0 Production (Décembre 2024)</strong>
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
-            <li><strong>⚡ Streaming USB immédiat</strong> : Démarrage instantané (< 1 seconde après boot) sans attendre le modem. Mesures JSON envoyées toutes les secondes dès la connexion</li>
-            <li><strong>🔌 Détection USB dynamique</strong> : Connexion/déconnexion USB détectée toutes les 500ms en arrière-plan. Plus besoin de reboot pour activer le streaming !</li>
-            <li><strong>📡 GPS désactivé par défaut</strong> : GPS OFF par défaut pour stabilité maximale (évite blocages modem + économie batterie). Activable par dispositif si besoin</li>
-            <li><strong>🛡️ Zero blocage garanti</strong> : Modem démarré en arrière-plan en mode USB. Le streaming fonctionne même si le modem échoue (RSSI/GPS à null)</li>
-            <li><strong>📊 Firmware v1.0 stable</strong> : Version production avec architecture optimisée, logs détaillés, et gestion d'erreur robuste</li>
+            <li><strong>⚡ Streaming USB</strong> : Démarrage instantané, détection dynamique, mesures JSON en temps réel</li>
+            <li><strong>🔌 Auto-sync USB</strong> : Enregistrement/restauration automatique des dispositifs USB</li>
+            <li><strong>📡 Logs USB à distance</strong> : Streaming temps réel pour tous les administrateurs</li>
+            <li><strong>🗄️ Gestion des archives</strong> : Archivage et restauration des éléments (patients, utilisateurs, dispositifs)</li>
+            <li><strong>📊 Dashboard complet</strong> : Vue d'ensemble, statistiques, alertes, carte interactive</li>
+            <li><strong>🏥 Gestion patients</strong> : Création, édition, assignation de dispositifs</li>
+            <li><strong>👥 Gestion utilisateurs</strong> : Multi-utilisateurs avec permissions granulaires</li>
+            <li><strong>🔌 Gestion dispositifs</strong> : Configuration, OTA, flash USB, streaming</li>
+            <li><strong>📱 PWA installable</strong> : Application progressive web</li>
+            <li><strong>🔒 Sécurité</strong> : Authentification JWT, validation stricte, sanitization XSS</li>
         </ul>
-    </div>
-
-    <div class="alert alert-success" style="margin-top: 1.5rem;">
-        <strong>✨ Fonctionnalités majeures - Production Ready!</strong>
-        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
-            <li><strong>📡 Logs USB à distance</strong> : Streaming temps réel pour tous les administrateurs. Maxime voit vos logs automatiquement sans être sur place (polling 2s, historique 7 jours)</li>
-            <li><strong>🔌 Auto-sync USB 100%</strong> : Enregistrement/restauration automatique des dispositifs USB (UPSERT SQL intelligent). Plus de bouton manuel !</li>
-            <li><strong>🟢 Badge LIVE</strong> : Indicateur visuel élégant avec point pulsant pour les dispositifs USB connectés en temps réel</li>
-            <li><strong>🔢 Numérotation OTT-YY-NNN</strong> : Auto-génération OTT-25-001, OTT-25-002, etc. (YY=année, NNN=séquence). Conservation du numéro lors restauration (traçabilité médicale)</li>
-            <li><strong>🗄️ Dispositifs archivés</strong> : Nouvel onglet pour voir les dispositifs supprimés (soft delete), restauration en 1 clic, conformité réglementaire</li>
-            <li><strong>🔒 Sécurité renforcée</strong> : Sanitization XSS, validation stricte, protection champs système, triple vérification admin</li>
-            <li><strong>⚡ Performance optimisée</strong> : Map() au lieu de find() en boucle (3 requêtes optimisées), code réduit de 200 lignes</li>
-        </ul>
-        <p style="margin-top: 1rem;"><strong>🎯 Impact :</strong> Interface épurée, automatisation complète, zéro intervention manuelle requise. Tag git: <code>v1.0-95percent</code></p>
     </div>
     
-    <h3>🆕 Améliorations v1.0</h3>
     <div class="alert alert-info">
-        <strong>Fonctionnalités de la version 3.11</strong>
-        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
-            <li><strong>Pagination complète</strong> : tous les endpoints de liste supportent maintenant la pagination (devices, alerts, commands)</li>
-            <li><strong>Cache Redis</strong> : système de cache avec support Redis optionnel et fallback mémoire automatique</li>
-            <li><strong>Monitoring Sentry</strong> : intégration Sentry pour le monitoring des erreurs en production</li>
-            <li><strong>Documentation API OpenAPI/Swagger</strong> : documentation OpenAPI 3.0 disponible via `/api.php/docs/openapi.json`</li>
-            <li><strong>Suivi du temps amélioré</strong> : script de suivi inclut maintenant les commits locaux (git reflog) et détection automatique</li>
-            <li><strong>Partage USB multi-onglets</strong> : mécanisme de partage du port USB entre plusieurs onglets du navigateur</li>
-            <li><strong>Sécurité renforcée</strong> : validation stricte des noms de tables pour la vue base de données</li>
-        </ul>
-    </div>
-    
-    <h3>📋 Fonctionnalités Principales</h3>
-    <div class="alert alert-success">
-        <strong>Fonctionnalités déjà disponibles</strong>
-        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
-            <li><strong>Streaming USB ultra-rapide</strong> : démarrage instantané (< 1s), détection dynamique toutes les 500ms, aucun blocage possible (Web Serial API)</li>
-            <li><strong>UsbContext global</strong> : détection permanente des dispositifs USB, même lors de la navigation entre pages. Gestion intelligente du modem en arrière-plan</li>
-            <li><strong>Menu simplifié</strong> : 4 pages principales avec fonctionnalités regroupées</li>
-            <li><strong>PWA installable</strong> : application progressive web avec manifest.json et service worker</li>
-            <li><strong>Carte interactive</strong> : visualisation des dispositifs avec statut (batterie, en ligne/hors ligne)</li>
-        </ul>
-    </div>
-    
-    <div class="alert alert-success">
         <strong>✅ Solution Clé en Main</strong><br>
-        Coût total : <strong>7€/mois</strong> (API Render Starter) vs 10 000€/mois avec solutions cloud classiques !<br>
+        Coût total : <strong>7€/mois</strong> (API Render Starter)<br>
         Déploiement complet en <strong>moins de 2 heures</strong>.
     </div>
 </section>
@@ -610,53 +575,44 @@
     
     <h3>🎯 Modules Principaux</h3>
     
-    <h4>📊 Dashboard de Monitoring</h4>
+    <h4>📊 Dashboard</h4>
     <ul>
-        <li>Vue d'ensemble en temps réel des dispositifs</li>
+        <li>Vue d'ensemble en temps réel</li>
         <li>Statistiques et indicateurs clés</li>
-        <li>Alertes critiques et actions requises</li>
-        <li>Cartographie interactive des dispositifs</li>
+        <li>Alertes critiques</li>
+        <li>Cartographie interactive</li>
     </ul>
     
-    <h4>🔌 Gestion des Dispositifs</h4>
+    <h4>🔌 Dispositifs</h4>
     <ul>
-        <li>Suivi en temps réel du statut (en ligne/hors ligne)</li>
-        <li>Monitoring de la batterie</li>
-        <li>Historique des mesures et logs</li>
-        <li>Gestion des alertes par dispositif</li>
-        <li>Mise à jour firmware OTA (Over-The-Air)</li>
-        <li>Flash USB local pour maintenance</li>
+        <li>Suivi statut (en ligne/hors ligne)</li>
+        <li>Monitoring batterie</li>
+        <li>Gestion alertes</li>
+        <li>Mise à jour firmware OTA</li>
+        <li>Flash USB local</li>
+        <li>Streaming USB temps réel</li>
     </ul>
     
-    <h4>🏥 Gestion des Patients</h4>
+    <h4>🏥 Patients</h4>
     <ul>
-        <li>Création et édition de profils patients</li>
-        <li>Assignation de dispositifs aux patients</li>
-        <li>Suivi de l'observance thérapeutique</li>
-        <li>Historique des mesures par patient</li>
+        <li>Création et édition de profils</li>
+        <li>Assignation de dispositifs</li>
+        <li>Suivi observance thérapeutique</li>
     </ul>
     
-    <h4>👥 Gestion des Utilisateurs</h4>
+    <h4>👥 Utilisateurs</h4>
     <ul>
-        <li>Système de rôles (Admin, Médecin, Technicien)</li>
-        <li>Permissions granulaires par fonctionnalité</li>
-        <li>Gestion des accès et authentification sécurisée</li>
-    </ul>
-    
-    <h4>📡 Communication & Mises à Jour</h4>
-    <ul>
-        <li>Transmission sécurisée des données via 4G</li>
-        <li>Mises à jour firmware à distance (OTA)</li>
-        <li>Streaming USB en temps réel pour diagnostic</li>
-        <li>Notifications automatiques (alertes, batteries faibles)</li>
+        <li>Rôles (Admin, Médecin, Technicien)</li>
+        <li>Permissions granulaires</li>
+        <li>Authentification JWT</li>
     </ul>
     
     <h4>🔒 Sécurité</h4>
     <ul>
-        <li>Authentification JWT sécurisée</li>
-        <li>Chiffrement HTTPS pour toutes les communications</li>
-        <li>Permissions granulaires par utilisateur</li>
-        <li>Conformité aux normes médicales</li>
+        <li>Authentification JWT</li>
+        <li>Chiffrement HTTPS</li>
+        <li>Permissions granulaires</li>
+        <li>Conformité normes médicales</li>
     </ul>
 </section>
 
@@ -873,7 +829,7 @@
                 <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
             </tr>
             <tr>
-                <td style="padding: 0.75rem; border: 1px solid #ddd;">Voir les détails d'un dispositif (statut, batterie, historique)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Voir les détails d'un dispositif (statut, batterie, logs)</td>
                 <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
                 <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
                 <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
@@ -961,7 +917,7 @@
     <h2>🚀 Roadmap & Améliorations Futures</h2>
     
     <div class="alert alert-success">
-        <strong>✅ Version 1.0 Production (Actuelle - Décembre 2025)</strong><br>
+        <strong>✅ Version 1.0 Production (Actuelle - Décembre 2024)</strong><br>
         Version actuellement déployée avec les fonctionnalités suivantes :
         <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
             <li>✅ Pagination complète sur tous les endpoints de liste</li>
@@ -978,6 +934,9 @@
             <li>✅ Mise à jour OTA (Over-The-Air) du firmware</li>
             <li>✅ Carte interactive Leaflet avec géolocalisation</li>
             <li>✅ Système d'alertes et notifications</li>
+            <li>✅ <strong>Uniformisation UI/UX</strong> - Interface cohérente</li>
+            <li>✅ <strong>Gestion des archives</strong> - Seule restauration disponible pour éléments archivés</li>
+            <li>✅ <strong>Configuration serveur 3000</strong> - Support Docker standalone + GitHub Pages</li>
         </ul>
     </div>
     
