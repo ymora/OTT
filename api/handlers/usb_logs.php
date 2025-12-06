@@ -210,7 +210,9 @@ function cleanupUsbLogs($pdo, $userRole) {
     }
     
     try {
-        $stmt = $pdo->query("SELECT cleanup_old_usb_logs() as deleted_count");
+        // Utiliser prepare() au lieu de query() pour la sécurité
+        $stmt = $pdo->prepare("SELECT cleanup_old_usb_logs() as deleted_count");
+        $stmt->execute();
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         $deletedCount = (int)$result['deleted_count'];
         

@@ -42,55 +42,53 @@ export default function RootLayout({ children }) {
         {/* Local (port 3000) : Désactiver le service worker */}
         {/* Production (en ligne) : Service worker activé automatiquement ci-dessous */}
         {!isProduction && (
-          <script
-            // eslint-disable-next-line react/no-danger
-            // SAFE: Script statique, pas de contenu utilisateur
-            dangerouslySetInnerHTML={{
-              __html: `
-                (function() {
-                  if ('serviceWorker' in navigator) {
-                    // Désenregistrer tous les service workers en local (port 3000)
-                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                      for(let registration of registrations) {
-                        registration.unregister();
-                      }
-                    });
-                  }
-                })();
-              `
-            }}
-          />
+          <Script
+            id="disable-service-worker"
+            strategy="afterInteractive"
+          >
+            {`
+              (function() {
+                if ('serviceWorker' in navigator) {
+                  // Désenregistrer tous les service workers en local (port 3000)
+                  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    for(let registration of registrations) {
+                      registration.unregister();
+                    }
+                  });
+                }
+              })();
+            `}
+          </Script>
         )}
 
         {/* Production (version en ligne) : Activer le service worker */}
         {isProduction && (
-          <script
-            // eslint-disable-next-line react/no-danger
-            // SAFE: Script statique, pas de contenu utilisateur
-            dangerouslySetInnerHTML={{
-              __html: `
-                (function() {
-                  if ('serviceWorker' in navigator) {
-                    const swPath = ${JSON.stringify(swPath || '/sw.js')};
-                    
-                    // Enregistrer le service worker uniquement en production (version en ligne)
-                    window.addEventListener('load', () => {
-                      navigator.serviceWorker.register(swPath)
-                        .catch(function(err) {
-                          // Logger l'erreur sans polluer la console en production
-                          // Note: logger n'est pas disponible dans ce contexte (script inline)
-                          // Le warning est conditionnel à NODE_ENV === 'development'
-                          if (process.env.NODE_ENV === 'development') {
-                            // Utilisation de console.warn acceptable ici (script inline, pas de logger disponible)
-                            console.warn('[SW] Échec enregistrement:', err);
-                          }
-                        });
-                    });
-                  }
-                })();
-              `
-            }}
-          />
+          <Script
+            id="register-service-worker"
+            strategy="afterInteractive"
+          >
+            {`
+              (function() {
+                if ('serviceWorker' in navigator) {
+                  const swPath = ${JSON.stringify(swPath || '/sw.js')};
+                  
+                  // Enregistrer le service worker uniquement en production (version en ligne)
+                  window.addEventListener('load', () => {
+                    navigator.serviceWorker.register(swPath)
+                      .catch(function(err) {
+                        // Logger l'erreur sans polluer la console en production
+                        // Note: logger n'est pas disponible dans ce contexte (script inline)
+                        // Le warning est conditionnel à NODE_ENV === 'development'
+                        if (process.env.NODE_ENV === 'development') {
+                          // Utilisation de console.warn acceptable ici (script inline, pas de logger disponible)
+                          console.warn('[SW] Échec enregistrement:', err);
+                        }
+                      });
+                  });
+                }
+              })();
+            `}
+          </Script>
         )}
       </body>
     </html>

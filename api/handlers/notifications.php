@@ -316,7 +316,9 @@ function handleUpdateUserNotifications($user_id) {
         // Vérifier si la table existe (unifié avec handleUpdatePatientNotifications)
         $hasNotificationsTable = false;
         try {
-            $checkStmt = $pdo->query("
+            // Utiliser prepare() au lieu de query() pour la sécurité
+            // Note: Cette requête est statique (pas de paramètres utilisateur), mais on utilise prepare() par précaution
+            $checkStmt = $pdo->prepare("
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables
                     WHERE table_schema = 'public'
