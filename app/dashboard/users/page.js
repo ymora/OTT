@@ -144,13 +144,26 @@ export default function UsersPage() {
                 {filteredUsers.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="py-8 text-center text-gray-500 dark:text-gray-400">
-                      Aucun utilisateur trouvé
+                      {searchTerm ? 'Aucun utilisateur ne correspond à la recherche' : 'Aucun utilisateur'}
                     </td>
                   </tr>
                 ) : (
                   filteredUsers.map((user, i) => {
-                    // Vérifier de manière plus robuste si l'utilisateur est archivé
-                    const userIsArchived = Boolean(isArchived(user) || user.deleted_at)
+                    // Vérifier de manière plus robuste si l'utilisateur est archivé (identique aux patients)
+                    const userIsArchived = isArchived(user)
+                    // DEBUG: Log pour diagnostiquer (toujours afficher en mode debug)
+                    if (showArchived) {
+                      console.log('[USERS PAGE DEBUG]', {
+                        id: user.id,
+                        name: `${user.first_name} ${user.last_name}`,
+                        email: user.email,
+                        deleted_at: user.deleted_at,
+                        deleted_at_type: typeof user.deleted_at,
+                        hasDeletedAt: user.hasOwnProperty('deleted_at'),
+                        isArchived: userIsArchived,
+                        allKeys: Object.keys(user)
+                      })
+                    }
                     return (
                     <tr 
                       key={user.id} 
@@ -160,8 +173,10 @@ export default function UsersPage() {
                       <td className="table-cell py-3 px-4 font-medium">
                         <div className="flex items-center gap-2">
                           <span>{user.first_name} {user.last_name}</span>
-                          {userIsArchived && (
+                          {userIsArchived ? (
                             <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
+                          ) : (
+                            <span className="badge badge-success">✅ Actif</span>
                           )}
                         </div>
                       </td>
@@ -192,6 +207,7 @@ export default function UsersPage() {
                       <td className="table-cell py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
                           {userIsArchived ? (
+                            // Utilisateurs archivés : uniquement l'icône de restauration
                             <button
                               onClick={() => handleRestoreUser(user)}
                               disabled={restoringUser === user.id}
@@ -201,6 +217,7 @@ export default function UsersPage() {
                               <span className="text-lg">{restoringUser === user.id ? '⏳' : '♻️'}</span>
                             </button>
                           ) : (
+                            // Utilisateurs actifs : toutes les actions disponibles
                             <>
                               <button
                                 className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"

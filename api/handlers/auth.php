@@ -150,7 +150,7 @@ function handleGetUsers() {
             $stmt = $pdo->prepare("
                 SELECT 
                     u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
-                    u.is_active, u.last_login, u.created_at,
+                    u.is_active, u.last_login, u.created_at, u.deleted_at,
                     r.name AS role_name,
                     r.description AS role_description,
                     COALESCE(STRING_AGG(p.code, ','), '') AS permissions,
@@ -180,7 +180,7 @@ function handleGetUsers() {
             $stmt = $pdo->prepare("
                 SELECT 
                     u.id, u.email, u.first_name, u.last_name, NULL AS phone, u.password_hash,
-                    u.is_active, u.last_login, u.created_at,
+                    u.is_active, u.last_login, u.created_at, u.deleted_at,
                     r.name AS role_name,
                     r.description AS role_description,
                     COALESCE(STRING_AGG(p.code, ','), '') AS permissions,
@@ -202,7 +202,7 @@ function handleGetUsers() {
                          unp.email_enabled, unp.sms_enabled, unp.push_enabled,
                          unp.notify_battery_low, unp.notify_device_offline, 
                          unp.notify_abnormal_flow, unp.notify_new_patient
-                ORDER BY u.created_at DESC
+                ORDER BY " . ($includeDeleted ? "u.deleted_at DESC" : "u.created_at DESC") . "
                 LIMIT :limit OFFSET :offset
             ");
         }

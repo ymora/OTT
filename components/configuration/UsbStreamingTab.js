@@ -7,6 +7,7 @@ import { fetchJson } from '@/lib/api'
 import { useApiData, useTimers, useEntityRestore } from '@/hooks'
 import { createUpdateConfigCommand, createUpdateCalibrationCommand } from '@/lib/deviceCommands'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
+import { isArchived } from '@/lib/utils'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -249,11 +250,11 @@ export default function DebugTab() {
   }, [allDevicesFromApi])
   
   const devices = useMemo(() => {
-    return allDevices.filter(d => !d.deleted_at)
+    return allDevices.filter(d => !isArchived(d))
   }, [allDevices])
   
   const archivedDevices = useMemo(() => {
-    return allDevices.filter(d => d.deleted_at)
+    return allDevices.filter(d => isArchived(d))
   }, [allDevices])
   
   // Dispositifs à afficher selon le toggle
@@ -1313,13 +1314,13 @@ export default function DebugTab() {
   // Patients disponibles (sans dispositif assigné et non archivés)
   const availablePatients = useMemo(() => {
     const assignedPatientIds = new Set(allDevices.filter(d => d.patient_id).map(d => d.patient_id))
-    return allPatients.filter(p => !p.deleted_at && !assignedPatientIds.has(p.id))
+    return allPatients.filter(p => !isArchived(p) && !assignedPatientIds.has(p.id))
   }, [allPatients, allDevices])
   
   // Gérer l'ouverture du modal de flash (uniquement pour dispositifs non archivés)
   const handleOpenFlashModal = useCallback((device) => {
     // Ne pas ouvrir le modal pour les dispositifs archivés
-    if (device?.deleted_at) {
+    if (isArchived(device)) {
       logger.warn('Tentative de flash d\'un dispositif archivé')
       return
     }
@@ -1587,7 +1588,7 @@ export default function DebugTab() {
                       </tr>
                     ) : (
                       devicesToDisplay.map((device) => {
-                  const isArchived = device.deleted_at !== null && device.deleted_at !== undefined && device.deleted_at !== ''
+                  const deviceIsArchived = isArchived(device)
                   // Vérifier si ce dispositif est connecté en USB (données temps réel)
                   const isDeviceUsbConnected = isConnected && (
                     usbDeviceInfo?.sim_iccid === device.sim_iccid ||
@@ -1605,7 +1606,7 @@ export default function DebugTab() {
                   const deviceDbData = device
                   
                   return (
-                    <tr key={device.id} className={`table-row hover:bg-gray-50 dark:hover:bg-gray-800 ${isArchived ? 'opacity-60' : ''}`}>
+                    <tr key={device.id} className={`table-row hover:bg-gray-50 dark:hover:bg-gray-800 ${deviceIsArchived ? 'opacity-60' : ''}`}>
                 {/* Identifiant */}
                 <td className="table-cell px-3 py-1.5">
                   {(() => {
@@ -1619,7 +1620,7 @@ export default function DebugTab() {
                           <span className={`text-xs font-semibold ${!deviceName ? 'text-gray-400 dark:text-gray-500' : 'text-orange-600 dark:text-orange-400'}`}>
                             {deviceName || 'N/A'}
                           </span>
-                          {isArchived && (
+                          {deviceIsArchived && (
                             <span className="ml-2 badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
                           )}
                           {isDeviceUsbConnected && (
@@ -1656,7 +1657,7 @@ export default function DebugTab() {
                         {hasPatient ? (
                           <span className="badge badge-success text-xs">{patientName}</span>
                         ) : (
-                          <span className={`badge ${isArchived ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'} text-xs`}>
+                          <span className={`badge ${deviceIsArchived ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'} text-xs`}>
                             Non assigné
                           </span>
                         )}
@@ -1675,7 +1676,7 @@ export default function DebugTab() {
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
-                          {isArchived ? (
+                          {deviceIsArchived ? (
                             <span className={`text-xs font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
                               {firmwareVersion || 'N/A'}
                             </span>
@@ -1947,7 +1948,8 @@ export default function DebugTab() {
                 {/* Actions */}
                 <td className="table-cell px-3 py-1.5">
                   <div className="flex items-center justify-end gap-2">
-                    {isArchived ? (
+                    {deviceIsArchived ? (
+                      // Dispositifs archivés : uniquement l'icône de restauration
                       <button
                         onClick={() => handleRestoreDeviceDirect(device)}
                         disabled={restoringDevice === device.id}
@@ -1957,6 +1959,7 @@ export default function DebugTab() {
                         <span className="text-lg">{restoringDevice === device.id ? '⏳' : '♻️'}</span>
                       </button>
                     ) : (
+                      // Dispositifs actifs : toutes les actions disponibles
                       <>
                         <button
                           onClick={() => {
