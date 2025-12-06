@@ -521,10 +521,33 @@ void loop()
   if (shouldMeasure) {
     // Activer modem si nécessaire
     if (!modemReady) {
+      String timeStr = formatTimeFromMillis(millis());
+      Serial.printf("%s[MODEM] ⚠️ Modem non prêt, démarrage...\n", timeStr.c_str());
       if (startModem()) {
         Serial.println(F("[MODEM] Modem activé pour envoi"));
+      } else {
+        Serial.println(F("[MODEM] ❌ Échec démarrage modem"));
+        return; // Sortir si modem ne démarre pas
       }
     }
+    
+    // Vérifier que le modem est bien connecté au réseau
+    if (!modem.isNetworkConnected()) {
+      String timeStr = formatTimeFromMillis(millis());
+      Serial.printf("%s[MODEM] ⚠️ Modem non connecté au réseau (GPRS OK mais réseau non attaché)\n", timeStr.c_str());
+      sendLog("WARN", "Modem GPRS connecté mais réseau non attaché", "network");
+      return; // Sortir si réseau non attaché
+    }
+    
+    if (!modem.isGprsConnected()) {
+      String timeStr = formatTimeFromMillis(millis());
+      Serial.printf("%s[MODEM] ⚠️ GPRS non connecté\n", timeStr.c_str());
+      sendLog("WARN", "GPRS non connecté malgré connexion réseau", "network");
+      return; // Sortir si GPRS non connecté
+    }
+    
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[API] 📤 Préparation envoi mesure...\n", timeStr.c_str());
     
     // Capturer mesure complète
     Measurement m = captureSensorSnapshot();
@@ -533,26 +556,34 @@ void loop()
     if (modemReady && modem.isNetworkConnected()) {
       int8_t csq = modem.getSignalQuality();
       m.rssi = csqToRssi(csq);
+      Serial.printf("%s[API] 📶 RSSI: %d dBm (CSQ=%d)\n", timeStr.c_str(), m.rssi, csq);
     } else {
       m.rssi = -999;
+      Serial.printf("%s[API] ⚠️ RSSI non disponible\n", timeStr.c_str());
     }
     
     // Obtenir GPS (si disponible)
     float latitude = 0.0, longitude = 0.0;
     bool hasLocation = getDeviceLocation(&latitude, &longitude);
+    if (hasLocation) {
+      Serial.printf("%s[API] 📍 GPS: %.6f, %.6f\n", timeStr.c_str(), latitude, longitude);
+    } else {
+      Serial.printf("%s[API] ℹ️ GPS non disponible\n", timeStr.c_str());
+    }
     
     // Envoyer immédiatement
+    Serial.printf("%s[API] 📤 Envoi mesure à l'API...\n", timeStr.c_str());
     bool sent = sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr, "EVENT");
     
     if (sent) {
       lastFlowValue = currentFlow;
       lastMeasurementTime = now;
-      String timeStr = formatTimeFromMillis(millis());
       Serial.printf("%s[SENSOR] ✅ Envoyé: %.2f L/min | %.0f%% | %d dBm\n", 
                     timeStr.c_str(), m.flow, m.battery, m.rssi);
+      sendLog("INFO", "Mesure envoyée avec succès: " + String(m.flow) + " L/min", "measurements");
     } else {
-      String timeStr = formatTimeFromMillis(millis());
-      Serial.printf("%s[SENSOR] ⚠️ Échec envoi\n", timeStr.c_str());
+      Serial.printf("%s[SENSOR] ❌ Échec envoi mesure\n", timeStr.c_str());
+      sendLog("ERROR", "Échec envoi mesure - vérifier connexion API", "measurements");
     }
     
     // Traiter les commandes OTA périodiquement
@@ -1275,6 +1306,23 @@ bool connectData(uint32_t timeoutMs)
     if (modem.gprsConnect(currentApn.c_str(), "", "")) {
       logRadioSnapshot("data:connected");
       Serial.printf("[MODEM] ✅ Connexion GPRS réussie avec APN: %s\n", currentApn.c_str());
+      
+      // Vérifier l'état complet de la connexion
+      delay(1000); // Attendre un peu pour que la connexion se stabilise
+      bool networkOk = modem.isNetworkConnected();
+      bool gprsOk = modem.isGprsConnected();
+      Serial.printf("[MODEM] 📊 État connexion: Réseau=%s | GPRS=%s\n", 
+                    networkOk ? "OK" : "KO", 
+                    gprsOk ? "OK" : "KO");
+      
+      if (networkOk && gprsOk) {
+        Serial.println(F("[MODEM] ✅ Prêt pour envoi de données"));
+        sendLog("INFO", "Connexion GPRS réussie avec APN: " + currentApn, "network");
+      } else {
+        Serial.println(F("[MODEM] ⚠️ Connexion GPRS mais état réseau incertain"));
+        sendLog("WARN", "Connexion GPRS réussie mais réseau non vérifié", "network");
+      }
+      
       return true;
     }
     
@@ -1557,6 +1605,22 @@ bool httpGet(const char* path, String* response)
 
 bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, const char* status)
 {
+  // Vérifier que le modem est prêt et connecté
+  if (!modemReady) {
+    Serial.println(F("[API] ❌ Modem non prêt - impossible d'envoyer"));
+    return false;
+  }
+  
+  if (!modem.isNetworkConnected()) {
+    Serial.println(F("[API] ❌ Réseau non attaché - impossible d'envoyer"));
+    return false;
+  }
+  
+  if (!modem.isGprsConnected()) {
+    Serial.println(F("[API] ❌ GPRS non connecté - impossible d'envoyer"));
+    return false;
+  }
+  
   // Envoyer TOUS les paramètres possibles (format unifié)
   DynamicJsonDocument doc(1024);  // Augmenté pour tous les paramètres
   
@@ -1570,6 +1634,11 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   doc["sim_iccid"] = DEVICE_ICCID;
   doc["device_serial"] = DEVICE_SERIAL;
   doc["firmware_version"] = FIRMWARE_VERSION;
+  
+  Serial.printf("[API] 📤 ICCID: %s | Serial: %s | FW: %s\n", 
+                DEVICE_ICCID.substring(0, 10).c_str(), 
+                DEVICE_SERIAL.c_str(), 
+                FIRMWARE_VERSION);
   
   // Calculer device_name
   String deviceName = "OTT-";
@@ -1630,6 +1699,8 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   
   // Authentification par ICCID uniquement (pas de JWT requis pour /measurements)
   Serial.println(F("[API] ℹ️ Authentification par ICCID"));
+  Serial.printf("[API] 📤 URL: https://%s:%d%s%s\n", API_HOST, API_PORT, API_PREFIX, PATH_MEASURE);
+  Serial.printf("[API] 📦 Taille payload: %d octets\n", body.length());
   
   String apiResponse;
   bool ok = httpPost(PATH_MEASURE, body, &apiResponse);
@@ -1638,15 +1709,22 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   if (ok) {
     Serial.printf("[API] ✅ Mesure envoyée avec succès\n");
     if (apiResponse.length() > 0) {
-      Serial.printf("[API] Réponse: %s\n", apiResponse.c_str());
+      Serial.printf("[API] Réponse API: %s\n", apiResponse.c_str());
     }
     sendLog("INFO", "Measurement posted successfully", "measurements");
   } else {
     Serial.printf("[API] ❌ Échec envoi mesure\n");
     if (apiResponse.length() > 0) {
-      Serial.printf("[API] Erreur: %s\n", apiResponse.c_str());
+      Serial.printf("[API] Erreur API: %s\n", apiResponse.c_str());
+      // Limiter la taille du message de log
+      String errorMsg = apiResponse;
+      if (errorMsg.length() > 200) {
+        errorMsg = errorMsg.substring(0, 200) + "...";
+      }
+      sendLog("ERROR", "Measurement failed: " + errorMsg, "measurements");
+    } else {
+      sendLog("ERROR", "Measurement failed: pas de réponse API", "measurements");
     }
-    sendLog("ERROR", "Measurement failed: " + apiResponse, "measurements");
   }
   
   return ok;

@@ -150,7 +150,7 @@ export default function UsersPage() {
                 ) : (
                   filteredUsers.map((user, i) => {
                     // Vérifier de manière plus robuste si l'utilisateur est archivé
-                    const userIsArchived = isArchived(user)
+                    const userIsArchived = Boolean(isArchived(user) || user.deleted_at)
                     return (
                     <tr 
                       key={user.id} 
@@ -192,7 +192,6 @@ export default function UsersPage() {
                       <td className="table-cell py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
                           {userIsArchived ? (
-                            // Utilisateurs archivés : uniquement le bouton de restauration
                             <button
                               onClick={() => handleRestoreUser(user)}
                               disabled={restoringUser === user.id}
@@ -202,7 +201,6 @@ export default function UsersPage() {
                               <span className="text-lg">{restoringUser === user.id ? '⏳' : '♻️'}</span>
                             </button>
                           ) : (
-                            // Utilisateurs actifs : boutons de modification, archivage, suppression
                             <>
                               <button
                                 className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"

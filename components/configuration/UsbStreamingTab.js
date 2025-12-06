@@ -215,6 +215,14 @@ export default function DebugTab() {
   // Toggle pour afficher les archives
   const [showArchived, setShowArchived] = useState(false)
   
+  // Charger tous les dispositifs pour le tableau
+  // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
+  // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
+  const { data: devicesData, loading: devicesLoading, refetch: refetchDevices, invalidateCache } = useApiData(
+    useMemo(() => [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'], [showArchived]),
+    { requiresAuth: true, autoLoad: !!user, cacheTTL: 30000 } // Cache de 30 secondes pour éviter les refetch intempestifs
+  )
+  
   // Utiliser le hook unifié pour la restauration
   const { restore: handleRestoreDeviceDirect, restoring: restoringDevice } = useEntityRestore('devices', {
     onSuccess: (device) => {
@@ -233,14 +241,6 @@ export default function DebugTab() {
     invalidateCache,
     refetch: refetchDevices
   })
-  
-  // Charger tous les dispositifs pour le tableau
-  // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
-  // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
-  const { data: devicesData, loading: devicesLoading, refetch: refetchDevices, invalidateCache } = useApiData(
-    useMemo(() => [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'], [showArchived]),
-    { requiresAuth: true, autoLoad: !!user, cacheTTL: 30000 } // Cache de 30 secondes pour éviter les refetch intempestifs
-  )
   const allDevicesFromApi = devicesData?.devices?.devices || []
   
   // Séparer les dispositifs actifs et archivés

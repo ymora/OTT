@@ -88,8 +88,16 @@ export function useApiData(endpoints, options = {}) {
           // Gérer les endpoints avec query params (ex: /api.php/logs?limit=200 -> logs)
           const endpointPath = endpoint.split('?')[0] // Enlever les query params
           const key = endpointPath.split('/').pop() || 'data'
-          // Stocker le résultat même s'il y a une erreur (pour permettre l'affichage d'erreurs partielles)
-          dataMap[key] = results[index]
+          
+          // IMPORTANT: Si on charge plusieurs fois le même endpoint avec des query params différents
+          // (ex: /api.php/users et /api.php/users?include_deleted=true), on préfère toujours
+          // la version la plus complète (avec query params car elle inclut plus de données)
+          if (!dataMap[key] || endpoint.includes('?')) {
+            // Stocker le résultat même s'il y a une erreur (pour permettre l'affichage d'erreurs partielles)
+            dataMap[key] = results[index]
+          }
+          // Si dataMap[key] existe déjà et endpoint n'a pas de query params, on ne l'écrase pas
+          // Cela préserve la version plus complète avec include_deleted si elle existe déjà
         })
         
         // Mettre en cache si activé

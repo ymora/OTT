@@ -68,7 +68,7 @@ export default function Topbar() {
         logger.debug('✅ Cache supprimé:', name)
       }
       
-      // Recharger la page
+      // Recharger la page (pas besoin de cleanup car la page se recharge)
       setTimeout(() => window.location.reload(true), 500)
     } catch (err) {
       logger.error('❌ Erreur lors du nettoyage:', err)
