@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener } from '@/hooks'
+import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener, useEntityRestore } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -40,7 +40,6 @@ export default function PatientsPage() {
   // Plus de modal - actions directes
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const [restoringPatient, setRestoringPatient] = useState(null)
 
   // Charger les données avec useApiData
   // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
@@ -52,6 +51,18 @@ export default function PatientsPage() {
     ], [showArchived]),
     { requiresAuth: true }
   )
+
+  // Utiliser le hook unifié pour la restauration
+  const { restore: handleRestorePatient, restoring: restoringPatient } = useEntityRestore('patients', {
+    onSuccess: () => {
+      setSuccess('✅ Patient restauré avec succès')
+    },
+    onError: (errorMessage) => {
+      setActionError(errorMessage)
+    },
+    invalidateCache,
+    refetch
+  })
 
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
   useAutoRefresh(refetch, 30000)
@@ -234,36 +245,6 @@ export default function PatientsPage() {
     await refetch()
   }
 
-  // Restaurer un patient archivé
-  const handleRestorePatient = async (patient) => {
-    try {
-      setRestoringPatient(patient.id)
-      setActionError(null)
-      const response = await fetchWithAuth(
-        `${API_URL}/api.php/patients/${patient.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deleted_at: null })
-        },
-        { requiresAuth: true }
-      )
-      
-      if (response.ok) {
-        setSuccess('✅ Patient restauré avec succès')
-        invalidateCache()
-        await refetch()
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        setActionError(errorData.error || 'Erreur lors de la restauration')
-      }
-    } catch (err) {
-      setActionError(err.message || 'Erreur lors de la restauration')
-      logger.error('Erreur restauration patient:', err)
-    } finally {
-      setRestoringPatient(null)
-    }
-  }
   
   // Fonction utilitaire pour créer un timeout avec cleanup
   const timeoutRefs = useRef([])

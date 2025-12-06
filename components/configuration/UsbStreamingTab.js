@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData } from '@/hooks'
+import { useApiData, useTimers, useEntityRestore } from '@/hooks'
 import { createUpdateConfigCommand, createUpdateCalibrationCommand } from '@/lib/deviceCommands'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
@@ -214,7 +214,25 @@ export default function DebugTab() {
   
   // Toggle pour afficher les archives
   const [showArchived, setShowArchived] = useState(false)
-  const [restoringDevice, setRestoringDevice] = useState(null)
+  
+  // Utiliser le hook unifié pour la restauration
+  const { restore: handleRestoreDeviceDirect, restoring: restoringDevice } = useEntityRestore('devices', {
+    onSuccess: (device) => {
+      logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré avec succès`)
+      appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré`, 'dashboard')
+      // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
+      invalidateCache()
+      createTimeoutWithCleanup(async () => {
+        await refetchDevices()
+      }, 500)
+    },
+    onError: (errorMessage) => {
+      logger.error('Erreur restauration device:', errorMessage)
+      appendUsbStreamLog(`❌ Erreur restauration: ${errorMessage}`, 'dashboard')
+    },
+    invalidateCache,
+    refetch: refetchDevices
+  })
   
   // Charger tous les dispositifs pour le tableau
   // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
@@ -1213,41 +1231,6 @@ export default function DebugTab() {
   
   // Plus de modal - actions directes
   
-  // Restaurer un dispositif archivé
-  const handleRestoreDeviceDirect = useCallback(async (device) => {
-    try {
-      setRestoringDevice(device.id)
-      const response = await fetchWithAuth(
-        `${API_URL}/api.php/devices/${device.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deleted_at: null })
-        },
-        { requiresAuth: true }
-      )
-      
-      if (response.ok) {
-        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré avec succès`)
-        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré`, 'dashboard')
-        // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
-        invalidateCache()
-        createTimeoutWithCleanup(async () => {
-          await refetchDevices()
-        }, 500)
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        const errorMessage = errorData.error || 'Erreur lors de la restauration'
-        logger.error('Erreur restauration device:', errorMessage)
-        appendUsbStreamLog(`❌ Erreur restauration: ${errorMessage}`, 'dashboard')
-      }
-    } catch (err) {
-      logger.error('Erreur restauration device:', err)
-      appendUsbStreamLog(`❌ Erreur restauration: ${err.message || err}`, 'dashboard')
-    } finally {
-      setRestoringDevice(null)
-    }
-  }, [fetchWithAuth, API_URL, refetchDevices, invalidateCache, appendUsbStreamLog])
   
   // Créer les dispositifs fictifs
   const [creatingTestDevices, setCreatingTestDevices] = useState(false)

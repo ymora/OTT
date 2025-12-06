@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useApiData, useFilter, useEntityModal } from '@/hooks'
+import { useApiData, useFilter, useEntityModal, useEntityRestore } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -48,6 +48,18 @@ export default function UsersPage() {
     ], [showArchived]),
     { requiresAuth: true }
   )
+
+  // Utiliser le hook unifié pour la restauration
+  const { restore: handleRestoreUser, restoring: restoringUser } = useEntityRestore('users', {
+    onSuccess: () => {
+      setSuccess('✅ Utilisateur restauré avec succès')
+    },
+    onError: (errorMessage) => {
+      setActionError(errorMessage)
+    },
+    invalidateCache,
+    refetch
+  })
 
   const allUsers = data?.users?.users || []
   const roles = data?.roles?.roles || []
@@ -157,36 +169,6 @@ export default function UsersPage() {
     }
   }
   
-  // Restaurer un utilisateur archivé
-  const handleRestoreUser = async (user) => {
-    try {
-      setRestoringUser(user.id)
-      setActionError(null)
-      const response = await fetchWithAuth(
-        `${API_URL}/api.php/users/${user.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deleted_at: null })
-        },
-        { requiresAuth: true }
-      )
-      
-      if (response.ok) {
-        setSuccess('✅ Utilisateur restauré avec succès')
-        invalidateCache()
-        await refetch()
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        setActionError(errorData.error || 'Erreur lors de la restauration')
-      }
-    } catch (err) {
-      setActionError(err.message || 'Erreur lors de la restauration')
-      logger.error('Erreur restauration user:', err)
-    } finally {
-      setRestoringUser(null)
-    }
-  }
   
   // Fonction utilitaire pour créer un timeout avec cleanup
   const timeoutRefs = useRef([])
