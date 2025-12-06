@@ -1861,14 +1861,15 @@ if (Test-Path "api.php") {
                 $startIndex = [Math]::Max(0, $match.Index - 250)
                 $context = $apiContent.Substring($startIndex, [Math]::Min(500, $apiContent.Length - $startIndex))
                 # Vérifier que le contexte contient :
-                # 1. La route avec le pattern
+                # 1. La route avec le pattern (format: preg_match('#/users/(\d+)$#', ...) ou preg_match('#/patients/(\d+)$#', ...))
                 # 2. La méthode PATCH
                 # 3. Le handler est appelé
-                # Pattern plus flexible pour la route (peut être sur plusieurs lignes)
-                $hasRoute = $context -match "preg_match.*#.*$routePattern" -or $context -match "#.*$routePattern.*\$#"
-                # Méthode PATCH
-                $hasMethod = $context -match "\`\$method === '$($ep.Method)'" -or $context -match "method === '$($ep.Method)'"
-                # Handler appelé
+                # Pattern plus flexible pour la route - chercher le pattern de route dans le contexte
+                $routePatternEscaped = $routePattern -replace '\\', '\\'
+                $hasRoute = $context -match "preg_match.*#.*$routePattern" -or $context -match "#.*$routePattern" -or $context -match "/$($ep.Endpoint -replace '\(\\d\+\)', '')"
+                # Méthode PATCH - chercher avec ou sans backtick
+                $hasMethod = $context -match "\`\$method === '$($ep.Method)'" -or $context -match "method === '$($ep.Method)'" -or $context -match "\$method === '$($ep.Method)'"
+                # Handler appelé - doit être présent dans le contexte
                 $hasHandler = $context -match $ep.Handler
                 
                 if ($hasRoute -and $hasMethod -and $hasHandler) {
