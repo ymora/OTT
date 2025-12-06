@@ -35,6 +35,7 @@ export function UsbProvider({ children }) {
   const sendMeasurementToApiRef = useRef(null) // Callback pour envoyer les mesures à l'API
   const updateDeviceFirmwareRef = useRef(null) // Callback pour mettre à jour les informations du dispositif dans la base (firmware_version, last_battery, last_seen, status)
   const portSharingRef = useRef(null)
+  const streamTimeoutRefs = useRef([]) // Références pour les timeouts de streaming
   
   // Batch des logs pour envoi au serveur (pour monitoring à distance)
   const logsToSendRef = useRef([])
@@ -1273,7 +1274,7 @@ export function UsbProvider({ children }) {
                   }
                 }, 500)
                 // Stocker dans une référence pour cleanup si nécessaire
-                // Note: Si le composant se démonte avant 500ms, isMounted sera false donc pas de problème
+                streamTimeoutRefs.current.push(streamTimeoutId)
                 
                 connectionAttemptInProgress = false
                 return
@@ -1304,7 +1305,7 @@ export function UsbProvider({ children }) {
                   }
                 }, 500)
                 // Stocker dans une référence pour cleanup si nécessaire
-                // Note: Si le composant se démonte avant 500ms, isMounted sera false donc pas de problème
+                streamTimeoutRefs.current.push(streamTimeoutId)
                 
                 connectionAttemptInProgress = false
                 return
@@ -1338,6 +1339,9 @@ export function UsbProvider({ children }) {
     return () => {
       isMounted = false
       clearInterval(interval)
+      // Nettoyer tous les timeouts de streaming
+      streamTimeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
+      streamTimeoutRefs.current = []
     }
   }, [isSupported, isConnected, port, connect, startUsbStreaming, appendUsbStreamLog])
 
