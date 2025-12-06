@@ -116,6 +116,42 @@ if (-not (Test-Path "docs")) {
     New-Item -Path "docs" -ItemType Directory -Force | Out-Null
 }
 
+# Vérifier que les fichiers de documentation sont dans out/docs/ (copiés automatiquement par Next.js depuis public/)
+Write-Host "  Verification des fichiers de documentation..." -ForegroundColor Yellow
+$requiredDocs = @(
+    "out\docs\DOCUMENTATION_PRESENTATION.html",
+    "out\docs\DOCUMENTATION_DEVELOPPEURS.html",
+    "out\docs\DOCUMENTATION_COMMERCIALE.html"
+)
+$missingDocs = 0
+foreach ($doc in $requiredDocs) {
+    if (Test-Path $doc) {
+        Write-Host "    OK $(Split-Path $doc -Leaf)" -ForegroundColor Green
+    } else {
+        Write-Host "    MANQUANT $(Split-Path $doc -Leaf)" -ForegroundColor Red
+        $missingDocs++
+        # Copier depuis public/docs/ si manquant
+        $sourceDoc = $doc -replace "out\\", "public\"
+        if (Test-Path $sourceDoc) {
+            Write-Host "      Copie depuis public/docs/..." -ForegroundColor Yellow
+            if (-not (Test-Path "out\docs")) {
+                New-Item -Path "out\docs" -ItemType Directory -Force | Out-Null
+            }
+            Copy-Item -Path $sourceDoc -Destination $doc -Force
+            Write-Host "      OK Copie reussie" -ForegroundColor Green
+        }
+    }
+}
+
+# Copier les screenshots si manquants
+if (Test-Path "public\docs\screenshots") {
+    if (-not (Test-Path "out\docs\screenshots")) {
+        Write-Host "  Copie des screenshots..." -ForegroundColor Yellow
+        Copy-Item -Path "public\docs\screenshots" -Destination "out\docs\screenshots" -Recurse -Force
+        Write-Host "    OK Screenshots copies" -ForegroundColor Green
+    }
+}
+
 # Copier tous les fichiers de out/ vers docs/
 Write-Host "  Copie des fichiers..." -ForegroundColor Yellow
 Copy-Item -Path "out\*" -Destination "docs" -Recurse -Force
@@ -131,6 +167,64 @@ if (Test-Path "public\SUIVI_TEMPS_FACTURATION.md") {
     Write-Host "    OK SUIVI_TEMPS_FACTURATION.md copie" -ForegroundColor Green
 } else {
     Write-Host "    ATTENTION: SUIVI_TEMPS_FACTURATION.md non trouve dans public/" -ForegroundColor Yellow
+}
+
+# Vérification finale des fichiers de documentation dans docs/
+Write-Host "  Verification finale des fichiers de documentation dans docs/..." -ForegroundColor Yellow
+$finalDocs = @(
+    "docs\docs\DOCUMENTATION_PRESENTATION.html",
+    "docs\docs\DOCUMENTATION_DEVELOPPEURS.html",
+    "docs\docs\DOCUMENTATION_COMMERCIALE.html"
+)
+$finalMissing = 0
+$outdatedDocs = 0
+foreach ($doc in $finalDocs) {
+    if (Test-Path $doc) {
+        # Vérifier que le fichier n'est pas obsolète (comparer avec la source)
+        $sourceDoc = $doc -replace "docs\\docs\\", "public\docs\"
+        if (Test-Path $sourceDoc) {
+            $sourceDate = (Get-Item $sourceDoc).LastWriteTime
+            $destDate = (Get-Item $doc).LastWriteTime
+            if ($sourceDate -gt $destDate) {
+                Write-Host "    ATTENTION $(Split-Path $doc -Leaf) OBSOLETE (source plus recente)" -ForegroundColor Yellow
+                Write-Host "      Source: $sourceDate" -ForegroundColor Gray
+                Write-Host "      Dest: $destDate" -ForegroundColor Gray
+                # Recopier le fichier
+                Copy-Item -Path $sourceDoc -Destination $doc -Force
+                Write-Host "      OK Fichier mis a jour" -ForegroundColor Green
+                $outdatedDocs++
+            } else {
+                Write-Host "    OK $(Split-Path $doc -Leaf)" -ForegroundColor Green
+            }
+        } else {
+            Write-Host "    OK $(Split-Path $doc -Leaf) (source non trouvee, peut etre normal)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "    ERREUR $(Split-Path $doc -Leaf) manquant dans docs/" -ForegroundColor Red
+        $finalMissing++
+        # Essayer de copier depuis out/docs/ si disponible
+        $outDoc = $doc -replace "docs\\docs\\", "out\docs\"
+        if (Test-Path $outDoc) {
+            Write-Host "      Copie depuis out/docs/..." -ForegroundColor Yellow
+            $destDir = Split-Path $doc -Parent
+            if (-not (Test-Path $destDir)) {
+                New-Item -Path $destDir -ItemType Directory -Force | Out-Null
+            }
+            Copy-Item -Path $outDoc -Destination $doc -Force
+            Write-Host "      OK Fichier copie" -ForegroundColor Green
+            $finalMissing--
+        }
+    }
+}
+if ($finalMissing -gt 0) {
+    Write-Host "" -ForegroundColor Red
+    Write-Host "ERREUR: $finalMissing fichier(s) de documentation manquant(s) dans docs/" -ForegroundColor Red
+    Write-Host "   Le deploiement GitHub Pages echouera pour ces fichiers" -ForegroundColor Red
+    exit 1
+}
+if ($outdatedDocs -gt 0) {
+    Write-Host "" -ForegroundColor Yellow
+    Write-Host "ATTENTION: $outdatedDocs fichier(s) de documentation etai(en)t obsolete(s) et a/ont ete mis a jour" -ForegroundColor Yellow
 }
 
 Write-Host ""

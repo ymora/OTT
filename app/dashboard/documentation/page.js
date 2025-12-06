@@ -537,7 +537,20 @@ function MarkdownViewer({ fileName }) {
     // ============================================
     // PHASE 3 : Utiliser les totaux du markdown comme source unique (avec UI/UX et Optimisation)
     // ============================================
-    const totalMatch = md.match(/(?:\*\*)?Total(?:\*\*)? \| (?:\*\*)?~?([\d.]+)h?(?:\*\*)? \| (?:\*\*)?(\d+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)? \| (?:\*\*)?([\d.]+)(?:\*\*)?/)
+    // Essayer plusieurs formats de regex pour la ligne Total
+    const totalMatchPatterns = [
+      // Format avec **Total** et valeurs en gras
+      /(?:\*\*)?Total(?:\*\*)?\s*\|\s*(?:\*\*)?~?([\d.]+)h?(?:\*\*)?\s*\|\s*(?:\*\*)?(\d+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?/,
+      // Format simple sans gras
+      /Total\s*\|\s*~?([\d.]+)h?\s*\|\s*(\d+)\s*\|\s*([\d.-]+)\s*\|\s*([\d.-]+)\s*\|\s*([\d.-]+)\s*\|\s*([\d.-]+)\s*\|\s*([\d.-]+)\s*\|\s*([\d.-]+)\s*\|\s*([\d.-]+)\s*\|\s*([\d.-]+)/
+    ]
+    
+    let totalMatch = null
+    for (const pattern of totalMatchPatterns) {
+      totalMatch = md.match(pattern)
+      if (totalMatch) break
+    }
+    
     if (totalMatch) {
       // Utiliser les totaux du markdown comme source de vérité
       data.totalHoursFromMarkdown = safeParseFloat(totalMatch[1])
@@ -572,6 +585,17 @@ function MarkdownViewer({ fileName }) {
       if (!data.validation.commitsMatch) {
         logger.warn(`Écart détecté pour les commits: calculé=${calculatedCommits}, markdown=${data.totalCommitsFromMarkdown}`)
       }
+    } else {
+      // Fallback : calculer les catégories depuis les données quotidiennes si le regex ne match pas
+      logger.debug('⚠️ Ligne Total non trouvée dans le markdown, calcul des catégories depuis les données quotidiennes')
+      data.categories['Développement'] = data.dailyData.reduce((sum, d) => sum + (d.dev || 0), 0)
+      data.categories['Correction'] = data.dailyData.reduce((sum, d) => sum + (d.fix || 0), 0)
+      data.categories['Test'] = data.dailyData.reduce((sum, d) => sum + (d.test || 0), 0)
+      data.categories['Documentation'] = data.dailyData.reduce((sum, d) => sum + (d.doc || 0), 0)
+      data.categories['Refactoring'] = data.dailyData.reduce((sum, d) => sum + (d.refactor || 0), 0)
+      data.categories['Déploiement'] = data.dailyData.reduce((sum, d) => sum + (d.deploy || 0), 0)
+      data.categories['UI/UX'] = data.dailyData.reduce((sum, d) => sum + (d.uiux || 0), 0)
+      data.categories['Optimisation'] = data.dailyData.reduce((sum, d) => sum + (d.optim || 0), 0)
     }
 
     // ============================================
@@ -1276,7 +1300,13 @@ function MarkdownViewer({ fileName }) {
               <div id="repartition" className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6 scroll-mt-20">
                 <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Répartition par Activité</h3>
                 <div className="h-64 flex items-center justify-center">
-                  <Doughnut data={pieChartData} options={chartOptions} />
+                  {pieChartData ? (
+                    <Doughnut data={pieChartData} options={chartOptions} />
+                  ) : (
+                    <p className="text-gray-500 dark:text-gray-400 text-center">
+                      📊 Pas de données disponibles pour la répartition
+                    </p>
+                  )}
                 </div>
               </div>
 

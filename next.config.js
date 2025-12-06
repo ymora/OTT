@@ -5,7 +5,7 @@ const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true'
 const basePath = (isDev || !isStaticExport) ? '' : '/OTT'
 
 const nextConfig = {
-  output: isStaticExport ? 'export' : undefined,
+  output: isStaticExport ? 'export' : 'standalone',
   images: {
     unoptimized: true
   },
@@ -18,9 +18,9 @@ const nextConfig = {
     NEXT_PUBLIC_BASE_PATH: basePath || '',
     NEXT_PUBLIC_STATIC_EXPORT: isStaticExport ? 'true' : 'false'
   },
-  // Proxy API en développement local
+  // Proxy API - fonctionne en dev et en production (sauf export statique)
   async rewrites() {
-    if (isDev && !isStaticExport) {
+    if (!isStaticExport) {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
       return [
         {

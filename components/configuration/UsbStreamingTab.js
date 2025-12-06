@@ -1014,12 +1014,12 @@ export default function DebugTab() {
       const result = await write(commandWithNewline)
       // Petit délai pour laisser le temps à l'écriture de se terminer
       await new Promise(resolve => {
-        const timeoutId = setTimeout(() => {
+        const timeoutId = createTimeoutWithCleanup(() => {
           resolve()
         }, 100)
-        // Cleanup automatique si le composant se démonte
-        if (!isMountedRef.current) {
-          clearTimeout(timeoutId)
+        if (!timeoutId) {
+          // Si le composant est démonté, résoudre immédiatement
+          resolve()
         }
       })
       if (result) {
@@ -1327,14 +1327,19 @@ export default function DebugTab() {
     }
   }, [fetchWithAuth, API_URL, deviceToAssign, allPatients, appendUsbStreamLog, refetchDevices])
   
-  // Patients disponibles (sans dispositif assigné)
+  // Patients disponibles (sans dispositif assigné et non archivés)
   const availablePatients = useMemo(() => {
     const assignedPatientIds = new Set(allDevices.filter(d => d.patient_id).map(d => d.patient_id))
-    return allPatients.filter(p => !assignedPatientIds.has(p.id))
+    return allPatients.filter(p => !p.deleted_at && !assignedPatientIds.has(p.id))
   }, [allPatients, allDevices])
   
-  // Gérer l'ouverture du modal de flash
+  // Gérer l'ouverture du modal de flash (uniquement pour dispositifs non archivés)
   const handleOpenFlashModal = useCallback((device) => {
+    // Ne pas ouvrir le modal pour les dispositifs archivés
+    if (device?.deleted_at) {
+      logger.warn('Tentative de flash d\'un dispositif archivé')
+      return
+    }
     setDeviceToFlash(device)
     setShowFlashModal(true)
   }, [])
@@ -1559,7 +1564,7 @@ export default function DebugTab() {
                       d.sim_iccid === usbVirtualDevice.sim_iccid || 
                       d.device_serial === usbVirtualDevice.device_serial
                     ) && (
-                      <tr key={usbVirtualDevice.id} className="table-row bg-blue-50 dark:bg-blue-900/20 animate-pulse">
+                      <tr key={usbVirtualDevice.id} className="table-row bg-blue-50 dark:bg-blue-900/20 animate-pulse hover:bg-blue-100 dark:hover:bg-blue-900/30">
                         <td className="table-cell px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                           <div className="flex items-center gap-2">
                             <span className="text-blue-500 text-lg animate-spin">⏳</span>
@@ -1586,7 +1591,7 @@ export default function DebugTab() {
                     )}
                     
                     {allDevices.length === 0 && !usbVirtualDevice ? (
-                      <tr className="table-row">
+                      <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
                         <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex flex-col items-center gap-3">
                             <span className="text-4xl">🔌</span>
@@ -1668,22 +1673,9 @@ export default function DebugTab() {
                         {hasPatient ? (
                           <span className="badge badge-success text-xs">{patientName}</span>
                         ) : (
-                          isArchived ? (
-                            <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">
-                              Non assigné
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setDeviceToAssign(device)
-                                setShowAssignPatientModal(true)
-                              }}
-                              className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-xs hover:bg-orange-200 dark:hover:bg-orange-900/40 cursor-pointer transition-colors"
-                              title="Cliquer pour assigner un patient"
-                            >
-                              Non assigné
-                            </button>
-                          )
+                          <span className={`badge ${isArchived ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'} text-xs`}>
+                            Non assigné
+                          </span>
                         )}
                       </div>
                     )
@@ -1973,16 +1965,14 @@ export default function DebugTab() {
                 <td className="table-cell px-3 py-1.5">
                   <div className="flex items-center justify-end gap-2">
                     {isArchived ? (
-                      hasPermission('devices.edit') && (
-                        <button
-                          onClick={() => handleRestoreDeviceDirect(device)}
-                          disabled={restoringDevice === device.id}
-                          className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50"
-                          title="Restaurer le dispositif"
-                        >
-                          <span className="text-lg">{restoringDevice === device.id ? '⏳' : '♻️'}</span>
-                        </button>
-                      )
+                      <button
+                        onClick={() => handleRestoreDeviceDirect(device)}
+                        disabled={restoringDevice === device.id}
+                        className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50"
+                        title="Restaurer le dispositif"
+                      >
+                        <span className="text-lg">{restoringDevice === device.id ? '⏳' : '♻️'}</span>
+                      </button>
                     ) : (
                       <>
                         <button

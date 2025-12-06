@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useUsb } from '@/contexts/UsbContext'
 import { useSerialPort } from '@/components/SerialPortManager'
+import { useTimers } from '@/hooks'
 import { ESPLoader } from 'esptool-js'
 import logger from '@/lib/logger'
 
@@ -28,28 +29,18 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
   const [otaStats, setOtaStats] = useState({ lastCheck: null, attempts: 0 })
   const stopReadingRef = useRef(null)
   const otaCheckIntervalRef = useRef(null)
-  const timeoutRefs = useRef([])
   
-  // Nettoyer tous les timeouts au démontage
+  // Utiliser le hook useTimers pour gérer les timers avec cleanup automatique
+  const { createTimeout: createTimeoutWithCleanup, createInterval } = useTimers()
+  
+  // Nettoyer l'interval OTA au démontage
   useEffect(() => {
     return () => {
-      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
-      timeoutRefs.current = []
       if (otaCheckIntervalRef.current) {
         clearInterval(otaCheckIntervalRef.current)
       }
     }
   }, [])
-  
-  // Fonction utilitaire pour créer un timeout avec cleanup
-  const createTimeoutWithCleanup = (callback, delay) => {
-    const timeoutId = setTimeout(() => {
-      callback()
-      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
-    }, delay)
-    timeoutRefs.current.push(timeoutId)
-    return timeoutId
-  }
 
   // Utiliser le contexte USB partagé
   const {
@@ -536,7 +527,7 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
       }, 2000) // Vérifier toutes les 2 secondes
 
       // Timeout après 5 minutes
-      setTimeout(() => {
+      const timeoutId = createTimeoutWithCleanup(() => {
         if (otaCheckIntervalRef.current) {
           clearInterval(otaCheckIntervalRef.current)
           otaCheckIntervalRef.current = null

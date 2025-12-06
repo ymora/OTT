@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData } from '@/hooks'
+import { useApiData, useTimers } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import Modal from '@/components/Modal'
@@ -29,26 +29,8 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const [firmwareToDelete, setFirmwareToDelete] = useState(null)
   const [deletingFirmware, setDeletingFirmware] = useState(null)
   
-  // Références pour stocker les timeouts et les nettoyer
-  const timeoutRefs = useRef([])
-  
-  // Nettoyer tous les timeouts au démontage
-  useEffect(() => {
-    return () => {
-      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
-      timeoutRefs.current = []
-    }
-  }, [])
-  
-  // Fonction utilitaire pour créer un timeout avec cleanup
-  const createTimeoutWithCleanup = (callback, delay) => {
-    const timeoutId = setTimeout(() => {
-      callback()
-      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
-    }, delay)
-    timeoutRefs.current.push(timeoutId)
-    return timeoutId
-  }
+  // Utiliser le hook useTimers pour gérer les timers avec cleanup automatique
+  const { createTimeout: createTimeoutWithCleanup } = useTimers()
   const [editorMinimized, setEditorMinimized] = useState(true)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)

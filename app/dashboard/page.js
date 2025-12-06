@@ -92,6 +92,8 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     // Compter les dispositifs en ligne depuis la base de données (last_seen < 2h)
     const onlineFromDb = devices.filter(d => {
+      // Exclure les dispositifs archivés
+      if (d.deleted_at) return false
       // Gérer les valeurs null, undefined ou invalides
       if (!d.last_seen) return false
       const lastSeen = new Date(d.last_seen)
@@ -118,8 +120,9 @@ export default function DashboardPage() {
     // Ajouter 1 si un dispositif USB est connecté et pas déjà compté
     const activeDevices = onlineFromDb.length + (usbDeviceOnline && !usbDeviceAlreadyCounted ? 1 : 0)
     
-    // Calculer les batteries faibles depuis la base de données
+    // Calculer les batteries faibles depuis la base de données (exclure archivés)
     const lowBatteryFromDb = devices.filter(d => {
+      if (d.deleted_at) return false
       const battery = d.last_battery
       return battery !== null && battery !== undefined && battery < 30
     }).length
@@ -139,16 +142,18 @@ export default function DashboardPage() {
     // Compter le dispositif USB seulement s'il n'est pas déjà dans la base de données
     const lowBatteryDevices = lowBatteryFromDb + (usbBatteryLow && !usbDeviceAlreadyCounted ? 1 : 0)
     
-    // Calculer le nombre total de dispositifs avec batterie OK (>= 30%)
+    // Calculer le nombre total de dispositifs avec batterie OK (>= 30%) - exclure archivés
     const devicesWithBattery = devices.filter(d => {
+      if (d.deleted_at) return false
       const battery = d.last_battery
       return battery !== null && battery !== undefined
     })
     const okBatteryFromDb = devicesWithBattery.filter(d => d.last_battery >= 30).length
     const okBatteryDevices = okBatteryFromDb + (usbBatteryOk && !usbDeviceAlreadyCounted ? 1 : 0)
     
-    // Total dispositifs : base de données + USB si pas déjà compté
-    const totalDevices = devices.length + (usbDeviceOnline && !usbDeviceAlreadyCounted ? 1 : 0)
+    // Total dispositifs : base de données (exclure archivés) + USB si pas déjà compté
+    const activeDevicesFromDb = devices.filter(d => !d.deleted_at)
+    const totalDevices = activeDevicesFromDb.length + (usbDeviceOnline && !usbDeviceAlreadyCounted ? 1 : 0)
     
     return {
       totalDevices,
@@ -160,12 +165,13 @@ export default function DashboardPage() {
   }, [devices, alerts, isConnected, usbDeviceInfo, usbStreamLastMeasurement])
 
   const unassignedDevices = useMemo(() => 
-    devices.filter(d => !d.first_name && !d.last_name),
+    devices.filter(d => !d.deleted_at && !d.first_name && !d.last_name),
     [devices]
   )
   
   const lowBatteryList = useMemo(() => 
     devices.filter(d => {
+      if (d.deleted_at) return false
       const battery = d.last_battery
       return battery !== null && battery !== undefined && battery < 30
     }),
@@ -207,12 +213,12 @@ export default function DashboardPage() {
       <ErrorMessage error={error} onRetry={refetch} />
 
       {/* Carte des dispositifs */}
-      {!loading && devices.length > 0 && (
+      {!loading && devices.filter(d => !d.deleted_at).length > 0 && (
         <div id="map-container" className="card p-0 overflow-hidden">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {devices.filter(d => d.latitude && d.longitude).length} dispositif(s) géolocalisé(s)
+              {devices.filter(d => !d.deleted_at && d.latitude && d.longitude).length} dispositif(s) géolocalisé(s)
             </p>
           </div>
           <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
@@ -283,6 +289,7 @@ export default function DashboardPage() {
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
                 {devices.filter(d => {
+                  if (d.deleted_at) return false
                   if (!d.last_seen) return false
                   const lastSeen = new Date(d.last_seen)
                   if (isNaN(lastSeen.getTime())) return false
@@ -321,8 +328,8 @@ export default function DashboardPage() {
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
                 {(() => {
-                  // Optimisation : créer un Map pour éviter find() à chaque itération
-                  const devicesMap = new Map(devices.map(d => [d.id, d]))
+                  // Optimisation : créer un Map pour éviter find() à chaque itération (exclure archivés)
+                  const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
                   return alerts.filter(a => a.severity === 'critical').map(alert => {
                     const device = devicesMap.get(alert.device_id)
                     return device ? (
@@ -362,6 +369,7 @@ export default function DashboardPage() {
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
                 {(stats.lowBatteryDevices > 0 ? lowBatteryList : devices.filter(d => {
+                  if (d.deleted_at) return false
                   const battery = d.last_battery
                   return battery !== null && battery !== undefined && battery >= 30
                 })).map(device => {

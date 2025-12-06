@@ -208,6 +208,8 @@ export default function PatientsPage() {
   }
 
   const openAssignModal = (patient) => {
+    // Ne pas ouvrir le modal pour les patients archivés
+    if (patient?.deleted_at) return
     setSelectedPatientForAssign(patient)
     setActionError(null)
     refetch()
@@ -367,6 +369,21 @@ export default function PatientsPage() {
                       <td className="table-cell py-3 px-4">
                         <div className="flex items-center gap-2">
                           {(() => {
+                            // Pour les patients archivés, afficher uniquement les infos (pas d'actions)
+                            if (isArchived) {
+                              const assignedDevice = devices.find(d => d.patient_id === p.id)
+                              if (assignedDevice) {
+                                return (
+                                  <div className="flex-1 space-y-1">
+                                    <p className="font-medium text-primary">{assignedDevice.device_name || assignedDevice.sim_iccid}</p>
+                                    <p className="text-xs text-muted font-mono">{assignedDevice.sim_iccid}</p>
+                                  </div>
+                                )
+                              } else {
+                                return <span className="flex-1 text-sm text-gray-500">Non assigné</span>
+                              }
+                            }
+                            
                             const assignedDevice = devices.find(d => d.patient_id === p.id)
                             if (assignedDevice) {
                               // Dispositif assigné : bouton désassigner + afficher les infos

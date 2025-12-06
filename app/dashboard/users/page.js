@@ -39,19 +39,15 @@ export default function UsersPage() {
   const [restoringUser, setRestoringUser] = useState(null)
 
   // Charger les données avec useApiData
+  // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
+  // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
   const { data, loading, error, refetch, invalidateCache } = useApiData(
-    [
+    useMemo(() => [
       showArchived ? '/api.php/users?include_deleted=true' : '/api.php/users',
       '/api.php/roles'
-    ],
+    ], [showArchived]),
     { requiresAuth: true }
   )
-
-  // Recharger automatiquement les données quand le toggle change
-  useEffect(() => {
-    invalidateCache()
-    refetch()
-  }, [showArchived, invalidateCache, refetch])
 
   const allUsers = data?.users?.users || []
   const roles = data?.roles?.roles || []
@@ -294,7 +290,7 @@ export default function UsersPage() {
                       className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${isArchived ? 'opacity-60' : ''}`}
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
-                      <td className="py-3 px-4 font-medium">
+                      <td className="table-cell py-3 px-4 font-medium">
                         <div className="flex items-center gap-2">
                           <span>{user.first_name} {user.last_name}</span>
                           {isArchived && (
@@ -302,7 +298,7 @@ export default function UsersPage() {
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="table-cell py-3 px-4">
                         <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
                           {user.role_name}
                         </span>
@@ -311,7 +307,7 @@ export default function UsersPage() {
                       <td className="table-cell text-sm">
                         {user.phone || '-'}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="table-cell py-3 px-4">
                         {user.is_active ? (
                           <span className="badge badge-success">✅ Actif</span>
                         ) : (
@@ -326,7 +322,7 @@ export default function UsersPage() {
                           minute: '2-digit' 
                         }) : 'Jamais'}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="table-cell py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
                           {isArchived ? (
                             <button
@@ -348,6 +344,7 @@ export default function UsersPage() {
                               </button>
                               {user.id !== currentUser?.id && hasPermission('users.manage') && (
                                 <>
+                                  {/* Administrateurs : Archive + Suppression définitive */}
                                   {currentUser?.role_name === 'admin' ? (
                                     <>
                                       <button
@@ -368,6 +365,7 @@ export default function UsersPage() {
                                       </button>
                                     </>
                                   ) : (
+                                    /* Non-administrateurs : Archive uniquement (pas de suppression définitive) */
                                     <button
                                       className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
                                       onClick={() => handleArchive(user)}

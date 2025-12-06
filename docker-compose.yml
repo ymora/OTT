@@ -58,6 +58,27 @@ services:
     networks:
       - ott-network
 
+  # Dashboard Next.js
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_ENABLE_DEMO_RESET: "false"
+    container_name: ott-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_ENABLE_DEMO_RESET: "false"
+      NODE_ENV: production
+      NEXT_STATIC_EXPORT: "false"
+    depends_on:
+      - api
+    networks:
+      - ott-network
+
   # Visualiseur de base de données (optionnel)
   pgweb:
     image: sosedoff/pgweb:latest

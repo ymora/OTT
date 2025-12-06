@@ -18,4 +18,5 @@ export { useFormState } from './useFormState'
 export { useAsync } from './useAsync'
 export { useLocalStorage } from './useLocalStorage'
 export { useTimeout, createTimeout } from './useTimeout'
+export { useTimeout as useTimerTimeout, useInterval as useTimerInterval, useTimers } from './useTimer'
 

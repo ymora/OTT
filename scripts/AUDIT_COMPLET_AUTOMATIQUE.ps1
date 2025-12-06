@@ -31,7 +31,7 @@ Write-Host "====================================================================
 Write-Host "[AUDIT] AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL - OTT Dashboard" -ForegroundColor Cyan
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host "Date     : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
-Write-Host "Version  : 2.1 - Analyse Exhaustive" -ForegroundColor Cyan
+Write-Host "Version  : 2.2 - Analyse Exhaustive Optimisée" -ForegroundColor Cyan
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -781,221 +781,273 @@ if ($optimizationIssues.Count -gt 0) {
 }
 
 # ===============================================================================
-# VÉRIFICATION COHÉRENCE CONFIGURATION DÉPLOIEMENT
+# VÉRIFICATION COHÉRENCE CONFIGURATION DÉPLOIEMENT (Web/Serveur 3000 + Production)
 # ===============================================================================
 
-Write-Section "[CONFIG] Cohérence Configuration Déploiement - Local vs Production"
+Write-Section "[CONFIG] Cohérence Configuration - Web/Serveur 3000 & Déploiement"
 
 $configScore = 10.0
 $configIssues = @()
 $configWarnings = @()
 
-# 1. Vérifier render.yaml existe et est valide
-Write-Host "`n1. Fichiers de configuration:" -ForegroundColor Yellow
+# Charger les fichiers de configuration une seule fois
+$dockerCompose = $null
+$nextConfig = $null
+$envExample = $null
+$renderYaml = $null
+$dockerfileDashboard = $null
+$packageJson = $null
+
+if (Test-Path "docker-compose.yml") {
+    $dockerCompose = Get-Content "docker-compose.yml" -Raw -ErrorAction SilentlyContinue
+}
+if (Test-Path "next.config.js") {
+    $nextConfig = Get-Content "next.config.js" -Raw -ErrorAction SilentlyContinue
+}
+if (Test-Path "env.example") {
+    $envExample = Get-Content "env.example" -Raw -ErrorAction SilentlyContinue
+}
 if (Test-Path "render.yaml") {
     $renderYaml = Get-Content "render.yaml" -Raw -ErrorAction SilentlyContinue
-    if ($renderYaml) {
-        Write-OK "  render.yaml présent"
+}
+if (Test-Path "Dockerfile.dashboard") {
+    $dockerfileDashboard = Get-Content "Dockerfile.dashboard" -Raw -ErrorAction SilentlyContinue
+}
+if (Test-Path "package.json") {
+    $packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
+}
+
+# 1. Vérifier service dashboard Docker (serveur 3000)
+Write-Host "`n1. Configuration Serveur 3000 (Docker):" -ForegroundColor Yellow
+if ($dockerCompose) {
+    if ($dockerCompose -match "dashboard:" -or $dockerCompose -match "ott-dashboard") {
+        Write-OK "  Service dashboard présent dans docker-compose.yml"
         
-        # Vérifier que les variables d'environnement nécessaires sont listées
-        $requiredVars = @("DATABASE_URL", "JWT_SECRET")
-        foreach ($var in $requiredVars) {
-            if ($renderYaml -match "key:\s*$var" -or $renderYaml -match "`"$var`"") {
-                Write-OK "    Variable $var documentée dans render.yaml"
-            } else {
-                Write-Warn "    Variable $var manquante dans render.yaml"
-                $configWarnings += "Variable $var non documentée dans render.yaml"
-                $configScore -= 0.2
-            }
+        if ($dockerCompose -match "3000:3000" -or $dockerCompose -match '"3000"') {
+            Write-OK "    Port 3000 configuré"
+        } else {
+            Write-Err "    Port 3000 manquant"
+            $configIssues += "Port 3000 manquant dans docker-compose.yml"
+            $configScore -= 2.0
+        }
+        
+        if ($dockerCompose -match "Dockerfile.dashboard") {
+            Write-OK "    Dockerfile.dashboard référencé"
+        } else {
+            Write-Err "    Dockerfile.dashboard non référencé"
+            $configIssues += "Dockerfile.dashboard non référencé"
+            $configScore -= 2.0
+        }
+        
+        if ($dockerCompose -match "NEXT_PUBLIC_API_URL") {
+            Write-OK "    NEXT_PUBLIC_API_URL configurée"
+        } else {
+            Write-Warn "    NEXT_PUBLIC_API_URL manquante"
+            $configWarnings += "NEXT_PUBLIC_API_URL manquante dans docker-compose.yml"
+            $configScore -= 0.5
+        }
+        
+        if ($dockerCompose -match "CORS_ALLOWED_ORIGINS.*3000" -or $dockerCompose -match "localhost:3000") {
+            Write-OK "    CORS_ALLOWED_ORIGINS inclut localhost:3000"
+        } else {
+            Write-Warn "    CORS_ALLOWED_ORIGINS peut ne pas inclure localhost:3000"
+            $configWarnings += "CORS_ALLOWED_ORIGINS peut ne pas autoriser localhost:3000"
+            $configScore -= 0.5
         }
     } else {
-        Write-Warn "  render.yaml vide ou non lisible"
-        $configScore -= 1.0
+        Write-Err "  Service dashboard MANQUANT dans docker-compose.yml"
+        $configIssues += "Service dashboard absent de docker-compose.yml"
+        $configScore -= 3.0
+    }
+} else {
+    Write-Warn "  docker-compose.yml introuvable"
+    $configWarnings += "docker-compose.yml manquant"
+    $configScore -= 1.0
+}
+
+# 2. Vérifier Dockerfile.dashboard
+if ($dockerfileDashboard) {
+    Write-OK "  Dockerfile.dashboard présent"
+    if ($dockerfileDashboard -match "EXPOSE 3000" -or $dockerfileDashboard -match "PORT=3000") {
+        Write-OK "    Port 3000 configuré"
+    } else {
+        Write-Err "    Port 3000 manquant"
+        $configIssues += "Port 3000 manquant dans Dockerfile.dashboard"
+        $configScore -= 1.5
+    }
+    if ($dockerfileDashboard -match "NEXT_STATIC_EXPORT.*false" -or $dockerfileDashboard -match "ENV NEXT_STATIC_EXPORT=false") {
+        Write-OK "    NEXT_STATIC_EXPORT=false (mode serveur)"
+    }
+    if ($dockerfileDashboard -match "standalone") {
+        Write-OK "    Mode standalone configuré"
+    }
+} else {
+    Write-Err "  Dockerfile.dashboard introuvable"
+    $configIssues += "Dockerfile.dashboard manquant"
+    $configScore -= 3.0
+}
+
+# 3. Vérifier next.config.js (cohérence serveur 3000)
+Write-Host "`n2. Configuration Next.js:" -ForegroundColor Yellow
+if ($nextConfig) {
+    Write-OK "  next.config.js présent"
+    
+    # Vérifier output standalone pour mode serveur
+    if ($nextConfig -match "output.*standalone" -or $nextConfig -match "isStaticExport.*export.*standalone") {
+        Write-OK "    Configuration output: 'standalone' présente (mode serveur)"
+    } else {
+        Write-Err "    Configuration standalone manquante"
+        $configIssues += "Configuration standalone manquante dans next.config.js"
+        $configScore -= 2.0
+    }
+    
+    # Vérifier basePath conditionnel
+    if ($nextConfig -match "basePath.*isStaticExport") {
+        Write-OK "    basePath conditionnel (uniquement en export)"
+    }
+    
+    # Vérifier rewrites API
+    if ($nextConfig -match "rewrites" -and ($nextConfig -match "!isStaticExport" -or $nextConfig -match "isStaticExport.*false")) {
+        Write-OK "    Rewrites API configurés pour mode serveur"
+    } elseif ($nextConfig -match "rewrites") {
+        Write-Warn "    Rewrites API peuvent ne pas fonctionner en mode serveur"
+        $configScore -= 0.5
+    }
+} else {
+    Write-Err "  next.config.js introuvable"
+    $configIssues += "next.config.js manquant"
+    $configScore -= 3.0
+}
+
+# 4. Vérifier scripts de déploiement
+Write-Host "`n3. Scripts de déploiement:" -ForegroundColor Yellow
+if (Test-Path "scripts/deploy/export_static.sh") {
+    Write-OK "  export_static.sh présent (GitHub Actions)"
+} else {
+    Write-Err "  export_static.sh MANQUANT"
+    $configIssues += "export_static.sh manquant"
+    $configScore -= 1.5
+}
+
+if ($packageJson) {
+    $scripts = $packageJson.scripts
+    if ($scripts.PSObject.Properties.Name -contains "dev") {
+        $devScript = $scripts.dev
+        if ($devScript -match "3000" -or $devScript -match "-p 3000") {
+            Write-OK "    Script 'dev' utilise port 3000"
+        } else {
+            Write-Warn "    Script 'dev' peut ne pas utiliser port 3000"
+            $configScore -= 0.3
+        }
+    }
+    if ($scripts.PSObject.Properties.Name -contains "build" -and $scripts.PSObject.Properties.Name -contains "start") {
+        Write-OK "    Scripts 'build' et 'start' présents"
+    } else {
+        Write-Warn "    Scripts 'build' ou 'start' manquants"
+        $configScore -= 0.5
+    }
+}
+
+# 5. Vérifier render.yaml (production)
+Write-Host "`n4. Configuration Production (Render):" -ForegroundColor Yellow
+if ($renderYaml) {
+    Write-OK "  render.yaml présent"
+    $requiredVars = @("DATABASE_URL", "JWT_SECRET")
+    foreach ($var in $requiredVars) {
+        if ($renderYaml -match "key:\s*$var") {
+            Write-OK "    Variable $var documentée"
+        } else {
+            Write-Warn "    Variable $var manquante"
+            $configWarnings += "Variable $var non documentée dans render.yaml"
+            $configScore -= 0.2
+        }
     }
 } else {
     Write-Warn "  render.yaml manquant"
-    $configIssues += "render.yaml manquant"
-    $configScore -= 2.0
+    $configWarnings += "render.yaml manquant"
+    $configScore -= 1.0
 }
 
-# 2. Vérifier docker-compose.yml
-if (Test-Path "docker-compose.yml") {
-    $dockerCompose = Get-Content "docker-compose.yml" -Raw -ErrorAction SilentlyContinue
-    if ($dockerCompose) {
-        Write-OK "  docker-compose.yml présent"
-        
-        # Vérifier cohérence des variables avec render.yaml
-        if ($renderYaml) {
-            # Extraire variables de render.yaml
-            $renderVars = [regex]::Matches($renderYaml, 'key:\s*([A-Z_]+)') | ForEach-Object { $_.Groups[1].Value }
-            
-            # Vérifier que les variables critiques sont dans docker-compose
-            $criticalVars = @("DATABASE_URL", "JWT_SECRET")
-            foreach ($var in $criticalVars) {
-                if ($dockerCompose -match $var) {
-                    Write-OK "    Variable $var présente dans docker-compose.yml"
-                } else {
-                    Write-Warn "    Variable $var absente de docker-compose.yml (acceptable pour dev)"
-                }
-            }
-        }
-    } else {
-        Write-Warn "  docker-compose.yml vide"
-    }
-} else {
-    Write-Warn "  docker-compose.yml manquant (acceptable si non utilisé)"
-}
-
-# 3. Vérifier env.example
-Write-Host "`n2. Variables d'environnement:" -ForegroundColor Yellow
-if (Test-Path "env.example") {
-    $envExample = Get-Content "env.example" -Raw -ErrorAction SilentlyContinue
+# 6. Vérifier env.example
+Write-Host "`n5. Variables d'environnement:" -ForegroundColor Yellow
+if ($envExample) {
     Write-OK "  env.example présent"
-    
-    # Vérifier que les variables critiques sont documentées
     $criticalEnvVars = @("DATABASE_URL", "JWT_SECRET", "NEXT_PUBLIC_API_URL")
     foreach ($var in $criticalEnvVars) {
-        # Rechercher avec regex plus flexible (peut être commenté ou avec espaces)
         if ($envExample -match "(?m)^\s*$var\s*=" -or $envExample -match "(?m)^#.*$var") {
             Write-OK "    Variable $var documentée"
         } else {
-            Write-Warn "    Variable $var non documentée dans env.example"
+            Write-Warn "    Variable $var non documentée"
             $configWarnings += "Variable $var manquante dans env.example"
             $configScore -= 0.3
         }
     }
-    
-    # Comparer avec render.yaml
-    if ($renderYaml) {
-        $envExampleVars = [regex]::Matches($envExample, '^([A-Z_]+)=') | ForEach-Object { $_.Groups[1].Value }
-        $renderVars = [regex]::Matches($renderYaml, 'key:\s*([A-Z_]+)') | ForEach-Object { $_.Groups[1].Value }
-        
-        # Variables dans render mais pas dans env.example
-        $missingInExample = $renderVars | Where-Object { $_ -notin $envExampleVars }
-        if ($missingInExample.Count -gt 0) {
-            Write-Warn "    Variables dans render.yaml mais absentes de env.example: $($missingInExample -join ', ')"
-            $configScore -= 0.5
-        }
-    }
 } else {
     Write-Warn "  env.example manquant"
-    $configIssues += "env.example manquant"
-    $configScore -= 2.0
+    $configWarnings += "env.example manquant"
+    $configScore -= 1.5
 }
 
-# 4. Vérifier next.config.js cohérence
-Write-Host "`n3. Configuration Next.js:" -ForegroundColor Yellow
-if (Test-Path "next.config.js") {
-    $nextConfig = Get-Content "next.config.js" -Raw -ErrorAction SilentlyContinue
-    Write-OK "  next.config.js présent"
-    
-    # Vérifier que basePath est cohérent avec NEXT_PUBLIC_BASE_PATH
-    if ($nextConfig -match 'basePath' -or $nextConfig -match 'NEXT_PUBLIC_BASE_PATH') {
-        Write-OK "    Configuration basePath présente"
-    } else {
-        Write-Warn "    Configuration basePath absente (peut être intentionnel)"
-    }
-    
-    # Vérifier configuration export statique
-    if ($nextConfig -match 'output.*export' -or $nextConfig -match 'NEXT_STATIC_EXPORT') {
-        Write-OK "    Configuration export statique présente"
-    }
-} else {
-    Write-Warn "  next.config.js manquant"
-    $configIssues += "next.config.js manquant"
-    $configScore -= 2.0
+# 7. Vérifier cohérence API_URL entre toutes les configs
+Write-Host "`n6. Cohérence API_URL:" -ForegroundColor Yellow
+$apiUrls = @{}
+if ($dockerCompose) {
+    $match = [regex]::Match($dockerCompose, 'NEXT_PUBLIC_API_URL[:\s]+([^\s\n"]+)')
+    if ($match.Success) { $apiUrls["docker-compose"] = $match.Groups[1].Value.Trim() }
 }
-
-# 5. Vérifier package.json scripts de déploiement
-Write-Host "`n4. Scripts de déploiement:" -ForegroundColor Yellow
-if (Test-Path "package.json") {
-    $packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
-    $scripts = $packageJson.scripts
-    
-    $requiredScripts = @("build", "start")
-    foreach ($script in $requiredScripts) {
-        if ($scripts.PSObject.Properties.Name -contains $script) {
-            Write-OK "    Script '$script' présent"
-        } else {
-            Write-Warn "    Script '$script' manquant"
-            $configScore -= 0.5
-        }
-    }
-    
-    # Vérifier script export si basePath est configuré
-    if ($nextConfig -match 'basePath' -and $scripts.PSObject.Properties.Name -notcontains "export") {
-        Write-Warn "    Script 'export' recommandé pour déploiement statique"
-        $configScore -= 0.3
-    }
-} else {
-    Write-Warn "  package.json manquant"
-    $configScore -= 2.0
-}
-
-# 6. Vérifier Dockerfiles
-Write-Host "`n5. Dockerfiles:" -ForegroundColor Yellow
-$dockerfiles = @(Get-ChildItem -File -Filter "Dockerfile*" -ErrorAction SilentlyContinue)
-if ($dockerfiles.Count -gt 0) {
-    Write-OK "  $($dockerfiles.Count) Dockerfile(s) présent(s)"
-    
-    foreach ($dockerfile in $dockerfiles) {
-        $content = Get-Content $dockerfile.FullName -Raw -ErrorAction SilentlyContinue
-        # Vérifier que les variables d'environnement critiques sont mentionnées
-        if ($content -match "ENV|ARG" -or $content -match "DATABASE|JWT") {
-            Write-OK "    $($dockerfile.Name) semble configuré"
-        } else {
-            Write-Warn "    $($dockerfile.Name) pourrait manquer de variables d'environnement"
-        }
-    }
-} else {
-    Write-Warn "  Aucun Dockerfile trouvé (acceptable si non utilisé)"
-}
-
-# 7. Vérifier cohérence API_URL entre configs
-Write-Host "`n6. Cohérence URLs API:" -ForegroundColor Yellow
-$apiUrlInExample = $null
-$apiUrlInNextConfig = $null
-
-if ($envExample) {
-    $apiUrlMatch = [regex]::Match($envExample, 'NEXT_PUBLIC_API_URL=(.+)')
-    if ($apiUrlMatch.Success) {
-        $apiUrlInExample = $apiUrlMatch.Groups[1].Value.Trim()
-    }
-}
-
 if ($nextConfig) {
-    $apiUrlMatch = [regex]::Match($nextConfig, 'NEXT_PUBLIC_API_URL["'']?\s*[:=]\s*["'']?([^"'']+)')
-    if ($apiUrlMatch.Success) {
-        $apiUrlInNextConfig = $apiUrlMatch.Groups[1].Value.Trim()
-    }
+    $match = [regex]::Match($nextConfig, 'NEXT_PUBLIC_API_URL["'']?\s*[:=]\s*["'']?([^"'']+)')
+    if ($match.Success) { $apiUrls["next.config"] = $match.Groups[1].Value.Trim() }
+}
+if ($envExample) {
+    $match = [regex]::Match($envExample, 'NEXT_PUBLIC_API_URL=(.+)')
+    if ($match.Success) { $apiUrls["env.example"] = $match.Groups[1].Value.Trim() }
 }
 
-if ($apiUrlInExample -and $apiUrlInNextConfig) {
-    if ($apiUrlInExample -eq $apiUrlInNextConfig) {
-        Write-OK "    API_URL cohérente entre env.example et next.config.js"
+if ($apiUrls.Count -gt 1) {
+    $uniqueUrls = $apiUrls.Values | Sort-Object -Unique
+    if ($uniqueUrls.Count -eq 1) {
+        Write-OK "    API_URL cohérente entre toutes les configs: $($uniqueUrls[0])"
     } else {
-        Write-Warn "    API_URL différente: env.example=$apiUrlInExample vs next.config.js=$apiUrlInNextConfig"
+        $apiUrlDetails = $apiUrls.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
+        Write-Warn "    API_URL incohérente: $($apiUrlDetails -join ', ')"
         $configWarnings += "API_URL incohérente entre configs"
         $configScore -= 0.5
     }
 } else {
-    if ($apiUrlInExample) {
-        Write-OK "    API_URL définie dans env.example"
-    } elseif ($apiUrlInNextConfig) {
-        Write-OK "    API_URL définie dans next.config.js"
+    if ($apiUrls.Count -eq 1) {
+        Write-OK "    API_URL définie dans: $($apiUrls.Keys[0])"
     } else {
-        Write-Warn "    API_URL non trouvée dans les configs"
+        Write-Warn "    API_URL non trouvée"
         $configScore -= 0.3
     }
 }
 
-# Score final
+# Score final configuration (inclut cohérence web/serveur 3000)
 $auditResults.Scores["Configuration"] = [Math]::Max($configScore, 0)
 if ($configIssues.Count -gt 0) {
     $auditResults.Issues += $configIssues
 }
 if ($configWarnings.Count -gt 0) {
     $auditResults.Warnings += $configWarnings
+}
+
+Write-Host ""
+if ($configIssues.Count -eq 0 -and $configWarnings.Count -eq 0) {
+    Write-OK "Configuration parfaite - Score: $([math]::Round($configScore, 1))/10"
+} else {
+    if ($configIssues.Count -gt 0) {
+        Write-Err "Problèmes de configuration détectés:"
+        $configIssues | Select-Object -First 5 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+        if ($configIssues.Count -gt 5) {
+            Write-Host "  ... et $($configIssues.Count - 5) autres problèmes" -ForegroundColor Red
+        }
+    }
+    if ($configWarnings.Count -gt 0) {
+        Write-Warn "Avertissements de configuration:"
+        $configWarnings | Select-Object -First 3 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    }
+    Write-Host "[SCORE CONFIGURATION] $([math]::Round($configScore, 1))/10" -ForegroundColor Yellow
 }
 
 # ===============================================================================
@@ -1180,13 +1232,15 @@ $scoreWeights = @{
     "Securite" = 2.0
     "Performance" = 1.0
     "Optimisation" = 1.2
-    "Configuration" = 1.0
+    "Configuration" = 1.5
     "Tests" = 0.8
     "Documentation" = 0.5
     "Imports" = 0.5
     "GestionErreurs" = 0.8
     "Logs" = 0.6
     "BestPractices" = 0.8
+    "Structure API" = 1.0
+    "Uniformisation UI/UX" = 0.8
 }
 
 $totalWeight = ($scoreWeights.Values | Measure-Object -Sum).Sum
@@ -1254,6 +1308,192 @@ if ($orphanDocs.Count -gt 0) {
     $auditResults.Warnings += "Docs orphelins: " + ($orphanDocs.Name -join ", ")
 } else {
     Write-OK "Aucun doc orphelin"
+}
+
+# Vérifier que les fichiers de documentation seront copiés dans out/docs/ lors de l'export
+Write-Host ""
+Write-Host "  Vérification export GitHub Pages..." -ForegroundColor Cyan
+$exportScript = "scripts/deploy/export_static.ps1"
+if (Test-Path $exportScript) {
+    $scriptContent = Get-Content $exportScript -Raw
+    $checksDocs = ($scriptContent -match "DOCUMENTATION_PRESENTATION|DOCUMENTATION_DEVELOPPEURS|DOCUMENTATION_COMMERCIALE") -or ($scriptContent -match "public\\docs")
+    if ($checksDocs) {
+        Write-OK "  Script d'export vérifie/copie les fichiers de documentation"
+    } else {
+        Write-Err "  Script d'export ne vérifie PAS les fichiers de documentation"
+        $auditResults.Warnings += "Script export ne vérifie pas les fichiers de documentation"
+    }
+} else {
+    Write-Err "  Script d'export manquant: $exportScript"
+    $auditResults.Warnings += "Script d'export manquant"
+}
+
+# Vérifier que docs/ contient les fichiers de documentation (si le build a été fait)
+if (Test-Path "docs/docs") {
+    $docsInBuild = Get-ChildItem -Path "docs/docs" -Filter "DOCUMENTATION_*.html" -ErrorAction SilentlyContinue
+    if ($docsInBuild.Count -eq 3) {
+        Write-OK "  Build docs/ contient les 3 fichiers de documentation"
+        
+        # Vérifier que les fichiers ne sont pas obsolètes (comparer avec public/docs/)
+        $outdatedCount = 0
+        foreach ($doc in $docsInBuild) {
+            $sourceDoc = "public/docs/$($doc.Name)"
+            if (Test-Path $sourceDoc) {
+                $sourceDate = (Get-Item $sourceDoc).LastWriteTime
+                $buildDate = $doc.LastWriteTime
+                if ($sourceDate -gt $buildDate) {
+                    $outdatedCount++
+                    Write-Warn "  Fichier obsolète: $($doc.Name) (source: $sourceDate, build: $buildDate)"
+                    $auditResults.Warnings += "Fichier documentation obsolète: $($doc.Name)"
+                }
+            }
+        }
+        if ($outdatedCount -eq 0) {
+            Write-OK "  Tous les fichiers de documentation sont à jour"
+        } else {
+            Write-Err "  $outdatedCount fichier(s) de documentation obsolète(s) - Rebuild nécessaire"
+            Write-Host "    💡 Action: .\scripts\deploy\export_static.ps1 puis git add docs/ .nojekyll && git commit -m 'Deploy: Update GitHub Pages' && git push" -ForegroundColor Cyan
+            $auditResults.Errors += "$outdatedCount fichier(s) de documentation obsolète(s) dans docs/"
+        }
+    } else {
+        Write-Warn "  Build docs/ contient seulement $($docsInBuild.Count)/3 fichiers de documentation"
+        Write-Host "    💡 Action: .\scripts\deploy\export_static.ps1 pour régénérer le build" -ForegroundColor Cyan
+        $auditResults.Warnings += "Build docs/ incomplet: $($docsInBuild.Count)/3 fichiers"
+    }
+} else {
+    Write-Warn "  Dossier docs/docs/ non trouvé (build pas encore effectué)"
+    Write-Host "    💡 Action: .\scripts\deploy\export_static.ps1 pour créer le build" -ForegroundColor Cyan
+}
+
+# Vérifier que les fichiers de documentation sont bien dans le repo git
+Write-Host ""
+Write-Section "[DOCUMENTATION] Vérification Git - Documentation déployée"
+$gitStatus = git status --porcelain 2>&1
+if ($LASTEXITCODE -eq 0) {
+    $docsModified = $gitStatus | Select-String -Pattern "docs/docs/.*\.html|public/docs/.*\.html"
+    if ($docsModified) {
+        Write-Warn "  Fichiers de documentation modifiés non commités:"
+        $docsModified | ForEach-Object { Write-Warn "    $_" }
+        Write-Host "    💡 Action: git add docs/ public/docs/*.html && git commit -m 'Deploy: Update GitHub Pages' && git push" -ForegroundColor Cyan
+        $auditResults.Warnings += "Fichiers documentation modifiés non commités"
+    } else {
+        Write-OK "  Tous les fichiers de documentation sont à jour dans Git"
+    }
+} else {
+    Write-Warn "  Impossible de vérifier le statut Git (pas un repo Git ou git non disponible)"
+}
+
+# Vérifier la conformité de la documentation (pas d'historique, pas de redondances, seulement actuel + roadmap)
+Write-Host ""
+Write-Section "[DOCUMENTATION] Vérification Conformité - Structure et Contenu"
+$docFiles = @(
+    "public/docs/DOCUMENTATION_PRESENTATION.html",
+    "public/docs/DOCUMENTATION_DEVELOPPEURS.html",
+    "public/docs/DOCUMENTATION_COMMERCIALE.html"
+)
+
+$conformityIssues = 0
+$historyKeywords = @(
+    "Historique", "historique", "Changelog", "changelog", 
+    "Améliorations v\d+\.\d+", "Version \d+\.\d+.*Décembre", "Décembre \d{4}",
+    "Score.*\d+/\d+", "Tag git", "v\d+\.\d+-\d+percent", "Version \d+\.\d+.*Score"
+)
+$redundancyPatterns = @(
+    "Fonctionnalités.*Principales.*Fonctionnalités",
+    "Version.*Production.*Version.*Production",
+    "✅.*✅.*✅" # Trop de checkmarks répétés
+)
+
+foreach ($docFile in $docFiles) {
+    if (Test-Path $docFile) {
+        $docName = Split-Path $docFile -Leaf
+        $content = Get-Content $docFile -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            $fileIssues = 0
+            
+            # Vérifier l'absence d'historique
+            Write-Host "  Analyse: $docName" -ForegroundColor Gray
+            $historyFound = @()
+            foreach ($keyword in $historyKeywords) {
+                if ($content -match $keyword) {
+                    $matches = [regex]::Matches($content, $keyword)
+                    if ($matches.Count -gt 0) {
+                        $historyFound += "$keyword ($($matches.Count) occurrence(s))"
+                    }
+                }
+            }
+            if ($historyFound.Count -gt 0) {
+                Write-Warn "    Historique detecte: $($historyFound -join ', ')"
+                $auditResults.Warnings += "$docName : Historique detecte ($($historyFound.Count) mot(s)-cle(s))"
+                $fileIssues++
+            } else {
+                Write-OK "    Aucun historique detecte"
+            }
+            
+            # Vérifier les redondances (sections qui se répètent)
+            $redundancyFound = @()
+            foreach ($pattern in $redundancyPatterns) {
+                if ($content -match $pattern) {
+                    $redundancyFound += $pattern
+                }
+            }
+            if ($redundancyFound.Count -gt 0) {
+                Write-Warn "    Redondances detectees: $($redundancyFound -join ', ')"
+                $auditResults.Warnings += "$docName : Redondances detectees"
+                $fileIssues++
+            } else {
+                Write-OK "    Aucune redondance majeure detectee"
+            }
+            
+            # Vérifier la présence de la roadmap (futur)
+            $hasRoadmap = $content -match "Roadmap|roadmap|Améliorations Futures|améliorations futures"
+            if ($hasRoadmap) {
+                Write-OK "    Roadmap presente (futur)"
+            } else {
+                Write-Warn "    Roadmap manquante (section future recommandee)"
+                $auditResults.Warnings += "$docName : Roadmap manquante"
+                $fileIssues++
+            }
+            
+            # Vérifier la présence de l'état actuel
+            $hasCurrentState = $content -match "Version.*Production.*Actuelle|Actuelle|État actuel|état actuel|Fonctionnalités.*Actuelles"
+            if ($hasCurrentState) {
+                Write-OK "    Etat actuel present"
+            } else {
+                Write-Warn "    Etat actuel non clairement identifie"
+                $auditResults.Warnings += "$docName : Etat actuel non clairement identifie"
+                $fileIssues++
+            }
+            
+            # Vérifier qu'il n'y a pas trop de détails techniques redondants
+            $technicalSections = ([regex]::Matches($content, "h[2-4].*[Tt]echnique|h[2-4].*[Aa]rchitecture|h[2-4].*[Ii]mplémentation")).Count
+            if ($technicalSections -gt 5) {
+                Write-Warn "    Trop de sections techniques ($technicalSections) - risque de redondance"
+                $auditResults.Warnings += "$docName : Trop de sections techniques ($technicalSections)"
+                $fileIssues++
+            }
+            
+            if ($fileIssues -eq 0) {
+                Write-OK "  OK $docName conforme (actuel + roadmap, pas d'historique, pas de redondances)"
+            } else {
+                $conformityIssues += $fileIssues
+                Write-Warn "  ATTENTION $docName : $fileIssues probleme(s) de conformite detecte(s)"
+            }
+        }
+    } else {
+        Write-Warn "  Fichier manquant: $docFile"
+        $auditResults.Warnings += "Documentation manquante: $docName"
+    }
+}
+
+if ($conformityIssues -eq 0) {
+    Write-OK "Toutes les documentations sont conformes (actuel + roadmap, pas d'historique, pas de redondances)"
+} else {
+    Write-Warn "$conformityIssues probleme(s) de conformite detecte(s) dans la documentation"
+    Write-Host "  Criteres attendus:" -ForegroundColor Cyan
+    Write-Host "    - Pas d'historique (dates, versions passees, scores, tags git)" -ForegroundColor Gray
+    Write-Host "    - Pas de redondances (sections qui se repetent)" -ForegroundColor Gray
+    Write-Host "    - Seulement etat actuel factuel + roadmap (futur)" -ForegroundColor Gray
 }
 
 # Vérifier la cohérence des liens dans Sidebar.js
@@ -1493,20 +1733,27 @@ if (Test-Path "api.php") {
     
     foreach ($ep in $criticalEndpoints) {
         $found = $false
-        # Vérifier directement dans api.php avec recherche directe
-        # Chercher pattern: preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH'
-        $searchPattern = $ep.Endpoint -replace '\(\\d\+\)', '\(\\d\+\)'
-        $fullPattern = "preg_match\('#$searchPattern'#" -replace '\\\\', '\\'
         
-        # Vérifier que la route existe avec la méthode correcte ET le handler
-        if ($apiContent -match $fullPattern) {
-            # Vérifier que c'est bien avec la bonne méthode
-            $routeBlock = [regex]::Match($apiContent, "$fullPattern.*?\`$method === '$($ep.Method)'", [System.Text.RegularExpressions.RegexOptions]::Singleline)
-            if ($routeBlock.Success) {
-                # Vérifier que le handler est présent dans ce bloc
-                if ($routeBlock.Value -match $ep.Handler) {
+        # Format réel dans api.php : } elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH') {
+        #     handleRestorePatient($m[1]);
+        # Recherche simple : chercher le handler et vérifier qu'il est dans le contexte d'une route PATCH
+        if ($apiContent -match $ep.Handler) {
+            # Trouver toutes les occurrences du handler
+            $handlerMatches = [regex]::Matches($apiContent, $ep.Handler, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            
+            foreach ($match in $handlerMatches) {
+                # Extraire 400 caractères avant le handler pour vérifier le contexte
+                $startIndex = [Math]::Max(0, $match.Index - 400)
+                $context = $apiContent.Substring($startIndex, $match.Index - $startIndex)
+                
+                # Vérifier que le contexte contient la route et la méthode PATCH
+                # Le pattern réel est : preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH'
+                $routePattern = $ep.Endpoint -replace '\(', '\(' -replace '\)', '\)' -replace '\+', '\+'
+                # Chercher preg_match avec la route et PATCH dans le contexte
+                if ($context -match "preg_match.*#.*$routePattern" -and $context -match "\`\$method === '$($ep.Method)'") {
                     Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
                     $found = $true
+                    break
                 }
             }
         }
@@ -1773,7 +2020,9 @@ if ($uiIssues.Count -eq 0 -and $uiWarnings.Count -eq 0) {
     Write-Host "[SCORE UI/UX] $([math]::Round($uiScore, 1))/10" -ForegroundColor Yellow
 }
 
-$auditResults.Scores["Uniformisation UI/UX"] = $uiScore
+# S'assurer que le score ne peut pas être négatif et est arrondi
+$uiScoreFinal = [Math]::Max(0, [Math]::Round($uiScore, 1))
+$auditResults.Scores["Uniformisation UI/UX"] = $uiScoreFinal
 $auditResults.Issues += $uiIssues
 $auditResults.Warnings += $uiWarnings
 
