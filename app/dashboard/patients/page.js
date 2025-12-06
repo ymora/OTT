@@ -3,9 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
-import { useAuth } from '@/contexts/AuthContext'
-import { fetchJson } from '@/lib/api'
+import { useMemo, useState } from 'react'
 import { useEntityPage, useAutoRefresh, useDevicesUpdateListener, useToggle } from '@/hooks'
 import { fetchJson } from '@/lib/api'
 import LoadingSpinner from '@/components/LoadingSpinner'
