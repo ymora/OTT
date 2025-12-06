@@ -20,4 +20,6 @@ export { useLocalStorage } from './useLocalStorage'
 export { useTimeout, createTimeout } from './useTimeout'
 export { useTimeout as useTimerTimeout, useInterval as useTimerInterval, useTimers } from './useTimer'
 export { useEntityRestore } from './useEntityRestore'
+export { useEntityArchive } from './useEntityArchive'
+export { useEntityPermanentDelete } from './useEntityPermanentDelete'
 

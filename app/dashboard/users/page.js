@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useApiData, useFilter, useEntityModal, useEntityRestore } from '@/hooks'
+import { useApiData, useFilter, useEntityModal, useEntityRestore, useEntityArchive, useEntityPermanentDelete } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -33,8 +33,6 @@ export default function UsersPage() {
   
   // Modal de suppression
   // Plus de modal - actions directes
-  const [userToDelete, setUserToDelete] = useState(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
 
   // Charger les données avec useApiData
@@ -58,6 +56,41 @@ export default function UsersPage() {
     },
     invalidateCache,
     refetch
+  })
+
+  // Utiliser le hook unifié pour l'archivage
+  const { archive: handleArchive, archiving } = useEntityArchive({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'users',
+    refetch,
+    onSuccess: () => {
+      setSuccess('✅ Utilisateur archivé avec succès')
+    },
+    onError: (errorMessage) => {
+      setActionError(errorMessage)
+    },
+    invalidateCache,
+    currentUser,
+    onCloseModal: closeModal,
+    editingItem
+  })
+
+  // Utiliser le hook unifié pour la suppression définitive
+  const { permanentDelete: handlePermanentDelete, deleting: deletingPermanent } = useEntityPermanentDelete({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'users',
+    refetch,
+    onSuccess: () => {
+      setSuccess('✅ Utilisateur supprimé définitivement')
+    },
+    onError: (errorMessage) => {
+      setActionError(errorMessage)
+    },
+    invalidateCache,
+    onCloseModal: closeModal,
+    editingItem
   })
 
   const allUsers = data?.users?.users || []
@@ -95,80 +128,6 @@ export default function UsersPage() {
     // viewer supprimé
   }
 
-  // Fonctions de suppression
-  const handleArchive = async (user = null) => {
-    const targetUser = user || userToDelete
-    if (!targetUser) return
-    setUserToDelete(targetUser)
-    
-    try {
-      setDeleteLoading(true)
-      setActionError(null)
-      // Forcer l'archivage avec ?archive=true pour les admins, ou DELETE normal pour les non-admins
-      const userId = targetUser.id
-      const url = currentUser?.role_name === 'admin' 
-        ? `/api.php/users/${userId}?archive=true`
-        : `/api.php/users/${userId}`
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        url,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      if (response.success) {
-        setSuccess('✅ Utilisateur archivé avec succès')
-        refetch()
-        setUserToDelete(null)
-        if (showModal && editingItem && editingItem.id === targetUser.id) {
-          closeModal()
-        }
-      } else {
-        setActionError(response.error || 'Erreur lors de l\'archivage')
-      }
-    } catch (err) {
-      setActionError(err.message || 'Erreur lors de l\'archivage')
-      logger.error('Erreur archivage user:', err)
-    } finally {
-      setDeleteLoading(false)
-    }
-  }
-  
-  const handlePermanentDelete = async (user = null) => {
-    const targetUser = user || userToDelete
-    if (!targetUser) return
-    setUserToDelete(targetUser)
-    
-    // Suppression définitive sans confirmation pour les admins
-    try {
-      setDeleteLoading(true)
-      setActionError(null)
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/users/${targetUser.id}?permanent=true`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      if (response.success) {
-        setSuccess('✅ Utilisateur supprimé définitivement')
-        refetch()
-        setUserToDelete(null)
-        if (showModal && editingItem && editingItem.id === targetUser.id) {
-          closeModal()
-        }
-      } else {
-        setActionError(response.error || 'Erreur lors de la suppression')
-      }
-    } catch (err) {
-      setActionError(err.message || 'Erreur lors de la suppression')
-      logger.error('Erreur suppression user:', err)
-    } finally {
-      setDeleteLoading(false)
-    }
-  }
-  
-  
   // Fonction utilitaire pour créer un timeout avec cleanup
   const timeoutRefs = useRef([])
   useEffect(() => {
@@ -350,10 +309,10 @@ export default function UsersPage() {
                                     <button
                                       className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
                                       onClick={() => handleArchive(user)}
-                                      disabled={deleteLoading}
+                                      disabled={archiving === user.id}
                                       title="Archiver l'utilisateur"
                                     >
-                                      <span className="text-lg">{deleteLoading ? '⏳' : '🗄️'}</span>
+                                      <span className="text-lg">{archiving === user.id ? '⏳' : '🗄️'}</span>
                                     </button>
                                   )}
                                 </>

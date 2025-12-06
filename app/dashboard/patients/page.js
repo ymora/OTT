@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener, useEntityRestore } from '@/hooks'
+import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener, useEntityRestore, useEntityArchive, useEntityPermanentDelete } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -38,7 +38,6 @@ export default function PatientsPage() {
   const [showUnassignModal, setShowUnassignModal] = useState(false)
   const [selectedDeviceForUnassign, setSelectedDeviceForUnassign] = useState(null)
   // Plus de modal - actions directes
-  const [deleteLoading, setDeleteLoading] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
 
   // Charger les données avec useApiData
@@ -62,6 +61,41 @@ export default function PatientsPage() {
     },
     invalidateCache,
     refetch
+  })
+
+  // Utiliser le hook unifié pour l'archivage
+  const { archive: handleArchive, archiving } = useEntityArchive({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'patients',
+    refetch,
+    onSuccess: () => {
+      setSuccess('✅ Patient archivé avec succès')
+    },
+    onError: (errorMessage) => {
+      setActionError(errorMessage)
+    },
+    invalidateCache,
+    currentUser,
+    onCloseModal: closeModal,
+    editingItem
+  })
+
+  // Utiliser le hook unifié pour la suppression définitive
+  const { permanentDelete: handlePermanentDelete, deleting: deletingPermanent } = useEntityPermanentDelete({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'patients',
+    refetch,
+    onSuccess: () => {
+      setSuccess('✅ Patient supprimé définitivement')
+    },
+    onError: (errorMessage) => {
+      setActionError(errorMessage)
+    },
+    invalidateCache,
+    onCloseModal: closeModal,
+    editingItem
   })
 
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
@@ -433,30 +467,30 @@ export default function PatientsPage() {
                                       <button
                                         className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
                                         onClick={() => handleArchive(p)}
-                                        disabled={deleteLoading}
+                                        disabled={deleteLoading || archiving === p.id}
                                         title="Archiver le patient"
                                       >
-                                        <span className="text-lg">{deleteLoading ? '⏳' : '🗄️'}</span>
+                                        <span className="text-lg">{(deleteLoading || archiving === p.id) ? '⏳' : '🗄️'}</span>
                                       </button>
                                       <button
                                         className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                                         onClick={() => handlePermanentDelete(p)}
-                                        disabled={deleteLoading}
+                                        disabled={deletingPermanent === p.id}
                                         title="Supprimer définitivement le patient"
                                       >
-                                        <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
+                                        <span className="text-lg">{deletingPermanent === p.id ? '⏳' : '🗑️'}</span>
                                       </button>
                                     </>
                                   ) : (
                                     /* Non-administrateurs : Archive uniquement (pas de suppression définitive) */
-                                    <button
-                                      className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
-                                      onClick={() => handleArchive(p)}
-                                      disabled={deleteLoading}
-                                      title="Archiver le patient"
-                                    >
-                                      <span className="text-lg">{deleteLoading ? '⏳' : '🗄️'}</span>
-                                    </button>
+                                      <button
+                                        className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
+                                        onClick={() => handleArchive(p)}
+                                        disabled={deleteLoading || archiving === p.id}
+                                        title="Archiver le patient"
+                                      >
+                                        <span className="text-lg">{(deleteLoading || archiving === p.id) ? '⏳' : '🗄️'}</span>
+                                      </button>
                                   )}
                                 </>
                               )}

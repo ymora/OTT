@@ -221,6 +221,30 @@ try {
         @{Pattern='try\s*\{'; Description='Try/catch'; Seuil=100}
     )
     
+    # Détecter les fonctions d'archivage/suppression dupliquées
+    Write-Info "Analyse fonctions archivage/suppression..."
+    $archiveFunctions = @($searchFiles | Select-String -Pattern "const handleArchive\s*=|function handleArchive|handleArchive\s*=\s*async")
+    $deleteFunctions = @($searchFiles | Select-String -Pattern "const handlePermanentDelete\s*=|function handlePermanentDelete|handlePermanentDelete\s*=\s*async")
+    $restoreFunctions = @($searchFiles | Select-String -Pattern "const handleRestore\w+\s*=|function handleRestore\w+|handleRestore\w+\s*=\s*async")
+    
+    if ($archiveFunctions.Count -gt 1) {
+        Write-Warn "handleArchive dupliquee: $($archiveFunctions.Count) occurrences (devrait utiliser useEntityArchive)"
+        $duplications += @{Pattern="handleArchive dupliquee"; Count=$archiveFunctions.Count; Files=($archiveFunctions | Group-Object Path).Count}
+        $auditResults.Recommendations += "Unifier handleArchive avec useEntityArchive hook ($($archiveFunctions.Count) occurrences)"
+    }
+    
+    if ($deleteFunctions.Count -gt 1) {
+        Write-Warn "handlePermanentDelete dupliquee: $($deleteFunctions.Count) occurrences (devrait utiliser useEntityPermanentDelete)"
+        $duplications += @{Pattern="handlePermanentDelete dupliquee"; Count=$deleteFunctions.Count; Files=($deleteFunctions | Group-Object Path).Count}
+        $auditResults.Recommendations += "Unifier handlePermanentDelete avec useEntityPermanentDelete hook ($($deleteFunctions.Count) occurrences)"
+    }
+    
+    if ($restoreFunctions.Count -gt 1) {
+        Write-Warn "handleRestore* dupliquee: $($restoreFunctions.Count) occurrences (devrait utiliser useEntityRestore)"
+        $duplications += @{Pattern="handleRestore* dupliquee"; Count=$restoreFunctions.Count; Files=($restoreFunctions | Group-Object Path).Count}
+        $auditResults.Recommendations += "Unifier handleRestore* avec useEntityRestore hook ($($restoreFunctions.Count) occurrences)"
+    }
+    
     $duplications = @()
     
     foreach ($pattern in $patterns) {
