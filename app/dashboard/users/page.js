@@ -169,7 +169,7 @@ export default function UsersPage() {
             <input
               type="checkbox"
               checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
+              onChange={toggleShowArchived}
               className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -189,8 +189,8 @@ export default function UsersPage() {
 
       <div className="card">
         <ErrorMessage error={error} onRetry={refetch} />
-        <ErrorMessage error={actionError} onClose={() => setActionError(null)} />
-        <SuccessMessage message={success} onClose={() => setSuccess(null)} />
+        <ErrorMessage error={actionError} onClose={resetMessages} />
+        <SuccessMessage message={success} onClose={resetMessages} />
         {loading ? (
           <LoadingSpinner size="lg" text="Chargement des utilisateurs..." />
         ) : (

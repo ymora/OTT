@@ -34,18 +34,19 @@ export default function PatientsPage() {
   const isPatientArchived = isEntityArchived
   
   // Utiliser useAsyncState pour gérer success/error
-  const { success, error: actionError, setSuccess, setError: setActionError, reset: resetMessages } = useAsyncState()
+  const asyncState = useAsyncState()
+  const { success, error: actionError, setSuccess, setError: setActionError, reset: resetMessages } = asyncState
   
   // Utiliser le hook useEntityModal pour gérer le modal
   const { isOpen: showModal, editingItem, openCreate: openCreateModal, openEdit: openEditModal, close: closeModal } = useEntityModal()
   const [unassigningDevice, setUnassigningDevice] = useState(null)
   const [assigningDevice, setAssigningDevice] = useState(null)
-  const [showAssignModal, setShowAssignModal] = useToggle(false)
+  const [showAssignModal, , , setShowAssignModalFalse] = useToggle(false)
   const [selectedPatientForAssign, setSelectedPatientForAssign] = useState(null)
-  const [showUnassignModal, setShowUnassignModal] = useToggle(false)
+  const [showUnassignModal, , , setShowUnassignModalFalse] = useToggle(false)
   const [selectedDeviceForUnassign, setSelectedDeviceForUnassign] = useState(null)
   // Plus de modal - actions directes
-  const [showArchived, setShowArchived] = useToggle(false)
+  const [showArchived, , toggleShowArchived] = useToggle(false)
 
   // Charger les données avec useApiData
   // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
@@ -173,7 +174,7 @@ export default function PatientsPage() {
         { requiresAuth: true }
       )
       
-      setShowAssignModal(false)
+      setShowAssignModalFalse()
       setSelectedPatientForAssign(null)
       await refetch()
       setSuccess(`Dispositif assigné avec succès à ${patient.first_name} ${patient.last_name}`)
@@ -230,7 +231,7 @@ export default function PatientsPage() {
         logger.warn('Erreur réinitialisation config dispositif:', configErr)
       }
       
-      setShowUnassignModal(false)
+      setShowUnassignModalFalse()
       setSelectedDeviceForUnassign(null)
       // Recharger les dispositifs et les patients
       await refetch()
@@ -308,7 +309,7 @@ export default function PatientsPage() {
             <input
               type="checkbox"
               checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
+              onChange={toggleShowArchived}
               className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">
