@@ -44,10 +44,13 @@ function Invoke-Check-StructureAPI {
                 $contextLength = [Math]::Min(400, $remainingLength)
                 $context = $apiContent.Substring($lineStart, $contextLength)
                 
-                # Vérifier si c'est dans un commentaire
-                $beforeMatch = $context.Substring(0, $context.Length - ($remainingLength - ($match.Index - $lineStart)))
-                if ($beforeMatch -match '//.*handle|/\*.*handle|#.*handle') {
-                    continue
+                # Vérifier si c'est dans un commentaire - calcul simplifié et sécurisé
+                $matchPosInContext = $match.Index - $lineStart
+                if ($matchPosInContext -gt 0 -and $matchPosInContext -le $context.Length) {
+                    $beforeMatch = $context.Substring(0, $matchPosInContext)
+                    if ($beforeMatch -match '//.*handle|/\*.*handle|#.*handle') {
+                        continue
+                    }
                 }
             }
             
@@ -59,8 +62,10 @@ function Invoke-Check-StructureAPI {
             $handlersCalled[$handler] = $true
         }
         
-        # Extraire handlers définis
+        # Extraire handlers définis (dans handlers/ ET dans api.php)
         $handlersDefined = @{}
+        
+        # Handlers dans api/handlers/
         $handlerFiles = Get-ChildItem -Path (Join-Path $ProjectPath "api" "handlers") -Recurse -File -Include *.php -ErrorAction SilentlyContinue
         
         foreach ($file in $handlerFiles) {
@@ -70,6 +75,14 @@ function Invoke-Check-StructureAPI {
                 foreach ($func in $functions) {
                     $handlersDefined[$func.Groups[1].Value] = $file.Name
                 }
+            }
+        }
+        
+        # Handlers définis directement dans api.php
+        if ($apiContent) {
+            $functions = [regex]::Matches($apiContent, "function (handle\w+)\(")
+            foreach ($func in $functions) {
+                $handlersDefined[$func.Groups[1].Value] = "api.php"
             }
         }
         

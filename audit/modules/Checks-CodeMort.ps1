@@ -29,6 +29,12 @@ function Invoke-Check-CodeMort {
         
         $searchFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$" }
         
+        # Inclure aussi les fichiers app/ dans la recherche
+        if (Test-Path "app") {
+            $appFiles = Get-ChildItem -Path app -Recurse -File -Include *.js,*.jsx -ErrorAction SilentlyContinue
+            $searchFiles = $searchFiles + $appFiles
+        }
+        
         # Analyser composants
         if (Test-Path "components") {
             Write-Info "Analyse composants..."
@@ -40,6 +46,9 @@ function Invoke-Check-CodeMort {
                 # Recherche améliorée : prendre en compte les alias d'imports (@/)
                 # Chercher l'import du composant (recherche simple sans échappement regex)
                 $allFiles = $searchFiles + $compFile
+                
+                # Exclure le fichier du composant lui-même des résultats
+                $allFiles = $allFiles | Where-Object { $_.FullName -ne $compFile.FullName }
                 $importUsage = 0
                 $jsxUsage = 0
                 
@@ -65,6 +74,21 @@ function Invoke-Check-CodeMort {
                                 $importUsage++
                                 break
                             }
+                        }
+                        
+                        # Chercher les lazy loading (React.lazy, dynamic import, next/dynamic)
+                        if ($content -like "*React.lazy*$compName*" -or 
+                            $content -like "*lazy(() =>*$compName*" -or
+                            $content -like "*dynamic(() =>*$compName*" -or
+                            $content -like "*dynamic(*import*$compName*" -or
+                            $content -like "*from*next/dynamic*$compName*") {
+                            $importUsage++
+                        }
+                        
+                        # Chercher les imports dynamiques avec await import()
+                        if ($content -like "*await import*$compName*" -or
+                            $content -like "*import(*$compName*") {
+                            $importUsage++
                         }
                         
                         # Chercher les utilisations JSX (pattern simple)
