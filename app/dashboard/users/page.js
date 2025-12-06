@@ -12,7 +12,7 @@ import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
 import ConfirmModal from '@/components/ConfirmModal'
-import { isTrue } from '@/lib/utils'
+import { isTrue, isArchived as isEntityArchived } from '@/lib/utils'
 import { fetchJson } from '@/lib/api'
 import logger from '@/lib/logger'
 
@@ -25,6 +25,9 @@ export default function UsersPage() {
     if (currentUser?.role_name === 'admin') return true
     return currentUser?.permissions?.includes(permission) || false
   }
+  
+  // Alias pour la fonction utilitaire unifiée
+  const isUserArchived = isEntityArchived
   const [actionError, setActionError] = useState(null)
   const [success, setSuccess] = useState(null)
   
@@ -45,6 +48,12 @@ export default function UsersPage() {
     ], [showArchived]),
     { requiresAuth: true }
   )
+
+  // Invalider le cache explicitement quand showArchived change pour forcer le rechargement
+  useEffect(() => {
+    invalidateCache()
+    refetch()
+  }, [showArchived, invalidateCache, refetch])
 
   // Utiliser le hook unifié pour la restauration
   const { restore: handleRestoreUser, restoring: restoringUser } = useEntityRestore('users', {
@@ -98,11 +107,7 @@ export default function UsersPage() {
   
   // Séparer les utilisateurs actifs et archivés
   const users = useMemo(() => {
-    return allUsers.filter(u => !u.deleted_at)
-  }, [allUsers])
-  
-  const archivedUsers = useMemo(() => {
-    return allUsers.filter(u => u.deleted_at)
+    return allUsers.filter(u => !isUserArchived(u))
   }, [allUsers])
 
   // Utiliser useFilter pour la recherche
@@ -129,11 +134,18 @@ export default function UsersPage() {
   }
 
   const handleModalSave = async () => {
-    setSuccess(editingItem ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
-    // Attendre un peu pour s'assurer que la base de données est bien mise à jour
-    // puis refetch pour recharger les données avec les notifications mises à jour
-    await new Promise(resolve => setTimeout(resolve, 100))
-    await refetch()
+    await withErrorHandling(async () => {
+      setSuccess(editingItem ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
+      // Attendre un peu pour s'assurer que la base de données est bien mise à jour
+      // puis refetch pour recharger les données avec les notifications mises à jour
+      await new Promise(resolve => setTimeout(resolve, 100))
+      await refetch()
+    }, {
+      errorMessage: 'Erreur lors de la sauvegarde',
+      onError: (err) => {
+        setActionError(err.message || 'Erreur lors de la sauvegarde')
+      }
+    })
   }
 
 
@@ -204,7 +216,8 @@ export default function UsersPage() {
                   </tr>
                 ) : (
                   filteredUsers.map((user, i) => {
-                    const isArchived = user.deleted_at !== null && user.deleted_at !== undefined && user.deleted_at !== ''
+                    // Vérifier de manière plus robuste si l'utilisateur est archivé
+                    const isArchived = isUserArchived(user)
                     return (
                     <tr 
                       key={user.id} 
@@ -246,6 +259,7 @@ export default function UsersPage() {
                       <td className="table-cell py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
                           {isArchived ? (
+                            // Utilisateurs archivés : uniquement le bouton de restauration
                             <button
                               onClick={() => handleRestoreUser(user)}
                               disabled={restoringUser === user.id}
@@ -255,6 +269,7 @@ export default function UsersPage() {
                               <span className="text-lg">{restoringUser === user.id ? '⏳' : '♻️'}</span>
                             </button>
                           ) : (
+                            // Utilisateurs actifs : boutons de modification, archivage, suppression
                             <>
                               <button
                                 className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"

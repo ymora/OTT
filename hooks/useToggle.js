@@ -1,28 +1,30 @@
+/**
+ * Hook pour gérer un état booléen toggleable
+ * Remplace les patterns useState(false) + setValue(!value)
+ * @module hooks/useToggle
+ */
+
 import { useState, useCallback } from 'react'
 
 /**
- * Hook pour gérer un état booléen avec toggle, open et close
- * Réduit la duplication de code pour les états on/off, show/hide, etc.
- * 
+ * Hook pour gérer un état booléen avec toggle
  * @param {boolean} initialValue - Valeur initiale (défaut: false)
- * @returns {[boolean, Object]} - [valeur, { toggle, open, close, set }]
- * 
- * @example
- * const [isOpen, { toggle, open, close }] = useToggle(false)
- * // Au lieu de:
- * // const [isOpen, setIsOpen] = useState(false)
- * // const toggle = () => setIsOpen(!isOpen)
- * // const open = () => setIsOpen(true)
- * // const close = () => setIsOpen(false)
+ * @returns {[boolean, Function, Function, Function]} [value, toggle, setTrue, setFalse]
  */
 export function useToggle(initialValue = false) {
   const [value, setValue] = useState(initialValue)
 
-  const toggle = useCallback(() => setValue(v => !v), [])
-  const open = useCallback(() => setValue(true), [])
-  const close = useCallback(() => setValue(false), [])
-  const set = useCallback((newValue) => setValue(newValue), [])
+  const toggle = useCallback(() => {
+    setValue(prev => !prev)
+  }, [])
 
-  return [value, { toggle, open, close, set }]
+  const setTrue = useCallback(() => {
+    setValue(true)
+  }, [])
+
+  const setFalse = useCallback(() => {
+    setValue(false)
+  }, [])
+
+  return [value, toggle, setTrue, setFalse]
 }
-

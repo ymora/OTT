@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic'
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener, useEntityRestore, useEntityArchive, useEntityPermanentDelete } from '@/hooks'
+import { useApiData, useFilter, useEntityModal, useEntityDelete, useAutoRefresh, useDevicesUpdateListener, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useToggle, useAsyncState } from '@/hooks'
+import { withErrorHandling } from '@/lib/errorHandler'
+import { safeApiCall } from '@/lib/apiHelpers'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -14,7 +16,7 @@ import SearchBar from '@/components/SearchBar'
 import UserPatientModal from '@/components/UserPatientModal'
 import Modal from '@/components/Modal'
 import ConfirmModal from '@/components/ConfirmModal'
-import { isTrue } from '@/lib/utils'
+import { isTrue, isArchived as isEntityArchived } from '@/lib/utils'
 import logger from '@/lib/logger'
 
 export default function PatientsPage() {
@@ -26,19 +28,24 @@ export default function PatientsPage() {
     if (currentUser?.role_name === 'admin') return true
     return currentUser?.permissions?.includes(permission) || false
   }
-  const [success, setSuccess] = useState(null)
-  const [actionError, setActionError] = useState(null)
+  
+  // Alias pour la fonction utilitaire unifiée
+  const isArchived = isEntityArchived
+  const isPatientArchived = isEntityArchived
+  
+  // Utiliser useAsyncState pour gérer success/error
+  const { success, error: actionError, setSuccess, setError: setActionError, reset: resetMessages } = useAsyncState()
   
   // Utiliser le hook useEntityModal pour gérer le modal
   const { isOpen: showModal, editingItem, openCreate: openCreateModal, openEdit: openEditModal, close: closeModal } = useEntityModal()
   const [unassigningDevice, setUnassigningDevice] = useState(null)
   const [assigningDevice, setAssigningDevice] = useState(null)
-  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [showAssignModal, setShowAssignModal] = useToggle(false)
   const [selectedPatientForAssign, setSelectedPatientForAssign] = useState(null)
-  const [showUnassignModal, setShowUnassignModal] = useState(false)
+  const [showUnassignModal, setShowUnassignModal] = useToggle(false)
   const [selectedDeviceForUnassign, setSelectedDeviceForUnassign] = useState(null)
   // Plus de modal - actions directes
-  const [showArchived, setShowArchived] = useState(false)
+  const [showArchived, setShowArchived] = useToggle(false)
 
   // Charger les données avec useApiData
   // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
@@ -50,6 +57,12 @@ export default function PatientsPage() {
     ], [showArchived]),
     { requiresAuth: true }
   )
+
+  // Invalider le cache explicitement quand showArchived change pour forcer le rechargement
+  useEffect(() => {
+    invalidateCache()
+    refetch()
+  }, [showArchived, invalidateCache, refetch])
 
   // Utiliser le hook unifié pour la restauration
   const { restore: handleRestorePatient, restoring: restoringPatient } = useEntityRestore('patients', {
@@ -109,21 +122,17 @@ export default function PatientsPage() {
   
   // Séparer les patients actifs et archivés
   const patients = useMemo(() => {
-    return allPatients.filter(p => !p.deleted_at)
+    return allPatients.filter(p => !isPatientArchived(p))
   }, [allPatients])
   
-  const archivedPatients = useMemo(() => {
-    return allPatients.filter(p => p.deleted_at)
-  }, [allPatients])
-  
-  // Filtrer uniquement les dispositifs assignés aux patients
+  // Filtrer uniquement les dispositifs assignés aux patients (non archivés)
   const devices = useMemo(() => {
-    return (allDevices || []).filter(d => d.patient_id)
+    return (allDevices || []).filter(d => d.patient_id && !isArchived(d))
   }, [allDevices])
   
-  // Dispositifs libres (non assignés)
+  // Dispositifs libres (non assignés et non archivés)
   const freeDevices = useMemo(() => {
-    return (allDevices || []).filter(d => !d.patient_id && !d.deleted_at)
+    return (allDevices || []).filter(d => !d.patient_id && !isArchived(d))
   }, [allDevices])
 
   // Utiliser useFilter pour la recherche
@@ -242,14 +251,14 @@ export default function PatientsPage() {
 
   const openUnassignModal = (device) => {
     setSelectedDeviceForUnassign(device)
-    setShowUnassignModal(true)
-    setActionError(null)
+    setShowUnassignModalTrue()
+    resetMessages()
   }
 
   const closeUnassignModal = () => {
-    setShowUnassignModal(false)
+    setShowUnassignModalFalse()
     setSelectedDeviceForUnassign(null)
-    setActionError(null)
+    resetMessages()
   }
 
   const openAssignModal = (patient) => {
@@ -258,15 +267,15 @@ export default function PatientsPage() {
       return
     }
     setSelectedPatientForAssign(patient)
-    setActionError(null)
+    resetMessages()
     refetch()
-    setShowAssignModal(true)
+    setShowAssignModalTrue()
   }
 
   const closeAssignModal = () => {
-    setShowAssignModal(false)
+    setShowAssignModalFalse()
     setSelectedPatientForAssign(null)
-    setActionError(null)
+    resetMessages()
   }
 
   // Les fonctions openCreateModal, openEditModal, closeModal sont maintenant gérées par useEntityModal
@@ -342,7 +351,8 @@ export default function PatientsPage() {
                   </tr>
                 ) : (
                   filteredPatients.map((p, i) => {
-                    const isArchived = p.deleted_at !== null && p.deleted_at !== undefined && p.deleted_at !== ''
+                    // Vérifier de manière plus robuste si le patient est archivé
+                    const isArchived = isPatientArchived(p)
                     return (
                     <tr 
                       key={p.id} 
