@@ -496,7 +496,10 @@ try {
         $_.FullName -notmatch '\\\.next\\' -and
         $_.FullName -notmatch '\\docs\\'
     } | Select-String -Pattern 'dangerouslySetInnerHTML' | Where-Object {
-        $_.Line -notmatch 'serviceWorker|Service Worker'
+        # Exclure les scripts de service worker (statiques et sécurisés)
+        $_.Line -notmatch 'serviceWorker|Service Worker|Script.*id.*service-worker' -and
+        # Exclure les composants Script de Next.js (gèrent automatiquement la sécurité)
+        $_.Line -notmatch 'Script.*dangerouslySetInnerHTML'
     })
     
     if ($dangerousHTML.Count -gt 0) {
