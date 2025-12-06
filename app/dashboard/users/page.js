@@ -298,10 +298,10 @@ export default function UsersPage() {
                                       <button
                                         className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                                         onClick={() => handlePermanentDelete(user)}
-                                        disabled={deleteLoading}
+                                        disabled={deletingPermanent === user.id}
                                         title="Supprimer définitivement l'utilisateur"
                                       >
-                                        <span className="text-lg">{deleteLoading ? '⏳' : '🗑️'}</span>
+                                        <span className="text-lg">{deletingPermanent === user.id ? '⏳' : '🗑️'}</span>
                                       </button>
                                     </>
                                   ) : (
