@@ -860,7 +860,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li><strong>Flash Firmware</strong> : Flasher un firmware compilé via OTA ou USB depuis le modal de détails</li>
         <li><strong>Streaming USB</strong> : Visualiser les mesures en temps réel via USB avec affichage min/max (débit, batterie, RSSI)</li>
         <li><strong>Carte Interactive</strong> : Visualisation géographique des dispositifs avec Leaflet</li>
-        <li><strong>Historique</strong> : Consulter les mesures, logs et alertes de chaque dispositif</li>
+        <li><strong>Logs</strong> : Consulter les mesures, logs et alertes de chaque dispositif</li>
     </ul>
     
     <h4>⚙️ Outils Techniques</h4>
@@ -1272,7 +1272,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <p>L'onglet Journal du modal de détails dispositif :</p>
     <div style="text-align: center; margin: 2rem 0;">
         <img src="screenshots/modal-device-logs.png" alt="Modal logs dispositif" style="max-width: 100%; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
-        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Onglet Journal du modal de détails avec historique des logs du dispositif</p>
+        <p class="text-sm text-gray-600" style="margin-top: 0.5rem;">Onglet Journal du modal de détails avec logs du dispositif</p>
     </div>
 </section>
 
@@ -1335,7 +1335,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
                 <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
             </tr>
             <tr>
-                <td style="padding: 0.75rem; border: 1px solid #ddd;">Voir les détails d'un dispositif (statut, batterie, historique)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Voir les détails d'un dispositif (statut, batterie, logs)</td>
                 <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
                 <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
                 <td style="padding: 0.75rem; text-align: center; border: 1px solid #ddd;">✅</td>
@@ -2041,7 +2041,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
             <li>✅ Mise à jour OTA (Over-The-Air) du firmware</li>
             <li>✅ Carte interactive Leaflet avec géolocalisation</li>
             <li>✅ Système d'alertes et notifications</li>
-            <li>✅ <strong>Uniformisation UI/UX (Score 10/10)</strong> - Badges et tables cohérents</li>
+            <li>✅ <strong>Uniformisation UI/UX</strong> - Badges et tables cohérents</li>
             <li>✅ <strong>Gestion des timers avec cleanup automatique</strong> - Hooks <code>useTimer</code></li>
             <li>✅ <strong>Utilitaires de refactoring</strong> - <code>apiHelpers</code> et <code>errorHandler</code></li>
             <li>✅ <strong>Gestion des archives</strong> - Seule restauration disponible pour éléments archivés</li>
@@ -2115,7 +2115,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
 
 <div class="footer">
     <p style="font-size: 1.3rem; margin-bottom: 0.5rem;"><strong>© 2025 HAPPLYZ MEDICAL SAS</strong></p>
-    <p>OTT - Version 1.0 Production (Décembre 2024) | Documentation Développeurs</p>
+    <p>OTT - Version 1.0 Production | Documentation Développeurs</p>
     <p style="margin-top: 1rem; font-size: 1rem; font-weight: bold;">
         📚 Documentation :
         <a href="DOCUMENTATION_PRESENTATION.html" style="color: white; text-decoration: underline; margin: 0 0.5rem;">📸 Présentation</a> | 

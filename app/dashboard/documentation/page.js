@@ -143,6 +143,7 @@ export default function DocumentationPage() {
             sendThemeToIframe()
           }
           sendWithRetry() // Immédiatement
+          // Utiliser des timeouts (pas besoin de cleanup car iframe reste monté pendant la vie du composant)
           setTimeout(sendWithRetry, 100) // Après 100ms
           setTimeout(sendWithRetry, 500) // Après 500ms
         }}

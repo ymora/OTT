@@ -128,25 +128,6 @@ export default function UsersPage() {
     // viewer supprimé
   }
 
-  // Fonction utilitaire pour créer un timeout avec cleanup
-  const timeoutRefs = useRef([])
-  useEffect(() => {
-    return () => {
-      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
-      timeoutRefs.current = []
-    }
-  }, [])
-  
-  const createTimeoutWithCleanup = (callback, delay) => {
-    const timeoutId = setTimeout(() => {
-      callback()
-      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
-    }, delay)
-    timeoutRefs.current.push(timeoutId)
-    return timeoutId
-  }
-
-
   const handleModalSave = async () => {
     setSuccess(editingItem ? 'Utilisateur modifié avec succès' : 'Utilisateur créé avec succès')
     // Attendre un peu pour s'assurer que la base de données est bien mise à jour

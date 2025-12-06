@@ -279,25 +279,6 @@ export default function PatientsPage() {
     await refetch()
   }
 
-  
-  // Fonction utilitaire pour créer un timeout avec cleanup
-  const timeoutRefs = useRef([])
-  useEffect(() => {
-    return () => {
-      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
-      timeoutRefs.current = []
-    }
-  }, [])
-  
-  const createTimeoutWithCleanup = (callback, delay) => {
-    const timeoutId = setTimeout(() => {
-      callback()
-      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
-    }, delay)
-    timeoutRefs.current.push(timeoutId)
-    return timeoutId
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
