@@ -1926,10 +1926,11 @@ if ($warnings.Count -gt 0) {
 $auditResults.Scores["Structure API"] = $structureScore
 
 # ===============================================================================
-# PHASE 16 : VÉRIFICATION UNIFORMISATION UI/UX
+# PHASE 16 : VÉRIFICATION UNIFORMISATION UI/UX (DÉJÀ FAIT AVANT LES SCORES FINAUX)
 # ===============================================================================
 
-Write-Section "[16/16] Uniformisation UI/UX - Badges, Tables, Modals"
+# Cette section a été déplacée avant l'affichage des scores finaux pour que le score soit disponible
+# Write-Section "[16/16] Uniformisation UI/UX - Badges, Tables, Modals"
 
 $uiScore = 10.0
 $uiIssues = @()
