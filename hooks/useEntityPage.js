@@ -4,7 +4,7 @@
  * @module hooks/useEntityPage
  */
 
-import { useMemo, useEffect } from 'react'
+import { useMemo, useRef, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiData, useFilter, useEntityModal, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useToggle, useAsyncState } from '@/hooks'
 import { isArchived as isEntityArchived } from '@/lib/utils'
@@ -39,22 +39,24 @@ export function useEntityPage(config) {
   const [showArchived, toggleShowArchived] = useToggle(false)
   
   // Charger les données (unifié)
+  // Mémoriser additionalEndpoints pour éviter les re-renders
+  const additionalEndpointsKey = useMemo(() => {
+    return additionalEndpoints.join(',')
+  }, [additionalEndpoints.join(',')])
+  
   const endpoints = useMemo(() => {
     const baseEndpoint = `/api.php/${entityType}`
     const mainEndpoint = showArchived ? `${baseEndpoint}?include_deleted=true` : baseEndpoint
     return [mainEndpoint, ...additionalEndpoints]
-  }, [entityType, showArchived, additionalEndpoints])
+  }, [entityType, showArchived, additionalEndpointsKey])
   
   const { data, loading, error, refetch, invalidateCache } = useApiData(
     endpoints,
     { requiresAuth: true }
   )
   
-  // Invalider le cache quand showArchived change (unifié)
-  useEffect(() => {
-    invalidateCache()
-    refetch()
-  }, [showArchived, invalidateCache, refetch])
+  // Note: useApiData gère déjà le rechargement automatique quand les endpoints changent
+  // Pas besoin de useEffect supplémentaire qui pourrait causer des boucles infinies
   
   // Hooks d'actions unifiés
   const restore = useEntityRestore(entityType, {
@@ -169,12 +171,14 @@ export function useEntityPage(config) {
     refetch,
     invalidateCache,
     
-    // Données supplémentaires
-    additionalData: additionalEndpoints.reduce((acc, endpoint) => {
-      const key = endpoint.split('/').pop().split('?')[0]
-      acc[key] = data?.[key]?.[key] || []
-      return acc
-    }, {})
+    // Données supplémentaires (mémorisé pour éviter les re-renders)
+    additionalData: useMemo(() => {
+      return additionalEndpoints.reduce((acc, endpoint) => {
+        const key = endpoint.split('/').pop().split('?')[0]
+        acc[key] = data?.[key]?.[key] || []
+        return acc
+      }, {})
+    }, [additionalEndpointsKey, data])
   }
 }
 

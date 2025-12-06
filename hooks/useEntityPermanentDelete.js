@@ -4,7 +4,7 @@
  * @module hooks/useEntityPermanentDelete
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { fetchJson } from '@/lib/api'
 import logger from '@/lib/logger'
 
@@ -34,6 +34,12 @@ export function useEntityPermanentDelete({
 }) {
   const [deleting, setDeleting] = useState(null)
   const [error, setError] = useState(null)
+  
+  // Utiliser useRef pour éviter les boucles infinies avec les callbacks
+  const callbacksRef = useRef({ refetch, onSuccess, onError, invalidateCache, onCloseModal, editingItem })
+  useEffect(() => {
+    callbacksRef.current = { refetch, onSuccess, onError, invalidateCache, onCloseModal, editingItem }
+  }, [refetch, onSuccess, onError, invalidateCache, onCloseModal, editingItem])
 
   const permanentDelete = useCallback(async (entity) => {
     if (!entity?.id) {
@@ -55,31 +61,31 @@ export function useEntityPermanentDelete({
 
       if (response.success) {
         // Invalider le cache si fourni
-        if (invalidateCache) {
-          invalidateCache()
+        if (callbacksRef.current.invalidateCache) {
+          callbacksRef.current.invalidateCache()
         }
         
         // Recharger les données si fourni
-        if (refetch) {
-          await refetch()
+        if (callbacksRef.current.refetch) {
+          await callbacksRef.current.refetch()
         }
 
         // Fermer le modal si l'élément supprimé est en cours d'édition
-        if (onCloseModal && editingItem && editingItem.id === entity.id) {
-          onCloseModal()
+        if (callbacksRef.current.onCloseModal && callbacksRef.current.editingItem && callbacksRef.current.editingItem.id === entity.id) {
+          callbacksRef.current.onCloseModal()
         }
 
         // Callback de succès
-        if (onSuccess) {
-          onSuccess(entity)
+        if (callbacksRef.current.onSuccess) {
+          callbacksRef.current.onSuccess(entity)
         }
       } else {
         const errorMessage = response.error || 'Erreur lors de la suppression'
         setError(errorMessage)
         
         // Callback d'erreur
-        if (onError) {
-          onError(errorMessage, entity)
+        if (callbacksRef.current.onError) {
+          callbacksRef.current.onError(errorMessage, entity)
         } else {
           logger.error(`Erreur suppression ${entityType}:`, errorMessage)
         }
@@ -89,15 +95,15 @@ export function useEntityPermanentDelete({
       setError(errorMessage)
       
       // Callback d'erreur
-      if (onError) {
-        onError(errorMessage, entity)
+      if (callbacksRef.current.onError) {
+        callbacksRef.current.onError(errorMessage, entity)
       } else {
         logger.error(`Erreur suppression ${entityType}:`, err)
       }
     } finally {
       setDeleting(null)
     }
-  }, [fetchWithAuth, API_URL, entityType, refetch, invalidateCache, onSuccess, onError, onCloseModal, editingItem])
+  }, [fetchWithAuth, API_URL, entityType])
 
   return {
     permanentDelete,

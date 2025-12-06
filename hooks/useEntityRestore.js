@@ -4,7 +4,7 @@
  * @module hooks/useEntityRestore
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import logger from '@/lib/logger'
 
@@ -21,6 +21,12 @@ export function useEntityRestore(entityType, { onSuccess, onError, invalidateCac
   const { fetchWithAuth, API_URL } = useAuth()
   const [restoring, setRestoring] = useState(null)
   const [error, setError] = useState(null)
+  
+  // Utiliser useRef pour éviter les boucles infinies avec les callbacks
+  const callbacksRef = useRef({ onSuccess, onError, invalidateCache, refetch })
+  useEffect(() => {
+    callbacksRef.current = { onSuccess, onError, invalidateCache, refetch }
+  }, [onSuccess, onError, invalidateCache, refetch])
 
   const restore = useCallback(async (entity) => {
     if (!entity?.id) {
@@ -44,18 +50,18 @@ export function useEntityRestore(entityType, { onSuccess, onError, invalidateCac
 
       if (response.ok) {
         // Invalider le cache si fourni
-        if (invalidateCache) {
-          invalidateCache()
+        if (callbacksRef.current.invalidateCache) {
+          callbacksRef.current.invalidateCache()
         }
         
         // Recharger les données si fourni
-        if (refetch) {
-          await refetch()
+        if (callbacksRef.current.refetch) {
+          await callbacksRef.current.refetch()
         }
 
         // Callback de succès
-        if (onSuccess) {
-          onSuccess(entity)
+        if (callbacksRef.current.onSuccess) {
+          callbacksRef.current.onSuccess(entity)
         }
       } else {
         const errorData = await response.json().catch(() => ({}))
@@ -63,8 +69,8 @@ export function useEntityRestore(entityType, { onSuccess, onError, invalidateCac
         setError(errorMessage)
         
         // Callback d'erreur
-        if (onError) {
-          onError(errorMessage, entity)
+        if (callbacksRef.current.onError) {
+          callbacksRef.current.onError(errorMessage, entity)
         } else {
           logger.error(`Erreur restauration ${entityType}:`, errorMessage)
         }
@@ -74,15 +80,15 @@ export function useEntityRestore(entityType, { onSuccess, onError, invalidateCac
       setError(errorMessage)
       
       // Callback d'erreur
-      if (onError) {
-        onError(errorMessage, entity)
+      if (callbacksRef.current.onError) {
+        callbacksRef.current.onError(errorMessage, entity)
       } else {
         logger.error(`Erreur restauration ${entityType}:`, err)
       }
     } finally {
       setRestoring(null)
     }
-  }, [entityType, fetchWithAuth, API_URL, invalidateCache, refetch, onSuccess, onError])
+  }, [entityType, fetchWithAuth, API_URL])
 
   return {
     restore,
