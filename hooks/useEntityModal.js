@@ -21,6 +21,10 @@ export function useEntityModal(initialOpen = false) {
   }, [])
 
   const openEdit = useCallback((item) => {
+    // Ne pas ouvrir le modal pour les éléments archivés
+    if (item?.deleted_at) {
+      return
+    }
     setEditingItem(item)
     setIsOpen(true)
   }, [])

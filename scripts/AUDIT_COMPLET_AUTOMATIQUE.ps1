@@ -1736,24 +1736,26 @@ if (Test-Path "api.php") {
         
         # Format réel dans api.php : } elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH') {
         #     handleRestorePatient($m[1]);
-        # Recherche simple : chercher le handler et vérifier qu'il est dans le contexte d'une route PATCH
-        if ($apiContent -match $ep.Handler) {
-            # Trouver toutes les occurrences du handler
-            $handlerMatches = [regex]::Matches($apiContent, $ep.Handler, [System.Text.RegularExpressions.RegexOptions]::Singleline)
-            
-            foreach ($match in $handlerMatches) {
-                # Extraire 400 caractères avant le handler pour vérifier le contexte
-                $startIndex = [Math]::Max(0, $match.Index - 400)
-                $context = $apiContent.Substring($startIndex, $match.Index - $startIndex)
-                
-                # Vérifier que le contexte contient la route et la méthode PATCH
-                # Le pattern réel est : preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH'
-                $routePattern = $ep.Endpoint -replace '\(', '\(' -replace '\)', '\)' -replace '\+', '\+'
-                # Chercher preg_match avec la route et PATCH dans le contexte
-                if ($context -match "preg_match.*#.*$routePattern" -and $context -match "\`\$method === '$($ep.Method)'") {
-                    Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
-                    $found = $true
-                    break
+        # Recherche simple : chercher directement le pattern complet sur une ou deux lignes
+        $routePattern = $ep.Endpoint -replace '\(', '\(' -replace '\)', '\)' -replace '\+', '\+'
+        # Pattern complet : preg_match avec la route, && $method === 'PATCH', puis le handler
+        $fullPattern = "preg_match\('#.*$routePattern.*\$#'[^}]*\`\$method === '$($ep.Method)'[^}]*$($ep.Handler)"
+        if ($apiContent -match $fullPattern) {
+            Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
+            $found = $true
+        } else {
+            # Méthode alternative : chercher le handler et vérifier le contexte
+            if ($apiContent -match $ep.Handler) {
+                $handlerMatches = [regex]::Matches($apiContent, $ep.Handler, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                foreach ($match in $handlerMatches) {
+                    $startIndex = [Math]::Max(0, $match.Index - 500)
+                    $context = $apiContent.Substring($startIndex, $match.Index - $startIndex)
+                    # Vérifier que le contexte contient la route et PATCH
+                    if ($context -match "preg_match.*#.*$routePattern" -and $context -match "\`\$method === '$($ep.Method)'") {
+                        Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
+                        $found = $true
+                        break
+                    }
                 }
             }
         }

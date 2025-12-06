@@ -209,7 +209,9 @@ export default function PatientsPage() {
 
   const openAssignModal = (patient) => {
     // Ne pas ouvrir le modal pour les patients archivés
-    if (patient?.deleted_at) return
+    if (patient?.deleted_at) {
+      return
+    }
     setSelectedPatientForAssign(patient)
     setActionError(null)
     refetch()
