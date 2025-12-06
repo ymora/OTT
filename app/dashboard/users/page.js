@@ -265,7 +265,7 @@ export default function UsersPage() {
                   </tr>
                 ) : (
                   filteredUsers.map((user, i) => {
-                    const isArchived = !!user.deleted_at
+                    const isArchived = user.deleted_at !== null && user.deleted_at !== undefined && user.deleted_at !== ''
                     return (
                     <tr 
                       key={user.id} 

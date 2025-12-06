@@ -327,7 +327,7 @@ export default function PatientsPage() {
                   </tr>
                 ) : (
                   filteredPatients.map((p, i) => {
-                    const isArchived = !!p.deleted_at
+                    const isArchived = p.deleted_at !== null && p.deleted_at !== undefined && p.deleted_at !== ''
                     return (
                     <tr 
                       key={p.id} 
