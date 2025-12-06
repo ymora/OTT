@@ -36,7 +36,6 @@ export default function UsersPage() {
   const [userToDelete, setUserToDelete] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const [restoringUser, setRestoringUser] = useState(null)
 
   // Charger les données avec useApiData
   // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
