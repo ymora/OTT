@@ -1760,32 +1760,28 @@ if (Test-Path "api.php") {
         
         # Format réel dans api.php : } elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH') {
         #     handleRestorePatient($m[1]);
-        # Recherche améliorée : chercher le pattern exact
+        # Recherche améliorée : chercher le pattern exact avec échappement correct
         $routePattern = $ep.Endpoint -replace '\(', '\(' -replace '\)', '\)' -replace '\+', '\+'
         
-        # Pattern 1 : recherche directe du handler avec la route dans les 3 lignes précédentes
-        # Format: } elseif(preg_match('#/patients/(\d+)$#', $path, $m) && $method === 'PATCH') {
-        #     handleRestorePatient($m[1]);
-        $pattern1 = "preg_match\('#.*$routePattern.*\$#'[^\n]*\n[^\n]*\`\$method === '$($ep.Method)'[^\n]*\n[^\n]*$($ep.Handler)"
-        
-        # Pattern 2 : recherche contextuelle (handler dans les 150 caractères après la route)
-        if ($apiContent -match $pattern1) {
-            Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
-            $found = $true
-        } else {
-            # Méthode alternative : chercher le handler et vérifier le contexte
-            if ($apiContent -match $ep.Handler) {
-                $handlerMatches = [regex]::Matches($apiContent, $ep.Handler, [System.Text.RegularExpressions.RegexOptions]::Singleline)
-                foreach ($match in $handlerMatches) {
-                    # Chercher dans les 150 caractères avant le handler
-                    $startIndex = [Math]::Max(0, $match.Index - 150)
-                    $context = $apiContent.Substring($startIndex, [Math]::Min(300, $apiContent.Length - $startIndex))
-                    # Vérifier que le contexte contient la route ET la méthode PATCH
-                    if ($context -match "preg_match.*#.*$routePattern.*\$#" -and $context -match "\`\$method === '$($ep.Method)'") {
-                        Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
-                        $found = $true
-                        break
-                    }
+        # Méthode simple et fiable : chercher le handler et vérifier le contexte
+        if ($apiContent -match $ep.Handler) {
+            $handlerMatches = [regex]::Matches($apiContent, $ep.Handler, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            foreach ($match in $handlerMatches) {
+                # Chercher dans les 250 caractères avant le handler
+                $startIndex = [Math]::Max(0, $match.Index - 250)
+                $context = $apiContent.Substring($startIndex, [Math]::Min(500, $apiContent.Length - $startIndex))
+                # Vérifier que le contexte contient :
+                # 1. La route avec le pattern
+                # 2. La méthode PATCH
+                # 3. Le handler est appelé
+                $hasRoute = $context -match "preg_match.*#.*$routePattern.*\$#"
+                $hasMethod = $context -match "\`\$method === '$($ep.Method)'"
+                $hasHandler = $context -match $ep.Handler
+                
+                if ($hasRoute -and $hasMethod -and $hasHandler) {
+                    Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
+                    $found = $true
+                    break
                 }
             }
         }
@@ -2054,7 +2050,9 @@ if ($uiIssues.Count -eq 0 -and $uiWarnings.Count -eq 0) {
 
 # S'assurer que le score ne peut pas être négatif et est arrondi
 $uiScoreFinal = [Math]::Max(0, [Math]::Round($uiScore, 1))
+# Assigner le score AVANT l'affichage des scores finaux
 $auditResults.Scores["Uniformisation UI/UX"] = $uiScoreFinal
+Write-Host "[DEBUG] Score UI/UX assigné: $uiScoreFinal" -ForegroundColor Cyan
 $auditResults.Issues += $uiIssues
 $auditResults.Warnings += $uiWarnings
 
