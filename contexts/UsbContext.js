@@ -185,21 +185,53 @@ export function UsbProvider({ children }) {
         })
       })
       
+      // Vérifier le Content-Type de la réponse
+      const contentType = response.headers.get('content-type') || ''
+      const isJson = contentType.includes('application/json')
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        logger.debug('⚠️ Erreur envoi logs USB:', response.status, errorData)
+        // Si ce n'est pas du JSON, c'est probablement une erreur PHP (HTML)
+        let errorMessage = `Erreur HTTP ${response.status}`
+        if (!isJson) {
+          const text = await response.text().catch(() => '')
+          // Extraire le message d'erreur PHP si possible
+          const phpErrorMatch = text.match(/<b>(?:Fatal error|Warning|Parse error|Notice):\s*(.+?)(?:<\/b>|$)/i)
+          if (phpErrorMatch) {
+            errorMessage = `Erreur PHP: ${phpErrorMatch[1].substring(0, 100)}`
+          } else {
+            errorMessage = `Erreur serveur (${response.status}) - Réponse non-JSON`
+          }
+          logger.error('⚠️ Erreur envoi logs USB - Réponse HTML:', text.substring(0, 500))
+        } else {
+          const errorData = await response.json().catch(() => ({}))
+          errorMessage = errorData.error || errorMessage
+          logger.debug('⚠️ Erreur envoi logs USB:', response.status, errorData)
+        }
+        
+        const fullErrorMsg = `⚠️ Erreur envoi logs USB: ${errorMessage}`
+        appendUsbStreamLog(fullErrorMsg, 'dashboard')
         // En cas d'erreur, remettre les logs dans le buffer pour réessayer plus tard
         logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
       } else {
-        const result = await response.json()
-        const count = result.inserted_count || logsToSend.length
-        logger.debug(`✅ ${count} logs USB envoyés au serveur`)
-        // Log aussi dans la console USB pour visibilité
-        appendUsbStreamLog(`📤 ${count} log(s) envoyé(s) au serveur (visible sur web)`, 'dashboard')
+        // Vérifier que la réponse est bien du JSON
+        if (!isJson) {
+          const text = await response.text().catch(() => '')
+          const errorMsg = `⚠️ Réponse serveur invalide (non-JSON): ${text.substring(0, 100)}`
+          logger.error(errorMsg)
+          appendUsbStreamLog(errorMsg, 'dashboard')
+          // Remettre les logs dans le buffer
+          logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
+        } else {
+          const result = await response.json().catch(() => ({}))
+          const count = result.inserted_count || logsToSend.length
+          logger.debug(`✅ ${count} logs USB envoyés au serveur`)
+          // Log aussi dans la console USB pour visibilité
+          appendUsbStreamLog(`📤 ${count} log(s) envoyé(s) au serveur (visible sur web)`, 'dashboard')
+        }
       }
     } catch (err) {
       const errorMsg = `⚠️ Erreur envoi logs USB au serveur (non bloquant): ${err.message || err}`
-      logger.debug(errorMsg)
+      logger.error(errorMsg, err)
       appendUsbStreamLog(errorMsg, 'dashboard')
       // En cas d'erreur, remettre les logs dans le buffer
       logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
