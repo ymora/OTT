@@ -353,13 +353,15 @@ export function UsbProvider({ children }) {
         
         // Log les premiers messages JSON (debug création device)
         if (!payload.seq || payload.seq <= 5) {
-          logger.log('📥 JSON:', {
+          const logData = {
             seq: payload.seq || 0,
             iccid: payload.sim_iccid?.slice(-10),
             serial: payload.device_serial,
             flow: payload.flow_lpm,
             battery: payload.battery_percent
-          })
+          }
+          logger.log('📥 JSON:', logData)
+          appendUsbStreamLog(`📥 JSON reçu: SEQ=${logData.seq} | ICCID=...${logData.iccid} | Serial=${logData.serial || 'N/A'} | Flow=${logData.flow || 'N/A'} | Battery=${logData.battery || 'N/A'}%`)
         }
         
         // Log pour vérifier la réception des données usb_stream
@@ -368,7 +370,7 @@ export function UsbProvider({ children }) {
                                   (payload.status === 'USB_STREAM' && payload.flow_lpm != null) ||
                                   (payload.flow_lpm != null && payload.battery_percent != null && !payload.type)
         if (isUsbStreamForLog) {
-          logger.log('📊 Données usb_stream reçues:', {
+          const streamData = {
             seq: payload.seq,
             flow_lpm: payload.flow_lpm,
             flowrate: payload.flowrate,
@@ -382,7 +384,14 @@ export function UsbProvider({ children }) {
             mode: payload.mode,
             type: payload.type,
             status: payload.status
-          })
+          }
+          logger.log('📊 Données usb_stream reçues:', streamData)
+          // Formater pour la console de logs
+          const flowValue = streamData.flow_lpm ?? streamData.flowrate ?? streamData.flow ?? 'N/A'
+          const batteryValue = streamData.battery_percent ?? streamData.battery ?? 'N/A'
+          const rssiValue = streamData.rssi ?? 'N/A'
+          const gpsInfo = streamData.hasGPS ? ` | GPS: ${streamData.latitude?.toFixed(6)}, ${streamData.longitude?.toFixed(6)}` : ''
+          appendUsbStreamLog(`📊 Mesure reçue: SEQ=${streamData.seq || 'N/A'} | Débit=${flowValue} L/min | Batterie=${batteryValue}% | RSSI=${rssiValue}${gpsInfo}`)
         }
         
         // Format unifié : tous les messages usb_stream contiennent identifiants + mesures + configuration
