@@ -483,7 +483,11 @@ function handleUpdateDevice($device_id) {
             if ($input['patient_id'] === null || $input['patient_id'] === '') {
                 $updates[] = "patient_id = NULL";
                 $updates[] = "device_name = :device_name_reset";
-                $params['device_name_reset'] = $device['device_serial'];
+                // Utiliser device_serial s'il existe, sinon device_name actuel, sinon sim_iccid
+                $params['device_name_reset'] = $device['device_serial'] 
+                    ?? $device['device_name'] 
+                    ?? $device['sim_iccid'] 
+                    ?? 'Dispositif-' . $device_id;
             } else {
                 $patientId = (int)$input['patient_id'];
                 $patientCheck = $pdo->prepare("SELECT id, first_name, last_name FROM patients WHERE id = :id AND deleted_at IS NULL");
@@ -499,8 +503,22 @@ function handleUpdateDevice($device_id) {
                 $updates[] = "patient_id = :patient_id";
                 $params['patient_id'] = $patientId;
                 
-                $year = extractYearFromSerial($device['device_serial']) ?: date('y');
-                $newDeviceName = sprintf('OTT-%s-%s %s', $year, $patient['first_name'], $patient['last_name']);
+                // Extraire l'année du serial ou utiliser l'année actuelle
+                $deviceSerial = $device['device_serial'] ?? null;
+                $year = ($deviceSerial && is_string($deviceSerial)) 
+                    ? (extractYearFromSerial($deviceSerial) ?: date('y'))
+                    : date('y');
+                
+                // Construire le nom du dispositif avec le nom du patient
+                $firstName = trim($patient['first_name'] ?? '');
+                $lastName = trim($patient['last_name'] ?? '');
+                
+                if (empty($firstName) && empty($lastName)) {
+                    // Fallback si pas de nom
+                    $newDeviceName = sprintf('OTT-%s-Patient-%d', $year, $patientId);
+                } else {
+                    $newDeviceName = sprintf('OTT-%s-%s %s', $year, $firstName, $lastName);
+                }
                 
                 $updates[] = "device_name = :device_name_patient";
                 $params['device_name_patient'] = $newDeviceName;
