@@ -24,4 +24,6 @@ export { useEntityRestore } from './useEntityRestore'
 export { useEntityArchive } from './useEntityArchive'
 export { useEntityPermanentDelete } from './useEntityPermanentDelete'
 export { useEntityPage } from './useEntityPage'
+export { useActionState } from './useActionState'
+export { useToggleState } from './useToggleState'
 

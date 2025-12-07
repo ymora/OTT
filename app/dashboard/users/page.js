@@ -153,15 +153,12 @@ export default function UsersPage() {
                     const userIsArchived = isArchived(user)
                     // DEBUG: Log pour diagnostiquer (toujours afficher en mode debug)
                     if (showArchived) {
-                      console.log('[USERS PAGE DEBUG]', {
+                      logger.debug('[USERS PAGE]', {
                         id: user.id,
                         name: `${user.first_name} ${user.last_name}`,
                         email: user.email,
                         deleted_at: user.deleted_at,
-                        deleted_at_type: typeof user.deleted_at,
-                        hasDeletedAt: user.hasOwnProperty('deleted_at'),
-                        isArchived: userIsArchived,
-                        allKeys: Object.keys(user)
+                        isArchived: userIsArchived
                       })
                     }
                     return (
