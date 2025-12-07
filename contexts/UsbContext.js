@@ -1052,10 +1052,12 @@ export function UsbProvider({ children }) {
     }
     
     // Traiter toutes les lignes extraites
+    logger.debug(`📦 [USB] ${parts.length} ligne(s) extraite(s) du chunk`)
     let jsonCount = 0
-    parts.forEach((line) => {
+    parts.forEach((line, index) => {
       if (line || line === '') {
         const trimmed = line.trim()
+        logger.debug(`📝 [USB] Traitement ligne ${index + 1}/${parts.length}: ${trimmed.substring(0, 50)}`)
         
         // Log uniquement les JSON (pas les logs du firmware)
         if (trimmed.startsWith('{')) {
@@ -1078,6 +1080,8 @@ export function UsbProvider({ children }) {
           }
         }
         
+        // TOUJOURS appeler processUsbStreamLine pour que les logs soient ajoutés
+        logger.debug(`📤 [USB] Appel processUsbStreamLine pour ligne ${index + 1}`)
         processUsbStreamLine(line)
       }
     })
