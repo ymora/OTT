@@ -80,7 +80,22 @@ export function UsbProvider({ children }) {
       const next = [...prev, { id: `${timestamp}-${Math.random()}`, line, timestamp, source }]
       return next.slice(-80)
     })
-  }, [])
+    
+    // Ajouter au batch pour envoi au serveur (pour monitoring à distance)
+    const currentDevice = usbConnectedDevice || usbVirtualDevice
+    if (currentDevice) {
+      logsToSendRef.current.push({
+        log_line: line,
+        log_source: source,
+        timestamp: timestamp
+      })
+      
+      // Limiter la taille du buffer (éviter la surcharge mémoire)
+      if (logsToSendRef.current.length > 200) {
+        logsToSendRef.current = logsToSendRef.current.slice(-200)
+      }
+    }
+  }, [usbConnectedDevice, usbVirtualDevice])
   
   // Fonction pour effacer les logs
   const clearUsbStreamLogs = useCallback(() => {
@@ -137,15 +152,19 @@ export function UsbProvider({ children }) {
     }
     
     const currentDevice = usbConnectedDevice || usbVirtualDevice
-    if (!currentDevice || !sendMeasurementToApiRef.current) {
-      return
+    if (!currentDevice) {
+      // Même sans device, on peut envoyer les logs pour qu'ils soient visibles sur le web
+      // Ne pas bloquer l'envoi des logs
     }
     
-    // Identifier le dispositif
-    const deviceIdentifier = currentDevice.sim_iccid || currentDevice.device_serial || currentDevice.device_name
+    // Identifier le dispositif (ou utiliser 'unknown' si pas disponible)
+    const deviceIdentifier = currentDevice 
+      ? (currentDevice.sim_iccid || currentDevice.device_serial || currentDevice.device_name)
+      : 'unknown'
+    
     if (!deviceIdentifier) {
-      logger.warn('⚠️ Impossible d\'envoyer les logs : aucun identifiant de dispositif')
-      return
+      logger.debug('⚠️ Envoi logs sans identifiant de dispositif')
+      // Continuer quand même, utiliser 'unknown' comme identifiant
     }
     
     // Copier les logs et vider le buffer
@@ -153,27 +172,24 @@ export function UsbProvider({ children }) {
     logsToSendRef.current = []
     
     try {
-      // Importer fetchJson dynamiquement
-      const { fetchJson } = await import('@/lib/api')
-      
-      // Utiliser le fetchWithAuth du contexte Auth (via sendMeasurementToApiRef)
-      // On va créer une fonction wrapper qui utilise fetchWithAuth
-      const response = await fetch('/api.php/usb-logs', {
+      // Utiliser l'API_URL pour envoyer directement au serveur distant
+      const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
+      const response = await fetch(`${apiUrl}/api.php/usb-logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('ott_token') || '' : ''}`
         },
         body: JSON.stringify({
-          device_identifier: deviceIdentifier,
-          device_name: currentDevice.device_name,
+          device_identifier: deviceIdentifier || 'unknown',
+          device_name: currentDevice?.device_name || 'USB-Local',
           logs: logsToSend
         })
       })
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        logger.warn('⚠️ Erreur envoi logs USB:', response.status, errorData)
+        logger.debug('⚠️ Erreur envoi logs USB:', response.status, errorData)
         // En cas d'erreur, remettre les logs dans le buffer pour réessayer plus tard
         logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
       } else {
@@ -181,11 +197,11 @@ export function UsbProvider({ children }) {
         logger.debug(`✅ ${result.inserted_count || logsToSend.length} logs USB envoyés au serveur`)
       }
     } catch (err) {
-      logger.error('❌ Erreur envoi logs USB au serveur:', err)
+      logger.debug('⚠️ Erreur envoi logs USB au serveur (non bloquant):', err.message || err)
       // En cas d'erreur, remettre les logs dans le buffer
       logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
     }
-  }, [usbConnectedDevice, usbVirtualDevice])
+  }, [usbConnectedDevice, usbVirtualDevice, API_URL])
   
   // Timer pour envoyer les logs toutes les 5 secondes
   useEffect(() => {
@@ -253,7 +269,9 @@ export function UsbProvider({ children }) {
   // Fonction pour envoyer une mesure à l'API avec retry et validation
   const sendMeasurementToApi = useCallback(async (measurement, device) => {
     if (!device || !sendMeasurementToApiRef.current) {
-      logger.debug('⚠️ Pas de dispositif ou callback pour envoyer la mesure USB')
+      const errorMsg = '⚠️ Pas de dispositif ou callback pour envoyer la mesure USB'
+      logger.debug(errorMsg)
+      appendUsbStreamLog(errorMsg)
       return
     }
     
@@ -341,9 +359,11 @@ export function UsbProvider({ children }) {
         appendUsbStreamLog(`⚠️ ÉCHEC envoi mesure: ${result.error?.message || result.error || 'Erreur inconnue'}`)
       }
     } catch (err) {
-      logger.error('❌ Erreur envoi mesure USB à l\'API:', err, { device })
+      const errorMsg = `❌ Erreur envoi mesure USB à l'API: ${err.message || err}`
+      logger.error(errorMsg, err, { device })
+      appendUsbStreamLog(errorMsg)
     }
-  }, [])
+  }, [appendUsbStreamLog])
 
   // Traitement des lignes de streaming USB
   const processUsbStreamLine = useCallback((line) => {
