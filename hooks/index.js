@@ -26,4 +26,5 @@ export { useEntityPermanentDelete } from './useEntityPermanentDelete'
 export { useEntityPage } from './useEntityPage'
 export { useActionState } from './useActionState'
 export { useToggleState } from './useToggleState'
+export { useSmartDeviceRefresh } from './useSmartDeviceRefresh'
 
