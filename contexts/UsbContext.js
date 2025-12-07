@@ -192,10 +192,15 @@ export function UsbProvider({ children }) {
         logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
       } else {
         const result = await response.json()
-        logger.debug(`✅ ${result.inserted_count || logsToSend.length} logs USB envoyés au serveur`)
+        const count = result.inserted_count || logsToSend.length
+        logger.debug(`✅ ${count} logs USB envoyés au serveur`)
+        // Log aussi dans la console USB pour visibilité
+        appendUsbStreamLog(`📤 ${count} log(s) envoyé(s) au serveur (visible sur web)`, 'dashboard')
       }
     } catch (err) {
-      logger.debug('⚠️ Erreur envoi logs USB au serveur (non bloquant):', err.message || err)
+      const errorMsg = `⚠️ Erreur envoi logs USB au serveur (non bloquant): ${err.message || err}`
+      logger.debug(errorMsg)
+      appendUsbStreamLog(errorMsg, 'dashboard')
       // En cas d'erreur, remettre les logs dans le buffer
       logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
     }
