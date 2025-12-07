@@ -280,11 +280,13 @@ export function UsbProvider({ children }) {
       }
       
       if (!simIccid || simIccid === 'N/A') {
-        logger.warn('❌ Impossible d\'envoyer la mesure USB: pas d\'identifiant disponible', {
+        const errorMsg = `❌ Impossible d'envoyer la mesure USB: pas d'identifiant disponible (nom: ${device.device_name || 'N/A'}, ICCID: ${device.sim_iccid || 'N/A'}, Serial: ${device.device_serial || 'N/A'})`
+        logger.warn(errorMsg, {
           device_name: device.device_name,
           sim_iccid: device.sim_iccid,
           device_serial: device.device_serial
         })
+        appendUsbStreamLog(errorMsg)
         return
       }
 
@@ -312,16 +314,31 @@ export function UsbProvider({ children }) {
 
       logger.debug('📤 Envoi mesure USB à l\'API:', measurementData)
       
+      // Vérifier que le callback est bien configuré
+      if (!sendMeasurementToApiRef.current) {
+        const errorMsg = '⚠️ Callback sendMeasurement non configuré - mesure non envoyée'
+        logger.warn(errorMsg)
+        appendUsbStreamLog(errorMsg)
+        return
+      }
+      
+      // Log dans la console de logs de l'interface
+      const logMessage = `📤 Préparation envoi mesure à l'API distante: ICCID=${measurementData.sim_iccid || 'N/A'} | Débit=${measurementData.flowrate ?? 0} L/min | Batterie=${measurementData.battery ?? 'N/A'}% | RSSI=${measurementData.rssi ?? 'N/A'}`
+      appendUsbStreamLog(logMessage)
+      
       // Utiliser le système robuste d'envoi avec retry
       const { sendMeasurementWithRetry } = await import('@/lib/measurementSender')
       const result = await sendMeasurementWithRetry(measurementData, sendMeasurementToApiRef.current)
       
       if (result.success) {
         logger.debug('✅ Mesure USB envoyée avec succès')
+        appendUsbStreamLog('✅ Mesure envoyée et enregistrée avec succès dans la base distante')
       } else if (result.queued) {
         logger.info('📦 Mesure USB mise en queue pour retry ultérieur')
+        appendUsbStreamLog(`📦 Mesure mise en queue pour retry ultérieur (erreur: ${result.error?.message || result.error || 'Erreur inconnue'})`)
       } else {
         logger.warn('⚠️ Échec envoi mesure USB:', result.error)
+        appendUsbStreamLog(`⚠️ ÉCHEC envoi mesure: ${result.error?.message || result.error || 'Erreur inconnue'}`)
       }
     } catch (err) {
       logger.error('❌ Erreur envoi mesure USB à l\'API:', err, { device })

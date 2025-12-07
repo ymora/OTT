@@ -421,12 +421,16 @@ export default function DebugTab() {
     
     // Callback pour envoyer les mesures à l'API
     const sendMeasurement = async (measurementData) => {
+      const apiUrl = `${API_URL}/api.php/devices/measurements`
       logger.log('🚀 [CALLBACK] sendMeasurement APPELÉ !', measurementData)
+      appendUsbStreamLog(`🚀 Envoi mesure à l'API distante: ${apiUrl}`)
+      appendUsbStreamLog(`📤 Données: ICCID=${measurementData.sim_iccid || 'N/A'} | Débit=${measurementData.flowrate ?? 0} L/min | Batterie=${measurementData.battery ?? 'N/A'}% | RSSI=${measurementData.rssi ?? 'N/A'}`)
+      
       try {
-        logger.log('📤 Envoi mesure USB à l\'API:', measurementData)
+        logger.log('📤 Envoi mesure USB à l\'API:', { apiUrl, measurementData })
         
         const response = await fetchWithAuth(
-          `${API_URL}/api.php/devices/measurements`,
+          apiUrl,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -435,14 +439,19 @@ export default function DebugTab() {
           { requiresAuth: false }
         )
         
+        appendUsbStreamLog(`📡 Réponse API: HTTP ${response.status} ${response.statusText}`)
+        
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}))
+          const errorMsg = errorData.error || `Erreur HTTP ${response.status}`
           logger.error('❌ Réponse API erreur:', response.status, errorData)
-          throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
+          appendUsbStreamLog(`❌ Erreur API: ${errorMsg}`)
+          throw new Error(errorMsg)
         }
         
         const result = await response.json()
         logger.log('✅ Mesure USB enregistrée:', result)
+        appendUsbStreamLog(`✅ Mesure enregistrée avec succès dans la base distante (device_id: ${result.device_id || 'N/A'})`)
         
         // Rafraîchir les données après l'enregistrement
         createTimeoutWithCleanup(() => {
@@ -453,7 +462,12 @@ export default function DebugTab() {
         
         return result
       } catch (err) {
+        const errorMsg = err.message || 'Erreur inconnue'
         logger.error('❌ Erreur envoi mesure USB:', err)
+        appendUsbStreamLog(`❌ ÉCHEC envoi mesure: ${errorMsg}`)
+        if (err.cause || err.stack) {
+          appendUsbStreamLog(`   Détails: ${err.cause || err.stack?.substring(0, 100) || ''}`)
+        }
         throw err
       }
     }
@@ -564,7 +578,8 @@ export default function DebugTab() {
     setSendMeasurementCallback(sendMeasurement)
     setUpdateDeviceFirmwareCallback(updateDevice)
     
-    logger.debug('[USB] Callbacks configurés')
+    logger.debug('[USB] Callbacks configurés', { API_URL })
+    appendUsbStreamLog(`✅ Callbacks USB configurés - API URL: ${API_URL}`)
     
     // Cleanup au démontage
     return () => {
