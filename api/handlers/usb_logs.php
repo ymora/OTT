@@ -13,9 +13,13 @@
  * Enregistrer des logs USB (batch)
  */
 function createUsbLogs($pdo, $body, $userId) {
+    // Accepter les logs même sans authentification (pour USB local)
+    // $userId peut être null si pas authentifié, c'est acceptable pour les logs USB
+    
     // Validation stricte
     if (!isset($body['device_identifier']) || empty(trim($body['device_identifier']))) {
         http_response_code(400);
+        header('Content-Type: application/json');
         return json_encode(['success' => false, 'error' => 'device_identifier est requis']);
     }
     
@@ -73,12 +77,13 @@ function createUsbLogs($pdo, $body, $userId) {
                 ? date('Y-m-d H:i:s.u', $log['timestamp'] / 1000) 
                 : date('Y-m-d H:i:s.u');
             
+            // $userId peut être null pour les logs USB locaux
             $stmt->execute([
                 ':device_identifier' => $deviceIdentifier,
                 ':device_name' => $deviceName,
                 ':log_line' => $logLine,
                 ':log_source' => $logSource,
-                ':user_id' => $userId,
+                ':user_id' => $userId, // null acceptable pour logs USB sans auth
                 ':created_at' => $timestamp
             ]);
             
@@ -88,6 +93,7 @@ function createUsbLogs($pdo, $body, $userId) {
         $pdo->commit();
         
         http_response_code(201);
+        header('Content-Type: application/json');
         return json_encode([
             'success' => true,
             'message' => "$insertedCount logs enregistrés avec succès",
@@ -96,9 +102,25 @@ function createUsbLogs($pdo, $body, $userId) {
         
     } catch (PDOException $e) {
         $pdo->rollBack();
-        error_log("Erreur création logs USB: " . $e->getMessage());
+        $errorMsg = "Erreur création logs USB: " . $e->getMessage();
+        error_log($errorMsg);
         http_response_code(500);
-        return json_encode(['success' => false, 'error' => 'Erreur lors de l\'enregistrement des logs']);
+        header('Content-Type: application/json');
+        return json_encode([
+            'success' => false, 
+            'error' => 'Erreur lors de l\'enregistrement des logs',
+            'details' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : null
+        ]);
+    } catch (Exception $e) {
+        $errorMsg = "Erreur inattendue création logs USB: " . $e->getMessage();
+        error_log($errorMsg);
+        http_response_code(500);
+        header('Content-Type: application/json');
+        return json_encode([
+            'success' => false, 
+            'error' => 'Erreur inattendue lors de l\'enregistrement des logs',
+            'details' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : null
+        ]);
     }
 }
 

@@ -1135,12 +1135,23 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 
 // USB Logs (pour monitoring à distance)
 } elseif(preg_match('#^/usb-logs(/.*)?$#', $path)) {
-    $currentUser = getCurrentUser();
-    $userId = $currentUser ? $currentUser['id'] : null;
-    $userRole = $currentUser ? $currentUser['role_name'] : null;
+    // Accepter les requêtes même sans authentification pour les logs USB locaux
+    // getCurrentUser() peut retourner null, c'est acceptable
+    try {
+        $currentUser = getCurrentUser();
+        $userId = $currentUser ? $currentUser['id'] : null;
+        $userRole = $currentUser ? $currentUser['role_name'] : null;
+    } catch (Exception $e) {
+        // Si getCurrentUser() échoue, continuer avec userId null
+        error_log("Warning: getCurrentUser() failed for /usb-logs: " . $e->getMessage());
+        $currentUser = null;
+        $userId = null;
+        $userRole = null;
+    }
     
     $body = json_decode(file_get_contents('php://input'), true) ?? [];
     
+    header('Content-Type: application/json');
     echo handleUsbLogsRequest($pdo, $method, $path, $body, $_GET, $userId, $userRole);
 
 // Migration complète - Route pour exécuter la migration complète
