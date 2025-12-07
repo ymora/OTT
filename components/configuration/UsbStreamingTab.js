@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useTimers, useEntityRestore, useAutoRefresh, useDevicesUpdateListener } from '@/hooks'
+import { useApiData, useTimers, useEntityRestore, useSmartDeviceRefresh } from '@/hooks'
 import { createUpdateConfigCommand, createUpdateCalibrationCommand } from '@/lib/deviceCommands'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import { isArchived } from '@/lib/utils'
@@ -222,14 +222,21 @@ export default function DebugTab() {
   // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
   const { data: devicesData, loading: devicesLoading, refetch: refetchDevices, invalidateCache } = useApiData(
     useMemo(() => [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'], [showArchived]),
-    { requiresAuth: true, autoLoad: !!user, cacheTTL: 5000 } // Cache de 5 secondes pour avoir des données plus fraîches
+    { requiresAuth: true, autoLoad: !!user, cacheTTL: 3000 } // Cache de 3 secondes (optimisé pour le polling adaptatif)
   )
   
-  // Rafraîchissement automatique du tableau toutes les 10 secondes (pour voir les mises à jour depuis USB local ou OTA)
-  useAutoRefresh(refetchDevices, 10000, !!user) // 10 secondes, activé si user connecté
-  
-  // Écouter les événements de mise à jour des dispositifs (cross-tab et cross-instance)
-  useDevicesUpdateListener(refetchDevices, !!user)
+  // Rafraîchissement intelligent : polling adaptatif + événements + debounce
+  // - Si USB connecté : polling toutes les 5 secondes (plus fréquent)
+  // - Si web seulement : polling toutes les 15 secondes (moins fréquent)
+  // - Événements déclenchent un refetch avec debounce de 2 secondes
+  // - Évite les refetch redondants si plusieurs événements arrivent rapidement
+  useSmartDeviceRefresh(refetchDevices, {
+    isUsbConnected: isConnected || !!usbVirtualDevice,
+    enabled: !!user,
+    pollingIntervalUsb: 5000, // 5 secondes si USB connecté
+    pollingIntervalWeb: 15000, // 15 secondes si web seulement
+    eventDebounceMs: 2000 // 2 secondes de debounce pour les événements
+  })
   
   // Utiliser le hook unifié pour la restauration
   const { restore: handleRestoreDeviceDirect, restoring: restoringDevice } = useEntityRestore('devices', {
