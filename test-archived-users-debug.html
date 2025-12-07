@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Utilisateurs Archivés - Debug</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Diagnostic Utilisateurs Archivés</h1>
+    
+    <div class="test-section">
+        <h2>1. Test API - Récupération des utilisateurs</h2>
+        <button onclick="testAPI()">Tester l'API</button>
+        <div id="api-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. Test Fonction isArchived()</h2>
+        <div id="isArchived-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. Test Utilisateurs Archivés</h2>
+        <div id="archived-users-result"></div>
+    </div>
+
+    <script>
+        // Fonction isArchived copiée de lib/utils.js
+        function isArchived(entity) {
+            if (!entity) return false
+            const deletedAt = entity.deleted_at
+            return deletedAt !== null && deletedAt !== undefined && deletedAt !== '' && String(deletedAt).trim() !== ''
+        }
+
+        async function testAPI() {
+            const resultDiv = document.getElementById('api-result')
+            resultDiv.innerHTML = '<p>⏳ Chargement...</p>'
+            
+            try {
+                // Test 1: Utilisateurs normaux
+                const response1 = await fetch('/api.php/users')
+                const data1 = await response1.json()
+                
+                // Test 2: Utilisateurs avec archives
+                const response2 = await fetch('/api.php/users?include_deleted=true')
+                const data2 = await response2.json()
+                
+                let html = '<h3>✅ Réponse API - Utilisateurs normaux:</h3>'
+                html += `<pre>${JSON.stringify(data1, null, 2)}</pre>`
+                
+                html += '<h3>✅ Réponse API - Utilisateurs avec archives:</h3>'
+                html += `<pre>${JSON.stringify(data2, null, 2)}</pre>`
+                
+                // Analyser les utilisateurs
+                if (data2.success && data2.users) {
+                    html += '<h3>📊 Analyse des utilisateurs:</h3>'
+                    html += '<ul>'
+                    data2.users.forEach(user => {
+                        const hasDeletedAt = user.hasOwnProperty('deleted_at')
+                        const deletedAtValue = user.deleted_at
+                        const isArchivedValue = isArchived(user)
+                        const status = isArchivedValue ? '🗄️ ARCHIVÉ' : '✅ ACTIF'
+                        
+                        html += `<li>
+                            <strong>${user.first_name} ${user.last_name}</strong> (${user.email})<br>
+                            - deleted_at présent: ${hasDeletedAt ? '✅ OUI' : '❌ NON'}<br>
+                            - deleted_at valeur: ${deletedAtValue === null ? 'null' : deletedAtValue === undefined ? 'undefined' : `"${deletedAtValue}"`}<br>
+                            - isArchived(): ${isArchivedValue ? '✅ true' : '❌ false'}<br>
+                            - Status: ${status}
+                        </li>`
+                    })
+                    html += '</ul>'
+                    
+                    const archivedCount = data2.users.filter(u => isArchived(u)).length
+                    html += `<p><strong>Total archivés détectés: ${archivedCount} sur ${data2.users.length}</strong></p>`
+                }
+                
+                resultDiv.innerHTML = html
+                
+                // Test isArchived()
+                testIsArchivedFunction(data2.users || [])
+                testArchivedUsers(data2.users || [])
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Erreur: ${error.message}</p>`
+            }
+        }
+        
+        function testIsArchivedFunction(users) {
+            const resultDiv = document.getElementById('isArchived-result')
+            let html = '<h3>🧪 Tests de la fonction isArchived():</h3>'
+            html += '<ul>'
+            
+            // Test avec différentes valeurs
+            const testCases = [
+                { deleted_at: null, expected: false },
+                { deleted_at: undefined, expected: false },
+                { deleted_at: '', expected: false },
+                { deleted_at: '   ', expected: false },
+                { deleted_at: '2024-01-01 12:00:00', expected: true },
+            ]
+            
+            testCases.forEach((testCase, index) => {
+                const result = isArchived(testCase)
+                const passed = result === testCase.expected
+                html += `<li class="${passed ? 'success' : 'error'}">
+                    Test ${index + 1}: deleted_at = ${testCase.deleted_at === null ? 'null' : testCase.deleted_at === undefined ? 'undefined' : `"${testCase.deleted_at}"`}<br>
+                    - Attendu: ${testCase.expected}, Obtenu: ${result} ${passed ? '✅' : '❌'}
+                </li>`
+            })
+            
+            html += '</ul>'
+            
+            // Test avec les utilisateurs réels
+            if (users.length > 0) {
+                html += '<h3>🧪 Tests avec utilisateurs réels:</h3>'
+                html += '<ul>'
+                users.forEach(user => {
+                    const result = isArchived(user)
+                    html += `<li>
+                        ${user.first_name} ${user.last_name}: isArchived() = ${result} 
+                        (deleted_at = ${user.deleted_at === null ? 'null' : user.deleted_at === undefined ? 'undefined' : `"${user.deleted_at}"`})
+                    </li>`
+                })
+                html += '</ul>'
+            }
+            
+            resultDiv.innerHTML = html
+        }
+        
+        function testArchivedUsers(users) {
+            const resultDiv = document.getElementById('archived-users-result')
+            const archivedUsers = users.filter(u => isArchived(u))
+            
+            let html = `<h3>🗄️ Utilisateurs archivés détectés: ${archivedUsers.length}</h3>`
+            
+            if (archivedUsers.length === 0) {
+                html += '<p class="warning">⚠️ Aucun utilisateur archivé détecté !</p>'
+                html += '<p>Vérifiez que:</p>'
+                html += '<ul>'
+                html += '<li>Vous avez bien archivé un utilisateur (icône 🗄️)</li>'
+                html += '<li>Le paramètre include_deleted=true est envoyé à l\'API</li>'
+                html += '<li>Le champ deleted_at est bien retourné par l\'API</li>'
+                html += '</ul>'
+            } else {
+                html += '<ul>'
+                archivedUsers.forEach(user => {
+                    html += `<li>
+                        <strong>${user.first_name} ${user.last_name}</strong><br>
+                        - Email: ${user.email}<br>
+                        - deleted_at: ${user.deleted_at}<br>
+                        - Devrait afficher: UNIQUEMENT l\'icône ♻️ (restauration)
+                    </li>`
+                })
+                html += '</ul>'
+            }
+            
+            resultDiv.innerHTML = html
+        }
+        
+        // Charger automatiquement au chargement de la page
+        window.onload = () => {
+            testAPI()
+        }
+    </script>
+</body>
+</html>
+

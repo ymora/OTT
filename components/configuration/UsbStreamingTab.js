@@ -1342,7 +1342,7 @@ export default function DebugTab() {
   const handleUnassignPatient = useCallback(async (device) => {
     if (!device) return
     
-    setUnassigningPatient(true)
+    setUnassigningPatient(device.id)
     try {
       // 1. Désassigner le dispositif (mettre patient_id à null)
       const url = `${API_URL}/api.php/devices/${device.id}`
@@ -1385,18 +1385,23 @@ export default function DebugTab() {
       }
       
       const patient = allPatients.find(p => p.id === device.patient_id)
-      logger.log(`✅ Dispositif désassigné de ${patient?.first_name} ${patient?.last_name || device.patient_id}`)
-      appendUsbStreamLog(`✅ Dispositif désassigné et réinitialisé avec succès`, 'dashboard')
+      logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" désassigné${patient ? ` de ${patient.first_name} ${patient.last_name}` : ''}`)
+      appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" désassigné et réinitialisé`, 'dashboard')
       setShowUnassignPatientModal(false)
       setDeviceToUnassign(null)
-      refetchDevices()
+      setSuccessMessage('✅ Dispositif désassigné et réinitialisé avec succès')
+      invalidateCache()
+      createTimeoutWithCleanup(async () => {
+        await refetchDevices()
+      }, 500)
+      createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
     } catch (err) {
       logger.error('Erreur désassignation patient:', err)
-      appendUsbStreamLog(`❌ Erreur désassignation patient: ${err.message || err}`, 'dashboard')
+      appendUsbStreamLog(`❌ Erreur désassignation: ${err.message || err}`, 'dashboard')
     } finally {
-      setUnassigningPatient(false)
+      setUnassigningPatient(null)
     }
-  }, [fetchWithAuth, API_URL, allPatients, appendUsbStreamLog, refetchDevices])
+  }, [fetchWithAuth, API_URL, allPatients, appendUsbStreamLog, refetchDevices, invalidateCache, createTimeoutWithCleanup, setSuccessMessage])
   
   // Patients disponibles (sans dispositif assigné et non archivés)
   const availablePatients = useMemo(() => {

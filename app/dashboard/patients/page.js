@@ -312,60 +312,19 @@ export default function PatientsPage() {
                       <td className="table-cell text-sm">{p.city || '-'}</td>
                       <td className="table-cell text-sm">{p.postal_code || '-'}</td>
                       <td className="table-cell py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          {(() => {
-                            // Pour les patients archivés, afficher uniquement les infos (pas d'actions)
-                            if (patientIsArchived) {
-                              const assignedDevice = devices.find(d => d.patient_id === p.id)
-                              if (assignedDevice) {
-                                return (
-                                  <div className="flex-1 space-y-1">
-                                    <p className="font-medium text-primary">{assignedDevice.device_name || assignedDevice.sim_iccid}</p>
-                                    <p className="text-xs text-muted font-mono">{assignedDevice.sim_iccid}</p>
-                                  </div>
-                                )
-                              } else {
-                                return <span className="flex-1 text-sm text-gray-500">Non assigné</span>
-                              }
-                            }
-                            
-                            const assignedDevice = devices.find(d => d.patient_id === p.id)
-                            if (assignedDevice) {
-                              // Dispositif assigné : bouton désassigner + afficher les infos
-                              return (
-                                <>
-                                  <button
-                                    className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
-                                    onClick={() => openUnassignModal(assignedDevice)}
-                                    disabled={unassigningDevice === assignedDevice.id}
-                                    title="Désassigner le dispositif du patient"
-                                  >
-                                    <span className="text-lg">{unassigningDevice === assignedDevice.id ? '⏳' : '🔓'}</span>
-                                  </button>
-                                  <div className="flex-1 space-y-1">
-                                    <p className="font-medium text-primary">{assignedDevice.device_name || assignedDevice.sim_iccid}</p>
-                                    <p className="text-xs text-muted font-mono">{assignedDevice.sim_iccid}</p>
-                                  </div>
-                                </>
-                              )
-                            } else {
-                              // Pas de dispositif : bouton assigner + afficher "Non assigné"
-                              return (
-                                <>
-                                  <button
-                                    className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
-                                    onClick={() => openAssignModal(p)}
-                                    disabled={freeDevices.length === 0}
-                                    title={freeDevices.length === 0 ? "Aucun dispositif libre disponible" : "Assigner un dispositif libre au patient"}
-                                  >
-                                    <span className="text-lg">🔗</span>
-                                  </button>
-                                  <span className="flex-1 text-sm text-amber-600">Non assigné</span>
-                                </>
-                              )
-                            }
-                          })()}
-                        </div>
+                        {(() => {
+                          const assignedDevice = devices.find(d => d.patient_id === p.id)
+                          if (assignedDevice) {
+                            return (
+                              <div className="space-y-1">
+                                <p className="font-medium text-primary">{assignedDevice.device_name || assignedDevice.sim_iccid}</p>
+                                <p className="text-xs text-muted font-mono">{assignedDevice.sim_iccid}</p>
+                              </div>
+                            )
+                          } else {
+                            return <span className="text-sm text-amber-600">Non assigné</span>
+                          }
+                        })()}
                       </td>
                       <td className="table-cell py-3 px-4">
                         <div className="flex items-center justify-end gap-2">
@@ -380,6 +339,36 @@ export default function PatientsPage() {
                             </button>
                           ) : (
                             <>
+                              {/* Icônes d'assignation/désassignation de dispositif */}
+                              {(() => {
+                                const assignedDevice = devices.find(d => d.patient_id === p.id)
+                                if (assignedDevice) {
+                                  // Dispositif assigné : bouton désassigner
+                                  return (
+                                    <button
+                                      className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
+                                      onClick={() => openUnassignModal(assignedDevice)}
+                                      disabled={unassigningDevice === assignedDevice.id}
+                                      title="Désassigner le dispositif du patient"
+                                    >
+                                      <span className="text-lg">{unassigningDevice === assignedDevice.id ? '⏳' : '🔓'}</span>
+                                    </button>
+                                  )
+                                } else {
+                                  // Pas de dispositif : bouton assigner
+                                  return (
+                                    <button
+                                      className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+                                      onClick={() => openAssignModal(p)}
+                                      disabled={freeDevices.length === 0}
+                                      title={freeDevices.length === 0 ? "Aucun dispositif libre disponible" : "Assigner un dispositif libre au patient"}
+                                    >
+                                      <span className="text-lg">🔗</span>
+                                    </button>
+                                  )
+                                }
+                              })()}
+                              
                               <button
                                 className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                                 onClick={() => openEditModal(p)}

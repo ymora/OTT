@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../../helpers.php';
+require_once __DIR__ . '/../device_serial_generator.php';
 
 /**
  * GET /api.php/devices
@@ -532,6 +533,14 @@ function handleUpdateDevice($device_id) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleUpdateDevice] ❌ Erreur DB: ' . $e->getMessage());
+        error_log('[handleUpdateDevice] Stack trace: ' . $e->getTraceAsString());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    } catch(Throwable $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur serveur interne';
+        error_log('[handleUpdateDevice] ❌ Erreur: ' . $e->getMessage());
+        error_log('[handleUpdateDevice] Type: ' . get_class($e));
+        error_log('[handleUpdateDevice] Stack trace: ' . $e->getTraceAsString());
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
