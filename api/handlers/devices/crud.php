@@ -596,9 +596,41 @@ function handleDeleteDevice($device_id) {
             return;
         }
         
+        // Désassigner automatiquement le patient si le dispositif est assigné
+        $wasAssigned = false;
+        $patientInfo = null;
         if ($device['patient_id']) {
+            $wasAssigned = true;
+            $patientInfo = ['first_name' => $device['first_name'] ?? null, 'last_name' => $device['last_name'] ?? null];
+            
+            // 1. Désassigner le patient
             $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE id = :id")
                 ->execute(['id' => $device_id]);
+            
+            // 2. Réinitialiser la configuration du dispositif aux paramètres par défaut
+            try {
+                // Vérifier si gps_enabled existe en BDD (compatibilité migration)
+                $hasGpsColumn = columnExists('device_configurations', 'gps_enabled');
+                
+                $resetFields = ['sleep_minutes = NULL', 'measurement_duration_ms = NULL', 'send_every_n_wakeups = NULL', 'calibration_coefficients = NULL'];
+                if ($hasGpsColumn) {
+                    $resetFields[] = 'gps_enabled = false';
+                }
+                
+                $pdo->prepare("
+                    UPDATE device_configurations 
+                    SET " . implode(', ', $resetFields) . "
+                    WHERE device_id = :device_id
+                ")->execute(['device_id' => $device_id]);
+                
+                error_log("[handleDeleteDevice] Configuration réinitialisée pour dispositif $device_id après désassignation automatique");
+            } catch(PDOException $e) {
+                // Ne pas bloquer l'archivage si la réinitialisation de la config échoue
+                error_log("[handleDeleteDevice] ⚠️ Erreur réinitialisation config (non bloquant): " . $e->getMessage());
+            }
+            
+            // Logger la désassignation automatique
+            auditLog('device.unassigned_before_archive', 'device', $device_id, ['old_patient_id' => $device['patient_id']], null);
         }
         
         if ($forcePermanent && $isAdmin) {
@@ -611,8 +643,8 @@ function handleDeleteDevice($device_id) {
             $pdo->prepare("DELETE FROM devices WHERE id = :id")->execute(['id' => $device_id]);
             
             auditLog('device.permanently_deleted', 'device', $device_id, $device, null);
-            $message = $device['patient_id'] 
-                ? 'Dispositif supprimé définitivement (désassigné du patient ' . ($device['first_name'] ?? '') . ' ' . ($device['last_name'] ?? '') . ')'
+            $message = $wasAssigned 
+                ? 'Dispositif supprimé définitivement (désassigné automatiquement du patient ' . ($patientInfo['first_name'] ?? '') . ' ' . ($patientInfo['last_name'] ?? '') . ' et config réinitialisée)'
                 : 'Dispositif supprimé définitivement';
             $permanent = true;
         } else {
@@ -620,8 +652,8 @@ function handleDeleteDevice($device_id) {
                 ->execute(['id' => $device_id]);
             
             auditLog('device.deleted', 'device', $device_id, $device, null);
-            $message = $device['patient_id'] 
-                ? 'Dispositif archivé avec succès (désassigné du patient ' . ($device['first_name'] ?? '') . ' ' . ($device['last_name'] ?? '') . ')'
+            $message = $wasAssigned 
+                ? 'Dispositif archivé avec succès (désassigné automatiquement du patient ' . ($patientInfo['first_name'] ?? '') . ' ' . ($patientInfo['last_name'] ?? '') . ' et config réinitialisée)'
                 : 'Dispositif archivé avec succès';
             $permanent = false;
         }
@@ -629,7 +661,7 @@ function handleDeleteDevice($device_id) {
         echo json_encode([
             'success' => true, 
             'message' => $message,
-            'was_assigned' => (bool)$device['patient_id'],
+            'was_assigned' => $wasAssigned,
             'permanent' => $permanent
         ]);
     } catch(PDOException $e) {

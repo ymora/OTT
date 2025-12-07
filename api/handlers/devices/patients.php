@@ -279,11 +279,32 @@ function handleDeletePatient($patient_id) {
 
         $wasAssigned = false;
         if (count($assignedDevices) > 0) {
+            // 1. Désassigner tous les dispositifs
             $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE patient_id = :patient_id")
                 ->execute(['patient_id' => $patient_id]);
             $wasAssigned = true;
             
+            // 2. Réinitialiser la configuration de tous les dispositifs désassignés
+            $hasGpsColumn = columnExists('device_configurations', 'gps_enabled');
+            $resetFields = ['sleep_minutes = NULL', 'measurement_duration_ms = NULL', 'send_every_n_wakeups = NULL', 'calibration_coefficients = NULL'];
+            if ($hasGpsColumn) {
+                $resetFields[] = 'gps_enabled = false';
+            }
+            
             foreach ($assignedDevices as $device) {
+                try {
+                    $pdo->prepare("
+                        UPDATE device_configurations 
+                        SET " . implode(', ', $resetFields) . "
+                        WHERE device_id = :device_id
+                    ")->execute(['device_id' => $device['id']]);
+                    
+                    error_log("[handleDeletePatient] Configuration réinitialisée pour dispositif {$device['id']} après désassignation automatique");
+                } catch(PDOException $e) {
+                    // Ne pas bloquer l'archivage si la réinitialisation de la config échoue
+                    error_log("[handleDeletePatient] ⚠️ Erreur réinitialisation config dispositif {$device['id']} (non bloquant): " . $e->getMessage());
+                }
+                
                 auditLog('device.unassigned_before_patient_delete', 'device', $device['id'], ['old_patient_id' => $patient_id], null);
             }
         }
