@@ -379,8 +379,9 @@ export function UsbProvider({ children }) {
 
     logger.debug('processUsbStreamLine:', trimmed.substring(0, Math.min(100, trimmed.length)))
     
-    // Toujours ajouter les logs
+    // Toujours ajouter les logs - TOUJOURS, même pour les lignes brutes
     appendUsbStreamLog(trimmed)
+    logger.debug('✅ Log ajouté via appendUsbStreamLog:', trimmed.substring(0, 50))
 
     // Parser les messages JSON du firmware
     // Le format unifié envoie un JSON complet avec TOUT : identifiants + mesures + configuration
@@ -1020,8 +1021,11 @@ export function UsbProvider({ children }) {
   // Gestion des chunks de streaming
   const handleUsbStreamChunk = useCallback((chunk) => {
     if (!chunk) {
+      logger.debug('⚠️ handleUsbStreamChunk: chunk vide ou null')
       return
     }
+    
+    logger.debug('📥 [USB] Chunk reçu, longueur:', chunk.length)
     
     // Accumuler les chunks dans le buffer jusqu'à avoir une ligne complète (terminée par \n)
     usbStreamBufferRef.current += chunk
@@ -1163,15 +1167,21 @@ export function UsbProvider({ children }) {
         logger.debug('[USB] Reading...')
 
       // Démarrer la lecture
+      appendUsbStreamLog('🚀 Démarrage du streaming USB...', 'dashboard')
+      logger.log('🚀 [USB] Démarrage startReading avec handleUsbStreamChunk')
+      
       const stop = await startReading(handleUsbStreamChunk)
       if (!stop || typeof stop !== 'function') {
-        throw new Error('startReading n\'a pas retourné de fonction stop valide')
+        const errorMsg = 'startReading n\'a pas retourné de fonction stop valide'
+        appendUsbStreamLog(`❌ ${errorMsg}`, 'dashboard')
+        throw new Error(errorMsg)
       }
       
       usbStreamStopRef.current = stop
       setUsbStreamStatus('waiting')
       
-        logger.log('✅ USB streaming démarré')
+      logger.log('✅ USB streaming démarré')
+      appendUsbStreamLog('✅ Streaming USB démarré - En attente de données...', 'dashboard')
       
       // Plus besoin d'envoyer les commandes "usb" et "start" :
       // - Le firmware détecte automatiquement la connexion série et entre en mode debug
