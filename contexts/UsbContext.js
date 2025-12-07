@@ -403,6 +403,7 @@ export function UsbProvider({ children }) {
           if (process.env.NODE_ENV === 'development') {
             logger.debug('📱 Device info reçu')
           }
+          appendUsbStreamLog(`📱 Device info reçu: ICCID=${payload.iccid?.slice(-10) || 'N/A'} | Serial=${payload.serial || 'N/A'} | Nom=${payload.device_name || 'N/A'} | Firmware=${payload.firmware_version || 'N/A'}`)
           
           const now = new Date().toISOString()
           
@@ -524,6 +525,7 @@ export function UsbProvider({ children }) {
             measurement_duration_ms: deviceConfigFromUsb.measurement_duration_ms,
             calibration: deviceConfigFromUsb.calibration_coefficients
           })
+          appendUsbStreamLog(`⚙️ Configuration stockée: Sleep=${deviceConfigFromUsb.sleep_minutes ?? 'N/A'} min | Durée=${deviceConfigFromUsb.measurement_duration_ms ?? 'N/A'} ms | Calibration=[${deviceConfigFromUsb.calibration_coefficients?.join(', ') || 'N/A'}]`)
           
           // Émettre un événement personnalisé pour notifier DeviceConfigSection
           if (typeof window !== 'undefined') {
@@ -563,6 +565,8 @@ export function UsbProvider({ children }) {
               firmware_version: payload.firmware_version,
               allKeys: Object.keys(payload)
             })
+            // Log dans la console de logs de l'interface
+            appendUsbStreamLog(`🔍 Payload reçu: Type=${payload.type || 'N/A'} | Mode=${payload.mode || 'N/A'} | ICCID=${payload.sim_iccid?.slice(-10) || 'N/A'} | Serial=${payload.device_serial || 'N/A'} | Nom=${payload.device_name || 'N/A'} | Firmware=${payload.firmware_version || 'N/A'}`)
             
             const deviceInfoFromUsb = {
               sim_iccid: payload.sim_iccid || null,
@@ -660,6 +664,7 @@ export function UsbProvider({ children }) {
             }
             
             logger.log('✅ Configuration extraite du format unifié:', deviceConfigFromUsb)
+            appendUsbStreamLog(`⚙️ Configuration reçue: Sleep=${deviceConfigFromUsb.sleep_minutes ?? 'N/A'} min | Durée=${deviceConfigFromUsb.measurement_duration_ms ?? 'N/A'} ms | Calibration=[${deviceConfigFromUsb.calibration_coefficients?.join(', ') || 'N/A'}]`)
             
             setUsbDeviceInfo(prev => ({
               ...prev,
