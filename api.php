@@ -1068,7 +1068,10 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleAcknowledgeCommand();
 } elseif(preg_match('#/devices/commands$#', $path) && $method === 'GET') {
     handleListAllCommands();
+} elseif(preg_match('#/devices/(\d+)/history$#', $path, $m) && $method === 'GET') {
+    handleGetDeviceHistory($m[1]);
 } elseif(preg_match('#/device/(\d+)$#', $path, $m) && $method === 'GET') {
+    // Compatibilité ancienne route
     handleGetDeviceHistory($m[1]);
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateDevice($m[1]);

@@ -13,6 +13,7 @@ import Modal from '@/components/Modal'
 import ConfirmModal from '@/components/ConfirmModal'
 import FlashModal from '@/components/FlashModal'
 import DeviceModal from '@/components/DeviceModal'
+import DeviceMeasurementsModal from '@/components/DeviceMeasurementsModal'
 import SuccessMessage from '@/components/SuccessMessage'
 
 export default function DebugTab() {
@@ -617,6 +618,10 @@ export default function DebugTab() {
   const [showUnassignPatientModal, setShowUnassignPatientModal] = useState(false)
   const [deviceToUnassign, setDeviceToUnassign] = useState(null)
   const [unassigningPatient, setUnassigningPatient] = useState(false)
+  
+  // États pour l'historique des mesures
+  const [showMeasurementsModal, setShowMeasurementsModal] = useState(false)
+  const [deviceForMeasurements, setDeviceForMeasurements] = useState(null)
   
   // États pour le flash
   const [showFlashModal, setShowFlashModal] = useState(false)
@@ -1594,7 +1599,16 @@ export default function DebugTab() {
         ) ? 'usb' : 'ota'}
       />
       
-      {/* Modal unifié pour création et modification (comme pour patients et utilisateurs) */}
+      {/* Modal pour l'historique des mesures */}
+      <DeviceMeasurementsModal
+        isOpen={showMeasurementsModal}
+        onClose={() => {
+          setShowMeasurementsModal(false)
+          setDeviceForMeasurements(null)
+        }}
+        device={deviceForMeasurements}
+      />
+      
       {/* Modal unifié pour création et modification (comme pour patients et utilisateurs) */}
       <DeviceModal
         isOpen={showDeviceModal}
@@ -2054,11 +2068,26 @@ export default function DebugTab() {
                     const count = usbCount || dbCount
                     const source = usbCount > 0 ? 'usb' : (dbCount > 0 ? 'database' : null)
                     return (
-                      <div className="flex flex-col gap-0.5">
+                      <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1">
-                          <span className={`text-xs font-semibold ${count === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-purple-600 dark:text-purple-400'}`}>
+                          <button
+                            onClick={() => {
+                              setDeviceForMeasurements(device)
+                              setShowMeasurementsModal(true)
+                            }}
+                            className={`text-xs font-semibold hover:underline transition-colors ${
+                              count === 0 
+                                ? 'text-gray-400 dark:text-gray-500 cursor-not-allowed' 
+                                : 'text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 cursor-pointer'
+                            }`}
+                            disabled={count === 0}
+                            title={count === 0 ? 'Aucune mesure enregistrée' : 'Voir l\'historique des mesures'}
+                          >
                             {count}
-                          </span>
+                          </button>
+                          {count > 0 && (
+                            <span className="text-xs text-purple-500" title="Voir l'historique">📊</span>
+                          )}
                         </div>
                         {isDeviceUsbConnected && deviceUsbMeasurement?.timestamp && (
                           <span className="text-[10px] text-gray-500 dark:text-gray-400">
