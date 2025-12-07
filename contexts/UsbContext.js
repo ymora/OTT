@@ -82,20 +82,18 @@ export function UsbProvider({ children }) {
     })
     
     // Ajouter au batch pour envoi au serveur (pour monitoring à distance)
-    const currentDevice = usbConnectedDevice || usbVirtualDevice
-    if (currentDevice) {
-      logsToSendRef.current.push({
-        log_line: line,
-        log_source: source,
-        timestamp: timestamp
-      })
-      
-      // Limiter la taille du buffer (éviter la surcharge mémoire)
-      if (logsToSendRef.current.length > 200) {
-        logsToSendRef.current = logsToSendRef.current.slice(-200)
-      }
+    // TOUJOURS ajouter, même sans device connecté, pour que les logs soient visibles localement
+    logsToSendRef.current.push({
+      log_line: line,
+      log_source: source,
+      timestamp: timestamp
+    })
+    
+    // Limiter la taille du buffer (éviter la surcharge mémoire)
+    if (logsToSendRef.current.length > 200) {
+      logsToSendRef.current = logsToSendRef.current.slice(-200)
     }
-  }, [usbConnectedDevice, usbVirtualDevice])
+  }, [])
   
   // Fonction pour effacer les logs
   const clearUsbStreamLogs = useCallback(() => {
