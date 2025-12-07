@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useTimers, useEntityRestore } from '@/hooks'
+import { useApiData, useTimers, useEntityRestore, useAutoRefresh, useDevicesUpdateListener } from '@/hooks'
 import { createUpdateConfigCommand, createUpdateCalibrationCommand } from '@/lib/deviceCommands'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import { isArchived } from '@/lib/utils'
@@ -222,8 +222,14 @@ export default function DebugTab() {
   // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
   const { data: devicesData, loading: devicesLoading, refetch: refetchDevices, invalidateCache } = useApiData(
     useMemo(() => [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'], [showArchived]),
-    { requiresAuth: true, autoLoad: !!user, cacheTTL: 30000 } // Cache de 30 secondes pour éviter les refetch intempestifs
+    { requiresAuth: true, autoLoad: !!user, cacheTTL: 5000 } // Cache de 5 secondes pour avoir des données plus fraîches
   )
+  
+  // Rafraîchissement automatique du tableau toutes les 10 secondes (pour voir les mises à jour depuis USB local ou OTA)
+  useAutoRefresh(refetchDevices, 10000, !!user) // 10 secondes, activé si user connecté
+  
+  // Écouter les événements de mise à jour des dispositifs (cross-tab et cross-instance)
+  useDevicesUpdateListener(refetchDevices, !!user)
   
   // Utiliser le hook unifié pour la restauration
   const { restore: handleRestoreDeviceDirect, restoring: restoringDevice } = useEntityRestore('devices', {

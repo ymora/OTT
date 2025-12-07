@@ -386,6 +386,17 @@ export function UsbProvider({ children }) {
       if (result.success) {
         logger.debug('✅ Mesure USB envoyée avec succès')
         appendUsbStreamLog('✅ Mesure envoyée et enregistrée avec succès dans la base distante')
+        
+        // Notifier les autres composants que les dispositifs ont été mis à jour
+        // Cela déclenchera un rafraîchissement automatique du tableau sur toutes les instances (local et web)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('ott-devices-updated'))
+          try {
+            window.localStorage.setItem('ott-devices-last-update', Date.now().toString())
+          } catch (err) {
+            // Ignorer les erreurs localStorage (quota, etc.)
+          }
+        }
       } else if (result.queued) {
         logger.info('📦 Mesure USB mise en queue pour retry ultérieur')
         appendUsbStreamLog(`📦 Mesure mise en queue pour retry ultérieur (erreur: ${result.error?.message || result.error || 'Erreur inconnue'})`)
