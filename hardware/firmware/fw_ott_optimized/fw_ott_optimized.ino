@@ -302,9 +302,14 @@ void setup()
   if (usbModeActive) {
     // Mode USB : Démarrage modem EN ARRIÈRE-PLAN (non bloquant)
     Serial.println(F("⚡ Streaming démarré | Modem: arrière-plan\n"));
+    Serial.println(F("📡 Deux processus parallèles :"));
+    Serial.println(F("   1. Debug USB : Affichage mesures toutes les secondes"));
+    Serial.println(F("   2. Normal OTA : Envoi périodique selon configuration"));
     modemReady = false;
+    // Initialiser lastMeasurementTime pour le processus normal
+    lastMeasurementTime = millis();
     // Continuer vers loop() IMMÉDIATEMENT sans attendre le modem
-    // Le modem sera initialisé lors de la première tentative GPS/RSSI
+    // Le modem sera initialisé dans loop(), puis envoi de la mesure initiale
     return;  // ← IMPORTANT: Sortir de setup() et aller dans loop() !
   } else {
     // Mode hybride : Modem REQUIS
@@ -352,7 +357,19 @@ void setup()
     }
   }
   
-  // Ne pas faire deep sleep, continuer en mode actif (loop())
+  // Après envoi initial, faire deep sleep pour économiser l'énergie
+  if (sentInit) {
+    Serial.printf("[SLEEP] Mesure initiale envoyée → Deep sleep %lu minutes\n", static_cast<unsigned long>(configuredSleepMinutes));
+    
+    // Arrêter modem avant sleep
+    stopModem();
+    
+    // Deep sleep périodique
+    goToSleep(configuredSleepMinutes);
+    // Note: goToSleep() ne retourne jamais (deep sleep réinitialise le MCU)
+  }
+  
+  // Si échec envoi, continuer en mode actif pour réessayer
 }
 
 void loop()
@@ -380,31 +397,34 @@ void loop()
   }
   
   // =========================================================================
-  // MODE USB ACTIF : Envoi continu
+  // MODE USB ACTIF : Deux processus parallèles
+  // =========================================================================
+  // Processus 1 (USB Debug) : Affichage des mesures en temps réel sur USB (toutes les secondes)
+  // Processus 2 (Normal OTA) : Envoi périodique des mesures via OTA (selon configuredSleepMinutes)
   // =========================================================================
   if (usbModeActive) {
-    // Initialiser le modem en arrière-plan si nécessaire (pour GPS/RSSI)
+    // Initialiser le modem pour permettre l'envoi OTA (processus normal)
     static unsigned long lastModemInitAttempt = 0;
     static bool modemInitInProgress = false;
+    static bool firstInitAttempt = true;
     
-    if (!modemReady && !modemInitInProgress && (gpsEnabled || now - lastModemInitAttempt > 30000)) {
-      // Essayer d'initialiser le modem toutes les 30 secondes si GPS activé ou si 30s écoulées
+    // Première tentative : immédiatement, puis toutes les 30 secondes si échec
+    unsigned long retryInterval = firstInitAttempt ? 0 : 30000;
+    
+    if (!modemReady && !modemInitInProgress && (now - lastModemInitAttempt >= retryInterval)) {
       lastModemInitAttempt = now;
+      firstInitAttempt = false;
       modemInitInProgress = true;
-      if (gpsEnabled) {
-        Serial.println(F("[MODEM] Initialisation modem en arrière-plan (GPS activé)..."));
-      } else {
-        Serial.println(F("[MODEM] Initialisation modem en arrière-plan (pour RSSI)..."));
-      }
-      // Note: startModem() est bloquant, mais en mode USB on peut se le permettre
-      // car on est en streaming continu
+      
+      Serial.println(F("[MODEM] Initialisation modem pour processus OTA normal (mode USB)..."));
       if (startModem()) {
-        Serial.println(F("[MODEM] ✅ Modem initialisé en arrière-plan"));
+        Serial.println(F("[MODEM] ✅ Modem initialisé - Processus OTA activé"));
         if (gpsEnabled) {
           Serial.println(F("[GPS] ⏱️  Le GPS sera activé automatiquement"));
         }
       } else {
         Serial.println(F("[MODEM] ⚠️ Échec initialisation modem (réessai dans 30s)"));
+        Serial.println(F("[MODEM] ⚠️ Les mesures OTA ne seront pas envoyées tant que le modem n'est pas connecté"));
         if (gpsEnabled) {
           Serial.println(F("[GPS] ⚠️  GPS ne pourra pas fonctionner sans modem"));
         }
@@ -412,25 +432,68 @@ void loop()
       modemInitInProgress = false;
     }
     
-    static uint32_t usbSequence = 0;
-    static unsigned long lastUsbSend = 0;
+    // Si le modem est prêt mais pas connecté, essayer de se connecter périodiquement
+    if (modemReady && !modem.isNetworkConnected() && (now - lastModemInitAttempt >= 60000)) {
+      Serial.println(F("[MODEM] Tentative reconnexion réseau..."));
+      if (attachNetwork(60000)) {
+        Serial.println(F("[MODEM] ✅ Réseau reconnecté - Processus OTA activé"));
+        lastModemInitAttempt = now;
+      }
+    }
     
-    // Envoyer toutes les secondes en mode USB
-    if (now - lastUsbSend >= 1000) {
-      lastUsbSend = now;
+    // ====================================================================
+    // PROCESSUS 1 : DEBUG USB - Affichage des mesures toutes les secondes
+    // ====================================================================
+    static uint32_t usbSequence = 0;
+    static unsigned long lastUsbDisplay = 0;
+    static bool firstUsbDisplay = true;
+    
+    if (now - lastUsbDisplay >= 1000) {
+      lastUsbDisplay = now;
+      usbSequence++;
       
-      // Capturer mesure
+      // Message de démarrage au premier affichage
+      if (firstUsbDisplay) {
+        firstUsbDisplay = false;
+        String timeStr = formatTimeFromMillis(millis());
+        Serial.printf("%s[USB] 🚀 Processus 1 démarré - Affichage mesures toutes les secondes\n", timeStr.c_str());
+        Serial.printf("%s[USB] 📡 État modem: %s\n", timeStr.c_str(), modemReady ? "✅ Prêt" : "❌ Non initialisé");
+        if (modemReady) {
+          Serial.printf("%s[USB] 📡 Réseau: %s | GPRS: %s\n", 
+                        timeStr.c_str(),
+                        modem.isNetworkConnected() ? "✅ Connecté" : "❌ Déconnecté",
+                        modem.isGprsConnected() ? "✅ Connecté" : "❌ Déconnecté");
+        }
+      }
+      
+      // Capturer mesure pour affichage USB
       Measurement m = captureSensorSnapshot();
       
       // RSSI (seulement si modem prêt)
       if (modemReady) {
         int8_t csq = modem.getSignalQuality();
         m.rssi = csqToRssi(csq);
+        // Afficher l'état du réseau toutes les 10 mesures (toutes les 10 secondes)
+        if (usbSequence % 10 == 0) {
+          String timeStr = formatTimeFromMillis(millis());
+          bool networkConnected = modem.isNetworkConnected();
+          bool gprsConnected = modem.isGprsConnected();
+          Serial.printf("%s[USB] 📶 Réseau: %s | GPRS: %s | RSSI: %d dBm (CSQ=%d)\n",
+                        timeStr.c_str(),
+                        networkConnected ? "✅ Connecté" : "❌ Déconnecté",
+                        gprsConnected ? "✅ Connecté" : "❌ Déconnecté",
+                        m.rssi, csq);
+        }
       } else {
-        m.rssi = 0; // Pas de RSSI si modem pas prêt
+        m.rssi = 0;
+        // Afficher que le modem n'est pas prêt toutes les 10 mesures
+        if (usbSequence % 10 == 0) {
+          String timeStr = formatTimeFromMillis(millis());
+          Serial.printf("%s[USB] ⚠️ Modem non initialisé - En attente d'initialisation...\n", timeStr.c_str());
+        }
       }
       
-      // GPS (tentative rapide, non-bloquante, seulement si modem prêt ET GPS activé)
+      // GPS (tentative rapide, seulement si modem prêt ET GPS activé)
       float latitude = 0.0, longitude = 0.0;
       bool hasLocation = false;
       if (modemReady && gpsEnabled) {
@@ -441,41 +504,96 @@ void loop()
         }
       }
       
-      // Envoyer via USB
-      emitDebugMeasurement(m, ++usbSequence, 1000, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
+      // Envoyer via USB (affichage seulement, pas d'envoi à l'API ici)
+      emitDebugMeasurement(m, usbSequence, 1000, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr);
+    }
+    
+    // ====================================================================
+    // PROCESSUS 2 : NORMAL OTA - Envoi périodique selon configuredSleepMinutes
+    // ====================================================================
+    // Vérifier si on doit envoyer une mesure (processus normal)
+    static unsigned long lastOtaMeasurementTime = 0;
+    unsigned long sleepMinutesMs = configuredSleepMinutes * 60 * 1000;
+    unsigned long timeSinceLastOtaMeasurement = now - lastOtaMeasurementTime;
+    
+    // Si c'est la première fois ou si le délai est écoulé, envoyer une mesure
+    bool shouldSendOtaMeasurement = (lastOtaMeasurementTime == 0) || (timeSinceLastOtaMeasurement >= sleepMinutesMs);
+    
+    if (shouldSendOtaMeasurement && modemReady && modem.isNetworkConnected()) {
+      Serial.println(F("[OTA] 📤 Envoi mesure périodique (processus normal)..."));
       
-      // Envoyer via réseau si disponible
-      if (modemReady && modem.isNetworkConnected()) {
-        bool sent = sendMeasurement(m, hasLocation ? &latitude : nullptr, hasLocation ? &longitude : nullptr, "USB_STREAM");
-        if (sent) {
-          // Log seulement toutes les 10 mesures pour ne pas surcharger
-          if (usbSequence % 10 == 0) {
-            String timeStr = formatTimeFromMillis(millis());
-            Serial.printf("%s[USB] ✅ Envoi réseau OK (seq=%lu)\n", timeStr.c_str(), usbSequence);
-          }
+      // Capturer mesure pour envoi OTA
+      Measurement mOta = captureSensorSnapshot();
+      
+      // RSSI
+      int8_t csq = modem.getSignalQuality();
+      mOta.rssi = csqToRssi(csq);
+      String timeStr = formatTimeFromMillis(millis());
+      Serial.printf("%s[OTA] 📶 RSSI: %d dBm (CSQ=%d)\n", timeStr.c_str(), mOta.rssi, csq);
+      
+      // GPS (si activé)
+      float latOta = 0.0, lonOta = 0.0;
+      bool hasLocationOta = false;
+      if (gpsEnabled) {
+        Serial.printf("%s[OTA] 📍 Acquisition GPS en cours...\n", timeStr.c_str());
+        hasLocationOta = getDeviceLocation(&latOta, &lonOta);
+        if (hasLocationOta) {
+          Serial.printf("%s[OTA] 📍 GPS: %.6f, %.6f\n", timeStr.c_str(), latOta, lonOta);
         } else {
-          String timeStr = formatTimeFromMillis(millis());
-          Serial.printf("%s[USB] ❌ Échec envoi réseau\n", timeStr.c_str());
+          Serial.printf("%s[OTA] ⚠️ GPS non disponible\n", timeStr.c_str());
         }
       }
       
-      // Vérifier commandes OTA (toutes les 30s)
-      static unsigned long lastOtaCheckUsb = 0;
-      if (now - lastOtaCheckUsb >= 30000) {
-        lastOtaCheckUsb = now;
-        Command cmds[5];
-        int count = fetchCommands(cmds, 5);
+      // Envoyer via OTA (processus normal)
+      Serial.printf("%s[OTA] 📤 Envoi à la base de données...\n", timeStr.c_str());
+      bool sent = sendMeasurement(mOta, hasLocationOta ? &latOta : nullptr, hasLocationOta ? &lonOta : nullptr, "TIMER");
+      if (sent) {
+        lastOtaMeasurementTime = now;
+        lastFlowValue = mOta.flow;
+        lastMeasurementTime = now;
+        timeStr = formatTimeFromMillis(millis());
+        Serial.printf("%s[OTA] ✅ Mesure envoyée à la base de données avec succès (débit: %.2f L/min, batterie: %.0f%%, RSSI: %d dBm)\n",
+                      timeStr.c_str(), mOta.flow, mOta.battery, mOta.rssi);
+        Serial.printf("%s[OTA] ⏰ Prochaine mesure dans %lu minutes\n", timeStr.c_str(), static_cast<unsigned long>(configuredSleepMinutes));
+      } else {
+        Serial.printf("%s[OTA] ❌ Échec envoi mesure - réessai au prochain cycle\n", timeStr.c_str());
+      }
+      
+      // Traiter les commandes OTA après envoi
+      Command cmds[MAX_COMMANDS];
+      int count = fetchCommands(cmds, MAX_COMMANDS);
+      if (count > 0) {
+        Serial.printf("[OTA] 📡 %d commande(s) reçue(s)\n", count);
+        uint32_t dummySleep = configuredSleepMinutes;
+        for (int i = 0; i < count; ++i) {
+          handleCommand(cmds[i], dummySleep);
+        }
+      }
+    } else if (shouldSendOtaMeasurement && !modemReady) {
+      Serial.println(F("[OTA] ⚠️ Modem non prêt - Mesure OTA reportée"));
+    } else if (shouldSendOtaMeasurement && !modem.isNetworkConnected()) {
+      Serial.println(F("[OTA] ⚠️ Réseau non connecté - Mesure OTA reportée"));
+    }
+    
+    // Vérifier les commandes OTA périodiquement (même sans envoi de mesure)
+    static unsigned long lastOtaCheckUsb = 0;
+    if (now - lastOtaCheckUsb >= OTA_CHECK_INTERVAL_MS) {
+      lastOtaCheckUsb = now;
+      if (modemReady && modem.isNetworkConnected()) {
+        Command cmds[MAX_COMMANDS];
+        int count = fetchCommands(cmds, MAX_COMMANDS);
         if (count > 0) {
           String timeStr = formatTimeFromMillis(millis());
           Serial.printf("%s[OTA] 📡 %d commande(s) en attente\n", timeStr.c_str(), count);
-          for (int i = 0; i < count && i < 5; i++) {
-            Serial.printf("%s[OTA]   → %s (ID: %d)\n", timeStr.c_str(), cmds[i].verb.c_str(), cmds[i].id);
+          uint32_t dummySleep = configuredSleepMinutes;
+          for (int i = 0; i < count; ++i) {
+            handleCommand(cmds[i], dummySleep);
           }
         }
       }
     }
     
-    // Traiter commandes série
+    // Traiter commandes série (config, calibration, etc.)
     static String commandBuffer = "";
     while (Serial.available()) {
       char incoming = Serial.read();
@@ -601,12 +719,40 @@ void loop()
         }
       }
     }
+    
+    // Après envoi réussi, faire deep sleep pour économiser l'énergie
+    // (sauf si on vient juste de se réveiller d'un deep sleep)
+    static unsigned long lastDeepSleepTime = 0;
+    unsigned long timeSinceLastSleep = now - lastDeepSleepTime;
+    if (sent && timeSinceLastSleep > 60000) { // Au moins 1 minute depuis le dernier deep sleep
+      Serial.printf("[SLEEP] Mesure envoyée → Deep sleep %lu minutes\n", static_cast<unsigned long>(configuredSleepMinutes));
+      
+      // Arrêter modem avant sleep
+      stopModem();
+      
+      // Deep sleep pour configuredSleepMinutes
+      goToSleep(configuredSleepMinutes);
+      // Note: goToSleep() ne retourne jamais (deep sleep réinitialise le MCU)
+    }
   } else {
-    // Pas de changement détecté
+    // Pas de changement détecté depuis la dernière mesure
     unsigned long idleTime = now - lastMeasurementTime;
     
-    // Si inactif depuis X minutes, passer en light sleep
-    if (idleTime > IDLE_TIMEOUT_MS && modemReady) {
+    // Si pas de mesure depuis configuredSleepMinutes, faire deep sleep périodique
+    unsigned long sleepMinutesMs = configuredSleepMinutes * 60 * 1000;
+    if (idleTime > sleepMinutesMs && modemReady) {
+      Serial.printf("[SLEEP] Pas de changement depuis %lu min → Deep sleep %lu minutes\n", 
+                    idleTime / 60000, static_cast<unsigned long>(configuredSleepMinutes));
+      
+      // Arrêter modem avant sleep
+      stopModem();
+      
+      // Deep sleep périodique
+      goToSleep(configuredSleepMinutes);
+      // Note: goToSleep() ne retourne jamais (deep sleep réinitialise le MCU)
+    }
+    // Sinon, si inactif depuis longtemps mais moins que sleepMinutesMs, light sleep
+    else if (idleTime > IDLE_TIMEOUT_MS && modemReady) {
       Serial.printf("[SLEEP] Inactif depuis %lu min → Light sleep 1 min\n", idleTime / 60000);
       
       // Arrêter modem pour économie
@@ -841,7 +987,7 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   
   // Mode et séquence
   doc["mode"] = "usb_stream";
-  doc["type"] = "usb_stream";  // Compatibilité
+  doc["type"] = "usb_stream";
   doc["seq"] = sequence;
   
   // Identifiants
@@ -861,12 +1007,10 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   doc["device_name"] = deviceName;
   
   // Mesures principales
+  // Mesures principales (format unifié uniquement)
   doc["flow_lpm"] = m.flow;
-  doc["flowrate"] = m.flow;  // Compatibilité
   doc["battery_percent"] = m.battery;
-  doc["battery"] = m.battery;  // Compatibilité
   doc["rssi"] = m.rssi;
-  doc["signal_strength"] = m.rssi;  // Compatibilité
   
   // Position GPS/réseau cellulaire
   if (latitude != nullptr && longitude != nullptr) {
@@ -1621,14 +1765,13 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
     return false;
   }
   
-  // Envoyer TOUS les paramètres possibles (format unifié)
-  DynamicJsonDocument doc(1024);  // Augmenté pour tous les paramètres
+  // Format unifié uniquement
+  DynamicJsonDocument doc(1024);
   
-  // Mode et type (pour format unifié)
-  // Pour OTA, on utilise le status comme mode (BOOT, EVENT, TIMER, USB_STREAM)
+  // Mode et type
   doc["mode"] = status;  // BOOT, EVENT, TIMER, USB_STREAM
-  doc["type"] = "ota_measurement";  // Pour distinguer OTA de USB
-  doc["status"] = status;  // Compatibilité
+  doc["type"] = "ota_measurement";
+  doc["status"] = status;
   
   // Identifiants
   doc["sim_iccid"] = DEVICE_ICCID;
@@ -1651,13 +1794,10 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   }
   doc["device_name"] = deviceName;
   
-  // Mesures principales
-  doc["flow_lpm"] = m.flow;  // Format unifié (prioritaire)
-  doc["flowrate"] = m.flow;  // Compatibilité
-  doc["battery_percent"] = m.battery;  // Format unifié (prioritaire)
-  doc["battery"] = m.battery;  // Compatibilité
+  // Mesures principales (format unifié uniquement)
+  doc["flow_lpm"] = m.flow;
+  doc["battery_percent"] = m.battery;
   doc["rssi"] = m.rssi;
-  doc["signal_strength"] = m.rssi; // Compatibilité format V1
   
   // Position GPS/réseau cellulaire
   if (latitude != nullptr && longitude != nullptr) {
@@ -1707,15 +1847,20 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   
   // Afficher le résultat détaillé via USB
   if (ok) {
-    Serial.printf("[API] ✅ Mesure envoyée avec succès\n");
+    Serial.printf("[API] ✅ Mesure reçue par la base de données avec succès\n");
     if (apiResponse.length() > 0) {
-      Serial.printf("[API] Réponse API: %s\n", apiResponse.c_str());
+      Serial.printf("[API] Réponse base de données: %s\n", apiResponse.c_str());
     }
+    Serial.printf("[API] 📊 Données enregistrées: Débit=%.2f L/min | Batterie=%.0f%% | RSSI=%d dBm", m.flow, m.battery, m.rssi);
+    if (latitude != nullptr && longitude != nullptr && *latitude != 0.0 && *longitude != 0.0) {
+      Serial.printf(" | GPS=%.6f,%.6f", *latitude, *longitude);
+    }
+    Serial.println();
     sendLog("INFO", "Measurement posted successfully", "measurements");
   } else {
-    Serial.printf("[API] ❌ Échec envoi mesure\n");
+    Serial.printf("[API] ❌ Échec envoi mesure à la base de données\n");
     if (apiResponse.length() > 0) {
-      Serial.printf("[API] Erreur API: %s\n", apiResponse.c_str());
+      Serial.printf("[API] Erreur base de données: %s\n", apiResponse.c_str());
       // Limiter la taille du message de log
       String errorMsg = apiResponse;
       if (errorMsg.length() > 200) {
@@ -1723,6 +1868,7 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
       }
       sendLog("ERROR", "Measurement failed: " + errorMsg, "measurements");
     } else {
+      Serial.println(F("[API] ⚠️ Pas de réponse de la base de données"));
       sendLog("ERROR", "Measurement failed: pas de réponse API", "measurements");
     }
   }
@@ -1777,6 +1923,10 @@ int fetchCommands(Command* out, size_t maxCount)
 
 bool acknowledgeCommand(const Command& cmd, bool success, const char* message)
 {
+  String timeStr = formatTimeFromMillis(millis());
+  Serial.printf("%s[CMD] 📤 Envoi ACK: ID=%d | Status=%s | Message=%s\n", 
+                timeStr.c_str(), cmd.id, success ? "executed" : "error", message);
+  
   DynamicJsonDocument doc(256);
   doc["device_sim_iccid"] = DEVICE_ICCID;
   doc["command_id"] = cmd.id;
@@ -1784,7 +1934,14 @@ bool acknowledgeCommand(const Command& cmd, bool success, const char* message)
   doc["message"] = message;
   String body;
   serializeJson(doc, body);
-  return httpPost(PATH_ACK, body);
+  
+  bool result = httpPost(PATH_ACK, body);
+  if (result) {
+    Serial.printf("%s[CMD] ✅ ACK envoyé avec succès à l'API\n", timeStr.c_str());
+  } else {
+    Serial.printf("%s[CMD] ❌ Échec envoi ACK à l'API\n", timeStr.c_str());
+  }
+  return result;
 }
 
 bool sendLog(const char* level, const String& message, const char* type)
@@ -1856,6 +2013,9 @@ void saveOfflineLogs()
 
 void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
 {
+  String timeStr = formatTimeFromMillis(millis());
+  Serial.printf("%s[CMD] 📥 Commande reçue: %s (ID: %d)\n", timeStr.c_str(), cmd.verb.c_str(), cmd.id);
+  
   DynamicJsonDocument payloadDoc(512);
   bool hasPayload = deserializePayload(cmd, payloadDoc);
 
@@ -1863,10 +2023,14 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     uint32_t requestedSeconds = hasPayload ? extractSleepSeconds(payloadDoc) : 0;
     uint32_t requestedMinutes = requestedSeconds > 0 ? requestedSeconds / 60 : 0;
     nextSleepMinutes = std::max<uint32_t>(static_cast<uint32_t>(1), requestedMinutes);
-    acknowledgeCommand(cmd, true, "Sleep updated");
+    Serial.printf("%s[CMD] ✅ SET_SLEEP_SECONDS: %d minutes\n", timeStr.c_str(), nextSleepMinutes);
+    bool ackOk = acknowledgeCommand(cmd, true, "Sleep updated");
+    Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
     sendLog("INFO", "Sleep interval set to " + String(nextSleepMinutes) + " min", "commands");
   } else if (cmd.verb == "PING") {
-    acknowledgeCommand(cmd, true, "pong");
+    Serial.printf("%s[CMD] ✅ PING reçu - Envoi pong...\n", timeStr.c_str());
+    bool ackOk = acknowledgeCommand(cmd, true, "pong");
+    Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
     sendLog("INFO", "PING command répondu", "commands");
   } else if (cmd.verb == "UPDATE_CONFIG") {
     if (!hasPayload) {
@@ -1973,8 +2137,11 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     Serial.printf("    • Serial: %s | ICCID: %s\n", DEVICE_SERIAL.c_str(), DEVICE_ICCID.substring(0,10).c_str());
     Serial.printf("    • Sleep: %d min | GPS: %s\n", configuredSleepMinutes, gpsEnabled ? "ON" : "OFF");
     
-    acknowledgeCommand(cmd, true, "config updated");
+    bool ackOk = acknowledgeCommand(cmd, true, "config updated");
+    Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
     sendLog("INFO", "Configuration mise à jour à distance", "commands");
+    Serial.println(F("[CMD] 🔄 Redémarrage du dispositif dans 2 secondes..."));
+    delay(2000);
     stopModem();
     esp_restart();
   } else if (cmd.verb == "UPDATE_CALIBRATION") {
@@ -1988,9 +2155,14 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       sendLog("WARN", "UPDATE_CALIBRATION coefficients manquants", "commands");
       return;
     }
-    updateCalibration(payloadDoc["a0"].as<float>(), payloadDoc["a1"].as<float>(), payloadDoc["a2"].as<float>());
+    float a0 = payloadDoc["a0"].as<float>();
+    float a1 = payloadDoc["a1"].as<float>();
+    float a2 = payloadDoc["a2"].as<float>();
+    Serial.printf("%s[CMD] ✅ UPDATE_CALIBRATION: a0=%.4f, a1=%.4f, a2=%.4f\n", timeStr.c_str(), a0, a1, a2);
+    updateCalibration(a0, a1, a2);
     saveConfig();
-    acknowledgeCommand(cmd, true, "calibration updated");
+    bool ackOk = acknowledgeCommand(cmd, true, "calibration updated");
+    Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
     sendLog("INFO", "Calibration capteur mise à jour", "commands");
   } else if (cmd.verb == "OTA_REQUEST") {
     String channel = "primary";
@@ -2038,10 +2210,12 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     }
     
     sendLog("INFO", "OTA request: " + url + (expectedVersion.length() ? " (v" + expectedVersion + ")" : ""), "ota");
-    if (performOtaUpdate(url, md5, expectedVersion)) {
-      acknowledgeCommand(cmd, true, "ota applied");
+    bool otaOk = performOtaUpdate(url, md5, expectedVersion);
+    bool ackOk = acknowledgeCommand(cmd, otaOk, otaOk ? "ota applied" : "ota failed");
+    if (otaOk) {
+      Serial.printf("%s[CMD] ✅ OTA appliqué avec succès\n", timeStr.c_str());
       sendLog("INFO", "OTA appliquée, reboot", "ota");
-      Serial.printf("%s[OTA] ✅ Mise à jour réussie, redémarrage...\n", formatTimeFromMillis(millis()).c_str());
+      Serial.printf("%s[OTA] ✅ Mise à jour réussie, redémarrage...\n", timeStr.c_str());
       stopModem();
       delay(250);
       esp_restart();

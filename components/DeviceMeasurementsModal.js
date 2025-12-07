@@ -35,8 +35,13 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
       if (data.success && data.measurements) {
         setMeasurements(data.measurements)
         logger.debug(`✅ ${data.measurements.length} mesures chargées pour dispositif ${device.id}`)
+        if (data.measurements.length === 0) {
+          logger.warn(`⚠️ Aucune mesure trouvée pour dispositif ${device.id} (${device.device_name || device.sim_iccid})`)
+        }
       } else {
-        setError('Impossible de charger les mesures')
+        const errorMsg = data.error || 'Impossible de charger les mesures'
+        logger.error(`❌ Erreur API: ${errorMsg}`)
+        setError(errorMsg)
       }
     } catch (err) {
       logger.error('Erreur chargement mesures:', err)
@@ -125,7 +130,10 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
                       Batterie (%)
                     </th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">
-                      RSSI
+                      RSSI (dBm)
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">
+                      GPS
                     </th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">
                       Statut
@@ -161,10 +169,28 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
                         )}
                       </td>
                       <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
-                        {measurement.signal_strength !== null && measurement.signal_strength !== undefined
-                          ? measurement.signal_strength
+                        {measurement.signal_strength !== null && measurement.signal_strength !== undefined && measurement.signal_strength !== -999
+                          ? (
+                            <span className={`font-medium ${
+                              measurement.signal_strength >= -70 ? 'text-green-600 dark:text-green-400' :
+                              measurement.signal_strength >= -90 ? 'text-yellow-600 dark:text-yellow-400' :
+                              'text-red-600 dark:text-red-400'
+                            }`}>
+                              {measurement.signal_strength} dBm
+                            </span>
+                          )
                           : <span className="text-gray-400">-</span>
                         }
+                      </td>
+                      <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                        {measurement.latitude != null && measurement.longitude != null && 
+                         measurement.latitude !== 0 && measurement.longitude !== 0 ? (
+                          <span className="font-mono text-xs">
+                            {Number(measurement.latitude).toFixed(4)}, {Number(measurement.longitude).toFixed(4)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-2">
                         {measurement.device_status ? (
