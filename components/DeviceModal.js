@@ -269,8 +269,8 @@ export default function DeviceModal({
           : undefined,
         device_serial: formData.device_serial && formData.device_serial.trim().length > 0 ? formData.device_serial.trim() : null,
         // Ne pas modifier firmware_version - il est en lecture seule
-        status: formData.status || 'inactive',
-        patient_id: formData.patient_id || null
+        status: formData.status || 'inactive'
+        // patient_id est géré via l'assignation dans le tableau des dispositifs, pas dans ce modal
       }
       
       // Ajouter firmware_version uniquement en création (pas en modification)
@@ -553,8 +553,8 @@ export default function DeviceModal({
             </div>
           </div>
 
-          {/* Troisième ligne : Version firmware (lecture seule) et Patient */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Troisième ligne : Version firmware (lecture seule) */}
+          <div className="grid grid-cols-1 gap-4">
             {/* Version du firmware - Lecture seule */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
@@ -570,26 +570,6 @@ export default function DeviceModal({
                 placeholder="Ex: 3.8-unified"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Lecture seule</p>
-            </div>
-
-            {/* Patient */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Patient
-              </label>
-              <select
-                name="patient_id"
-                value={formData.patient_id || ''}
-                onChange={handleInputChange}
-                className="input w-full"
-              >
-                <option value="">— Aucun patient —</option>
-                {patients.map(patient => (
-                  <option key={patient.id} value={patient.id}>
-                    {patient.first_name} {patient.last_name} {patient.email ? `(${patient.email})` : ''}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -656,10 +636,10 @@ export default function DeviceModal({
                 </label>
               </div>
 
-              {/* Deuxième ligne : Envoyer toutes les N réveils */}
+              {/* Deuxième ligne : Fréquence d'envoi des mesures */}
               <div>
                 <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                  📤 Envoyer toutes les N réveils
+                  📤 Envoyer une mesure tous les N réveils
                 </label>
                 <input
                   type="number"
@@ -668,7 +648,11 @@ export default function DeviceModal({
                   onChange={handleInputChange}
                   className="input w-full"
                   min="1"
+                  placeholder="1"
                 />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Exemple : 1 = à chaque réveil, 2 = tous les 2 réveils, 5 = tous les 5 réveils
+                </p>
               </div>
 
               {/* Calibration */}

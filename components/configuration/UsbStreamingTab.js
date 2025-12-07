@@ -613,6 +613,11 @@ export default function DebugTab() {
   const [deviceToAssign, setDeviceToAssign] = useState(null)
   const [assigningPatient, setAssigningPatient] = useState(false)
   
+  // États pour la désassignation de patient
+  const [showUnassignPatientModal, setShowUnassignPatientModal] = useState(false)
+  const [deviceToUnassign, setDeviceToUnassign] = useState(null)
+  const [unassigningPatient, setUnassigningPatient] = useState(false)
+  
   // États pour le flash
   const [showFlashModal, setShowFlashModal] = useState(false)
   const [deviceToFlash, setDeviceToFlash] = useState(null)
@@ -758,16 +763,38 @@ export default function DebugTab() {
   const formatTime = useCallback((timestamp) => {
     if (!timestamp) return null
     const date = new Date(timestamp)
+    if (isNaN(date.getTime())) return 'Date invalide'
+    
     const now = new Date()
     const diffMs = now - date
     const diffSec = Math.floor(diffMs / 1000)
     const diffMin = Math.floor(diffSec / 60)
     const diffHour = Math.floor(diffMin / 60)
+    const diffDays = Math.floor(diffHour / 24)
     
-    if (diffSec < 60) return `${diffSec}s`
-    if (diffMin < 60) return `${diffMin}min`
-    if (diffHour < 24) return `${diffHour}h`
-    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    // Moins de 1 minute : secondes
+    if (diffSec < 60) return `Il y a ${diffSec}s`
+    
+    // Moins de 1 heure : minutes
+    if (diffMin < 60) return `Il y a ${diffMin}min`
+    
+    // Moins de 24h : heures et minutes
+    if (diffHour < 24) {
+      const remainingMin = diffMin % 60
+      if (remainingMin > 0) {
+        return `Il y a ${diffHour}h ${remainingMin}min`
+      }
+      return `Il y a ${diffHour}h`
+    }
+    
+    // Au-delà de 24h : afficher la date complète (jour + heure)
+    return date.toLocaleString('fr-FR', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })
   }, [])
   
   // Le modem est toujours démarré par défaut dans le firmware
@@ -1311,11 +1338,91 @@ export default function DebugTab() {
     }
   }, [fetchWithAuth, API_URL, deviceToAssign, allPatients, appendUsbStreamLog, refetchDevices])
   
+  // Gérer la désassignation d'un patient d'un dispositif
+  const handleUnassignPatient = useCallback(async (device) => {
+    if (!device) return
+    
+    setUnassigningPatient(true)
+    try {
+      // 1. Désassigner le dispositif (mettre patient_id à null)
+      const url = `${API_URL}/api.php/devices/${device.id}`
+      const response = await fetchWithAuth(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patient_id: null })
+      }, { requiresAuth: true })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
+      }
+      
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.error || 'Erreur API')
+      }
+      
+      // 2. Réinitialiser la configuration du dispositif aux paramètres d'origine
+      try {
+        await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/devices/${device.id}/config`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              sleep_minutes: null,
+              measurement_duration_ms: null,
+              send_every_n_wakeups: null,
+              calibration_coefficients: null
+            })
+          },
+          { requiresAuth: true }
+        )
+      } catch (configErr) {
+        // Ne pas bloquer si la réinitialisation de la config échoue
+        logger.warn('Erreur réinitialisation config dispositif:', configErr)
+      }
+      
+      const patient = allPatients.find(p => p.id === device.patient_id)
+      logger.log(`✅ Dispositif désassigné de ${patient?.first_name} ${patient?.last_name || device.patient_id}`)
+      appendUsbStreamLog(`✅ Dispositif désassigné et réinitialisé avec succès`, 'dashboard')
+      setShowUnassignPatientModal(false)
+      setDeviceToUnassign(null)
+      refetchDevices()
+    } catch (err) {
+      logger.error('Erreur désassignation patient:', err)
+      appendUsbStreamLog(`❌ Erreur désassignation patient: ${err.message || err}`, 'dashboard')
+    } finally {
+      setUnassigningPatient(false)
+    }
+  }, [fetchWithAuth, API_URL, allPatients, appendUsbStreamLog, refetchDevices])
+  
   // Patients disponibles (sans dispositif assigné et non archivés)
   const availablePatients = useMemo(() => {
     const assignedPatientIds = new Set(allDevices.filter(d => d.patient_id).map(d => d.patient_id))
     return allPatients.filter(p => !isArchived(p) && !assignedPatientIds.has(p.id))
   }, [allPatients, allDevices])
+  
+  // Gérer l'ouverture du modal d'assignation de patient
+  const handleOpenAssignPatientModal = useCallback((device) => {
+    if (isArchived(device)) {
+      logger.warn('Tentative d\'assignation d\'un patient à un dispositif archivé')
+      return
+    }
+    setDeviceToAssign(device)
+    setShowAssignPatientModal(true)
+  }, [])
+  
+  // Gérer l'ouverture du modal de désassignation de patient
+  const handleOpenUnassignPatientModal = useCallback((device) => {
+    if (isArchived(device)) {
+      logger.warn('Tentative de désassignation d\'un patient d\'un dispositif archivé')
+      return
+    }
+    setDeviceToUnassign(device)
+    setShowUnassignPatientModal(true)
+  }, [])
   
   // Gérer l'ouverture du modal de flash (uniquement pour dispositifs non archivés)
   const handleOpenFlashModal = useCallback((device) => {
@@ -1427,6 +1534,45 @@ export default function DebugTab() {
           </>
         )}
       </Modal>
+      
+      {/* Modal de confirmation de désassignation de patient */}
+      <ConfirmModal
+        isOpen={showUnassignPatientModal}
+        onClose={() => {
+          setShowUnassignPatientModal(false)
+          setDeviceToUnassign(null)
+        }}
+        title="🔓 Désassigner le patient"
+        onConfirm={() => {
+          if (deviceToUnassign) {
+            handleUnassignPatient(deviceToUnassign)
+          }
+        }}
+        confirmText={unassigningPatient ? '⏳ Désassignation...' : '🔓 Désassigner'}
+        cancelText="Annuler"
+        disabled={unassigningPatient}
+      >
+        {deviceToUnassign && (
+          <>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Êtes-vous sûr de vouloir désassigner le dispositif :
+            </p>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-4">
+              <p className="font-semibold text-gray-900 dark:text-gray-100">
+                {deviceToUnassign.device_name || deviceToUnassign.sim_iccid}
+              </p>
+              {deviceToUnassign.sim_iccid && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-mono">
+                  {deviceToUnassign.sim_iccid}
+                </p>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              La configuration du dispositif sera réinitialisée aux paramètres d'origine.
+            </p>
+          </>
+        )}
+      </ConfirmModal>
       
       {/* Modal de confirmation de suppression */}
       {/* Modal de flash */}
@@ -1925,22 +2071,35 @@ export default function DebugTab() {
                     const usbTimestamp = isDeviceUsbConnected ? (usbStreamLastUpdate || deviceUsbMeasurement?.timestamp || deviceUsbInfo?.last_seen) : null
                     const dbTimestamp = deviceDbData?.last_seen
                     const timestamp = usbTimestamp || dbTimestamp
-                    const source = usbTimestamp ? 'usb' : (dbTimestamp ? 'database' : null)
-                    const timeDiff = timestamp ? Math.floor((currentTime - timestamp) / 1000) : null
-                    const isRecent = timeDiff != null && timeDiff < 60
+                    
+                    if (!timestamp) {
+                      return (
+                        <span className="text-xs text-gray-400 dark:text-gray-500">Jamais</span>
+                      )
+                    }
+                    
+                    // Vérifier si timestamp est valide
+                    const date = new Date(timestamp)
+                    const isValidDate = !isNaN(date.getTime())
+                    
+                    if (!isValidDate) {
+                      return (
+                        <span className="text-xs text-gray-400 dark:text-gray-500">Date invalide</span>
+                      )
+                    }
+                    
+                    // Afficher la date/heure complète avec secondes
                     return (
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1">
-                          <span className={`text-xs font-semibold ${!isRecent ? 'text-gray-400 dark:text-gray-500' : 'text-green-600 dark:text-green-400'}`}>
-                            {timeDiff != null ? `${timeDiff}s` : 'Jamais'}
-                          </span>
-                        </div>
-                        {timestamp && (
-                          <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                            {new Date(timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-xs text-gray-700 dark:text-gray-300">
+                        {date.toLocaleString('fr-FR', { 
+                          day: '2-digit', 
+                          month: '2-digit', 
+                          year: 'numeric',
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
+                      </span>
                     )
                   })()}
                 </td>
@@ -1971,6 +2130,34 @@ export default function DebugTab() {
                         >
                           <span className="text-lg">✏️</span>
                         </button>
+                        {(() => {
+                          const hasPatient = !!deviceDbData?.patient_id
+                          if (hasPatient) {
+                            // Dispositif assigné : bouton désassigner
+                            return (
+                              <button
+                                className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
+                                onClick={() => handleOpenUnassignPatientModal(device)}
+                                disabled={unassigningPatient}
+                                title="Désassigner le patient du dispositif"
+                              >
+                                <span className="text-lg">{unassigningPatient ? '⏳' : '🔓'}</span>
+                              </button>
+                            )
+                          } else {
+                            // Pas de patient : bouton assigner
+                            return (
+                              <button
+                                className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+                                onClick={() => handleOpenAssignPatientModal(device)}
+                                disabled={availablePatients.length === 0 || assigningPatient}
+                                title={availablePatients.length === 0 ? "Aucun patient libre disponible" : "Assigner un patient au dispositif"}
+                              >
+                                <span className="text-lg">🔗</span>
+                              </button>
+                            )
+                          }
+                        })()}
                         <button
                           onClick={() => handleOpenFlashModal(device)}
                           disabled={compiledFirmwares.length === 0}
