@@ -60,6 +60,7 @@ function handleGetDevices() {
         $total = intval($countStmt->fetchColumn());
         
         // Requête simplifiée et robuste - éviter duplication firmware_version
+        // Ajouter le nombre de mesures par dispositif
         $stmt = $pdo->prepare("
             SELECT 
                 d.id,
@@ -83,7 +84,8 @@ function handleGetDevices() {
                 p.last_name,
                 COALESCE(d.firmware_version, dc.firmware_version) as firmware_version,
                 COALESCE(dc.ota_pending, FALSE) as ota_pending,
-                COALESCE(dc.gps_enabled, FALSE) as gps_enabled
+                COALESCE(dc.gps_enabled, FALSE) as gps_enabled,
+                (SELECT COUNT(*) FROM measurements m WHERE m.device_id = d.id) as measurement_count
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
             LEFT JOIN device_configurations dc ON d.id = dc.device_id

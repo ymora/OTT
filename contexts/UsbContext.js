@@ -78,7 +78,8 @@ export function UsbProvider({ children }) {
     // Ajouter au state local pour affichage immédiat
     setUsbStreamLogs(prev => {
       const next = [...prev, { id: `${timestamp}-${Math.random()}`, line, timestamp, source }]
-      return next.slice(-80)
+      // Augmenté de 80 à 500 pour capturer plus de logs (notamment les logs OTA périodiques)
+      return next.slice(-500)
     })
     
     // Ajouter au batch pour envoi au serveur (pour monitoring à distance)
@@ -225,8 +226,8 @@ export function UsbProvider({ children }) {
           const result = await response.json().catch(() => ({}))
           const count = result.inserted_count || logsToSend.length
           logger.debug(`✅ ${count} logs USB envoyés au serveur`)
-          // Log aussi dans la console USB pour visibilité
-          appendUsbStreamLog(`📤 ${count} log(s) envoyé(s) au serveur (visible sur web)`, 'dashboard')
+          // Ne pas afficher ce message dans la console pour ne pas masquer les logs du firmware
+          // Les logs sont déjà visibles individuellement, ce message est redondant
         }
       }
     } catch (err) {
@@ -301,12 +302,25 @@ export function UsbProvider({ children }) {
     return () => clearInterval(interval)
   }, [isConnected, usbConnectedDevice, write, fetchWithAuth, API_URL])
   
-  // Fonction pour envoyer une mesure à l'API avec retry et validation
+  // Stockage des mesures USB locales pour comparaison avec OTA
+  const usbMeasurementsLocalRef = useRef([])
+  
+  // État du monitoring OTA
+  const [otaMonitoringStatus, setOtaMonitoringStatus] = useState({
+    isMonitoring: false,
+    lastOtaMeasurement: null,
+    lastCheck: null,
+    syncStatus: 'unknown', // 'synced' | 'delayed' | 'not_syncing' | 'unknown'
+    matchedMeasurements: 0,
+    totalUsbMeasurements: 0
+  })
+  
+  // Fonction pour enregistrer une mesure USB locale (pour visualisation et monitoring OTA)
+  // ⚠️ IMPORTANT : Le mode USB sert uniquement à visualiser ce qui se passe en live
+  // Le firmware continue de fonctionner normalement et d'envoyer en OTA
+  // On ne fait PAS d'envoi séparé depuis le dashboard pour éviter les doublons
   const sendMeasurementToApi = useCallback(async (measurement, device) => {
-    if (!device || !sendMeasurementToApiRef.current) {
-      const errorMsg = '⚠️ Pas de dispositif ou callback pour envoyer la mesure USB'
-      logger.debug(errorMsg)
-      appendUsbStreamLog(errorMsg)
+    if (!device) {
       return
     }
     
@@ -317,97 +331,57 @@ export function UsbProvider({ children }) {
       // Si pas d'ICCID, utiliser device_serial
       if (!simIccid || simIccid === 'N/A' || simIccid.length < 10) {
         simIccid = device.device_serial
-        logger.debug('📝 Utilisation device_serial comme ICCID:', simIccid)
       }
       
-      // Si toujours pas d'identifiant valide, utiliser device_name (pour USB-xxx:yyy)
+      // Si toujours pas d'identifiant valide, utiliser device_name
       if (!simIccid || simIccid === 'N/A') {
-        // Extraire l'identifiant du nom USB-xxx:yyy
         const nameMatch = device.device_name?.match(/USB-([a-f0-9:]+)/i)
         if (nameMatch && nameMatch[1]) {
           simIccid = nameMatch[1]
-          logger.debug('📝 Utilisation device_name comme ICCID:', simIccid)
         } else {
           simIccid = device.device_name
         }
       }
       
       if (!simIccid || simIccid === 'N/A') {
-        const errorMsg = `❌ Impossible d'envoyer la mesure USB: pas d'identifiant disponible (nom: ${device.device_name || 'N/A'}, ICCID: ${device.sim_iccid || 'N/A'}, Serial: ${device.device_serial || 'N/A'})`
-        logger.warn(errorMsg, {
-          device_name: device.device_name,
-          sim_iccid: device.sim_iccid,
-          device_serial: device.device_serial
-        })
-        appendUsbStreamLog(errorMsg)
+        logger.debug('⚠️ Mesure USB reçue mais pas d\'identifiant pour monitoring OTA')
         return
       }
 
-      // Priorité pour firmware_version :
-      // 1. Version depuis le message usb_stream (measurement.raw.firmware_version) - la plus récente
-      // 2. Version depuis device_info (device.firmware_version) - peut être obsolète
-      // 3. null si aucune version disponible
-      const firmwareVersion = measurement.raw?.firmware_version || device.firmware_version || null
-      
-      const measurementData = {
+      // Enregistrer la mesure USB localement pour visualisation et comparaison avec OTA
+      const usbMeasurement = {
         sim_iccid: String(simIccid).trim(),
         flowrate: measurement.flowrate ?? 0,
         battery: measurement.battery ?? null,
         rssi: measurement.rssi ?? null,
-        firmware_version: firmwareVersion,
-        timestamp: new Date(measurement.timestamp).toISOString(),
-        status: 'USB'
+        timestamp: measurement.timestamp,
+        source: 'usb'
       }
       
-      // Inclure les coordonnées GPS si disponibles (même pour USB)
-      if (measurement.latitude != null && measurement.longitude != null) {
-        measurementData.latitude = measurement.latitude
-        measurementData.longitude = measurement.longitude
+      // Ajouter à la liste des mesures USB locales (garder les 50 dernières)
+      usbMeasurementsLocalRef.current.push(usbMeasurement)
+      if (usbMeasurementsLocalRef.current.length > 50) {
+        usbMeasurementsLocalRef.current.shift()
       }
 
-      logger.debug('📤 Envoi mesure USB à l\'API:', measurementData)
+      logger.debug('📊 Mesure USB reçue (visualisation locale):', {
+        iccid: usbMeasurement.sim_iccid?.slice(-10),
+        flowrate: usbMeasurement.flowrate,
+        battery: usbMeasurement.battery,
+        timestamp: new Date(usbMeasurement.timestamp).toISOString()
+      })
       
-      // Vérifier que le callback est bien configuré
-      if (!sendMeasurementToApiRef.current) {
-        const errorMsg = '⚠️ Callback sendMeasurement non configuré - mesure non envoyée'
-        logger.warn(errorMsg)
-        appendUsbStreamLog(errorMsg)
-        return
-      }
-      
-      // Log dans la console de logs de l'interface
-      const logMessage = `📤 Préparation envoi mesure à l'API distante: ICCID=${measurementData.sim_iccid || 'N/A'} | Débit=${measurementData.flowrate ?? 0} L/min | Batterie=${measurementData.battery ?? 'N/A'}% | RSSI=${measurementData.rssi ?? 'N/A'}`
+      // Log informatif : visualisation uniquement, le firmware envoie normalement en OTA
+      const logMessage = `📊 Mesure reçue (USB): Débit=${usbMeasurement.flowrate?.toFixed(2) ?? 0} L/min | Batterie=${usbMeasurement.battery ?? 'N/A'}% | RSSI=${usbMeasurement.rssi ?? 'N/A'} | Le firmware envoie en OTA normalement`
       appendUsbStreamLog(logMessage)
       
-      // Utiliser le système robuste d'envoi avec retry
-      const { sendMeasurementWithRetry } = await import('@/lib/measurementSender')
-      const result = await sendMeasurementWithRetry(measurementData, sendMeasurementToApiRef.current)
+      // ⚠️ NE PAS ENVOYER la mesure depuis le dashboard
+      // Le firmware envoie déjà en OTA normalement (processus parallèle)
+      // Les logs USB montrent en live ce qui se passe (modem, GPS, envoi API)
+      // Le monitoring OTA compare les mesures USB locales avec celles qui arrivent dans la BDD
       
-      if (result.success) {
-        logger.debug('✅ Mesure USB envoyée avec succès')
-        appendUsbStreamLog('✅ Mesure envoyée et enregistrée avec succès dans la base distante')
-        
-        // Notifier les autres composants que les dispositifs ont été mis à jour
-        // Cela déclenchera un rafraîchissement automatique du tableau sur toutes les instances (local et web)
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('ott-devices-updated'))
-          try {
-            window.localStorage.setItem('ott-devices-last-update', Date.now().toString())
-          } catch (err) {
-            // Ignorer les erreurs localStorage (quota, etc.)
-          }
-        }
-      } else if (result.queued) {
-        logger.info('📦 Mesure USB mise en queue pour retry ultérieur')
-        appendUsbStreamLog(`📦 Mesure mise en queue pour retry ultérieur (erreur: ${result.error?.message || result.error || 'Erreur inconnue'})`)
-      } else {
-        logger.warn('⚠️ Échec envoi mesure USB:', result.error)
-        appendUsbStreamLog(`⚠️ ÉCHEC envoi mesure: ${result.error?.message || result.error || 'Erreur inconnue'}`)
-      }
     } catch (err) {
-      const errorMsg = `❌ Erreur envoi mesure USB à l'API: ${err.message || err}`
-      logger.error(errorMsg, err, { device })
-      appendUsbStreamLog(errorMsg)
+      logger.error('❌ Erreur enregistrement mesure USB locale:', err)
     }
   }, [appendUsbStreamLog])
 
@@ -1606,6 +1580,143 @@ export function UsbProvider({ children }) {
     autoCreateOrUpdateDeviceRef.current = autoCreateOrUpdateDevice
   }, [autoCreateOrUpdateDevice])
 
+  // Fonction pour vérifier si les mesures OTA arrivent dans la base de données
+  const checkOtaSync = useCallback(async (deviceIdentifier, deviceId = null) => {
+    if (!deviceIdentifier || !fetchWithAuth || !API_URL) {
+      return null
+    }
+
+    try {
+      setOtaMonitoringStatus(prev => ({ ...prev, isMonitoring: true, lastCheck: Date.now() }))
+      
+      let device = null
+      
+      // Si on a un deviceId, récupérer directement le dispositif
+      if (deviceId) {
+        const response = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/devices/${deviceId}`,
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        
+        if (response.success && response.device) {
+          device = response.device
+        }
+      }
+      
+      // Sinon, récupérer tous les dispositifs et chercher
+      if (!device) {
+        const response = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/devices`,
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        
+        if (response.success && response.devices && response.devices.devices) {
+          // Chercher par sim_iccid ou device_serial
+          device = response.devices.devices.find(d => 
+            d.sim_iccid === deviceIdentifier || 
+            d.device_serial === deviceIdentifier
+          )
+        }
+      }
+      
+      if (!device) {
+        setOtaMonitoringStatus(prev => ({ 
+          ...prev, 
+          isMonitoring: false,
+          syncStatus: 'unknown'
+        }))
+        return null
+      }
+
+      // Récupérer les mesures USB locales récentes (dernières 2 minutes)
+      const twoMinutesAgo = Date.now() - 2 * 60 * 1000
+      const usbMeasurements = usbMeasurementsLocalRef.current
+        .filter(m => {
+          const match = m.sim_iccid === deviceIdentifier || 
+                       m.sim_iccid === device.sim_iccid ||
+                       m.sim_iccid === device.device_serial
+          return match && new Date(m.timestamp).getTime() >= twoMinutesAgo
+        })
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) // Plus récentes en premier
+
+      // Comparer avec les données du dispositif dans la BDD
+      const deviceLastSeen = device.last_seen ? new Date(device.last_seen).getTime() : null
+      const deviceLastBattery = device.last_battery
+      const deviceLastFlowrate = device.last_flowrate
+      
+      let matchedCount = 0
+      let syncStatus = 'unknown'
+      const now = Date.now()
+
+      if (usbMeasurements.length === 0) {
+        syncStatus = 'unknown'
+      } else if (!deviceLastSeen) {
+        syncStatus = 'not_syncing' // Dispositif jamais vu en OTA
+      } else {
+        // Vérifier si la dernière mesure USB correspond aux données OTA
+        const lastUsbMeasurement = usbMeasurements[0]
+        const timeSinceLastOta = (now - deviceLastSeen) / 1000 // secondes
+        
+        // Si une mesure OTA a été reçue dans les 30 dernières secondes
+        if (timeSinceLastOta <= 30) {
+          // Comparer les valeurs
+          const batteryDiff = Math.abs((lastUsbMeasurement.battery || 0) - (deviceLastBattery || 0))
+          const flowrateDiff = Math.abs((lastUsbMeasurement.flowrate || 0) - (deviceLastFlowrate || 0))
+          
+          // Si les valeurs sont proches, considérer comme synchronisé
+          if (batteryDiff <= 2 && flowrateDiff <= 0.5) {
+            matchedCount = 1
+            syncStatus = 'synced'
+          } else {
+            syncStatus = 'delayed' // Valeurs différentes mais timing OK
+          }
+        } else {
+          syncStatus = 'delayed' // Pas de mesure OTA récente
+        }
+      }
+
+      setOtaMonitoringStatus({
+        isMonitoring: false,
+        lastOtaMeasurement: deviceLastSeen ? {
+          timestamp: device.last_seen,
+          battery: deviceLastBattery,
+          flowrate: deviceLastFlowrate,
+          rssi: device.last_rssi
+        } : null,
+        lastCheck: Date.now(),
+        syncStatus,
+        matchedMeasurements: matchedCount,
+        totalUsbMeasurements: usbMeasurements.length
+      })
+
+      return {
+        syncStatus,
+        matchedCount,
+        totalUsbCount: usbMeasurements.length,
+        deviceLastSeen: device.last_seen,
+        deviceData: {
+          last_battery: deviceLastBattery,
+          last_flowrate: deviceLastFlowrate,
+          last_rssi: device.last_rssi
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Erreur vérification OTA:', error)
+      setOtaMonitoringStatus(prev => ({ 
+        ...prev, 
+        isMonitoring: false,
+        syncStatus: 'unknown'
+      }))
+      return null
+    }
+  }, [fetchWithAuth, API_URL])
+
   const value = {
     // État USB
     usbConnectedDevice,
@@ -1646,6 +1757,11 @@ export function UsbProvider({ children }) {
     clearUsbStreamLogs,
     setSendMeasurementCallback,
     setUpdateDeviceFirmwareCallback,
+    
+    // Monitoring OTA
+    otaMonitoringStatus,
+    checkOtaSync,
+    usbMeasurementsLocal: usbMeasurementsLocalRef.current,
   }
 
   return (

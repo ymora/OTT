@@ -93,19 +93,32 @@ git push origin main
 
 ### Flux global
 
-#### Mode Hybride (Production) - v3.8
+#### Mode Hybride (Production)
 - **Envoi au reset hard** : Mesure initiale envoyée au démarrage (`status: "BOOT"`)
 - **Détection de changement** : Surveillance continue du flux d'air (seuil: 0.5 L/min)
 - **Envoi immédiat** : Mesure et envoi dès changement détecté (`status: "EVENT"`)
-- **Light sleep** : Si inactif 30 minutes (économie d'énergie)
-- **Vérification OTA** : Commandes vérifiées toutes les 30 secondes
+- **Deep sleep après mesure** : Après chaque envoi réussi, le dispositif entre en deep sleep pour la durée configurée (`configuredSleepMinutes`, par défaut 24 heures)
+- **Deep sleep périodique** : Si aucun changement n'est détecté pendant la durée configurée, le dispositif entre en deep sleep automatiquement
+- **Light sleep intermédiaire** : Si inactif depuis plus de 30 minutes mais moins que `configuredSleepMinutes`, le dispositif entre en light sleep (1 minute) pour économiser l'énergie tout en restant réactif
+- **Vérification OTA** : Commandes vérifiées toutes les 30 secondes après chaque changement de flux détecté
 
-#### Mode USB (Tests/Diagnostics)
-- **Mode continu automatique** : Détection automatique de la connexion USB, streaming continu de mesures en temps réel
-- **Envoi simultané** : Les mesures sont envoyées simultanément via USB (JSON) et OTA (réseau GSM si disponible)
+#### Mode USB (Visualisation Live / Debug)
+- **Fonctionnement normal** : Le dispositif continue de fonctionner normalement même branché en USB. Il envoie ses mesures en OTA comme d'habitude.
+- **Visualisation live** : Les logs USB permettent de voir en temps réel ce qui se passe :
+  - ✅ **Connexion modem** : Logs de connexion au réseau GSM, qualité du signal (RSSI)
+  - ✅ **GPS** : Acquisition de position, coordonnées GPS, nombre de satellites
+  - ✅ **Envoi API** : Tentatives d'envoi des mesures, réponses de l'API (succès/échec)
+  - ✅ **Capteurs** : Valeurs des mesures (débit, batterie) en temps réel
+- **Processus parallèles** : Le firmware exécute deux processus en parallèle :
+  - **Processus 1 (Debug USB)** : Affichage des mesures toutes les secondes sur USB pour visualisation live
+  - **Processus 2 (Normal OTA)** : Envoi périodique des mesures via OTA selon `configuredSleepMinutes` (par défaut toutes les 24 heures, configurable)
+- **⚠️ Important** : 
+  - Les mesures affichées sur USB sont **uniquement pour visualisation** (affichées toutes les secondes)
+  - Les mesures envoyées à l'API suivent le **cycle normal OTA** (toutes les `configuredSleepMinutes`)
+  - Le processus normal OTA continue même en mode USB, sans deep sleep (mode continu)
 - **Configuration directe** : Commandes USB `config {...}` et `calibration {...}` pour configuration immédiate
 - **Commandes disponibles** : `config {...}`, `calibration {...}`, `interval=<ms>`
-- **Pas de deep sleep** : Mode continu tant que USB connecté, retour automatique en mode normal à la déconnexion
+- **Pas de deep sleep en USB** : Mode continu tant que USB connecté pour permettre la visualisation live, retour automatique en mode normal (avec deep sleep) à la déconnexion
 
 #### Géolocalisation
 - **Dispositifs OTA (Mode Normal)** : le firmware tente d'obtenir la position via GPS (priorité) ou réseau cellulaire (fallback) et l'inclut dans chaque mesure. L'API met à jour automatiquement `latitude`/`longitude` du dispositif.
@@ -395,15 +408,7 @@ grep -r "function " api/ | sort | uniq -d
 
 ---
 
-## 🆕 Améliorations Récentes (v3.3)
-
-### Géolocalisation (v3.1-gps)
-- **Position automatique pour dispositifs OTA** : le firmware v3.1-gps+ envoie automatiquement la position GPS (ou réseau cellulaire en fallback) dans chaque mesure
-- **Position automatique pour dispositifs USB** : déterminée via géolocalisation IP du PC client
-- **Mise à jour automatique** : l'API met à jour les coordonnées `latitude`/`longitude` dans la base de données à chaque mesure
-- **Affichage sur carte** : les dispositifs avec position apparaissent sur la carte interactive (`/dashboard/map`)
-
-## 🆕 Améliorations Récentes (v3.3)
+## 🆕 Améliorations Récentes
 
 ### Interface Utilisateur
 - **Menu réorganisé** : passage de 14 onglets à 5 sections principales avec sous-menus déroulants
@@ -441,7 +446,7 @@ grep -r "function " api/ | sort | uniq -d
 ### 🔧 Firmware
 - ✅ Mesure débit oxygène (MPXV7007DP) + calibration polynomiale (override possible via `UPDATE_CALIBRATION`)
 - ✅ Bidirectionnel complet (TinyGSM SIM7600, commandes `SET_SLEEP_SECONDS`, `PING`, `UPDATE_CONFIG`, `UPDATE_CALIBRATION`, `OTA_REQUEST`)
-- ✅ Deep sleep dynamique (5 min par défaut, override via dashboard + configuration distante)
+- ✅ Deep sleep dynamique (24 heures par défaut, override via dashboard + configuration distante)
 - ✅ Publication HTTPS sécurisée (Bearer JWT, endpoints `/devices/measurements`, `/devices/commands/*`, `/devices/logs`)
 - ✅ Watchdog applicatif + instrumentation série (flux/batterie/RSSI, compte commandes, progression OTA)
 - ✅ Mesure paramétrable (passes, échantillons, délais) + timeouts modem/OTA ajustables à chaud
@@ -450,40 +455,17 @@ grep -r "function " api/ | sort | uniq -d
 - ✅ Protocoles API alignés : headers `X-Device-ICCID`, payload `device_sim_iccid` + `payload{flowrate,battery,signal_*}`, prise en charge des réponses `/devices/{iccid}/commands/pending`
 - ✅ Reconfiguration distante des secrets APN/JWT/ICCID/serial/PIN SIM et paramètres runtime (watchdog, OTA, mesures) stockés en NVS
 - ✅ **Mode streaming USB** : brancher l'OTT en USB, ouvrir un moniteur série 115200 puis taper `usb` + Entrée <3s → 1 mesure/s en JSON (`interval=<ms>`, `once`, `exit`)
-- ✅ **Géolocalisation automatique** : envoi position GPS/réseau cellulaire dans chaque mesure OTA (v3.1-gps+). Pour dispositifs USB, position déterminée via IP du PC client
+- ✅ **Géolocalisation automatique** : envoi position GPS/réseau cellulaire dans chaque mesure OTA. Pour dispositifs USB, position déterminée via IP du PC client
 
 #### Mode streaming USB – mode opératoire
 
 1. Alimenter l'OTT via USB et ouvrir le dashboard (`/dashboard/devices` → onglet "⚡ Streaming USB").
 2. Cliquer sur l'icône **🔌 Connexion USB** pour autoriser le port USB (Web Serial API).
-3. Le dashboard envoie automatiquement les commandes `usb` puis `start` pour activer le streaming continu.
-4. **Important** : En mode USB, le firmware **attend uniquement les commandes du dashboard** et n'envoie des mesures que sur demande explicite. Le modem n'est **pas démarré automatiquement** pour économiser l'énergie et éviter les connexions réseau inutiles.
-
-**Mode sécurisé (v3.5+)** : Le firmware ne fait rien d'autre qu'attendre les commandes entrantes du dashboard. Toutes les actions doivent être déclenchées depuis le dashboard pour garantir la sécurité.
-
-Commandes disponibles depuis le dashboard (icônes cliquables) :
-
-- **🆔 Identifiant / 💾 Firmware** : `device_info` → demande les informations du dispositif
-- **📡 Modem** : `modem_on` / `modem_off` → démarre/arrête le modem
-- **📍 GPS** : `gps` → teste le GPS (modem requis)
-- **💨 Débit / 🔋 Batterie** : `once` → demande une mesure immédiate
-- **📶 RSSI** : `test_network` → teste le réseau et affiche le RSSI (modem requis)
-- **▶️ Streaming** : `start` → démarre le streaming continu (mesures automatiques)
-- **⏸️ Streaming** : `stop` → arrête le streaming continu
-
-Commandes texte (console) :
-
-- `start` → démarre le streaming continu (mesures automatiques)
-- `stop` → arrête le streaming continu
-- `once` → envoie immédiatement une mesure unique
-- `device_info` → envoie les informations du dispositif
-- `interval=<ms>` → change l'intervalle (200 à 10000 ms, défaut 1000 ms)
-- `modem_on` → démarre le modem (pour tester réseau/GPS)
-- `modem_off` → arrête le modem
-- `test_network` → teste l'enregistrement réseau (modem doit être démarré)
-- `gps` → teste le GPS (modem doit être démarré)
-- `help` → affiche l'aide
-- `exit` → quitte le streaming et redémarre pour reprendre le cycle 4G/deep sleep
+3. Le dashboard détecte automatiquement le dispositif et affiche les logs en temps réel.
+4. **Fonctionnement** : En mode USB, le firmware exécute deux processus parallèles :
+   - **Processus 1 (Debug USB)** : Affichage des mesures toutes les secondes sur USB pour visualisation live
+   - **Processus 2 (Normal OTA)** : Envoi périodique des mesures via OTA selon la configuration (par défaut toutes les 24 heures, configurable)
+5. Le modem est automatiquement initialisé pour permettre l'envoi OTA, même en mode USB.
 
 📁 Firmwares : `hardware/firmware/vX.X/` (organisés par version, .bin et .ino ensemble)
 
@@ -605,11 +587,11 @@ Commandes texte (console) :
 
 ---
 
-**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.8 - React + Next.js + Render Cloud
+**© 2025 HAPPLYZ MEDICAL SAS** | Version 3.11 - React + Next.js + Render Cloud
 
 ---
 
-## 🆕 Nouveautés v3.3
+## 🆕 Nouveautés Récentes
 
 ### Architecture USB Améliorée
 - **UsbContext global** : Contexte React pour gérer l'état USB en permanence sur toutes les pages

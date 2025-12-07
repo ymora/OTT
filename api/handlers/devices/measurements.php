@@ -21,34 +21,24 @@ function handlePostMeasurement() {
         return;
     }
     
-    // Extraire les données (support format V1 et V2)
-    $iccid = $input['iccid'] ?? $input['sim_iccid'] ?? $input['device_id'] ?? null;
-    $flowrate = floatval($input['flowrate'] ?? $input['flow_rate'] ?? 0);
-    $battery = intval($input['battery'] ?? $input['battery_level'] ?? 100);
-    $rssi = intval($input['rssi'] ?? $input['signal_strength'] ?? 0);
-    $status = $input['status'] ?? $input['device_status'] ?? 'active';
+    // Extraire les données (format unifié uniquement)
+    $iccid = $input['sim_iccid'] ?? null;
+    $flowrate = isset($input['flow_lpm']) ? floatval($input['flow_lpm']) : 0;
+    $battery = isset($input['battery_percent']) ? intval($input['battery_percent']) : 100;
+    $rssi = isset($input['rssi']) ? intval($input['rssi']) : 0;
+    $status = $input['status'] ?? $input['mode'] ?? 'active';
     $timestamp = $input['timestamp'] ?? null;
-    $firmware_version = $input['firmware_version'] ?? $input['firmware'] ?? 'unknown';
+    $firmware_version = $input['firmware_version'] ?? 'unknown';
     
     if (!$iccid) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'iccid or device_id required']);
+        echo json_encode(['success' => false, 'error' => 'sim_iccid is required']);
         return;
     }
     
-    // Extraire latitude/longitude (support format V1 et V2)
-    $latitude = null;
-    $longitude = null;
-    if (isset($input['latitude']) && is_numeric($input['latitude'])) {
-        $latitude = floatval($input['latitude']);
-    } elseif (isset($input['payload']['latitude']) && is_numeric($input['payload']['latitude'])) {
-        $latitude = floatval($input['payload']['latitude']);
-    }
-    if (isset($input['longitude']) && is_numeric($input['longitude'])) {
-        $longitude = floatval($input['longitude']);
-    } elseif (isset($input['payload']['longitude']) && is_numeric($input['payload']['longitude'])) {
-        $longitude = floatval($input['payload']['longitude']);
-    }
+    // Extraire latitude/longitude (format unifié)
+    $latitude = isset($input['latitude']) && is_numeric($input['latitude']) ? floatval($input['latitude']) : null;
+    $longitude = isset($input['longitude']) && is_numeric($input['longitude']) ? floatval($input['longitude']) : null;
     
     // Détecter si c'est une mesure USB (status = 'USB') ou OTA
     $isUsbMeasurement = ($status === 'USB' || strpos($iccid, 'USB-') === 0 || strpos($iccid, 'TEMP-') === 0);
@@ -160,7 +150,7 @@ function handlePostMeasurement() {
                         ->execute(['firmware_version' => $firmware_version, 'device_id' => $device_id]);
                 }
                 
-                // Mettre à jour la configuration si elle est fournie dans le format unifié
+                // Mettre à jour la configuration si elle est fournie
                 if (isset($input['sleep_minutes']) || isset($input['measurement_duration_ms']) || isset($input['calibration_coefficients']) || isset($input['config'])) {
                     $configData = $input['config'] ?? $input;
                     $configUpdateFields = [];
@@ -330,10 +320,16 @@ function handleGetDeviceHistory($device_id) {
     global $pdo;
     
     try {
+        // Récupérer les mesures avec les coordonnées GPS du dispositif (dernières connues)
         $stmt = $pdo->prepare("
-            SELECT * FROM measurements 
-            WHERE device_id = :device_id 
-            ORDER BY timestamp DESC 
+            SELECT 
+                m.*,
+                d.latitude,
+                d.longitude
+            FROM measurements m
+            JOIN devices d ON m.device_id = d.id
+            WHERE m.device_id = :device_id 
+            ORDER BY m.timestamp DESC 
             LIMIT 1000
         ");
         $stmt->execute(['device_id' => $device_id]);
