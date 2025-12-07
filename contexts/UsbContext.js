@@ -738,6 +738,10 @@ export function UsbProvider({ children }) {
             },
           }
           
+          // Log toutes les mesures reçues dans la console de logs
+          const measureLogMsg = `📊 Mesure reçue: SEQ=${measurement.seq ?? 'N/A'} | Débit=${measurement.flowrate ?? 'N/A'} L/min | Batterie=${measurement.battery ?? 'N/A'}% | RSSI=${measurement.rssi ?? 'N/A'}${measurement.latitude && measurement.longitude ? ` | GPS: ${measurement.latitude.toFixed(6)}, ${measurement.longitude.toFixed(6)}` : ''}`
+          appendUsbStreamLog(measureLogMsg)
+          
           // Log pour debug (toutes les mesures en développement)
           if (process.env.NODE_ENV === 'development') {
             logger.debug('📊 Mesure USB reçue:', {
