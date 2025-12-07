@@ -242,10 +242,7 @@ function MarkdownViewer({ fileName }) {
         },
         // 3. Essayer depuis l'API
         async () => {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
-            (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-              ? 'http://localhost:8000' 
-              : 'https://ott-jbln.onrender.com')
+          const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
           const response = await fetch(`${apiUrl}/api.php/docs/${fileName}?t=${Date.now()}`) // Cache busting
           if (response.ok) {
             return await response.text()

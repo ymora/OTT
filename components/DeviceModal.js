@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
 import logger from '@/lib/logger'
+import { useUsb } from '@/contexts/UsbContext'
+import { buildUpdateConfigPayload } from '@/lib/deviceCommands'
 
 // Composant Accordéon simple
 function Accordion({ title, children, defaultOpen = false }) {
@@ -52,6 +54,14 @@ export default function DeviceModal({
   allDevices = [],
   appendLog = null
 }) {
+  // Contexte USB pour détecter la connexion et envoyer des commandes
+  const { 
+    isConnected: usbIsConnected, 
+    port, 
+    write: usbWrite,
+    usbConnectedDevice,
+    usbVirtualDevice
+  } = useUsb()
   const [formData, setFormData] = useState({
     device_name: '',
     sim_iccid: '',
@@ -59,11 +69,28 @@ export default function DeviceModal({
     firmware_version: '',
     status: 'inactive',
     patient_id: null,
+    // Mesure
     sleep_minutes: null,
     measurement_duration_ms: null,
     send_every_n_wakeups: 1,
     calibration_coefficients: [0, 1, 0],
-    gps_enabled: false
+    gps_enabled: false,
+    // Airflow
+    airflow_passes: null,
+    airflow_samples_per_pass: null,
+    airflow_delay_ms: null,
+    // Modem
+    watchdog_seconds: null,
+    modem_boot_timeout_ms: null,
+    sim_ready_timeout_ms: null,
+    network_attach_timeout_ms: null,
+    modem_max_reboots: null,
+    // Réseau
+    apn: '',
+    sim_pin: '',
+    // OTA
+    ota_primary_url: '',
+    ota_fallback_url: ''
   })
   const [formErrors, setFormErrors] = useState({})
   const [formError, setFormError] = useState(null)
@@ -101,7 +128,19 @@ export default function DeviceModal({
           measurement_duration_ms: null,
           send_every_n_wakeups: 1,
           calibration_coefficients: [0, 1, 0],
-          gps_enabled: false
+          gps_enabled: false,
+          airflow_passes: null,
+          airflow_samples_per_pass: null,
+          airflow_delay_ms: null,
+          watchdog_seconds: null,
+          modem_boot_timeout_ms: null,
+          sim_ready_timeout_ms: null,
+          network_attach_timeout_ms: null,
+          modem_max_reboots: null,
+          apn: '',
+          sim_pin: '',
+          ota_primary_url: '',
+          ota_fallback_url: ''
         }
         setFormData(initialFormData)
         // Sauvegarder les valeurs initiales pour comparaison
@@ -123,7 +162,19 @@ export default function DeviceModal({
           measurement_duration_ms: null,
           send_every_n_wakeups: 1,
           calibration_coefficients: [0, 1, 0],
-          gps_enabled: false
+          gps_enabled: false,
+          airflow_passes: null,
+          airflow_samples_per_pass: null,
+          airflow_delay_ms: null,
+          watchdog_seconds: null,
+          modem_boot_timeout_ms: null,
+          sim_ready_timeout_ms: null,
+          network_attach_timeout_ms: null,
+          modem_max_reboots: null,
+          apn: '',
+          sim_pin: '',
+          ota_primary_url: '',
+          ota_fallback_url: ''
         })
         // En mode création, pas de valeurs initiales (toujours considéré comme modifié)
         initialFormDataRef.current = null
@@ -154,12 +205,43 @@ export default function DeviceModal({
       )
 
       if (data.config) {
+        // Convertir les valeurs pour l'affichage (ms → sec, sec → min)
         const configData = {
           sleep_minutes: data.config.sleep_minutes || null,
-          measurement_duration_ms: data.config.measurement_duration_ms || null,
+          // Convertir ms → sec pour l'affichage (garder comme nombre pour les inputs)
+          measurement_duration_ms: data.config.measurement_duration_ms != null 
+            ? parseFloat((data.config.measurement_duration_ms / 1000).toFixed(1))
+            : null,
           send_every_n_wakeups: data.config.send_every_n_wakeups || 1,
           calibration_coefficients: data.config.calibration_coefficients || [0, 1, 0],
-          gps_enabled: data.config.gps_enabled || false
+          gps_enabled: data.config.gps_enabled || false,
+          airflow_passes: data.config.airflow_passes || null,
+          airflow_samples_per_pass: data.config.airflow_samples_per_pass || null,
+          // Convertir ms → sec pour l'affichage (garder comme nombre)
+          airflow_delay_ms: data.config.airflow_delay_ms != null 
+            ? parseFloat((data.config.airflow_delay_ms / 1000).toFixed(3))
+            : null,
+          // Convertir sec → min pour l'affichage (garder comme nombre)
+          watchdog_seconds: data.config.watchdog_seconds != null 
+            ? parseFloat((data.config.watchdog_seconds / 60).toFixed(1))
+            : null,
+          // Convertir ms → sec pour l'affichage (garder comme nombre)
+          modem_boot_timeout_ms: data.config.modem_boot_timeout_ms != null 
+            ? parseFloat((data.config.modem_boot_timeout_ms / 1000).toFixed(1))
+            : null,
+          // Convertir ms → sec pour l'affichage (garder comme nombre)
+          sim_ready_timeout_ms: data.config.sim_ready_timeout_ms != null 
+            ? parseFloat((data.config.sim_ready_timeout_ms / 1000).toFixed(1))
+            : null,
+          // Convertir ms → sec pour l'affichage (garder comme nombre)
+          network_attach_timeout_ms: data.config.network_attach_timeout_ms != null 
+            ? parseFloat((data.config.network_attach_timeout_ms / 1000).toFixed(1))
+            : null,
+          modem_max_reboots: data.config.modem_max_reboots || null,
+          apn: data.config.apn || '',
+          sim_pin: data.config.sim_pin || '',
+          ota_primary_url: data.config.ota_primary_url || '',
+          ota_fallback_url: data.config.ota_fallback_url || ''
         }
         setFormData(prev => ({
           ...prev,
@@ -206,6 +288,140 @@ export default function DeviceModal({
       ...prev,
       calibration_coefficients: newCoefficients
     }))
+  }
+  
+  // Fonctions de conversion pour l'affichage
+  // Convertir ms → sec pour l'affichage
+  const msToSec = (ms) => ms != null ? (ms / 1000).toFixed(1) : ''
+  // Convertir sec → ms pour la sauvegarde
+  const secToMs = (sec) => sec != null ? Math.round(parseFloat(sec) * 1000) : null
+  // Convertir sec → min pour l'affichage
+  const secToMin = (sec) => sec != null ? (sec / 60).toFixed(1) : ''
+  // Convertir min → sec pour la sauvegarde
+  const minToSec = (min) => min != null ? Math.round(parseFloat(min) * 60) : null
+  
+  // Gérer les changements avec conversion automatique
+  const handleInputChangeWithConversion = (e) => {
+    const { name, value, type, checked } = e.target
+    
+    let convertedValue = value
+    
+    // Conversion selon le type de champ
+    if (type === 'number' && value !== '') {
+      const numValue = parseFloat(value)
+      
+      // Champs en millisecondes (affichés en secondes)
+      if (name === 'measurement_duration_ms' || 
+          name === 'airflow_delay_ms' || 
+          name === 'modem_boot_timeout_ms' || 
+          name === 'sim_ready_timeout_ms' || 
+          name === 'network_attach_timeout_ms') {
+        // L'utilisateur saisit en secondes, on stocke en secondes pour l'affichage
+        // La conversion en ms se fera à la sauvegarde
+        convertedValue = numValue
+      }
+      // Champs en secondes (affichés en minutes)
+      else if (name === 'watchdog_seconds') {
+        // L'utilisateur saisit en minutes, on stocke en minutes pour l'affichage
+        // La conversion en secondes se fera à la sauvegarde
+        convertedValue = numValue
+      }
+      // Autres champs numériques
+      else {
+        convertedValue = numValue
+      }
+    } else if (type === 'number' && value === '') {
+      convertedValue = null
+    } else if (type === 'checkbox') {
+      convertedValue = checked
+    } else {
+      convertedValue = value
+    }
+    
+    const newFormData = {
+      ...formData,
+      [name]: convertedValue
+    }
+    setFormData(newFormData)
+
+    // Effacer l'erreur du champ modifié
+    if (formErrors[name]) {
+      setFormErrors(prev => {
+        const next = { ...prev }
+        delete next[name]
+        return next
+      })
+    }
+  }
+  
+  // Vérifier si le dispositif est connecté en USB
+  const isDeviceUsbConnected = useMemo(() => {
+    if (!editingItem || !usbIsConnected || !port) return false
+    const currentUsbDevice = usbConnectedDevice || usbVirtualDevice
+    if (!currentUsbDevice) return false
+    
+    // Vérifier si l'ICCID ou le serial correspond
+    return (
+      (editingItem.sim_iccid && currentUsbDevice.sim_iccid === editingItem.sim_iccid) ||
+      (editingItem.device_serial && currentUsbDevice.device_serial === editingItem.device_serial)
+    )
+  }, [editingItem, usbIsConnected, port, usbConnectedDevice, usbVirtualDevice])
+  
+  // Envoyer la configuration via USB (prioritaire) ou OTA
+  const sendConfigToDevice = async (configPayload, deviceId) => {
+    if (isDeviceUsbConnected && usbWrite && port) {
+      // Envoi via USB (prioritaire)
+      try {
+        const payload = buildUpdateConfigPayload(configPayload)
+        const command = JSON.stringify({
+          command: 'UPDATE_CONFIG',
+          payload: payload
+        })
+        const commandWithNewline = command + '\n'
+        
+        if (appendLog) {
+          appendLog(`📤 [USB] Envoi configuration directement via USB...`, 'dashboard')
+        }
+        
+        await usbWrite(commandWithNewline)
+        
+        if (appendLog) {
+          appendLog(`✅ [USB] Configuration envoyée via USB`, 'dashboard')
+        }
+        
+        return { success: true, method: 'USB' }
+      } catch (err) {
+        logger.error('Erreur envoi config USB:', err)
+        if (appendLog) {
+          appendLog(`❌ [USB] Erreur envoi: ${err.message}`, 'dashboard')
+        }
+        // Fallback sur OTA en cas d'erreur USB
+        throw err
+      }
+    } else {
+      // Envoi via OTA (fallback)
+      try {
+        await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/devices/${deviceId}/config`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(configPayload)
+          },
+          { requiresAuth: true }
+        )
+        
+        if (appendLog) {
+          appendLog(`📡 [OTA] Configuration envoyée via OTA (dispositif non connecté en USB)`, 'dashboard')
+        }
+        
+        return { success: true, method: 'OTA' }
+      } catch (err) {
+        logger.error('Erreur envoi config OTA:', err)
+        throw err
+      }
+    }
   }
   
   // Détecter si des modifications ont été faites (uniquement en mode édition)
@@ -278,13 +494,14 @@ export default function DeviceModal({
         devicePayload.firmware_version = formData.firmware_version.trim()
       }
 
-      // Préparer la configuration
+      // Préparer la configuration avec reconversion (sec → ms, min → sec)
       const configPayload = {}
       if (formData.sleep_minutes != null) {
         configPayload.sleep_minutes = parseInt(formData.sleep_minutes)
       }
+      // Convertir sec → ms pour la sauvegarde
       if (formData.measurement_duration_ms != null) {
-        configPayload.measurement_duration_ms = parseInt(formData.measurement_duration_ms)
+        configPayload.measurement_duration_ms = Math.round(parseFloat(formData.measurement_duration_ms) * 1000)
       }
       if (formData.send_every_n_wakeups != null) {
         configPayload.send_every_n_wakeups = parseInt(formData.send_every_n_wakeups)
@@ -294,6 +511,51 @@ export default function DeviceModal({
       }
       if (formData.gps_enabled != null) {
         configPayload.gps_enabled = formData.gps_enabled
+      }
+      // Airflow
+      if (formData.airflow_passes != null) {
+        configPayload.airflow_passes = parseInt(formData.airflow_passes)
+      }
+      if (formData.airflow_samples_per_pass != null) {
+        configPayload.airflow_samples_per_pass = parseInt(formData.airflow_samples_per_pass)
+      }
+      // Convertir sec → ms pour la sauvegarde
+      if (formData.airflow_delay_ms != null) {
+        configPayload.airflow_delay_ms = Math.round(parseFloat(formData.airflow_delay_ms) * 1000)
+      }
+      // Modem
+      // Convertir min → sec pour la sauvegarde
+      if (formData.watchdog_seconds != null) {
+        configPayload.watchdog_seconds = Math.round(parseFloat(formData.watchdog_seconds) * 60)
+      }
+      // Convertir sec → ms pour la sauvegarde
+      if (formData.modem_boot_timeout_ms != null) {
+        configPayload.modem_boot_timeout_ms = Math.round(parseFloat(formData.modem_boot_timeout_ms) * 1000)
+      }
+      // Convertir sec → ms pour la sauvegarde
+      if (formData.sim_ready_timeout_ms != null) {
+        configPayload.sim_ready_timeout_ms = Math.round(parseFloat(formData.sim_ready_timeout_ms) * 1000)
+      }
+      // Convertir sec → ms pour la sauvegarde
+      if (formData.network_attach_timeout_ms != null) {
+        configPayload.network_attach_timeout_ms = Math.round(parseFloat(formData.network_attach_timeout_ms) * 1000)
+      }
+      if (formData.modem_max_reboots != null) {
+        configPayload.modem_max_reboots = parseInt(formData.modem_max_reboots)
+      }
+      // Réseau
+      if (formData.apn && formData.apn.trim()) {
+        configPayload.apn = formData.apn.trim()
+      }
+      if (formData.sim_pin && formData.sim_pin.trim()) {
+        configPayload.sim_pin = formData.sim_pin.trim()
+      }
+      // OTA
+      if (formData.ota_primary_url && formData.ota_primary_url.trim()) {
+        configPayload.ota_primary_url = formData.ota_primary_url.trim()
+      }
+      if (formData.ota_fallback_url && formData.ota_fallback_url.trim()) {
+        configPayload.ota_fallback_url = formData.ota_fallback_url.trim()
       }
 
       if (editingItem) {
@@ -312,16 +574,7 @@ export default function DeviceModal({
         // Mettre à jour la configuration si fournie
         if (Object.keys(configPayload).length > 0) {
           try {
-            await fetchJson(
-              fetchWithAuth,
-              API_URL,
-              `/api.php/devices/${editingItem.id}/config`,
-              {
-                method: 'PUT',
-                body: JSON.stringify(configPayload)
-              },
-              { requiresAuth: true }
-            )
+            const result = await sendConfigToDevice(configPayload, editingItem.id)
             
             // Afficher un log bleu dans le terminal pour confirmer
             if (appendLog) {
@@ -329,13 +582,45 @@ export default function DeviceModal({
                 .map(([key, val]) => {
                   if (key === 'gps_enabled') return `GPS: ${val ? 'ON' : 'OFF'}`
                   if (key === 'sleep_minutes') return `Sleep: ${val}min`
-                  if (key === 'measurement_duration_ms') return `Mesure: ${val}ms`
+                  if (key === 'measurement_duration_ms') return `Durée: ${val}ms (${(val/1000).toFixed(1)}s)`
+                  if (key === 'send_every_n_wakeups') return `Envoi: ${val}`
                   if (key === 'calibration_coefficients') return `Cal: [${val.join(',')}]`
+                  if (key === 'airflow_passes') return `Passes: ${val}`
+                  if (key === 'airflow_samples_per_pass') return `Samples: ${val}`
+                  if (key === 'airflow_delay_ms') return `Délai: ${val}ms (${(val/1000).toFixed(3)}s)`
+                  if (key === 'watchdog_seconds') return `Watchdog: ${val}s (${(val/60).toFixed(1)}min)`
+                  if (key === 'modem_boot_timeout_ms') return `Boot: ${val}ms (${(val/1000).toFixed(1)}s)`
+                  if (key === 'sim_ready_timeout_ms') return `SIM: ${val}ms (${(val/1000).toFixed(1)}s)`
+                  if (key === 'network_attach_timeout_ms') return `Network: ${val}ms (${(val/1000).toFixed(1)}s)`
+                  if (key === 'modem_max_reboots') return `Reboots: ${val}`
+                  if (key === 'apn') return `APN: ${val}`
+                  if (key === 'sim_pin') return `PIN: ***`
+                  if (key === 'ota_primary_url') return `OTA1: ${val.substring(0, 30)}...`
+                  if (key === 'ota_fallback_url') return `OTA2: ${val.substring(0, 30)}...`
                   return `${key}: ${val}`
                 })
                 .join(', ')
               
-              appendLog(`📤 [CONFIG] UPDATE_CONFIG → ${configSummary}`, 'dashboard')
+              appendLog(`📤 [CONFIG] UPDATE_CONFIG (${result.method}) → ${configSummary}`, 'dashboard')
+            }
+            
+            // Si envoyé via USB, sauvegarder aussi en base pour cohérence
+            if (result.method === 'USB') {
+              try {
+                await fetchJson(
+                  fetchWithAuth,
+                  API_URL,
+                  `/api.php/devices/${editingItem.id}/config`,
+                  {
+                    method: 'PUT',
+                    body: JSON.stringify(configPayload)
+                  },
+                  { requiresAuth: true }
+                )
+              } catch (dbErr) {
+                logger.warn('⚠️ Erreur sauvegarde config en base (après envoi USB):', dbErr)
+                // Ne pas bloquer, la config a déjà été envoyée au dispositif
+              }
             }
           } catch (configErr) {
             logger.warn('⚠️ Erreur mise à jour configuration:', configErr)
@@ -366,16 +651,7 @@ export default function DeviceModal({
           // Mettre à jour la configuration
           if (Object.keys(configPayload).length > 0) {
             try {
-              await fetchJson(
-                fetchWithAuth,
-                API_URL,
-                `/api.php/devices/${existingDevice.id}/config`,
-                {
-                  method: 'PUT',
-                  body: JSON.stringify(configPayload)
-                },
-                { requiresAuth: true }
-              )
+              await sendConfigToDevice(configPayload, existingDevice.id)
             } catch (configErr) {
               logger.warn('⚠️ Erreur mise à jour configuration:', configErr)
             }
@@ -419,6 +695,24 @@ export default function DeviceModal({
           // Sauvegarder la configuration si fournie
           if (data.device && Object.keys(configPayload).length > 0) {
             try {
+              // Vérifier si le nouveau dispositif est connecté en USB
+              const newDeviceUsbConnected = usbIsConnected && port && (
+                (data.device.sim_iccid && (usbConnectedDevice?.sim_iccid === data.device.sim_iccid || usbVirtualDevice?.sim_iccid === data.device.sim_iccid)) ||
+                (data.device.device_serial && (usbConnectedDevice?.device_serial === data.device.device_serial || usbVirtualDevice?.device_serial === data.device.device_serial))
+              )
+              
+              if (newDeviceUsbConnected && usbWrite) {
+                // Envoi via USB
+                const payload = buildUpdateConfigPayload(configPayload)
+                const command = JSON.stringify({
+                  command: 'UPDATE_CONFIG',
+                  payload: payload
+                })
+                await usbWrite(command + '\n')
+                logger.log('✅ Configuration envoyée via USB')
+              }
+              
+              // Toujours sauvegarder en base
               await fetchJson(
                 fetchWithAuth,
                 API_URL,
@@ -453,11 +747,23 @@ export default function DeviceModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
         <div className="sticky top-0 bg-white dark:bg-[rgb(var(--night-surface))] border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            {editingItem ? '✏️ Modifier le dispositif' : '➕ Créer un nouveau dispositif'}
-          </h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+              {editingItem ? '✏️ Modifier le dispositif' : '➕ Créer un nouveau dispositif'}
+            </h2>
+            {editingItem && isDeviceUsbConnected && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                🔌 Connecté en USB - Configuration envoyée directement
+              </p>
+            )}
+            {editingItem && !isDeviceUsbConnected && (
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
+                📡 Non connecté - Configuration envoyée via OTA
+              </p>
+            )}
+          </div>
           <button
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 w-8 h-8 flex items-center justify-center rounded-full transition-colors"
             onClick={onClose}
@@ -469,11 +775,11 @@ export default function DeviceModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3">
           {formError && <ErrorMessage message={formError} />}
 
           {/* Première ligne : Nom et Statut */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             {/* Nom du dispositif */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
@@ -514,7 +820,7 @@ export default function DeviceModal({
           </div>
 
           {/* Deuxième ligne : SIM ICCID et Numéro de série */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             {/* SIM ICCID - Lecture seule (vient de la SIM) */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
@@ -554,7 +860,7 @@ export default function DeviceModal({
           </div>
 
           {/* Troisième ligne : Version firmware (lecture seule) */}
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-3">
             {/* Version du firmware - Lecture seule */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
@@ -573,112 +879,292 @@ export default function DeviceModal({
             </div>
           </div>
 
-          {/* Configuration - Accordéon */}
-          <Accordion title="⚙️ Configuration" defaultOpen={editingItem ? true : false}>
-            <div className="space-y-4">
-              {/* Première ligne : Intervalle de veille et Durée de mesure */}
-              <div className="grid grid-cols-2 gap-4">
-                {/* Intervalle de veille */}
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                    ⏰ Intervalle de veille (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    name="sleep_minutes"
-                    value={formData.sleep_minutes || ''}
-                    onChange={handleInputChange}
-                    className="input w-full"
-                    placeholder="Ex: 5"
-                    min="1"
-                  />
-                </div>
-
-                {/* Durée de mesure */}
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                    ⏱️ Durée de mesure (ms)
-                  </label>
-                  <input
-                    type="number"
-                    name="measurement_duration_ms"
-                    value={formData.measurement_duration_ms || ''}
-                    onChange={handleInputChange}
-                    className="input w-full"
-                    placeholder="Ex: 5000"
-                    min="1"
-                  />
-                </div>
-              </div>
-
-              {/* GPS Toggle */}
-              <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-slate-800/50">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">📍</span>
+          {/* Configuration - Accordéons par catégorie */}
+          <div className="space-y-2">
+            {/* Mesure - Accordéon principal (ouvert par défaut) */}
+            <Accordion title="📊 Mesure" defaultOpen={true}>
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      GPS
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                      ⏰ Veille (min)
                     </label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      {formData.gps_enabled ? '✅ Géolocalisation active' : '⚠️ OFF (économie batterie)'}
-                    </p>
+                    <input
+                      type="number"
+                      name="sleep_minutes"
+                      value={formData.sleep_minutes || ''}
+                      onChange={handleInputChange}
+                      className="input w-full text-sm py-1.5"
+                      placeholder="5"
+                      min="1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                      ⏱️ Durée (sec)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      name="measurement_duration_ms"
+                      value={formData.measurement_duration_ms || ''}
+                      onChange={handleInputChangeWithConversion}
+                      className="input w-full text-sm py-1.5"
+                      placeholder="5.0"
+                      min="0.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                      📤 Envoi (N réveils)
+                    </label>
+                    <input
+                      type="number"
+                      name="send_every_n_wakeups"
+                      value={formData.send_every_n_wakeups || 1}
+                      onChange={handleInputChange}
+                      className="input w-full text-sm py-1.5"
+                      min="1"
+                      placeholder="1"
+                    />
                   </div>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="gps_enabled"
-                    checked={formData.gps_enabled || false}
-                    onChange={(e) => setFormData(prev => ({ ...prev, gps_enabled: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-
-              {/* Deuxième ligne : Fréquence d'envoi des mesures */}
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                  📤 Envoyer une mesure tous les N réveils
-                </label>
-                <input
-                  type="number"
-                  name="send_every_n_wakeups"
-                  value={formData.send_every_n_wakeups || 1}
-                  onChange={handleInputChange}
-                  className="input w-full"
-                  min="1"
-                  placeholder="1"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Exemple : 1 = à chaque réveil, 2 = tous les 2 réveils, 5 = tous les 5 réveils
-                </p>
-              </div>
-
-              {/* Calibration */}
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                  📐 Calibration (a0, a1, a2)
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[0, 1, 2].map(index => (
-                    <input
-                      key={index}
-                      type="number"
-                      step="any"
-                      value={formData.calibration_coefficients[index] || 0}
-                      onChange={(e) => handleCalibrationChange(index, e.target.value)}
-                      className="input w-full"
-                      placeholder={`a${index}`}
-                    />
-                  ))}
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="col-span-3">
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                      📐 Calibration (a0, a1, a2)
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[0, 1, 2].map(index => (
+                        <input
+                          key={index}
+                          type="number"
+                          step="any"
+                          value={formData.calibration_coefficients[index] || 0}
+                          onChange={(e) => handleCalibrationChange(index, e.target.value)}
+                          className="input w-full text-sm py-1.5"
+                          placeholder={`a${index}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-end">
+                    <div className="w-full">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        📍 GPS
+                      </label>
+                      <label className="relative inline-flex items-center cursor-pointer w-full justify-center">
+                        <input
+                          type="checkbox"
+                          name="gps_enabled"
+                          checked={formData.gps_enabled || false}
+                          onChange={(e) => setFormData(prev => ({ ...prev, gps_enabled: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </Accordion>
+            </Accordion>
+
+            {/* Airflow - Accordéon fermé */}
+            <Accordion title="💨 Airflow" defaultOpen={false}>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    Passes
+                  </label>
+                  <input
+                    type="number"
+                    name="airflow_passes"
+                    value={formData.airflow_passes || ''}
+                    onChange={handleInputChange}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="2"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    Échantillons/passe
+                  </label>
+                  <input
+                    type="number"
+                    name="airflow_samples_per_pass"
+                    value={formData.airflow_samples_per_pass || ''}
+                    onChange={handleInputChange}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="10"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    Délai (sec)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="airflow_delay_ms"
+                    value={formData.airflow_delay_ms || ''}
+                    onChange={handleInputChangeWithConversion}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="0.005"
+                    min="0.001"
+                  />
+                </div>
+              </div>
+            </Accordion>
+
+            {/* Modem - Accordéon fermé */}
+            <Accordion title="📡 Modem" defaultOpen={false}>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    Watchdog (min)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="watchdog_seconds"
+                    value={formData.watchdog_seconds || ''}
+                    onChange={handleInputChangeWithConversion}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="5.0"
+                    min="0.1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    Boot timeout (sec)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="modem_boot_timeout_ms"
+                    value={formData.modem_boot_timeout_ms || ''}
+                    onChange={handleInputChangeWithConversion}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="30.0"
+                    min="0.1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    SIM ready timeout (sec)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="sim_ready_timeout_ms"
+                    value={formData.sim_ready_timeout_ms || ''}
+                    onChange={handleInputChangeWithConversion}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="10.0"
+                    min="0.1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    Network attach timeout (sec)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="network_attach_timeout_ms"
+                    value={formData.network_attach_timeout_ms || ''}
+                    onChange={handleInputChangeWithConversion}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="60.0"
+                    min="0.1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    Max reboots
+                  </label>
+                  <input
+                    type="number"
+                    name="modem_max_reboots"
+                    value={formData.modem_max_reboots || ''}
+                    onChange={handleInputChange}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="3"
+                    min="0"
+                  />
+                </div>
+              </div>
+            </Accordion>
+
+            {/* Réseau - Accordéon fermé */}
+            <Accordion title="🌐 Réseau" defaultOpen={false}>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    APN
+                  </label>
+                  <input
+                    type="text"
+                    name="apn"
+                    value={formData.apn || ''}
+                    onChange={handleInputChange}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="Ex: internet"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    SIM PIN
+                  </label>
+                  <input
+                    type="password"
+                    name="sim_pin"
+                    value={formData.sim_pin || ''}
+                    onChange={handleInputChange}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="0000"
+                  />
+                </div>
+              </div>
+            </Accordion>
+
+            {/* OTA - Accordéon fermé */}
+            <Accordion title="🔄 OTA" defaultOpen={false}>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    URL primaire
+                  </label>
+                  <input
+                    type="url"
+                    name="ota_primary_url"
+                    value={formData.ota_primary_url || ''}
+                    onChange={handleInputChange}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="https://..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    URL de secours
+                  </label>
+                  <input
+                    type="url"
+                    name="ota_fallback_url"
+                    value={formData.ota_fallback_url || ''}
+                    onChange={handleInputChange}
+                    className="input w-full text-sm py-1.5"
+                    placeholder="https://..."
+                  />
+                </div>
+              </div>
+            </Accordion>
+          </div>
 
           {/* Boutons */}
-          <div className="flex gap-2 justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex gap-2 justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               className="btn-secondary"

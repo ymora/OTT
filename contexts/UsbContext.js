@@ -171,7 +171,7 @@ export function UsbProvider({ children }) {
     logsToSendRef.current = []
     
     try {
-      // Utiliser l'API_URL pour envoyer directement au serveur distant
+      // Utiliser l'API_URL depuis le contexte
       const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
       const response = await fetch(`${apiUrl}/api.php/usb-logs`, {
         method: 'POST',
