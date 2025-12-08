@@ -161,6 +161,7 @@ function computeBatteryMeta(value) {
 function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
   const map = useMap()
   const [hoveredDeviceId, setHoveredDeviceId] = useState(null)
+  const hoverTimeoutRef = useRef(null)
 
   useEffect(() => {
     if (!focusDeviceId || !map) return
@@ -355,16 +356,6 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
 }
 
 export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
-  const hoverTimeoutRef = useRef(null)
-  
-  // Cleanup timeout au démontage
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current)
-      }
-    }
-  }, [])
   
   const center = useMemo(() => {
     if (devices.length === 0) {
