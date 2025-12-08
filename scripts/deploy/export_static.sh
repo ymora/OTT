@@ -130,6 +130,27 @@ required_docs=(
     "out/docs/DOCUMENTATION_COMMERCIALE.html"
 )
 
+# Vérifier et copier les pages statiques importantes (migrate.html, diagnostic-measurements.html)
+echo "📄 Vérification des pages statiques..."
+static_pages=(
+    "migrate.html"
+    "diagnostic-measurements.html"
+)
+
+for page in "${static_pages[@]}"; do
+    if [ -f "public/$page" ]; then
+        if [ ! -f "out/$page" ]; then
+            echo "  📋 Copie de $page depuis public/ vers out/..."
+            cp "public/$page" "out/$page"
+            echo "    ✅ $page copié"
+        else
+            echo "  ✅ $page déjà présent dans out/"
+        fi
+    else
+        echo "  ⚠️  $page non trouvé dans public/"
+    fi
+done
+
 missing_docs=0
 for doc in "${required_docs[@]}"; do
     if [ -f "$doc" ]; then
