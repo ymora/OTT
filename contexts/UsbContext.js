@@ -680,6 +680,33 @@ export function UsbProvider({ children }) {
             
             if (!usbConnectedDevice && !usbVirtualDevice) {
               setUsbVirtualDevice(deviceInfo)
+              
+              // Enregistrement automatique : créer le dispositif dans la base de données
+              if (autoCreateOrUpdateDeviceRef.current && (deviceInfo.sim_iccid || deviceInfo.device_serial)) {
+                logger.log('🔄 [AUTO-CREATE] Tentative enregistrement automatique...', {
+                  sim_iccid: deviceInfo.sim_iccid,
+                  device_serial: deviceInfo.device_serial,
+                  device_name: deviceInfo.device_name
+                })
+                
+                // Appeler de manière asynchrone pour ne pas bloquer
+                autoCreateOrUpdateDeviceRef.current(deviceInfo)
+                  .then(createdDevice => {
+                    if (createdDevice) {
+                      logger.log('✅ [AUTO-CREATE] Dispositif enregistré avec succès:', createdDevice)
+                      // Remplacer le dispositif virtuel par le dispositif réel
+                      setUsbVirtualDevice(null)
+                      setUsbConnectedDevice(createdDevice)
+                    } else {
+                      logger.warn('⚠️ [AUTO-CREATE] Échec enregistrement automatique')
+                    }
+                  })
+                  .catch(error => {
+                    logger.error('❌ [AUTO-CREATE] Erreur enregistrement automatique:', error)
+                  })
+              } else {
+                logger.debug('⚠️ [AUTO-CREATE] Pas d\'identifiant disponible ou callback non défini')
+              }
             } else if (usbConnectedDevice) {
               setUsbConnectedDevice(prev => ({
                 ...prev,

@@ -1429,17 +1429,50 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
   Serial.println(F("[MODEM] attache réseau en cours (avec retry)"));
   logRadioSnapshot("attach:start");
   
-  // NOUVEAU: Vérifier CSQ avant de commencer
+  // NOUVEAU: Attendre que le modem se stabilise et vérifier CSQ
+  // Le modem peut avoir besoin de plus de temps après l'initialisation
+  Serial.println(F("[MODEM] Attente stabilisation modem (5s)..."));
+  unsigned long stabilStart = millis();
+  while (millis() - stabilStart < 5000) {
+    delay(500);
+    feedWatchdog();
+  }
+  
   int8_t initialCsq = modem.getSignalQuality();
   if (initialCsq == 99) {
-    Serial.println(F("[MODEM] ⚠️ CSQ=99 avant attachement - Reset modem"));
-    modem.restart();
-    delay(5000);
-    initialCsq = modem.getSignalQuality();
+    Serial.println(F("[MODEM] ⚠️ CSQ=99 - Attente supplémentaire (10s) avant reset..."));
+    // Attendre encore un peu - parfois le modem a besoin de plus de temps
+    unsigned long waitStart = millis();
+    while (millis() - waitStart < 10000) {
+      delay(1000);
+      feedWatchdog();
+      initialCsq = modem.getSignalQuality();
+      if (initialCsq != 99) {
+        Serial.printf("[MODEM] ✅ CSQ récupéré: %d\n", initialCsq);
+        break;
+      }
+    }
+    
     if (initialCsq == 99) {
-      Serial.println(F("[MODEM] ❌ CSQ toujours à 99 après reset - Problème matériel probable"));
-      logRadioSnapshot("attach:csq_fail");
-      return false;
+      Serial.println(F("[MODEM] ⚠️ CSQ toujours à 99 - Reset modem"));
+      modem.restart();
+      // Attendre après reset
+      unsigned long resetWaitStart = millis();
+      while (millis() - resetWaitStart < 10000) {
+        delay(1000);
+        feedWatchdog();
+        initialCsq = modem.getSignalQuality();
+        if (initialCsq != 99) {
+          Serial.printf("[MODEM] ✅ CSQ récupéré après reset: %d\n", initialCsq);
+          break;
+        }
+      }
+      
+      if (initialCsq == 99) {
+        Serial.println(F("[MODEM] ❌ CSQ toujours à 99 après reset - Continuer quand même (peut être temporaire)"));
+        // Ne pas retourner false immédiatement - continuer et voir si ça s'améliore
+        logRadioSnapshot("attach:csq_warn");
+      }
     }
   }
   
@@ -1492,13 +1525,23 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
     }
     
     // Attendre l'enregistrement réseau avec feedWatchdog() régulier
+    // Augmenter le timeout à 30 secondes pour laisser plus de temps
     unsigned long networkWaitStart = millis();
     bool networkAttached = false;
-    while (millis() - networkWaitStart < 10000 && !networkAttached) {
+    while (millis() - networkWaitStart < 30000 && !networkAttached) {
       feedWatchdog();
-      if (modem.waitForNetwork(1000)) {
+      if (modem.waitForNetwork(2000)) {
         networkAttached = true;
         logRadioSnapshot("attach:event");
+        Serial.println(F("[MODEM] ✅ Réseau attaché avec succès"));
+        return true;
+      }
+      // Vérifier périodiquement le statut d'enregistrement
+      RegStatus reg = modem.getRegistrationStatus();
+      if (reg == REG_OK_HOME || reg == REG_OK_ROAMING) {
+        networkAttached = true;
+        logRadioSnapshot("attach:success");
+        Serial.println(F("[MODEM] ✅ Réseau attaché (statut OK)"));
         return true;
       }
     }
