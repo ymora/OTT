@@ -65,10 +65,13 @@ function handleGetDevices() {
     }
     
     try {
+        error_log('[handleGetDevices] Début de la fonction');
+        
         // Condition WHERE selon le paramètre include_deleted
         $whereClause = $includeDeleted ? "d.deleted_at IS NOT NULL" : "d.deleted_at IS NULL";
         
         // Compter le total
+        error_log('[handleGetDevices] Comptage des dispositifs...');
         $countStmt = $pdo->prepare("
             SELECT COUNT(*) 
             FROM devices d
@@ -76,6 +79,7 @@ function handleGetDevices() {
         ");
         $countStmt->execute();
         $total = intval($countStmt->fetchColumn());
+        error_log('[handleGetDevices] Total dispositifs: ' . $total);
         
         // Requête simplifiée et robuste - éviter duplication firmware_version
         // Ajouter le nombre de mesures par dispositif
@@ -113,8 +117,11 @@ function handleGetDevices() {
         ");
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        error_log('[handleGetDevices] Exécution de la requête SQL...');
         $stmt->execute();
+        error_log('[handleGetDevices] Requête SQL exécutée avec succès');
         $devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log('[handleGetDevices] ' . count($devices) . ' dispositifs récupérés');
         
         $totalPages = ceil($total / $limit);
         
@@ -158,21 +165,34 @@ function handleGetDevices() {
         }
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         echo json_encode(['success' => false, 'error' => $errorMsg, 'details' => getenv('DEBUG_ERRORS') === 'true' ? $pdo->errorInfo() : null]);
-    } catch(Exception $e) {
+    } catch(Throwable $e) {
         // Nettoyer le buffer avant d'envoyer l'erreur
         if (ob_get_level() > 0) {
             ob_clean();
         }
         
-        error_log('[handleGetDevices] ❌ Erreur inattendue: ' . $e->getMessage());
+        $errorMessage = $e->getMessage();
+        $errorCode = $e->getCode();
+        $errorFile = $e->getFile();
+        $errorLine = $e->getLine();
+        
+        error_log('[handleGetDevices] ❌ Erreur fatale: ' . $errorMessage);
+        error_log('[handleGetDevices] Fichier: ' . $errorFile . ' Ligne: ' . $errorLine);
         error_log('[handleGetDevices] Stack trace: ' . $e->getTraceAsString());
         
         http_response_code(500);
         if (!headers_sent()) {
             header('Content-Type: application/json; charset=utf-8');
         }
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal server error';
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $errorMessage : 'Internal server error';
+        echo json_encode([
+            'success' => false, 
+            'error' => $errorMsg,
+            'code' => $errorCode,
+            'file' => getenv('DEBUG_ERRORS') === 'true' ? basename($errorFile) : null,
+            'line' => getenv('DEBUG_ERRORS') === 'true' ? $errorLine : null
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 }
 

@@ -22,11 +22,15 @@ function handleGetFirmwares() {
     } catch (Exception $e) {
         // Si requireAdmin() échoue (ex: non authentifié), retourner une erreur 401
         http_response_code(401);
-        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode(['success' => false, 'error' => 'Unauthorized', 'message' => $e->getMessage()]);
         return;
     }
     
     try {
+        error_log('[handleGetFirmwares] Début de la fonction');
         // Vérifier si la colonne status existe
         $hasStatusColumn = false;
         try {
@@ -63,8 +67,11 @@ function handleGetFirmwares() {
         }
         
         $stmt = $pdo->prepare($sql);
+        error_log('[handleGetFirmwares] Exécution de la requête SQL...');
         $stmt->execute();
+        error_log('[handleGetFirmwares] Requête SQL exécutée avec succès');
         $firmwares = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log('[handleGetFirmwares] ' . count($firmwares) . ' firmwares récupérés');
         
         // Ajouter status par défaut si la colonne n'existe pas
         if (!$hasStatusColumn) {
@@ -226,17 +233,60 @@ function handleGetFirmwares() {
         
         echo $json;
     } catch(PDOException $e) {
-        error_log('[handleGetFirmwares] ❌ Erreur DB: ' . $e->getMessage());
+        // Nettoyer le buffer avant d'envoyer l'erreur
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        
+        $errorCode = $e->getCode();
+        $errorMessage = $e->getMessage();
+        $errorInfo = $pdo->errorInfo();
+        
+        error_log('[handleGetFirmwares] ❌ Erreur DB: ' . $errorMessage);
+        error_log('[handleGetFirmwares] Code: ' . $errorCode);
+        error_log('[handleGetFirmwares] PDO ErrorInfo: ' . json_encode($errorInfo));
         error_log('[handleGetFirmwares] Stack trace: ' . $e->getTraceAsString());
+        
         http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
-    } catch(Exception $e) {
-        error_log('[handleGetFirmwares] ❌ Erreur inattendue: ' . $e->getMessage());
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $errorMessage : 'Database error';
+        echo json_encode([
+            'success' => false, 
+            'error' => $errorMsg,
+            'code' => $errorCode,
+            'details' => getenv('DEBUG_ERRORS') === 'true' ? $errorInfo : null
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch(Throwable $e) {
+        // Nettoyer le buffer avant d'envoyer l'erreur
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        
+        $errorMessage = $e->getMessage();
+        $errorCode = $e->getCode();
+        $errorFile = $e->getFile();
+        $errorLine = $e->getLine();
+        
+        error_log('[handleGetFirmwares] ❌ Erreur fatale: ' . $errorMessage);
+        error_log('[handleGetFirmwares] Fichier: ' . $errorFile . ' Ligne: ' . $errorLine);
         error_log('[handleGetFirmwares] Stack trace: ' . $e->getTraceAsString());
+        
         http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal server error';
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $errorMessage : 'Internal server error';
+        echo json_encode([
+            'success' => false, 
+            'error' => $errorMsg,
+            'code' => $errorCode,
+            'file' => getenv('DEBUG_ERRORS') === 'true' ? basename($errorFile) : null,
+            'line' => getenv('DEBUG_ERRORS') === 'true' ? $errorLine : null
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 }
 
