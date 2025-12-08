@@ -153,87 +153,126 @@ function formatCommandForDashboard($row) {
  */
 function fetchPendingCommandsForDevice($device_id, $limit = 5) {
     global $pdo;
-    expireDeviceCommands($device_id);
+    
+    try {
+        expireDeviceCommands($device_id);
+    } catch (Exception $e) {
+        // Log l'erreur mais continuer
+        error_log('[fetchPendingCommandsForDevice] Erreur expireDeviceCommands: ' . $e->getMessage());
+    }
     
     // Vérifier si une OTA est en attente et créer automatiquement la commande OTA_REQUEST
-    $configStmt = $pdo->prepare("
-        SELECT target_firmware_version, firmware_url, ota_pending
-        FROM device_configurations
-        WHERE device_id = :device_id AND ota_pending = TRUE
-    ");
-    $configStmt->execute(['device_id' => $device_id]);
-    $config = $configStmt->fetch();
+    try {
+        $configStmt = $pdo->prepare("
+            SELECT target_firmware_version, firmware_url, ota_pending
+            FROM device_configurations
+            WHERE device_id = :device_id AND ota_pending = TRUE
+        ");
+        $configStmt->execute(['device_id' => $device_id]);
+        $config = $configStmt->fetch();
+    } catch (Exception $e) {
+        // Si la table ou colonne n'existe pas, ignorer et continuer
+        error_log('[fetchPendingCommandsForDevice] Erreur vérification OTA: ' . $e->getMessage());
+        $config = false;
+    }
     
     if ($config && $config['ota_pending']) {
-        // Vérifier si une commande OTA_REQUEST n'existe pas déjà
-        $existingOtaStmt = $pdo->prepare("
-            SELECT id FROM device_commands
-            WHERE device_id = :device_id
-              AND command = 'OTA_REQUEST'
-              AND status = 'pending'
-        ");
-        $existingOtaStmt->execute(['device_id' => $device_id]);
-        
-        if (!$existingOtaStmt->fetch()) {
-            // Récupérer les infos du firmware (MD5, etc.)
-            $firmwareStmt = $pdo->prepare("
-                SELECT version, checksum, file_path
-                FROM firmware_versions
-                WHERE version = :version
+        try {
+            // Vérifier si une commande OTA_REQUEST n'existe pas déjà
+            $existingOtaStmt = $pdo->prepare("
+                SELECT id FROM device_commands
+                WHERE device_id = :device_id
+                  AND command = 'OTA_REQUEST'
+                  AND status = 'pending'
             ");
-            $firmwareStmt->execute(['version' => $config['target_firmware_version']]);
-            $firmware = $firmwareStmt->fetch();
+            $existingOtaStmt->execute(['device_id' => $device_id]);
             
-            if ($firmware) {
-                // Construire l'URL complète
-                $base_url = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
-                $base_url .= $_SERVER['HTTP_HOST'];
-                $firmware_url = $config['firmware_url'] ?: ($base_url . '/' . $firmware['file_path']);
-                
-                // Calculer le MD5 depuis le fichier (le firmware attend MD5, pas SHA256)
-                $firmware_full_path = __DIR__ . '/../../' . $firmware['file_path'];
-                $md5 = file_exists($firmware_full_path) ? hash_file('md5', $firmware_full_path) : '';
-                
-                // Créer le payload OTA_REQUEST avec url, md5, et version
-                $otaPayload = [
-                    'url' => $firmware_url,
-                    'md5' => $md5,
-                    'version' => $firmware['version']
-                ];
-                
-                // Insérer la commande OTA_REQUEST
-                $insertStmt = $pdo->prepare("
-                    INSERT INTO device_commands (device_id, command, payload, priority, status, execute_after, expires_at)
-                    VALUES (:device_id, 'OTA_REQUEST', :payload, 'high', 'pending', NOW(), NOW() + INTERVAL '24 HOURS')
-                ");
-                $insertStmt->execute([
-                    'device_id' => $device_id,
-                    'payload' => json_encode($otaPayload)
-                ]);
+            if (!$existingOtaStmt->fetch()) {
+                // Récupérer les infos du firmware (MD5, etc.)
+                try {
+                    $firmwareStmt = $pdo->prepare("
+                        SELECT version, checksum, file_path
+                        FROM firmware_versions
+                        WHERE version = :version
+                    ");
+                    $firmwareStmt->execute(['version' => $config['target_firmware_version']]);
+                    $firmware = $firmwareStmt->fetch();
+                    
+                    if ($firmware) {
+                        // Construire l'URL complète
+                        $base_url = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
+                        $base_url .= $_SERVER['HTTP_HOST'];
+                        $firmware_url = $config['firmware_url'] ?: ($base_url . '/' . $firmware['file_path']);
+                        
+                        // Calculer le MD5 depuis le fichier (le firmware attend MD5, pas SHA256)
+                        $firmware_full_path = __DIR__ . '/../../' . $firmware['file_path'];
+                        $md5 = file_exists($firmware_full_path) ? hash_file('md5', $firmware_full_path) : '';
+                        
+                        // Créer le payload OTA_REQUEST avec url, md5, et version
+                        $otaPayload = [
+                            'url' => $firmware_url,
+                            'md5' => $md5,
+                            'version' => $firmware['version']
+                        ];
+                        
+                        // Insérer la commande OTA_REQUEST (syntaxe PostgreSQL)
+                        $insertStmt = $pdo->prepare("
+                            INSERT INTO device_commands (device_id, command, payload, priority, status, execute_after, expires_at)
+                            VALUES (:device_id, 'OTA_REQUEST', :payload, 'high', 'pending', NOW(), NOW() + INTERVAL '24 HOURS')
+                        ");
+                        $insertStmt->execute([
+                            'device_id' => $device_id,
+                            'payload' => json_encode($otaPayload)
+                        ]);
+                    }
+                } catch (Exception $e) {
+                    // Si la table firmware_versions n'existe pas, ignorer
+                    error_log('[fetchPendingCommandsForDevice] Erreur récupération firmware: ' . $e->getMessage());
+                }
             }
+        } catch (Exception $e) {
+            // Si la table device_commands n'existe pas, ignorer
+            error_log('[fetchPendingCommandsForDevice] Erreur vérification OTA command: ' . $e->getMessage());
         }
     }
     
-    $stmt = $pdo->prepare("
-        SELECT id, command, payload, priority, status, execute_after, expires_at
-        FROM device_commands
-        WHERE device_id = :device_id
-          AND status = 'pending'
-          AND execute_after <= NOW()
-          AND (expires_at IS NULL OR expires_at > NOW())
-        ORDER BY 
-            CASE priority
-                WHEN 'critical' THEN 1
-                WHEN 'high' THEN 2
-                WHEN 'normal' THEN 3
-                ELSE 4
-            END,
-            created_at ASC
-        LIMIT :limit
-    ");
-    $stmt->bindValue(':device_id', $device_id, PDO::PARAM_INT);
-    $stmt->bindValue(':limit', max(1, min($limit, 20)), PDO::PARAM_INT);
-    $stmt->execute();
-    $rows = $stmt->fetchAll();
-    return array_map('formatCommandForDevice', $rows);
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id, command, payload, priority, status, execute_after, expires_at
+            FROM device_commands
+            WHERE device_id = :device_id
+              AND status = 'pending'
+              AND execute_after <= NOW()
+              AND (expires_at IS NULL OR expires_at > NOW())
+            ORDER BY 
+                CASE priority
+                    WHEN 'critical' THEN 1
+                    WHEN 'high' THEN 2
+                    WHEN 'normal' THEN 3
+                    ELSE 4
+                END,
+                created_at ASC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':device_id', $device_id, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', max(1, min($limit, 20)), PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+        
+        // Formater les commandes avec gestion d'erreur
+        $formatted = [];
+        foreach ($rows as $row) {
+            try {
+                $formatted[] = formatCommandForDevice($row);
+            } catch (Exception $e) {
+                error_log('[fetchPendingCommandsForDevice] Erreur formatage commande: ' . $e->getMessage());
+                // Ignorer cette commande et continuer
+            }
+        }
+        return $formatted;
+    } catch (Exception $e) {
+        // Si la table device_commands n'existe pas encore, retourner un tableau vide
+        error_log('[fetchPendingCommandsForDevice] Erreur récupération commandes: ' . $e->getMessage());
+        return [];
+    }
 }

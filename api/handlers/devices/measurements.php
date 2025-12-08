@@ -14,6 +14,15 @@ require_once __DIR__ . '/utils.php';
 function handlePostMeasurement() {
     global $pdo;
     
+    // Nettoyer tout output précédent
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    ob_start();
+    
+    // Headers JSON
+    header('Content-Type: application/json; charset=utf-8');
+    
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input) {
         http_response_code(400);
@@ -81,14 +90,18 @@ function handlePostMeasurement() {
                     }
                 }
                 
+                // Utiliser device_serial et device_name du payload si fournis, sinon utiliser ICCID
+                $device_serial = $input['device_serial'] ?? $iccid;
+                $device_name = $input['device_name'] ?? $iccid;
+                
                 $insertStmt = $pdo->prepare("
                     INSERT INTO devices (sim_iccid, device_name, device_serial, last_seen, last_battery, firmware_version, status, first_use_date, latitude, longitude)
                     VALUES (:iccid, :device_name, :device_serial, :timestamp, :battery, :firmware_version, 'active', :timestamp, :latitude, :longitude)
                 ");
                 $insertStmt->execute([
                     'iccid' => $iccid,
-                    'device_name' => $iccid,
-                    'device_serial' => $iccid,
+                    'device_name' => $device_name,
+                    'device_serial' => $device_serial,
                     'battery' => $battery,
                     'firmware_version' => $firmware_version,
                     'timestamp' => $timestampValue,
@@ -275,13 +288,32 @@ function handlePostMeasurement() {
             // Commit de la transaction
             $pdo->commit();
             
-            $commands = fetchPendingCommandsForDevice($device_id);
+            // Récupérer les commandes en attente (avec gestion d'erreur robuste)
+            $commands = [];
+            if (function_exists('fetchPendingCommandsForDevice')) {
+                try {
+                    $commands = @fetchPendingCommandsForDevice($device_id);
+                    if (!is_array($commands)) {
+                        $commands = [];
+                    }
+                } catch (Exception $cmdError) {
+                    error_log('[handlePostMeasurement] ⚠️ Erreur récupération commandes: ' . $cmdError->getMessage());
+                    $commands = [];
+                } catch (Error $cmdError) {
+                    error_log('[handlePostMeasurement] ⚠️ Erreur fatale récupération commandes: ' . $cmdError->getMessage());
+                    $commands = [];
+                }
+            }
+            
+            // Nettoyer le buffer avant d'envoyer la réponse
+            ob_clean();
             echo json_encode([
                 'success' => true,
                 'device_id' => $device_id,
                 'device_auto_registered' => !$device,
                 'commands' => $commands
             ]);
+            ob_end_flush();
             
         } catch(PDOException $e) {
             // Rollback en cas d'erreur
@@ -330,13 +362,27 @@ function handlePostMeasurement() {
                         }
                         
                         $pdo->commit();
-                        $commands = fetchPendingCommandsForDevice($device_id);
+                        $commands = [];
+                        if (function_exists('fetchPendingCommandsForDevice')) {
+                            try {
+                                $commands = @fetchPendingCommandsForDevice($device_id);
+                                if (!is_array($commands)) {
+                                    $commands = [];
+                                }
+                            } catch (Exception $e) {
+                                error_log('[handlePostMeasurement] Erreur commandes (retry): ' . $e->getMessage());
+                                $commands = [];
+                            }
+                        }
+                        
+                        ob_clean();
                         echo json_encode([
                             'success' => true,
                             'device_id' => $device_id,
                             'device_auto_registered' => false,
                             'commands' => $commands
                         ]);
+                        ob_end_flush();
                         return;
                     }
                 } catch(PDOException $retryE) {
@@ -358,6 +404,9 @@ function handlePostMeasurement() {
         error_log('[handlePostMeasurement] Code: ' . $e->getCode());
         error_log('[handlePostMeasurement] ICCID: ' . ($iccid ?? 'unknown'));
         
+        // Nettoyer le buffer avant d'envoyer l'erreur
+        ob_clean();
+        
         // Retourner l'erreur SQL complète dans la réponse pour diagnostic
         // Le firmware pourra la voir dans la réponse HTTP
         echo json_encode([
@@ -366,6 +415,7 @@ function handlePostMeasurement() {
             'error_code' => $e->getCode(),
             'error_message' => $e->getMessage() // Toujours inclure le message complet pour diagnostic
         ]);
+        ob_end_flush();
     }
 }
 
