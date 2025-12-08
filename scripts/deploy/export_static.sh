@@ -134,17 +134,26 @@ if [ -d "public/docs/screenshots" ] && [ ! -d "out/docs/screenshots" ]; then
     echo "    ✅ Screenshots copiés"
 fi
 
+# IMPORTANT: Next.js NE COPIE PAS automatiquement les fichiers .md de public/ vers out/
+# Il faut les copier manuellement APRÈS le build
 # Copier le fichier SUIVI_TEMPS_FACTURATION.md depuis public/ vers out/
-# Next.js copie automatiquement public/ vers out/, mais on s'assure que le fichier est bien là
 echo "  📄 Vérification et copie de SUIVI_TEMPS_FACTURATION.md..."
+echo "    ⚠️  Note: Next.js ne copie pas automatiquement les fichiers .md, copie manuelle nécessaire"
 if [ -f "public/SUIVI_TEMPS_FACTURATION.md" ]; then
     # Copier explicitement pour s'assurer qu'il est présent
-    cp "public/SUIVI_TEMPS_FACTURATION.md" "out/SUIVI_TEMPS_FACTURATION.md"
+    echo "    📋 Copie depuis public/ vers out/..."
+    cp -v "public/SUIVI_TEMPS_FACTURATION.md" "out/SUIVI_TEMPS_FACTURATION.md"
     # Vérifier que la copie a réussi
     if [ -f "out/SUIVI_TEMPS_FACTURATION.md" ]; then
-        echo "    ✅ SUIVI_TEMPS_FACTURATION.md copié vers out/ ($(wc -c < out/SUIVI_TEMPS_FACTURATION.md) bytes)"
+        FILE_SIZE=$(wc -c < out/SUIVI_TEMPS_FACTURATION.md)
+        echo "    ✅ SUIVI_TEMPS_FACTURATION.md copié vers out/ ($FILE_SIZE bytes)"
+        echo "    📍 Emplacement: out/SUIVI_TEMPS_FACTURATION.md"
+        echo "    📄 Aperçu (premières lignes):"
+        head -3 out/SUIVI_TEMPS_FACTURATION.md | sed 's/^/      /'
     else
-        echo "    ❌ ERREUR: Copie échouée"
+        echo "    ❌ ERREUR: Copie échouée - fichier absent de out/ après copie"
+        echo "    📋 Vérification:"
+        ls -la out/ | grep -i suivi || echo "      Aucun fichier SUIVI trouvé dans out/"
         exit 1
     fi
 elif [ -f "SUIVI_TEMPS_FACTURATION.md" ]; then
