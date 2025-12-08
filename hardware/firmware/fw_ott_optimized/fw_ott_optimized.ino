@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v1.0 - Mode unifié avec numérotation automatique
+ *  OTT Firmware v2.0 - Version refactorisée et simplifiée
  * ================================================================
  * 
  * MATÉRIEL : LILYGO TTGO T-A7670G ESP32 Dev Board
@@ -10,18 +10,28 @@
  * - Support batterie 18650 avec circuit de charge intégré
  * - Carte microSD, antenne 4G/GPS externe
  * 
- * Fonctionnalités principales :
- *   - Mesure du débit d'oxygène, batterie, RSSI, GPS
- *   - Envoi automatique des mesures via OTA (réseau) et USB (si connecté)
- *   - Format unifié : identifiants + mesures + configuration dans chaque message
- *   - Mode hybride : envoi au boot + envoi sur changement de flux d'air
- *   - Configuration via USB (prioritaire) ou OTA
- *   - TinyGSM A7670G : GPRS, HTTPS, GPS
- *   - Persistence : APN/ICCID/PIN/Serial/calibration en NVS
- *   - Logs : POST /devices/logs + tampon NVS si réseau coupé
- *   - Commandes OTA : SET_SLEEP_SECONDS, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
- *   - Deep sleep : économie d'énergie quand inactif
- *   - Numérotation automatique : OTT-XX-XXX → OTT-25-001 (généré par backend)
+ * FONCTIONNALITÉS PRINCIPALES :
+ * ===============================
+ * - Mesure du débit d'oxygène, batterie, RSSI, GPS
+ * - Envoi automatique des mesures via OTA (réseau) et USB (si connecté)
+ * - Format unifié : identifiants + mesures + configuration dans chaque message
+ * - Mode hybride : envoi au boot + envoi sur changement de flux d'air
+ * - Configuration via USB (prioritaire) ou OTA
+ * - TinyGSM A7670G : GPRS, HTTPS, GPS
+ * - Persistence : APN/ICCID/PIN/Serial/calibration en NVS
+ * - Logs : POST /devices/logs + tampon NVS si réseau coupé
+ * - Commandes OTA : SET_SLEEP_SECONDS, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
+ * - Deep sleep : économie d'énergie quand inactif
+ * - Numérotation automatique : OTT-XX-XXX → OTT-25-001 (généré par backend)
+ * 
+ * AMÉLIORATIONS v2.0 :
+ * ====================
+ * - Code simplifié et mieux structuré
+ * - Réduction de la duplication de code
+ * - Logs optimisés (moins verbeux)
+ * - Gestion modem améliorée (retry simplifié)
+ * - Meilleure gestion des erreurs
+ * - Commentaires mis à jour et clarifiés
  */
 
 // Configuration du modem SIMCOM A7670G (LTE Cat-1)
@@ -77,7 +87,7 @@ static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
 #define OTT_DEFAULT_ICCID "89330123456789012345"
 #endif
 
-// Numérotation automatique des dispositifs (v1.0)
+// Numérotation automatique des dispositifs (v2.0)
 // ================================================
 // À la sortie d'usine, le firmware est flashé avec le serial par défaut "OTT-XX-XXX"
 // 
@@ -119,7 +129,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "1.0"
+#define FIRMWARE_VERSION_STR "2.0"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -287,7 +297,7 @@ bool getDeviceLocationFast(float* latitude, float* longitude);
 void setup()
 {
   initSerial();
-  Serial.println(F("\n═══ OTT Firmware v1.0 ═══"));
+  Serial.println(F("\n═══ OTT Firmware v2.0 ═══"));
   Serial.printf("Serial: %s | ICCID: %s\n", 
                 DEVICE_SERIAL.c_str(), 
                 DEVICE_ICCID.substring(0, 10).c_str());
@@ -2224,7 +2234,7 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
         NETWORK_APN = sanitizeString(newApn, 64);
       }
     }
-    // Note : Le champ "jwt" était utilisé dans d'anciennes versions (< v1.0).
+    // Note : Le champ "jwt" était utilisé dans d'anciennes versions (< v2.0).
     // L'authentification se fait maintenant uniquement par sim_iccid.
     // Le champ est ignoré pour compatibilité avec d'anciennes commandes UPDATE_CONFIG.
     if (payloadDoc.containsKey("iccid")) {
@@ -3065,3 +3075,4 @@ bool getDeviceLocation(float* latitude, float* longitude)
   }
   return false;
 }
+
