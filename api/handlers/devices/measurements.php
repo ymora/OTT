@@ -363,3 +363,97 @@ function handleGetLatestMeasurements() {
         echo json_encode(['success' => false, 'error' => 'Database error']);
     }
 }
+
+/**
+ * GET /api.php/admin/diagnostic/measurements
+ * Diagnostic complet des mesures dans la base de données
+ */
+function handleDiagnosticMeasurements() {
+    global $pdo;
+    requireAdmin();
+    
+    try {
+        $diagnostic = [];
+        
+        // 1. Compter les dispositifs
+        $stmt = $pdo->query("SELECT COUNT(*) FROM devices WHERE deleted_at IS NULL");
+        $diagnostic['devices_count'] = (int)$stmt->fetchColumn();
+        
+        // 2. Compter les mesures totales
+        $stmt = $pdo->query("SELECT COUNT(*) FROM measurements");
+        $diagnostic['measurements_total'] = (int)$stmt->fetchColumn();
+        
+        // 3. Compter les mesures des dernières 24h
+        $stmt = $pdo->query("
+            SELECT COUNT(*) 
+            FROM measurements m
+            JOIN devices d ON m.device_id = d.id
+            WHERE m.timestamp >= NOW() - INTERVAL '24 HOURS'
+            AND d.deleted_at IS NULL
+        ");
+        $diagnostic['measurements_24h'] = (int)$stmt->fetchColumn();
+        
+        // 4. Liste des dispositifs avec nombre de mesures
+        $stmt = $pdo->query("
+            SELECT d.id, d.sim_iccid, d.device_name, d.device_serial, 
+                   COUNT(m.id) as measurement_count,
+                   MAX(m.timestamp) as last_measurement,
+                   d.last_seen
+            FROM devices d
+            LEFT JOIN measurements m ON d.id = m.device_id
+            WHERE d.deleted_at IS NULL
+            GROUP BY d.id, d.sim_iccid, d.device_name, d.device_serial, d.last_seen
+            ORDER BY last_measurement DESC NULLS LAST, d.last_seen DESC NULLS LAST
+        ");
+        $diagnostic['devices'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // 5. Dernières 10 mesures
+        $stmt = $pdo->query("
+            SELECT m.id, m.device_id, d.sim_iccid, d.device_name, 
+                   m.timestamp, m.flowrate, m.battery, m.signal_strength, m.device_status
+            FROM measurements m
+            JOIN devices d ON m.device_id = d.id
+            WHERE d.deleted_at IS NULL
+            ORDER BY m.timestamp DESC
+            LIMIT 10
+        ");
+        $diagnostic['latest_measurements'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // 6. Dispositifs sans mesures
+        $stmt = $pdo->query("
+            SELECT d.id, d.sim_iccid, d.device_name, d.device_serial, d.last_seen
+            FROM devices d
+            LEFT JOIN measurements m ON d.id = m.device_id
+            WHERE d.deleted_at IS NULL
+            AND m.id IS NULL
+            ORDER BY d.last_seen DESC NULLS LAST
+        ");
+        $diagnostic['devices_without_measurements'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // 7. Statistiques par dispositif (mesures 24h)
+        $stmt = $pdo->query("
+            SELECT d.sim_iccid, d.device_name, COUNT(m.id) as count, MAX(m.timestamp) as last_measurement
+            FROM measurements m
+            JOIN devices d ON m.device_id = d.id
+            WHERE m.timestamp >= NOW() - INTERVAL '24 HOURS'
+            AND d.deleted_at IS NULL
+            GROUP BY d.id, d.sim_iccid, d.device_name
+            ORDER BY last_measurement DESC
+        ");
+        $diagnostic['measurements_by_device_24h'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo json_encode([
+            'success' => true,
+            'diagnostic' => $diagnostic,
+            'timestamp' => date('c')
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Database error',
+            'message' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Vérifiez les logs'
+        ]);
+    }
+}

@@ -90,7 +90,8 @@ export default function DeviceModal({
     sim_pin: '',
     // OTA
     ota_primary_url: '',
-    ota_fallback_url: ''
+    ota_fallback_url: '',
+    ota_md5: ''
   })
   const [formErrors, setFormErrors] = useState({})
   const [formError, setFormError] = useState(null)
@@ -140,7 +141,8 @@ export default function DeviceModal({
           apn: '',
           sim_pin: '',
           ota_primary_url: '',
-          ota_fallback_url: ''
+          ota_fallback_url: '',
+          ota_md5: ''
         }
         setFormData(initialFormData)
         // Sauvegarder les valeurs initiales pour comparaison
@@ -174,7 +176,8 @@ export default function DeviceModal({
           apn: '',
           sim_pin: '',
           ota_primary_url: '',
-          ota_fallback_url: ''
+          ota_fallback_url: '',
+          ota_md5: ''
         })
         // En mode création, pas de valeurs initiales (toujours considéré comme modifié)
         initialFormDataRef.current = null
@@ -241,7 +244,8 @@ export default function DeviceModal({
           apn: data.config.apn || '',
           sim_pin: data.config.sim_pin || '',
           ota_primary_url: data.config.ota_primary_url || '',
-          ota_fallback_url: data.config.ota_fallback_url || ''
+          ota_fallback_url: data.config.ota_fallback_url || '',
+          ota_md5: data.config.ota_md5 || ''
         }
         setFormData(prev => ({
           ...prev,
@@ -372,7 +376,31 @@ export default function DeviceModal({
     if (isDeviceUsbConnected && usbWrite && port) {
       // Envoi via USB (prioritaire)
       try {
-        const payload = buildUpdateConfigPayload(configPayload)
+        // Mapper les noms de propriétés pour buildUpdateConfigPayload
+        const mappedConfig = {
+          sleepMinutes: configPayload.sleep_minutes,
+          sleep_minutes: configPayload.sleep_minutes, // Support des deux formats
+          measurementDurationMs: configPayload.measurement_duration_ms,
+          measurement_duration_ms: configPayload.measurement_duration_ms,
+          sendEveryNWakeups: configPayload.send_every_n_wakeups,
+          send_every_n_wakeups: configPayload.send_every_n_wakeups,
+          calibration_coefficients: configPayload.calibration_coefficients,
+          gps_enabled: configPayload.gps_enabled,
+          airflowPasses: configPayload.airflow_passes,
+          airflowSamples: configPayload.airflow_samples_per_pass,
+          airflowDelay: configPayload.airflow_delay_ms,
+          watchdogSeconds: configPayload.watchdog_seconds,
+          modemBootTimeout: configPayload.modem_boot_timeout_ms,
+          simReadyTimeout: configPayload.sim_ready_timeout_ms,
+          networkAttachTimeout: configPayload.network_attach_timeout_ms,
+          modemReboots: configPayload.modem_max_reboots,
+          apn: configPayload.apn,
+          simPin: configPayload.sim_pin,
+          otaPrimaryUrl: configPayload.ota_primary_url,
+          otaFallbackUrl: configPayload.ota_fallback_url,
+          otaMd5: configPayload.ota_md5
+        }
+        const payload = buildUpdateConfigPayload(mappedConfig)
         const command = JSON.stringify({
           command: 'UPDATE_CONFIG',
           payload: payload
@@ -495,6 +523,7 @@ export default function DeviceModal({
       }
 
       // Préparer la configuration avec reconversion (sec → ms, min → sec)
+      // Note: sleep_minutes sera mappé vers sleep_minutes_default par buildUpdateConfigPayload
       const configPayload = {}
       if (formData.sleep_minutes != null) {
         configPayload.sleep_minutes = parseInt(formData.sleep_minutes)
@@ -557,6 +586,9 @@ export default function DeviceModal({
       if (formData.ota_fallback_url && formData.ota_fallback_url.trim()) {
         configPayload.ota_fallback_url = formData.ota_fallback_url.trim()
       }
+      if (formData.ota_md5 && formData.ota_md5.trim()) {
+        configPayload.ota_md5 = formData.ota_md5.trim()
+      }
 
       if (editingItem) {
         // Modification
@@ -597,6 +629,7 @@ export default function DeviceModal({
                   if (key === 'sim_pin') return `PIN: ***`
                   if (key === 'ota_primary_url') return `OTA1: ${val.substring(0, 30)}...`
                   if (key === 'ota_fallback_url') return `OTA2: ${val.substring(0, 30)}...`
+                  if (key === 'ota_md5') return `MD5: ${val.substring(0, 16)}...`
                   return `${key}: ${val}`
                 })
                 .join(', ')
@@ -895,9 +928,12 @@ export default function DeviceModal({
                       value={formData.sleep_minutes || ''}
                       onChange={handleInputChange}
                       className="input w-full text-sm py-1.5"
-                      placeholder="5"
+                      placeholder="1440 (24h)"
                       min="1"
                     />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Par défaut: 1440 min (24h) - Intervalle entre envois OTA
+                    </p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
@@ -1158,6 +1194,24 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="https://..."
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    MD5 attendu (vérification)
+                  </label>
+                  <input
+                    type="text"
+                    name="ota_md5"
+                    value={formData.ota_md5 || ''}
+                    onChange={handleInputChange}
+                    className="input w-full text-sm py-1.5 font-mono"
+                    placeholder="a1b2c3d4e5f6..."
+                    pattern="[a-fA-F0-9]{32}"
+                    title="32 caractères hexadécimaux"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Hash MD5 pour vérifier l'intégrité du firmware OTA
+                  </p>
                 </div>
               </div>
             </Accordion>

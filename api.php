@@ -1171,6 +1171,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 // Health check
 } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
     handleHealthCheck();
+} elseif(preg_match('#/admin/diagnostic/measurements$#', $path) && $method === 'GET') {
+    handleDiagnosticMeasurements();
 
 // Audit
 } elseif(preg_match('#/audit$#', $path) && $method === 'GET') {

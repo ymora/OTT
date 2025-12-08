@@ -221,9 +221,34 @@ function MarkdownViewer({ fileName }) {
       let text = ''
       let lastError = null
       
+      // Détecter le basePath depuis window.location ou process.env
+      const detectBasePath = () => {
+        // En mode statique (GitHub Pages), détecter depuis l'URL
+        if (typeof window !== 'undefined') {
+          const pathname = window.location.pathname
+          // Si on est sur /OTT/..., le basePath est /OTT
+          if (pathname.startsWith('/OTT/')) {
+            return '/OTT'
+          }
+        }
+        // Sinon, utiliser la variable d'environnement
+        return process.env.NEXT_PUBLIC_BASE_PATH || ''
+      }
+      
+      const basePath = detectBasePath()
+      
       // Essayer plusieurs méthodes de chargement
       const methods = [
-        // 1. Essayer depuis public/ avec basePath
+        // 1. Essayer depuis la racine avec basePath (pour GitHub Pages)
+        async () => {
+          const url = `${basePath}/${fileName}`
+          const response = await fetch(url + '?t=' + Date.now()) // Cache busting
+          if (response.ok) {
+            return await response.text()
+          }
+          throw new Error(`HTTP ${response.status}`)
+        },
+        // 2. Essayer depuis public/ avec basePath
         async () => {
           const url = withBasePath(`/${fileName}`)
           const response = await fetch(url + '?t=' + Date.now()) // Cache busting
@@ -232,7 +257,7 @@ function MarkdownViewer({ fileName }) {
           }
           throw new Error(`HTTP ${response.status}`)
         },
-        // 2. Essayer depuis public/ sans basePath (fallback)
+        // 3. Essayer depuis la racine sans basePath (fallback local)
         async () => {
           const response = await fetch(`/${fileName}?t=${Date.now()}`) // Cache busting
           if (response.ok) {
@@ -240,7 +265,7 @@ function MarkdownViewer({ fileName }) {
           }
           throw new Error(`HTTP ${response.status}`)
         },
-        // 3. Essayer depuis l'API
+        // 4. Essayer depuis l'API (uniquement si disponible)
         async () => {
           const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
           const response = await fetch(`${apiUrl}/api.php/docs/${fileName}?t=${Date.now()}`) // Cache busting

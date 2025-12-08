@@ -123,6 +123,18 @@ if [ -d "public/docs/screenshots" ] && [ ! -d "out/docs/screenshots" ]; then
     echo "    ✅ Screenshots copiés"
 fi
 
+# Copier le fichier SUIVI_TEMPS_FACTURATION.md depuis public/ vers out/
+echo "  📄 Copie de SUIVI_TEMPS_FACTURATION.md..."
+if [ -f "public/SUIVI_TEMPS_FACTURATION.md" ]; then
+    cp "public/SUIVI_TEMPS_FACTURATION.md" "out/SUIVI_TEMPS_FACTURATION.md"
+    echo "    ✅ SUIVI_TEMPS_FACTURATION.md copié vers out/"
+elif [ -f "SUIVI_TEMPS_FACTURATION.md" ]; then
+    cp "SUIVI_TEMPS_FACTURATION.md" "out/SUIVI_TEMPS_FACTURATION.md"
+    echo "    ✅ SUIVI_TEMPS_FACTURATION.md copié depuis racine vers out/"
+else
+    echo "    ⚠️  ATTENTION: SUIVI_TEMPS_FACTURATION.md non trouvé"
+fi
+
 # Vérification finale : s'assurer que tous les fichiers de documentation sont présents et à jour
 echo ""
 echo "🔍 Vérification finale des fichiers de documentation..."

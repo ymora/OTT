@@ -68,6 +68,10 @@ function handleUpdateDeviceConfig($device_id) {
         
         // Vérifier si gps_enabled existe en BDD (compatibilité migration)
         $hasGpsColumn = columnExists('device_configurations', 'gps_enabled');
+        
+        // Liste de tous les champs configurables (ceux qui peuvent être sauvegardés en BDD)
+        // Note: Les paramètres réseau/modem/OTA sont envoyés au firmware mais pas stockés en BDD
+        // car ils sont gérés directement par le firmware via NVS
         $fieldsToUpdate = ['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients'];
         if ($hasGpsColumn) {
             $fieldsToUpdate[] = 'gps_enabled';
@@ -91,14 +95,32 @@ function handleUpdateDeviceConfig($device_id) {
             $stmt->execute($params);
             
             // Créer une commande UPDATE_CONFIG pour envoyer la nouvelle config au firmware
+            // Inclure TOUS les paramètres (même ceux non stockés en BDD)
             $configPayload = [];
+            
+            // Paramètres de base (stockés en BDD)
             $configFields = ['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients'];
             if ($hasGpsColumn) {
                 $configFields[] = 'gps_enabled';
             }
             
-            foreach($configFields as $field) {
-                if (array_key_exists($field, $input) && $input[$field] !== null) {
+            // Paramètres airflow (envoyés au firmware, pas stockés en BDD)
+            $airflowFields = ['airflow_passes', 'airflow_samples_per_pass', 'airflow_delay_ms'];
+            
+            // Paramètres modem (envoyés au firmware, pas stockés en BDD)
+            $modemFields = ['watchdog_seconds', 'modem_boot_timeout_ms', 'sim_ready_timeout_ms', 'network_attach_timeout_ms', 'modem_max_reboots'];
+            
+            // Paramètres réseau (envoyés au firmware, pas stockés en BDD)
+            $networkFields = ['apn', 'sim_pin'];
+            
+            // Paramètres OTA (envoyés au firmware, pas stockés en BDD)
+            $otaFields = ['ota_primary_url', 'ota_fallback_url', 'ota_md5'];
+            
+            // Combiner tous les champs
+            $allConfigFields = array_merge($configFields, $airflowFields, $modemFields, $networkFields, $otaFields);
+            
+            foreach($allConfigFields as $field) {
+                if (array_key_exists($field, $input) && $input[$field] !== null && $input[$field] !== '') {
                     $configPayload[$field] = $input[$field];
                 }
             }
