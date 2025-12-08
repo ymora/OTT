@@ -135,18 +135,43 @@ function handleGetDevices() {
         // Mettre en cache (TTL: 30 secondes pour les listes)
         SimpleCache::set($cacheKey, $response, 30);
         
-        echo json_encode($response);
+        // S'assurer que le Content-Type est JSON avant d'encoder
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     } catch(PDOException $e) {
-        http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        // Nettoyer le buffer avant d'envoyer l'erreur
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        
         error_log('[handleGetDevices] ❌ Erreur DB: ' . $e->getMessage());
+        error_log('[handleGetDevices] Code: ' . $e->getCode());
+        error_log('[handleGetDevices] PDO ErrorInfo: ' . json_encode($pdo->errorInfo()));
         error_log('[handleGetDevices] Stack trace: ' . $e->getTraceAsString());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
-    } catch(Exception $e) {
+        
         http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal server error';
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        echo json_encode(['success' => false, 'error' => $errorMsg, 'details' => getenv('DEBUG_ERRORS') === 'true' ? $pdo->errorInfo() : null]);
+    } catch(Exception $e) {
+        // Nettoyer le buffer avant d'envoyer l'erreur
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        
         error_log('[handleGetDevices] ❌ Erreur inattendue: ' . $e->getMessage());
         error_log('[handleGetDevices] Stack trace: ' . $e->getTraceAsString());
+        
+        http_response_code(500);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal server error';
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
