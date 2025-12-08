@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnostic Mesures - OTT Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 {
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 6px;
+            border-left: 4px solid #2563eb;
+        }
+        .section h2 {
+            color: #1f2937;
+            margin-bottom: 15px;
+            font-size: 1.25rem;
+        }
+        .stat {
+            display: inline-block;
+            margin: 10px 20px 10px 0;
+            padding: 15px 20px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .stat-label {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #1f2937;
+        }
+        .stat-value.success { color: #10b981; }
+        .stat-value.warning { color: #f59e0b; }
+        .stat-value.error { color: #ef4444; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: white;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background: #f3f4f6;
+            font-weight: 600;
+            color: #374151;
+        }
+        tr:hover {
+            background: #f9fafb;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+        .error {
+            background: #fef2f2;
+            border-left-color: #ef4444;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            background: #1d4ed8;
+        }
+        .timestamp {
+            color: #6b7280;
+            font-size: 0.875rem;
+            margin-top: 20px;
+        }
+        .empty {
+            color: #6b7280;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Diagnostic des Mesures</h1>
+        <p class="subtitle">Vérification de la base de données pour les mesures enregistrées</p>
+        
+        <!-- Formulaire de connexion si pas de token -->
+        <div id="login-form" class="section" style="display: none;">
+            <h2>🔐 Connexion requise</h2>
+            <p style="margin-bottom: 20px;">Veuillez vous connecter pour accéder au diagnostic.</p>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div style="margin-bottom: 15px;">
+                    <label for="email" style="display: block; margin-bottom: 5px; font-weight: 600;">Email:</label>
+                    <input type="email" id="email" required 
+                           style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem;"
+                           placeholder="votre@email.com">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label for="password" style="display: block; margin-bottom: 5px; font-weight: 600;">Mot de passe:</label>
+                    <input type="password" id="password" required 
+                           style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem;"
+                           placeholder="Votre mot de passe">
+                </div>
+                <button type="submit" class="btn" style="width: 100%;">Se connecter</button>
+            </form>
+            <div id="login-error" class="error" style="display: none; margin-top: 15px;"></div>
+        </div>
+        
+        <div id="loading" class="loading">
+            Chargement des données...
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="content" style="display: none;">
+            <!-- Statistiques générales -->
+            <div class="section">
+                <h2>📊 Statistiques Générales</h2>
+                <div class="stat">
+                    <div class="stat-label">Dispositifs actifs</div>
+                    <div class="stat-value" id="devices-count">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Mesures totales</div>
+                    <div class="stat-value" id="measurements-total">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Mesures (24h)</div>
+                    <div class="stat-value" id="measurements-24h">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Dispositifs sans mesures</div>
+                    <div class="stat-value" id="devices-without">-</div>
+                </div>
+            </div>
+            
+            <!-- Dernières mesures -->
+            <div class="section">
+                <h2>📈 Dernières Mesures (10)</h2>
+                <div id="latest-measurements">
+                    <div class="empty">Chargement...</div>
+                </div>
+            </div>
+            
+            <!-- Dispositifs -->
+            <div class="section">
+                <h2>📱 Dispositifs</h2>
+                <div id="devices-list">
+                    <div class="empty">Chargement...</div>
+                </div>
+            </div>
+            
+            <!-- Dispositifs sans mesures -->
+            <div class="section" id="devices-without-section" style="display: none;">
+                <h2>⚠️ Dispositifs sans Mesures</h2>
+                <div id="devices-without-list">
+                    <div class="empty">Chargement...</div>
+                </div>
+            </div>
+            
+            <button class="btn" onclick="loadDiagnostic()">🔄 Actualiser</button>
+            <div class="timestamp" id="timestamp"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = window.location.origin;
+        
+        async function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const loginError = document.getElementById('login-error');
+            const loginForm = document.getElementById('login-form');
+            
+            loginError.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${API_URL}/api.php/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Erreur de connexion');
+                }
+                
+                // Sauvegarder le token
+                if (data.token) {
+                    localStorage.setItem('token', data.token);
+                    if (data.refresh_token) {
+                        localStorage.setItem('refresh_token', data.refresh_token);
+                    }
+                }
+                
+                // Masquer le formulaire et charger les données
+                loginForm.style.display = 'none';
+                loadDiagnostic();
+                
+            } catch (err) {
+                loginError.style.display = 'block';
+                loginError.textContent = `❌ Erreur: ${err.message}`;
+            }
+        }
+        
+        async function loadDiagnostic() {
+            const loading = document.getElementById('loading');
+            const content = document.getElementById('content');
+            const error = document.getElementById('error');
+            const loginForm = document.getElementById('login-form');
+            
+            // Vérifier si on a un token
+            const token = localStorage.getItem('token');
+            
+            if (!token) {
+                // Afficher le formulaire de connexion
+                loading.style.display = 'none';
+                content.style.display = 'none';
+                loginForm.style.display = 'block';
+                return;
+            }
+            
+            loading.style.display = 'block';
+            content.style.display = 'none';
+            error.style.display = 'none';
+            loginForm.style.display = 'none';
+            
+            try {
+                
+                const response = await fetch(`${API_URL}/api.php/admin/diagnostic/measurements`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: 'Erreur HTTP ' + response.status }));
+                    throw new Error(errorData.error || 'Erreur lors du chargement');
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Erreur inconnue');
+                }
+                
+                displayDiagnostic(data.diagnostic);
+                
+                loading.style.display = 'none';
+                content.style.display = 'block';
+                
+            } catch (err) {
+                loading.style.display = 'none';
+                
+                // Si erreur 401, supprimer le token et afficher le formulaire de connexion
+                if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('refresh_token');
+                    loginForm.style.display = 'block';
+                    error.style.display = 'block';
+                    error.textContent = `❌ Session expirée. Veuillez vous reconnecter.`;
+                } else {
+                    error.style.display = 'block';
+                    error.textContent = `❌ Erreur: ${err.message}`;
+                }
+                console.error('Erreur diagnostic:', err);
+            }
+        }
+        
+        function displayDiagnostic(diagnostic) {
+            // Statistiques
+            document.getElementById('devices-count').textContent = diagnostic.devices_count;
+            document.getElementById('measurements-total').textContent = diagnostic.measurements_total;
+            document.getElementById('measurements-24h').textContent = diagnostic.measurements_24h;
+            document.getElementById('devices-without').textContent = diagnostic.devices_without_measurements.length;
+            
+            // Classes de couleur
+            const totalEl = document.getElementById('measurements-total');
+            totalEl.className = 'stat-value ' + (diagnostic.measurements_total > 0 ? 'success' : 'error');
+            
+            const recentEl = document.getElementById('measurements-24h');
+            recentEl.className = 'stat-value ' + (diagnostic.measurements_24h > 0 ? 'success' : 'warning');
+            
+            // Dernières mesures
+            const latestDiv = document.getElementById('latest-measurements');
+            if (diagnostic.latest_measurements.length > 0) {
+                latestDiv.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Dispositif</th>
+                                <th>Date/Heure</th>
+                                <th>Débit (L/min)</th>
+                                <th>Batterie</th>
+                                <th>RSSI</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${diagnostic.latest_measurements.map(m => `
+                                <tr>
+                                    <td>${m.device_name || m.sim_iccid}</td>
+                                    <td>${formatDate(m.timestamp)}</td>
+                                    <td>${parseFloat(m.flowrate).toFixed(2)}</td>
+                                    <td>${m.battery !== null ? parseFloat(m.battery).toFixed(1) + '%' : 'N/A'}</td>
+                                    <td>${m.signal_strength !== null ? m.signal_strength + ' dBm' : 'N/A'}</td>
+                                    <td>${m.device_status || 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                latestDiv.innerHTML = '<div class="empty">Aucune mesure trouvée</div>';
+            }
+            
+            // Dispositifs
+            const devicesDiv = document.getElementById('devices-list');
+            if (diagnostic.devices.length > 0) {
+                devicesDiv.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nom</th>
+                                <th>ICCID</th>
+                                <th>Serial</th>
+                                <th>Mesures</th>
+                                <th>Dernière mesure</th>
+                                <th>Dernière vue</th>
+                                <th>⚠️</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${diagnostic.devices.map(d => {
+                                const hasInconsistency = d.has_inconsistency || (d.measurement_count == 0 && d.last_seen);
+                                const inconsistencyClass = hasInconsistency ? 'style="background-color: #fef2f2; color: #991b1b;"' : '';
+                                const inconsistencyIcon = hasInconsistency ? '⚠️' : '';
+                                return `
+                                <tr ${inconsistencyClass}>
+                                    <td>${d.id}</td>
+                                    <td>${d.device_name || 'N/A'}</td>
+                                    <td>${d.sim_iccid || 'N/A'}</td>
+                                    <td>${d.device_serial || 'N/A'}</td>
+                                    <td>${d.measurement_count}</td>
+                                    <td>${d.last_measurement ? formatDate(d.last_measurement) : 'Aucune'}</td>
+                                    <td>${d.last_seen ? formatDate(d.last_seen) : 'Jamais'}</td>
+                                    <td>${inconsistencyIcon}</td>
+                                </tr>
+                            `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                    ${diagnostic.devices.some(d => d.has_inconsistency || (d.measurement_count == 0 && d.last_seen)) ? 
+                        '<div style="margin-top: 15px; padding: 10px; background: #fef2f2; border-left: 4px solid #ef4444; border-radius: 4px; color: #991b1b;">' +
+                        '<strong>⚠️ Incohérence détectée:</strong> Certains dispositifs ont une "Dernière vue" récente mais aucune mesure enregistrée. ' +
+                        'Cela peut indiquer que l\'envoi des mesures échoue silencieusement. Vérifiez les logs du serveur.' +
+                        '</div>' : ''}
+                `;
+            } else {
+                devicesDiv.innerHTML = '<div class="empty">Aucun dispositif trouvé</div>';
+            }
+            
+            // Dispositifs sans mesures
+            const withoutSection = document.getElementById('devices-without-section');
+            const withoutDiv = document.getElementById('devices-without-list');
+            if (diagnostic.devices_without_measurements.length > 0) {
+                withoutSection.style.display = 'block';
+                withoutDiv.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nom</th>
+                                <th>ICCID</th>
+                                <th>Serial</th>
+                                <th>Dernière vue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${diagnostic.devices_without_measurements.map(d => `
+                                <tr>
+                                    <td>${d.id}</td>
+                                    <td>${d.device_name || 'N/A'}</td>
+                                    <td>${d.sim_iccid || 'N/A'}</td>
+                                    <td>${d.device_serial || 'N/A'}</td>
+                                    <td>${d.last_seen ? formatDate(d.last_seen) : 'Jamais'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                withoutSection.style.display = 'none';
+            }
+            
+            // Timestamp
+            document.getElementById('timestamp').textContent = `Dernière mise à jour: ${new Date().toLocaleString('fr-FR')}`;
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleString('fr-FR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch {
+                return dateString;
+            }
+        }
+        
+        // Charger au démarrage
+        // Vérifier d'abord si on a un token
+        const token = localStorage.getItem('token');
+        if (!token) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
+        } else {
+            loadDiagnostic();
+        }
+    </script>
+</body>
+</html>
+

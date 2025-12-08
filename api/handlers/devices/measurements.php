@@ -188,18 +188,32 @@ function handlePostMeasurement() {
             }
             
             // Enregistrer la mesure
-            $measurementStmt = $pdo->prepare("
-                INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status)
-                VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status)
-            ");
-            $measurementStmt->execute([
-                'device_id' => $device_id,
-                'flowrate' => $flowrate,
-                'battery' => $battery,
-                'rssi' => $rssi,
-                'status' => $status,
-                'timestamp' => $timestampValue
-            ]);
+            // IMPORTANT: S'assurer que flowrate est toujours un nombre valide (même 0)
+            // La table measurements a flowrate NOT NULL, donc on doit toujours fournir une valeur
+            $flowrateValue = is_numeric($flowrate) ? floatval($flowrate) : 0.0;
+            
+            try {
+                $measurementStmt = $pdo->prepare("
+                    INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status)
+                    VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status)
+                ");
+                $measurementStmt->execute([
+                    'device_id' => $device_id,
+                    'flowrate' => $flowrateValue,
+                    'battery' => $battery !== null ? floatval($battery) : null,
+                    'rssi' => $rssi !== null ? intval($rssi) : null,
+                    'status' => $status,
+                    'timestamp' => $timestampValue
+                ]);
+                error_log("[Measurement] ✅ Mesure enregistrée pour dispositif $device_id (ICCID: $iccid) - Flow: $flowrateValue, Bat: $battery, RSSI: $rssi");
+            } catch(PDOException $measurementError) {
+                error_log("[Measurement] ❌ ERREUR insertion mesure pour dispositif $device_id (ICCID: $iccid): " . $measurementError->getMessage());
+                error_log("[Measurement] Code erreur: " . $measurementError->getCode());
+                error_log("[Measurement] Données: flowrate=$flowrateValue (type: " . gettype($flowrateValue) . "), battery=$battery, rssi=$rssi, status=$status");
+                error_log("[Measurement] Stack trace: " . $measurementError->getTraceAsString());
+                // Faire échouer la transaction pour éviter l'incohérence (last_seen mis à jour mais pas de mesure)
+                throw $measurementError;
+            }
             
             // Alertes - utiliser la fonction depuis helpers.php si disponible, sinon créer directement
             if ($battery < 20) {
@@ -394,11 +408,17 @@ function handleDiagnosticMeasurements() {
         $diagnostic['measurements_24h'] = (int)$stmt->fetchColumn();
         
         // 4. Liste des dispositifs avec nombre de mesures
+        // Inclure aussi les dispositifs avec last_seen récent mais sans mesures (incohérence)
         $stmt = $pdo->query("
             SELECT d.id, d.sim_iccid, d.device_name, d.device_serial, 
                    COUNT(m.id) as measurement_count,
                    MAX(m.timestamp) as last_measurement,
-                   d.last_seen
+                   d.last_seen,
+                   CASE 
+                     WHEN COUNT(m.id) = 0 AND d.last_seen IS NOT NULL AND d.last_seen >= NOW() - INTERVAL '7 days' 
+                     THEN true 
+                     ELSE false 
+                   END as has_inconsistency
             FROM devices d
             LEFT JOIN measurements m ON d.id = m.device_id
             WHERE d.deleted_at IS NULL

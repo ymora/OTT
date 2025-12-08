@@ -1014,6 +1014,17 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
         echo json_encode(['success' => false, 'error' => 'Migration page not found']);
         exit;
     }
+} elseif($method === 'GET' && ($path === '/diagnostic-measurements.html' || preg_match('#^/diagnostic-measurements\.html$#', $path))) {
+    $filePath = __DIR__ . '/public/diagnostic-measurements.html';
+    if (file_exists($filePath)) {
+        header('Content-Type: text/html; charset=utf-8');
+        readfile($filePath);
+        exit;
+    } else {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Diagnostic page not found']);
+        exit;
+    }
 
 // Auth
 } elseif(preg_match('#/auth/login$#', $path) && $method === 'POST') {
@@ -1166,6 +1177,10 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     // Route pour la visualisation de la base de données
     error_log('[ROUTER] ✅ Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
     handleDatabaseView();
+} elseif($method === 'GET' && ($path === '/admin/diagnostic/measurements' || preg_match('#^/admin/diagnostic/measurements/?$#', $path))) {
+    // Route pour le diagnostic des mesures
+    error_log('[ROUTER] ✅ Route /admin/diagnostic/measurements matchée - Path: ' . $path . ' Method: ' . $method);
+    handleDiagnosticMeasurements();
     exit;
 
 // Health check

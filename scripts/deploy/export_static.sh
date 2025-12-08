@@ -25,6 +25,17 @@ if [ -d "out" ]; then
     rm -rf out
 fi
 
+# Vérifier que le fichier SUIVI_TEMPS_FACTURATION.md existe avant le build
+echo "🔍 Vérification fichier avant build..."
+if [ -f "public/SUIVI_TEMPS_FACTURATION.md" ]; then
+    echo "  ✅ SUIVI_TEMPS_FACTURATION.md présent dans public/ ($(wc -c < public/SUIVI_TEMPS_FACTURATION.md) bytes)"
+    head -3 public/SUIVI_TEMPS_FACTURATION.md
+else
+    echo "  ❌ ERREUR: SUIVI_TEMPS_FACTURATION.md absent de public/"
+    echo "  📝 Le fichier devrait avoir été généré par l'étape précédente"
+    exit 1
+fi
+
 # Exporter le site statique
 echo "🔨 Build et export en cours..."
 npx next build
