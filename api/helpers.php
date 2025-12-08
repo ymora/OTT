@@ -520,12 +520,71 @@ function auditLog($action, $entity_type = null, $entity_id = null, $old_value = 
 
 function runSqlFile(PDO $pdo, $filename) {
     $path = SQL_BASE_DIR . '/' . ltrim($filename, '/');
+    
+    error_log("[runSqlFile] Début exécution: {$filename}");
+    error_log("[runSqlFile] Chemin complet: {$path}");
+    
     if (!file_exists($path)) {
-        throw new RuntimeException("SQL file not found: {$filename}");
+        $error = "SQL file not found: {$filename} (path: {$path})";
+        error_log("[runSqlFile] ❌ ERREUR: {$error}");
+        throw new RuntimeException($error);
     }
+    
     $sql = file_get_contents($path);
     if ($sql === false) {
-        throw new RuntimeException("Unable to read SQL file: {$filename}");
+        $error = "Unable to read SQL file: {$filename}";
+        error_log("[runSqlFile] ❌ ERREUR: {$error}");
+        throw new RuntimeException($error);
     }
-    $pdo->exec($sql);
+    
+    $sqlSize = strlen($sql);
+    error_log("[runSqlFile] Fichier lu: {$sqlSize} octets");
+    
+    // Diviser le SQL en instructions individuelles pour un meilleur logging
+    $statements = array_filter(
+        array_map('trim', explode(';', $sql)),
+        function($stmt) { return !empty($stmt) && !preg_match('/^\s*--/', $stmt); }
+    );
+    
+    error_log("[runSqlFile] Nombre d'instructions SQL: " . count($statements));
+    
+    try {
+        // Exécuter chaque instruction séparément pour un meilleur diagnostic
+        foreach ($statements as $index => $statement) {
+            if (empty(trim($statement))) continue;
+            
+            $stmtPreview = substr($statement, 0, 100);
+            error_log("[runSqlFile] Exécution instruction " . ($index + 1) . "/" . count($statements) . ": {$stmtPreview}...");
+            
+            try {
+                $pdo->exec($statement);
+                error_log("[runSqlFile] ✅ Instruction " . ($index + 1) . " exécutée avec succès");
+            } catch (PDOException $e) {
+                $errorCode = $e->getCode();
+                $errorMessage = $e->getMessage();
+                $errorInfo = $pdo->errorInfo();
+                
+                error_log("[runSqlFile] ❌ ERREUR SQL à l'instruction " . ($index + 1) . ":");
+                error_log("[runSqlFile]   Code: {$errorCode}");
+                error_log("[runSqlFile]   Message: {$errorMessage}");
+                error_log("[runSqlFile]   PDO ErrorInfo: " . json_encode($errorInfo));
+                error_log("[runSqlFile]   Instruction complète: " . substr($statement, 0, 500));
+                
+                // Relancer avec plus de détails
+                throw new RuntimeException(
+                    "SQL error at statement " . ($index + 1) . "/" . count($statements) . 
+                    " in file {$filename}: [{$errorCode}] {$errorMessage}. " .
+                    "Statement: " . substr($statement, 0, 200),
+                    $errorCode,
+                    $e
+                );
+            }
+        }
+        
+        error_log("[runSqlFile] ✅ Migration '{$filename}' terminée avec succès");
+    } catch (Exception $e) {
+        error_log("[runSqlFile] ❌ ÉCHEC migration '{$filename}': " . $e->getMessage());
+        error_log("[runSqlFile] Stack trace: " . $e->getTraceAsString());
+        throw $e;
+    }
 }

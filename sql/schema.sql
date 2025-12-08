@@ -131,6 +131,8 @@ CREATE TABLE IF NOT EXISTS measurements (
   battery NUMERIC(5,2),
   signal_strength INT,
   device_status VARCHAR(50),
+  latitude NUMERIC(10,8),
+  longitude NUMERIC(11,8),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_measurements_device_time ON measurements(device_id, timestamp DESC);

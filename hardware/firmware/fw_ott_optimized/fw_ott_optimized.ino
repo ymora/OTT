@@ -1118,7 +1118,7 @@ void handleSerialCommand(const String& command)
   lowered.toLowerCase();
   
   // Commande config {...} - Configuration directe via USB
-  if (lowered.startsWith("config ")) {
+      if (lowered.startsWith("config ")) {
     String jsonPayload = command.substring(7);
     jsonPayload.trim();
     
@@ -1133,7 +1133,10 @@ void handleSerialCommand(const String& command)
     
     if (error) {
       Serial.printf("❌ Erreur JSON: %s\n", error.c_str());
-    } else {
+      return;
+    }
+    
+    {
       bool configUpdated = false;
       
       if (payloadDoc.containsKey("sleep_minutes")) {
@@ -1189,8 +1192,8 @@ void handleSerialCommand(const String& command)
                       gpsEnabled ? "ON" : "OFF");
       }
     }
-          return;
-        }
+    return;
+  }
 
   // Commande calibration {...} - Calibration directe via USB
   if (lowered.startsWith("calibration ")) {
@@ -1208,7 +1211,10 @@ void handleSerialCommand(const String& command)
     
     if (error) {
       Serial.printf("❌ Erreur JSON: %s\n", error.c_str());
-          } else {
+      return;
+    }
+    
+    {
       if (payloadDoc.containsKey("a0") && payloadDoc.containsKey("a1") && payloadDoc.containsKey("a2")) {
         float a0 = payloadDoc["a0"].as<float>();
         float a1 = payloadDoc["a1"].as<float>();
@@ -1221,8 +1227,6 @@ void handleSerialCommand(const String& command)
         Serial.println(F("❌ Coefficients manquants"));
       }
     }
-    return;
-  }
   
   // Commande inconnue
   Serial.printf("⚠️  Commande inconnue: %s\n", command.c_str());
@@ -1907,18 +1911,18 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   doc["battery_percent"] = m.battery;
   doc["rssi"] = m.rssi;
   
-  // Position GPS/réseau cellulaire
-  if (latitude != nullptr && longitude != nullptr) {
-    // Valider que les coordonnées ne sont pas nulles (0,0) avant d'envoyer
-    if (*latitude != 0.0 || *longitude != 0.0) {
-      doc["latitude"] = *latitude;
-      doc["longitude"] = *longitude;
-      Serial.printf("[API] 📍 Coordonnées GPS incluses: %.6f, %.6f\n", *latitude, *longitude);
-    } else {
-      Serial.println(F("[API] ⚠️  Coordonnées GPS nulles (0,0) - non incluses dans l'envoi"));
-    }
+  // Position GPS/réseau cellulaire (validation avec fonction utilitaire)
+  if (latitude != nullptr && longitude != nullptr && isValidGpsCoordinates(*latitude, *longitude)) {
+    doc["latitude"] = *latitude;
+    doc["longitude"] = *longitude;
+    Serial.printf("[API] 📍 Coordonnées GPS incluses: %.6f, %.6f\n", *latitude, *longitude);
   } else {
-    Serial.println(F("[API] ℹ️  Pas de coordonnées GPS disponibles pour cette mesure"));
+    // GPS non disponible ou coordonnées invalides - ce n'est PAS bloquant
+    if (latitude != nullptr && longitude != nullptr) {
+      Serial.println(F("[API] ⚠️  Coordonnées GPS invalides - non incluses (non bloquant)"));
+    } else {
+      Serial.println(F("[API] ℹ️  GPS non disponible - mesure envoyée sans coordonnées (non bloquant)"));
+    }
   }
   
   // Configuration actuelle
@@ -2961,9 +2965,8 @@ bool getDeviceLocation(float* latitude, float* longitude)
   float gsmAccuracy = 0.0;
   
   if (modem.getGsmLocation(&lat, &lon, &gsmAccuracy)) {
-    // Valider les coordonnées
-    if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0 && 
-        lat != 0.0 && lon != 0.0) {
+    // Valider les coordonnées (fonction utilitaire)
+    if (isValidGpsCoordinates(lat, lon)) {
       *latitude = lat;
       *longitude = lon;
       String timeStr = formatTimeFromMillis(millis());

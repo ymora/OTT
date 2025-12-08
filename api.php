@@ -274,14 +274,69 @@ function handleRunMigration() {
             return;
         }
         
-        runSqlFile($pdo, $migrationFile);
-        echo json_encode(['success' => true, 'message' => 'Migration executed']);
-    } catch(Exception $e) {
-        http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Migration failed';
-        error_log('[handleRunMigration] Error: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
-    }
+        $logs = [];
+        $startTime = microtime(true);
+        
+        error_log("[handleRunMigration] Début migration: {$migrationFile}");
+        
+        try {
+            runSqlFile($pdo, $migrationFile);
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            error_log("[handleRunMigration] ✅ Migration réussie en {$duration}ms");
+            
+            echo json_encode([
+                'success' => true, 
+                'message' => 'Migration executed',
+                'logs' => [
+                    "✅ Migration '{$migrationFile}' exécutée avec succès",
+                    "⏱️ Durée: {$duration}ms"
+                ]
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch (PDOException $e) {
+            $errorCode = $e->getCode();
+            $errorMessage = $e->getMessage();
+            $errorInfo = $pdo->errorInfo();
+            
+            error_log("[handleRunMigration] ❌ ERREUR PDO:");
+            error_log("[handleRunMigration]   Code: {$errorCode}");
+            error_log("[handleRunMigration]   Message: {$errorMessage}");
+            error_log("[handleRunMigration]   PDO ErrorInfo: " . json_encode($errorInfo));
+            
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'SQL Error',
+                'message' => $errorMessage,
+                'code' => $errorCode,
+                'details' => $errorInfo,
+                'logs' => [
+                    "❌ ERREUR SQL lors de l'exécution de '{$migrationFile}'",
+                    "Code erreur: {$errorCode}",
+                    "Message: {$errorMessage}",
+                    "PDO ErrorInfo: " . json_encode($errorInfo)
+                ]
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch(Exception $e) {
+            $errorMessage = $e->getMessage();
+            $errorCode = $e->getCode();
+            
+            error_log('[handleRunMigration] ❌ ERREUR: ' . $errorMessage);
+            error_log('[handleRunMigration] Code: ' . $errorCode);
+            error_log('[handleRunMigration] Stack trace: ' . $e->getTraceAsString());
+            
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Migration failed',
+                'message' => $errorMessage,
+                'code' => $errorCode,
+                'logs' => [
+                    "❌ ÉCHEC migration '{$migrationFile}'",
+                    "Message: {$errorMessage}",
+                    "Code: {$errorCode}"
+                ]
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
 }
 
 function handleRunCompleteMigration() {
