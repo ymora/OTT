@@ -315,10 +315,14 @@ function MarkdownViewer({ fileName }) {
       }
       
       if (!text) {
+        const errorDetails = attemptedUrls.length > 0 
+          ? `\n\nURLs tentées:\n${attemptedUrls.join('\n')}\n\nBasePath détecté: "${basePath}"\nURL actuelle: ${typeof window !== 'undefined' ? window.location.href : 'N/A'}`
+          : ''
         throw new Error(
           `Impossible de charger ${fileName}. ` +
           `Vérifiez que le fichier existe dans public/ ou que l'API est accessible. ` +
-          `Dernière erreur: ${lastError?.message || 'Inconnue'}`
+          `Dernière erreur: ${lastError?.message || 'Inconnue'}` +
+          errorDetails
         )
       }
       
