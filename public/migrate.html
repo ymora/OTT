@@ -171,7 +171,7 @@
 <body>
     <div class="container">
         <h1>🚀 Migration Base de Données</h1>
-        <p class="subtitle">Applique la migration complète sur votre base Render</p>
+        <p class="subtitle">Applique les migrations SQL sur votre base Render</p>
         
         <div class="warning">
             <strong>⚠️ Attention</strong>
@@ -180,7 +180,7 @@
         
         <div class="info">
             <strong>ℹ️ Information</strong>
-            Cette migration est idempotente (peut être exécutée plusieurs fois sans problème).
+            Toutes les migrations sont idempotentes (peuvent être exécutées plusieurs fois sans problème).
         </div>
         
         <label for="apiUrl">URL de votre API :</label>
@@ -192,12 +192,21 @@
             value="https://ott-jbln.onrender.com"
         >
         
-        <label for="migrationType" style="margin-top: 20px;">Type de migration :</label>
-        <select id="migrationType" class="api-url-input" style="margin-bottom: 20px;">
-            <option value="complete">Migration Complète (recommandée pour première installation)</option>
-            <option value="migration_add_min_max_columns.sql">Migration: Colonnes min/max (devices)</option>
-            <option value="migration_add_gps_to_measurements.sql">Migration: GPS dans measurements (latitude/longitude)</option>
+        <label for="migrationType" style="margin-top: 20px;">Sélectionner la migration à appliquer :</label>
+        <select id="migrationType" class="api-url-input" style="margin-bottom: 20px;" onchange="updateMigrationDescription()">
+            <option value="complete">📦 Migration Complète (tout le schéma + corrections)</option>
+            <option value="migration_add_min_max_columns.sql">📊 Migration: Colonnes min/max (devices)</option>
+            <option value="migration_add_gps_to_measurements.sql">📍 Migration: GPS dans measurements</option>
         </select>
+        
+        <div id="migrationDescription" class="info" style="margin-top: 10px; margin-bottom: 20px;">
+            <strong>📋 Détails de la migration sélectionnée :</strong>
+            <div id="descriptionContent" style="margin-top: 10px; font-size: 13px; line-height: 1.6;">
+                <strong>Migration Complète</strong> : Applique tout le schéma de base de données avec toutes les corrections intégrées.<br>
+                <strong>Inclut</strong> : Tables (users, patients, devices, measurements, etc.), colonnes min/max (devices), triggers, index, etc.<br>
+                <strong>⚠️ Ne inclut PAS</strong> : Colonnes GPS dans measurements (à appliquer séparément)
+            </div>
+        </div>
         
         <button id="migrateBtn" onclick="runMigration()">
             🚀 Exécuter la Migration
@@ -261,29 +270,57 @@
                 if (response.ok && data.success) {
                     result.className = 'result success';
                     let nextSteps = '';
+                    let details = '';
                     
                     if (migrationType === 'complete') {
-                        nextSteps = `
-                            <p style="margin-top: 15px;"><strong>Prochaines étapes :</strong></p>
+                        details = `
+                            <p><strong>📊 Résultat de la migration :</strong></p>
                             <ul style="margin-top: 10px; padding-left: 20px;">
+                                <li>✅ Schéma complet appliqué</li>
                                 <li>✅ Colonnes min/max ajoutées à devices</li>
-                                <li>⚠️  N'oubliez pas d'appliquer la migration GPS (latitude/longitude dans measurements)</li>
-                                <li>Testez votre application</li>
+                                <li>✅ Trigger update_device_min_max() créé</li>
+                                <li>✅ Index créés</li>
+                                <li>✅ Table usb_logs créée</li>
+                            </ul>
+                        `;
+                        nextSteps = `
+                            <p style="margin-top: 15px;"><strong>⚠️ Prochaine étape importante :</strong></p>
+                            <ul style="margin-top: 10px; padding-left: 20px;">
+                                <li>🔴 <strong>Appliquez la migration GPS</strong> pour ajouter latitude/longitude à measurements</li>
+                                <li>Sinon, les mesures avec coordonnées GPS échoueront avec une erreur SQL</li>
                             </ul>
                         `;
                     } else if (migrationType === 'migration_add_gps_to_measurements.sql') {
-                        nextSteps = `
-                            <p style="margin-top: 15px;"><strong>✅ Migration GPS appliquée !</strong></p>
+                        details = `
+                            <p><strong>📍 Résultat de la migration GPS :</strong></p>
                             <ul style="margin-top: 10px; padding-left: 20px;">
-                                <li>Les colonnes latitude et longitude ont été ajoutées à measurements</li>
+                                <li>✅ Colonne latitude ajoutée à measurements</li>
+                                <li>✅ Colonne longitude ajoutée à measurements</li>
+                                <li>✅ Index idx_measurements_location créé</li>
+                            </ul>
+                        `;
+                        nextSteps = `
+                            <p style="margin-top: 15px;"><strong>✅ Migration GPS appliquée avec succès !</strong></p>
+                            <ul style="margin-top: 10px; padding-left: 20px;">
                                 <li>Les coordonnées GPS seront maintenant stockées avec chaque mesure</li>
+                                <li>Vous pouvez tracer le déplacement du dispositif dans le temps</li>
                                 <li>Testez l'envoi d'une mesure avec coordonnées GPS</li>
                             </ul>
                         `;
-                    } else {
+                    } else if (migrationType === 'migration_add_min_max_columns.sql') {
+                        details = `
+                            <p><strong>📊 Résultat de la migration min/max :</strong></p>
+                            <ul style="margin-top: 10px; padding-left: 20px;">
+                                <li>✅ Colonnes min_flowrate, max_flowrate ajoutées</li>
+                                <li>✅ Colonnes min_battery, max_battery ajoutées</li>
+                                <li>✅ Colonnes min_rssi, max_rssi ajoutées</li>
+                                <li>✅ Colonne min_max_updated_at ajoutée</li>
+                            </ul>
+                        `;
                         nextSteps = `
                             <p style="margin-top: 15px;"><strong>✅ Migration appliquée !</strong></p>
                             <ul style="margin-top: 10px; padding-left: 20px;">
+                                <li>Le trigger update_device_min_max() mettra à jour ces valeurs automatiquement</li>
                                 <li>Testez votre application</li>
                             </ul>
                         `;
@@ -291,7 +328,11 @@
                     
                     result.innerHTML = `
                         <strong>✅ Migration réussie !</strong>
-                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        ${details}
+                        <details style="margin-top: 15px;">
+                            <summary style="cursor: pointer; font-weight: bold;">📋 Détails techniques (JSON)</summary>
+                            <pre style="margin-top: 10px; max-height: 300px; overflow-y: auto;">${JSON.stringify(data, null, 2)}</pre>
+                        </details>
                         ${nextSteps}
                     `;
                 } else {
@@ -322,12 +363,54 @@
             }
         }
         
+        // Fonction pour mettre à jour la description selon la migration sélectionnée
+        function updateMigrationDescription() {
+            const migrationType = document.getElementById('migrationType').value;
+            const descriptionContent = document.getElementById('descriptionContent');
+            
+            const descriptions = {
+                'complete': `
+                    <strong>Migration Complète</strong> : Applique tout le schéma de base de données avec toutes les corrections intégrées.<br><br>
+                    <strong>✅ Ce qui sera créé/modifié :</strong><br>
+                    • Tables principales (users, patients, devices, measurements, etc.)<br>
+                    • Colonnes min/max dans devices (min_flowrate, max_flowrate, min_battery, max_battery, min_rssi, max_rssi)<br>
+                    • Trigger update_device_min_max() pour mettre à jour automatiquement les min/max<br>
+                    • Index sur les colonnes importantes<br>
+                    • Table usb_logs pour les logs USB<br>
+                    • Colonnes deleted_at pour soft delete<br><br>
+                    <strong>⚠️ Important</strong> : Cette migration n'inclut PAS les colonnes GPS (latitude/longitude) dans measurements.<br>
+                    Vous devrez appliquer la migration GPS séparément si vous voulez stocker les coordonnées GPS par mesure.
+                `,
+                'migration_add_min_max_columns.sql': `
+                    <strong>Migration: Colonnes min/max (devices)</strong><br><br>
+                    <strong>✅ Ce qui sera créé/modifié :</strong><br>
+                    • Ajoute les colonnes min_flowrate, max_flowrate à devices<br>
+                    • Ajoute les colonnes min_battery, max_battery à devices<br>
+                    • Ajoute les colonnes min_rssi, max_rssi à devices<br>
+                    • Ajoute la colonne min_max_updated_at à devices<br><br>
+                    <strong>📝 Note</strong> : Ces colonnes sont utilisées par le trigger update_device_min_max() pour suivre les valeurs min/max de chaque dispositif.
+                `,
+                'migration_add_gps_to_measurements.sql': `
+                    <strong>Migration: GPS dans measurements</strong><br><br>
+                    <strong>✅ Ce qui sera créé/modifié :</strong><br>
+                    • Ajoute la colonne latitude NUMERIC(10,8) à measurements<br>
+                    • Ajoute la colonne longitude NUMERIC(11,8) à measurements<br>
+                    • Crée un index idx_measurements_location pour améliorer les requêtes de géolocalisation<br><br>
+                    <strong>📝 Note</strong> : Permet de stocker les coordonnées GPS spécifiques à chaque mesure, permettant de tracer le déplacement du dispositif dans le temps.
+                `
+            };
+            
+            descriptionContent.innerHTML = descriptions[migrationType] || descriptions['complete'];
+        }
+        
         // Remplir automatiquement l'URL depuis la page actuelle si possible
         window.addEventListener('DOMContentLoaded', () => {
             const currentHost = window.location.hostname;
             if (currentHost && currentHost.includes('render.com')) {
                 document.getElementById('apiUrl').value = `https://${currentHost}`;
             }
+            // Initialiser la description
+            updateMigrationDescription();
         });
     </script>
 </body>
