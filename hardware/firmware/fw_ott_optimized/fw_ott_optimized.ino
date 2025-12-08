@@ -161,7 +161,8 @@ static uint32_t networkAttachTimeoutMs = NETWORK_ATTACH_TIMEOUT_DEFAULT_MS;
 static uint8_t modemMaxReboots = MODEM_MAX_REBOOTS_DEFAULT;
 static uint32_t configuredSleepMinutes = DEFAULT_SLEEP_MINUTES;
 static uint8_t sendEveryNWakeups = 1;  // Envoyer une mesure tous les N wakeups (1 = à chaque wakeup)
-static uint8_t wakeupCounter = 0;  // Compteur de wakeups depuis le dernier envoi
+// Utiliser RTC_DATA_ATTR pour persister le compteur à travers les deep sleeps
+RTC_DATA_ATTR static uint8_t wakeupCounter = 0;  // Compteur de wakeups depuis le dernier envoi (persiste après deep sleep)
 static uint16_t airflowPasses = 2;
 static uint16_t airflowSamplesPerPass = 10;
 static uint16_t airflowSampleDelayMs = 5;
@@ -387,19 +388,16 @@ void setup()
     }
   }
   
-  // Après envoi initial, faire deep sleep pour économiser l'énergie
-  if (sentInit) {
-    Serial.printf("[SLEEP] Mesure initiale envoyée → Deep sleep %lu minutes\n", static_cast<unsigned long>(configuredSleepMinutes));
-    
-    // Arrêter modem avant sleep
-    stopModem();
-    
-    // Deep sleep périodique
-    goToSleep(configuredSleepMinutes);
-    // Note: goToSleep() ne retourne jamais (deep sleep réinitialise le MCU)
-  }
+  // Toujours faire deep sleep après le boot (qu'on ait envoyé ou non)
+  // Si on n'a pas envoyé (wakeupCounter < sendEveryNWakeups), on se réveillera au prochain cycle
+  Serial.printf("[SLEEP] Deep sleep %lu minutes\n", static_cast<unsigned long>(configuredSleepMinutes));
   
-  // Si échec envoi, continuer en mode actif pour réessayer
+  // Arrêter modem avant sleep
+  stopModem();
+  
+  // Deep sleep périodique
+  goToSleep(configuredSleepMinutes);
+  // Note: goToSleep() ne retourne jamais (deep sleep réinitialise le MCU)
 }
 
 void loop()
@@ -546,13 +544,11 @@ void loop()
     unsigned long sleepMinutesMs = configuredSleepMinutes * 60 * 1000;
     unsigned long timeSinceLastOtaMeasurement = now - lastOtaMeasurementTime;
     
-    // Incrémenter le compteur de wakeups à chaque cycle
-    wakeupCounter++;
-    
-    // Vérifier si le délai est écoulé ET si on doit envoyer selon sendEveryNWakeups
+    // En mode USB, on ignore sendEveryNWakeups (pas de deep sleep, donc pas de wakeups)
+    // Le compteur wakeupCounter n'est utilisé qu'en mode normal (avec deep sleep)
+    // En mode USB, on envoie simplement selon le délai de temps
     bool timeElapsed = (lastOtaMeasurementTime == 0) || (timeSinceLastOtaMeasurement >= sleepMinutesMs);
-    bool wakeupCountReached = (wakeupCounter >= sendEveryNWakeups);
-    bool shouldSendOtaMeasurement = timeElapsed && wakeupCountReached;
+    bool shouldSendOtaMeasurement = timeElapsed;  // En mode USB, ignorer wakeupCounter
     
     if (shouldSendOtaMeasurement && modemReady && modem.isNetworkConnected()) {
       Serial.println(F("[OTA] 📤 Envoi mesure périodique (processus normal)..."));
@@ -584,7 +580,8 @@ void loop()
       bool sent = sendMeasurement(mOta, hasLocationOta ? &latOta : nullptr, hasLocationOta ? &lonOta : nullptr, "TIMER");
       if (sent) {
         lastOtaMeasurementTime = now;
-        wakeupCounter = 0;  // Réinitialiser le compteur après envoi réussi
+        // Note: wakeupCounter sera réinitialisé après deep sleep en mode normal
+        // En mode USB, on ne l'utilise pas
         lastFlowValue = mOta.flow;
         lastMeasurementTime = now;
         timeStr = formatTimeFromMillis(millis());
@@ -771,6 +768,9 @@ void loop()
     
     unsigned long timeSinceLastSleep = now - lastDeepSleepTime;
     if (sent && timeSinceLastSleep > 60000) { // Au moins 1 minute depuis le dernier deep sleep
+      // Incrémenter le compteur de wakeups avant le deep sleep
+      wakeupCounter++;
+      
       Serial.printf("[SLEEP] Mesure envoyée → Deep sleep %lu minutes\n", static_cast<unsigned long>(configuredSleepMinutes));
       
       // Mettre à jour le timestamp avant le sleep
