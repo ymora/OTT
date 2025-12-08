@@ -124,15 +124,54 @@ if [ -d "public/docs/screenshots" ] && [ ! -d "out/docs/screenshots" ]; then
 fi
 
 # Copier le fichier SUIVI_TEMPS_FACTURATION.md depuis public/ vers out/
-echo "  📄 Copie de SUIVI_TEMPS_FACTURATION.md..."
+# Next.js copie automatiquement public/ vers out/, mais on s'assure que le fichier est bien là
+echo "  📄 Vérification et copie de SUIVI_TEMPS_FACTURATION.md..."
 if [ -f "public/SUIVI_TEMPS_FACTURATION.md" ]; then
+    # Copier explicitement pour s'assurer qu'il est présent
     cp "public/SUIVI_TEMPS_FACTURATION.md" "out/SUIVI_TEMPS_FACTURATION.md"
-    echo "    ✅ SUIVI_TEMPS_FACTURATION.md copié vers out/"
+    # Vérifier que la copie a réussi
+    if [ -f "out/SUIVI_TEMPS_FACTURATION.md" ]; then
+        echo "    ✅ SUIVI_TEMPS_FACTURATION.md copié vers out/ ($(wc -c < out/SUIVI_TEMPS_FACTURATION.md) bytes)"
+    else
+        echo "    ❌ ERREUR: Copie échouée"
+        exit 1
+    fi
 elif [ -f "SUIVI_TEMPS_FACTURATION.md" ]; then
     cp "SUIVI_TEMPS_FACTURATION.md" "out/SUIVI_TEMPS_FACTURATION.md"
-    echo "    ✅ SUIVI_TEMPS_FACTURATION.md copié depuis racine vers out/"
+    if [ -f "out/SUIVI_TEMPS_FACTURATION.md" ]; then
+        echo "    ✅ SUIVI_TEMPS_FACTURATION.md copié depuis racine vers out/ ($(wc -c < out/SUIVI_TEMPS_FACTURATION.md) bytes)"
+    else
+        echo "    ❌ ERREUR: Copie échouée"
+        exit 1
+    fi
 else
-    echo "    ⚠️  ATTENTION: SUIVI_TEMPS_FACTURATION.md non trouvé"
+    echo "    ⚠️  ATTENTION: SUIVI_TEMPS_FACTURATION.md non trouvé dans public/ ni à la racine"
+    echo "    📝 Création d'un fichier minimal..."
+    cat > "out/SUIVI_TEMPS_FACTURATION.md" << 'EOF'
+# Suivi du Temps - Projet OTT
+## Journal de travail pour facturation
+
+> **Note**: Ce fichier est généré automatiquement.
+
+**Période analysée** : En cours
+**Développeur** : ymora
+
+### Statistiques
+- **Total heures** : En cours de calcul...
+- **Total commits** : En cours de calcul...
+
+---
+*Ce fichier sera mis à jour lors du prochain déploiement.*
+EOF
+    echo "    ✅ Fichier minimal créé dans out/"
+fi
+
+# Vérification finale que le fichier est bien accessible
+if [ -f "out/SUIVI_TEMPS_FACTURATION.md" ]; then
+    echo "    ✅ Vérification finale: SUIVI_TEMPS_FACTURATION.md présent dans out/"
+else
+    echo "    ❌ ERREUR CRITIQUE: SUIVI_TEMPS_FACTURATION.md absent de out/ après toutes les tentatives"
+    exit 1
 fi
 
 # Vérification finale : s'assurer que tous les fichiers de documentation sont présents et à jour

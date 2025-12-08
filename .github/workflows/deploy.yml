@@ -48,6 +48,14 @@ jobs:
         run: |
           echo "Contenu du dossier out/:"
           ls -la out/ | head -20
+          # Vérifier spécifiquement que SUIVI_TEMPS_FACTURATION.md est présent
+          if [ -f "out/SUIVI_TEMPS_FACTURATION.md" ]; then
+            echo "✅ SUIVI_TEMPS_FACTURATION.md trouvé dans out/ ($(wc -c < out/SUIVI_TEMPS_FACTURATION.md) bytes)"
+            head -5 out/SUIVI_TEMPS_FACTURATION.md
+          else
+            echo "❌ ERREUR: SUIVI_TEMPS_FACTURATION.md manquant dans out/"
+            exit 1
+          fi
           # Utiliser le script de vérification dédié
           bash scripts/deploy/verify-build.sh out
       
