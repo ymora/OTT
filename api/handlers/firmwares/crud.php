@@ -21,11 +21,26 @@ function handleGetFirmwares() {
         requireAdmin();
     } catch (Exception $e) {
         // Si requireAdmin() échoue (ex: non authentifié), retourner une erreur 401
+        error_log('[handleGetFirmwares] ⚠️ requireAdmin() échoué: ' . $e->getMessage());
         http_response_code(401);
         if (!headers_sent()) {
             header('Content-Type: application/json; charset=utf-8');
         }
         echo json_encode(['success' => false, 'error' => 'Unauthorized', 'message' => $e->getMessage()]);
+        return;
+    } catch (Throwable $e) {
+        // Capturer aussi les Throwable (erreurs fatales)
+        error_log('[handleGetFirmwares] ❌ Erreur fatale dans requireAdmin(): ' . $e->getMessage());
+        error_log('[handleGetFirmwares] Stack trace: ' . $e->getTraceAsString());
+        http_response_code(500);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Erreur authentification',
+            'message' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur serveur'
+        ]);
         return;
     }
     
