@@ -160,6 +160,8 @@ static uint32_t simReadyTimeoutMs = SIM_READY_TIMEOUT_DEFAULT_MS;
 static uint32_t networkAttachTimeoutMs = NETWORK_ATTACH_TIMEOUT_DEFAULT_MS;
 static uint8_t modemMaxReboots = MODEM_MAX_REBOOTS_DEFAULT;
 static uint32_t configuredSleepMinutes = DEFAULT_SLEEP_MINUTES;
+static uint8_t sendEveryNWakeups = 1;  // Envoyer une mesure tous les N wakeups (1 = à chaque wakeup)
+static uint8_t wakeupCounter = 0;  // Compteur de wakeups depuis le dernier envoi
 static uint16_t airflowPasses = 2;
 static uint16_t airflowSamplesPerPass = 10;
 static uint16_t airflowSampleDelayMs = 5;
@@ -544,8 +546,13 @@ void loop()
     unsigned long sleepMinutesMs = configuredSleepMinutes * 60 * 1000;
     unsigned long timeSinceLastOtaMeasurement = now - lastOtaMeasurementTime;
     
-    // Si c'est la première fois ou si le délai est écoulé, envoyer une mesure
-    bool shouldSendOtaMeasurement = (lastOtaMeasurementTime == 0) || (timeSinceLastOtaMeasurement >= sleepMinutesMs);
+    // Incrémenter le compteur de wakeups à chaque cycle
+    wakeupCounter++;
+    
+    // Vérifier si le délai est écoulé ET si on doit envoyer selon sendEveryNWakeups
+    bool timeElapsed = (lastOtaMeasurementTime == 0) || (timeSinceLastOtaMeasurement >= sleepMinutesMs);
+    bool wakeupCountReached = (wakeupCounter >= sendEveryNWakeups);
+    bool shouldSendOtaMeasurement = timeElapsed && wakeupCountReached;
     
     if (shouldSendOtaMeasurement && modemReady && modem.isNetworkConnected()) {
       Serial.println(F("[OTA] 📤 Envoi mesure périodique (processus normal)..."));
@@ -577,12 +584,14 @@ void loop()
       bool sent = sendMeasurement(mOta, hasLocationOta ? &latOta : nullptr, hasLocationOta ? &lonOta : nullptr, "TIMER");
       if (sent) {
         lastOtaMeasurementTime = now;
+        wakeupCounter = 0;  // Réinitialiser le compteur après envoi réussi
         lastFlowValue = mOta.flow;
         lastMeasurementTime = now;
         timeStr = formatTimeFromMillis(millis());
         Serial.printf("%s[OTA] ✅ Mesure envoyée à la base de données avec succès (débit: %.2f L/min, batterie: %.0f%%, RSSI: %d dBm)\n",
                       timeStr.c_str(), mOta.flow, mOta.battery, mOta.rssi);
-        Serial.printf("%s[OTA] ⏰ Prochaine mesure dans %lu minutes\n", timeStr.c_str(), static_cast<unsigned long>(configuredSleepMinutes));
+        Serial.printf("%s[OTA] ⏰ Prochaine mesure dans %lu minutes (ou après %d wakeup(s))\n", 
+                      timeStr.c_str(), static_cast<unsigned long>(configuredSleepMinutes), sendEveryNWakeups);
       } else {
         Serial.printf("%s[OTA] ❌ Échec envoi mesure - réessai au prochain cycle\n", timeStr.c_str());
       }
@@ -2272,12 +2281,21 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     if (payloadDoc.containsKey("ota_md5")) {
       otaExpectedMd5 = payloadDoc["ota_md5"].as<String>();
     }
+    if (payloadDoc.containsKey("send_every_n_wakeups")) {
+      uint8_t newValue = payloadDoc["send_every_n_wakeups"].as<uint8_t>();
+      if (newValue >= 1 && newValue <= 255) {
+        sendEveryNWakeups = newValue;
+        wakeupCounter = 0;  // Réinitialiser le compteur lors du changement
+        Serial.printf("✅ [CMD] send_every_n_wakeups changé: %d\n", sendEveryNWakeups);
+      }
+    }
     saveConfig();
     
     // Afficher un résumé de ce qui a été modifié
     Serial.println("✅ [CMD] Configuration appliquée et sauvegardée en NVS");
     Serial.printf("    • Serial: %s | ICCID: %s\n", DEVICE_SERIAL.c_str(), DEVICE_ICCID.substring(0,10).c_str());
-    Serial.printf("    • Sleep: %d min | GPS: %s\n", configuredSleepMinutes, gpsEnabled ? "ON" : "OFF");
+    Serial.printf("    • Sleep: %d min | GPS: %s | Envoi: tous les %d wakeup(s)\n", 
+                  configuredSleepMinutes, gpsEnabled ? "ON" : "OFF", sendEveryNWakeups);
     
     bool ackOk = acknowledgeCommand(cmd, true, "config updated");
     Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
@@ -2434,6 +2452,8 @@ void loadConfig()
   CAL_OVERRIDE_A1 = prefs.getFloat("cal_a1", NAN);
   CAL_OVERRIDE_A2 = prefs.getFloat("cal_a2", NAN);
   configuredSleepMinutes = prefs.getUInt("sleep_min", configuredSleepMinutes);
+  sendEveryNWakeups = prefs.getUChar("send_n_wake", 1);  // Par défaut: 1 (envoi à chaque wakeup)
+  wakeupCounter = 0;  // Réinitialiser le compteur au boot
   airflowPasses = prefs.getUShort("flow_passes", airflowPasses);
   airflowSamplesPerPass = prefs.getUShort("flow_samples", airflowSamplesPerPass);
   airflowSampleDelayMs = prefs.getUShort("flow_delay", airflowSampleDelayMs);
@@ -2490,6 +2510,7 @@ void saveConfig()
   prefs.putFloat("cal_a1", CAL_OVERRIDE_A1);
   prefs.putFloat("cal_a2", CAL_OVERRIDE_A2);
   prefs.putUInt("sleep_min", configuredSleepMinutes);
+  prefs.putUChar("send_n_wake", sendEveryNWakeups);
   prefs.putUShort("flow_passes", airflowPasses);
   prefs.putUShort("flow_samples", airflowSamplesPerPass);
   prefs.putUShort("flow_delay", airflowSampleDelayMs);
