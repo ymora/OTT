@@ -256,6 +256,16 @@ function cleanupUsbLogs($pdo, $userRole) {
  * Router principal pour les logs USB
  */
 function handleUsbLogsRequest($pdo, $method, $path, $body, $query, $userId, $userRole) {
+    // Nettoyer le buffer de sortie AVANT tout header
+    if (ob_get_level() > 0) {
+        ob_clean();
+    }
+    
+    // Définir le Content-Type JSON AVANT tout autre output
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
     $subPath = preg_replace('#^/usb-logs/?#', '', $path);
     
     switch ($method) {

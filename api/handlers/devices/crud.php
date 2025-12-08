@@ -14,9 +14,27 @@ require_once __DIR__ . '/../device_serial_generator.php';
 function handleGetDevices() {
     global $pdo;
     
+    // Nettoyer le buffer de sortie AVANT tout header
+    if (ob_get_level() > 0) {
+        ob_clean();
+    }
+    
+    // Définir le Content-Type JSON AVANT tout autre output
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
     // Permettre accès sans auth pour dispositifs IoT (rétrocompatibilité)
     // OU avec auth JWT pour dashboard
-    $user = getCurrentUser();
+    try {
+        $user = getCurrentUser();
+    } catch (Exception $e) {
+        // Si getCurrentUser() échoue, continuer sans user (rétrocompatibilité)
+        $user = null;
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleGetDevices] ⚠️ getCurrentUser() failed: ' . $e->getMessage());
+        }
+    }
     
     // Paramètre pour inclure les devices archivés (soft-deleted)
     $includeDeleted = isset($_GET['include_deleted']) && $_GET['include_deleted'] === 'true';

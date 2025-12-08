@@ -1285,6 +1285,11 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 
 // USB Logs (pour monitoring à distance)
 } elseif(preg_match('#^/usb-logs(/.*)?$#', $path)) {
+    // Nettoyer le buffer de sortie AVANT tout header
+    if (ob_get_level() > 0) {
+        ob_clean();
+    }
+    
     // Accepter les requêtes même sans authentification pour les logs USB locaux
     // getCurrentUser() peut retourner null, c'est acceptable
     try {
@@ -1301,7 +1306,7 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     
     $body = json_decode(file_get_contents('php://input'), true) ?? [];
     
-    header('Content-Type: application/json');
+    // Le Content-Type sera défini dans handleUsbLogsRequest()
     echo handleUsbLogsRequest($pdo, $method, $path, $body, $_GET, $userId, $userRole);
 
 // Migration complète - Route pour exécuter la migration complète

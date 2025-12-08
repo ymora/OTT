@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS measurements (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_measurements_device_time ON measurements(device_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_measurements_location ON measurements(latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
 
 -- Fonction pour mettre à jour automatiquement les min/max des dispositifs
 CREATE OR REPLACE FUNCTION update_device_min_max()

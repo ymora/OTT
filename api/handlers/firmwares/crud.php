@@ -6,7 +6,25 @@
 
 function handleGetFirmwares() {
     global $pdo;
-    requireAdmin();
+    
+    // Nettoyer le buffer de sortie AVANT tout header
+    if (ob_get_level() > 0) {
+        ob_clean();
+    }
+    
+    // Définir le Content-Type JSON AVANT tout autre output
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
+    try {
+        requireAdmin();
+    } catch (Exception $e) {
+        // Si requireAdmin() échoue (ex: non authentifié), retourner une erreur 401
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        return;
+    }
     
     try {
         // IMPORTANT: Exclure ino_content et bin_content (BYTEA) de la liste car :
@@ -43,7 +61,22 @@ function handleGetFirmwares() {
             $firmware_id = $firmware['id'];
             $firmware_version = $firmware['version'];
             $firmware_status = $firmware['status'] ?? 'unknown';
+            
+            // Vérifier que les fonctions helpers retournent des valeurs valides
             $version_dir = getVersionDir($firmware_version);
+            if (empty($root_dir)) {
+                $root_dir = getProjectRoot();
+            }
+            
+            // Si les fonctions helpers retournent null ou vide, utiliser des valeurs par défaut
+            if (empty($version_dir) || !is_string($version_dir)) {
+                $version_dir = 'fw_ott_v' . str_replace('.', '_', $firmware_version);
+                error_log('[handleGetFirmwares] ⚠️ Version dir invalide, utilisation valeur par défaut: ' . $version_dir);
+            }
+            if (empty($root_dir) || !is_string($root_dir)) {
+                $root_dir = dirname(__DIR__, 3); // Remonter depuis api/handlers/firmwares/
+                error_log('[handleGetFirmwares] ⚠️ Project root invalide, utilisation valeur par défaut: ' . $root_dir);
+            }
             
             // Déterminer quel type de fichier chercher selon le statut
             if ($firmware_status === 'compiled') {

@@ -169,7 +169,7 @@ static bool gpsEnabled = false;  // GPS DÉSACTIVÉ par défaut (peut bloquer mo
 // Variables pour mode hybride (détection changement flux)
 static float lastFlowValue = 0.0;
 static unsigned long lastMeasurementTime = 0;
-static unsigned long lastOtaCheck = 0;
+static unsigned long lastOtaCheck = 0;  // Initialisé à 0 pour première vérification immédiate
 static const float FLOW_CHANGE_THRESHOLD = 0.5;  // Seuil de changement (L/min)
 static const unsigned long MIN_INTERVAL_MS = 5000;  // Intervalle minimum entre mesures (5s)
 static const unsigned long IDLE_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes sans changement → light sleep
@@ -732,16 +732,17 @@ void loop()
       sendLog("ERROR", "Échec envoi mesure - vérifier connexion API", "measurements");
     }
     
-    // Traiter les commandes OTA périodiquement
+    // Traiter les commandes OTA périodiquement (toutes les 30 secondes)
+    // Note: lastOtaCheck est initialisé à 0, donc la première vérification se fera immédiatement
     if (now - lastOtaCheck >= OTA_CHECK_INTERVAL_MS) {
       lastOtaCheck = now;
       if (modemReady && modem.isNetworkConnected()) {
-  Command cmds[MAX_COMMANDS];
-  int count = fetchCommands(cmds, MAX_COMMANDS);
+        Command cmds[MAX_COMMANDS];
+        int count = fetchCommands(cmds, MAX_COMMANDS);
         if (count > 0) {
           Serial.printf("[COMMANDS] %d commande(s) OTA reçue(s)\n", count);
           uint32_t dummySleep = configuredSleepMinutes;
-  for (int i = 0; i < count; ++i) {
+          for (int i = 0; i < count; ++i) {
             handleCommand(cmds[i], dummySleep);
           }
         }
@@ -751,9 +752,20 @@ void loop()
     // Après envoi réussi, faire deep sleep pour économiser l'énergie
     // (sauf si on vient juste de se réveiller d'un deep sleep)
     static unsigned long lastDeepSleepTime = 0;
+    static bool firstMeasurementAfterBoot = true;
+    
+    // Initialiser lastDeepSleepTime au premier boot
+    if (firstMeasurementAfterBoot) {
+      lastDeepSleepTime = now;
+      firstMeasurementAfterBoot = false;
+    }
+    
     unsigned long timeSinceLastSleep = now - lastDeepSleepTime;
     if (sent && timeSinceLastSleep > 60000) { // Au moins 1 minute depuis le dernier deep sleep
       Serial.printf("[SLEEP] Mesure envoyée → Deep sleep %lu minutes\n", static_cast<unsigned long>(configuredSleepMinutes));
+      
+      // Mettre à jour le timestamp avant le sleep
+      lastDeepSleepTime = now;
       
       // Arrêter modem avant sleep
       stopModem();
@@ -1227,6 +1239,8 @@ void handleSerialCommand(const String& command)
         Serial.println(F("❌ Coefficients manquants"));
       }
     }
+    return;
+  }
   
   // Commande inconnue
   Serial.printf("⚠️  Commande inconnue: %s\n", command.c_str());
