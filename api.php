@@ -500,38 +500,122 @@ EXECUTE FUNCTION update_device_min_max();
 ";
         
         // Exécuter la migration avec SQL corrigé directement
+        $startTime = microtime(true);
         error_log('[handleRunCompleteMigration] Début de la migration complète (SQL corrigé intégré)...');
-        $pdo->exec($correctedSql);
-        error_log('[handleRunCompleteMigration] Migration complète terminée avec succès');
         
-        // Vérifier le résultat
-        $checkStmt = $pdo->query("
-            SELECT 
-                'MIGRATION COMPLÈTE' as status,
-                (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) as users_actifs,
-                (SELECT COUNT(*) FROM patients WHERE deleted_at IS NULL) as patients_actifs,
-                (SELECT COUNT(*) FROM devices WHERE deleted_at IS NULL) as devices_actifs,
-                (SELECT COUNT(*) FROM device_configurations WHERE gps_enabled IS NOT NULL) as configs_gps_ready,
-                (SELECT COUNT(*) FROM usb_logs) as usb_logs_count
-        ");
-        $result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+        $logs = [];
+        $logs[] = "🚀 Début de la migration complète...";
         
-        echo json_encode([
-            'success' => true,
-            'message' => 'Migration complète exécutée avec succès',
-            'verification' => $result
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        
-    } catch(Exception $e) {
-        http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Migration failed';
-        error_log('[handleRunCompleteMigration] Erreur: ' . $e->getMessage());
-        error_log('[handleRunCompleteMigration] Stack trace: ' . $e->getTraceAsString());
-        echo json_encode([
-            'success' => false,
-            'error' => $errorMsg,
-            'details' => getenv('DEBUG_ERRORS') === 'true' ? $e->getTraceAsString() : null
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        try {
+            // Diviser le SQL en instructions pour un meilleur logging
+            $statements = array_filter(
+                array_map('trim', explode(';', $correctedSql)),
+                function($stmt) { return !empty($stmt) && !preg_match('/^\s*--/', $stmt); }
+            );
+            
+            $logs[] = "📝 Nombre d'instructions SQL: " . count($statements);
+            error_log('[handleRunCompleteMigration] Nombre d\'instructions: ' . count($statements));
+            
+            foreach ($statements as $index => $statement) {
+                if (empty(trim($statement))) continue;
+                
+                $stmtPreview = substr($statement, 0, 80);
+                error_log("[handleRunCompleteMigration] Exécution instruction " . ($index + 1) . "/" . count($statements) . ": {$stmtPreview}...");
+                
+                try {
+                    $pdo->exec($statement);
+                    $logs[] = "✅ Instruction " . ($index + 1) . "/" . count($statements) . " exécutée";
+                } catch (PDOException $stmtError) {
+                    $errorCode = $stmtError->getCode();
+                    $errorMessage = $stmtError->getMessage();
+                    $errorInfo = $pdo->errorInfo();
+                    
+                    $logs[] = "❌ ERREUR à l'instruction " . ($index + 1) . "/" . count($statements);
+                    $logs[] = "   Code: {$errorCode}";
+                    $logs[] = "   Message: {$errorMessage}";
+                    $logs[] = "   Instruction: " . substr($statement, 0, 150);
+                    
+                    error_log("[handleRunCompleteMigration] ❌ ERREUR SQL à l'instruction " . ($index + 1) . ":");
+                    error_log("[handleRunCompleteMigration]   Code: {$errorCode}");
+                    error_log("[handleRunCompleteMigration]   Message: {$errorMessage}");
+                    error_log("[handleRunCompleteMigration]   PDO ErrorInfo: " . json_encode($errorInfo));
+                    error_log("[handleRunCompleteMigration]   Instruction: " . substr($statement, 0, 500));
+                    
+                    throw new RuntimeException(
+                        "SQL error at statement " . ($index + 1) . "/" . count($statements) . 
+                        ": [{$errorCode}] {$errorMessage}",
+                        $errorCode,
+                        $stmtError
+                    );
+                }
+            }
+            
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            error_log('[handleRunCompleteMigration] ✅ Migration complète terminée avec succès en ' . $duration . 'ms');
+            $logs[] = "✅ Migration terminée en {$duration}ms";
+            
+            // Vérifier le résultat
+            $checkStmt = $pdo->query("
+                SELECT 
+                    'MIGRATION COMPLÈTE' as status,
+                    (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) as users_actifs,
+                    (SELECT COUNT(*) FROM patients WHERE deleted_at IS NULL) as patients_actifs,
+                    (SELECT COUNT(*) FROM devices WHERE deleted_at IS NULL) as devices_actifs,
+                    (SELECT COUNT(*) FROM device_configurations WHERE gps_enabled IS NOT NULL) as configs_gps_ready,
+                    (SELECT COUNT(*) FROM usb_logs) as usb_logs_count
+            ");
+            $result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Migration complète exécutée avec succès',
+                'verification' => $result,
+                'logs' => $logs
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            
+        } catch (PDOException $e) {
+            $errorCode = $e->getCode();
+            $errorMessage = $e->getMessage();
+            $errorInfo = $pdo->errorInfo();
+            
+            $logs[] = "❌ ERREUR PDO:";
+            $logs[] = "   Code: {$errorCode}";
+            $logs[] = "   Message: {$errorMessage}";
+            $logs[] = "   PDO ErrorInfo: " . json_encode($errorInfo);
+            
+            error_log('[handleRunCompleteMigration] ❌ ERREUR PDO: ' . $errorMessage);
+            error_log('[handleRunCompleteMigration] Code: ' . $errorCode);
+            error_log('[handleRunCompleteMigration] PDO ErrorInfo: ' . json_encode($errorInfo));
+            
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'SQL Error',
+                'message' => $errorMessage,
+                'code' => $errorCode,
+                'details' => $errorInfo,
+                'logs' => $logs
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch(Exception $e) {
+            $errorMessage = $e->getMessage();
+            $errorCode = $e->getCode();
+            
+            $logs[] = "❌ ERREUR: {$errorMessage}";
+            $logs[] = "   Code: {$errorCode}";
+            
+            error_log('[handleRunCompleteMigration] ❌ ERREUR: ' . $errorMessage);
+            error_log('[handleRunCompleteMigration] Code: ' . $errorCode);
+            error_log('[handleRunCompleteMigration] Stack trace: ' . $e->getTraceAsString());
+            
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Migration failed',
+                'message' => $errorMessage,
+                'code' => $errorCode,
+                'logs' => $logs
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
     }
 }
 
