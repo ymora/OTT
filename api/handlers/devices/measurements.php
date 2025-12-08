@@ -195,22 +195,49 @@ function handlePostMeasurement() {
             $flowrateValue = is_numeric($flowrate) ? floatval($flowrate) : 0.0;
             
             try {
-                // CORRECTION: Ajouter latitude et longitude à chaque mesure pour tracer le déplacement
-                // Utiliser COALESCE pour gérer le cas où les colonnes n'existent pas encore (migration progressive)
-                $measurementStmt = $pdo->prepare("
-                    INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status, latitude, longitude)
-                    VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status, :latitude, :longitude)
+                // Vérifier si les colonnes GPS existent dans measurements
+                $checkGpsStmt = $pdo->query("
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'measurements' 
+                        AND column_name = 'latitude'
+                    ) as has_latitude
                 ");
-                $measurementStmt->execute([
-                    'device_id' => $device_id,
-                    'flowrate' => $flowrateValue,
-                    'battery' => $battery !== null ? floatval($battery) : null,
-                    'rssi' => $rssi !== null ? intval($rssi) : null,
-                    'status' => $status,
-                    'timestamp' => $timestampValue,
-                    'latitude' => ($latitude !== null && $latitude >= -90 && $latitude <= 90) ? floatval($latitude) : null,
-                    'longitude' => ($longitude !== null && $longitude >= -180 && $longitude <= 180) ? floatval($longitude) : null
-                ]);
+                $gpsCheck = $checkGpsStmt->fetch(PDO::FETCH_ASSOC);
+                $hasGpsColumns = ($gpsCheck['has_latitude'] === true || $gpsCheck['has_latitude'] === 't' || $gpsCheck['has_latitude'] === 1);
+                
+                // Construire la requête INSERT selon si les colonnes GPS existent
+                if ($hasGpsColumns) {
+                    // Colonnes GPS existent : les inclure dans l'INSERT
+                    $measurementStmt = $pdo->prepare("
+                        INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status, latitude, longitude)
+                        VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status, :latitude, :longitude)
+                    ");
+                    $measurementStmt->execute([
+                        'device_id' => $device_id,
+                        'flowrate' => $flowrateValue,
+                        'battery' => $battery !== null ? floatval($battery) : null,
+                        'rssi' => $rssi !== null ? intval($rssi) : null,
+                        'status' => $status,
+                        'timestamp' => $timestampValue,
+                        'latitude' => ($latitude !== null && $latitude >= -90 && $latitude <= 90) ? floatval($latitude) : null,
+                        'longitude' => ($longitude !== null && $longitude >= -180 && $longitude <= 180) ? floatval($longitude) : null
+                    ]);
+                } else {
+                    // Colonnes GPS n'existent pas encore : INSERT sans GPS
+                    $measurementStmt = $pdo->prepare("
+                        INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status)
+                        VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status)
+                    ");
+                    $measurementStmt->execute([
+                        'device_id' => $device_id,
+                        'flowrate' => $flowrateValue,
+                        'battery' => $battery !== null ? floatval($battery) : null,
+                        'rssi' => $rssi !== null ? intval($rssi) : null,
+                        'status' => $status,
+                        'timestamp' => $timestampValue
+                    ]);
+                }
                 error_log("[Measurement] ✅ Mesure enregistrée pour dispositif $device_id (ICCID: $iccid) - Flow: $flowrateValue, Bat: $battery, RSSI: $rssi");
             } catch(PDOException $measurementError) {
                 error_log("[Measurement] ❌ ERREUR insertion mesure pour dispositif $device_id (ICCID: $iccid): " . $measurementError->getMessage());
@@ -350,19 +377,53 @@ function handleGetDeviceHistory($device_id) {
     global $pdo;
     
     try {
-        // Récupérer les mesures avec leurs coordonnées GPS (si disponibles) ou celles du dispositif (fallback)
-        // COALESCE permet d'utiliser les coordonnées de la mesure si disponibles, sinon celles du dispositif
-        $stmt = $pdo->prepare("
-            SELECT 
-                m.*,
-                COALESCE(m.latitude, d.latitude) as latitude,
-                COALESCE(m.longitude, d.longitude) as longitude
-            FROM measurements m
-            JOIN devices d ON m.device_id = d.id
-            WHERE m.device_id = :device_id 
-            ORDER BY m.timestamp DESC 
-            LIMIT 1000
-        ");
+        // Vérifier si les colonnes GPS existent dans measurements
+        $checkGpsColumns = $pdo->query("
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'measurements' 
+                AND column_name = 'latitude'
+            ) as has_latitude,
+            EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'measurements' 
+                AND column_name = 'longitude'
+            ) as has_longitude
+        ")->fetch(PDO::FETCH_ASSOC);
+        
+        $hasGpsColumns = ($checkGpsColumns['has_latitude'] === true || $checkGpsColumns['has_latitude'] === 't' || $checkGpsColumns['has_latitude'] === 1) &&
+                         ($checkGpsColumns['has_longitude'] === true || $checkGpsColumns['has_longitude'] === 't' || $checkGpsColumns['has_longitude'] === 1);
+        
+        // Construire la requête selon si les colonnes GPS existent
+        if ($hasGpsColumns) {
+            // Colonnes GPS existent : utiliser COALESCE pour prioriser les coordonnées de la mesure
+            $sql = "
+                SELECT 
+                    m.*,
+                    COALESCE(m.latitude, d.latitude) as latitude,
+                    COALESCE(m.longitude, d.longitude) as longitude
+                FROM measurements m
+                JOIN devices d ON m.device_id = d.id
+                WHERE m.device_id = :device_id 
+                ORDER BY m.timestamp DESC 
+                LIMIT 1000
+            ";
+        } else {
+            // Colonnes GPS n'existent pas encore : utiliser seulement celles du dispositif
+            $sql = "
+                SELECT 
+                    m.*,
+                    d.latitude,
+                    d.longitude
+                FROM measurements m
+                JOIN devices d ON m.device_id = d.id
+                WHERE m.device_id = :device_id 
+                ORDER BY m.timestamp DESC 
+                LIMIT 1000
+            ";
+        }
+        
+        $stmt = $pdo->prepare($sql);
         $stmt->execute(['device_id' => $device_id]);
         echo json_encode(['success' => true, 'measurements' => $stmt->fetchAll()]);
     } catch(PDOException $e) {

@@ -57,9 +57,9 @@
 
 static constexpr uint32_t DEFAULT_SLEEP_MINUTES = 1440; // 24 heures (1 envoi par jour pour limiter les coûts réseau)
 static constexpr uint8_t  MAX_COMMANDS = 4;
-static constexpr uint32_t MODEM_BOOT_TIMEOUT_DEFAULT_MS = 15000;
-static constexpr uint32_t SIM_READY_TIMEOUT_DEFAULT_MS = 30000;
-static constexpr uint32_t NETWORK_ATTACH_TIMEOUT_DEFAULT_MS = 60000;
+static constexpr uint32_t MODEM_BOOT_TIMEOUT_DEFAULT_MS = 20000;  // Augmenté de 15s à 20s
+static constexpr uint32_t SIM_READY_TIMEOUT_DEFAULT_MS = 45000;   // Augmenté de 30s à 45s
+static constexpr uint32_t NETWORK_ATTACH_TIMEOUT_DEFAULT_MS = 120000; // Augmenté de 60s à 120s
 static constexpr uint8_t  MODEM_MAX_REBOOTS_DEFAULT = 3;
 static constexpr uint32_t WATCHDOG_TIMEOUT_DEFAULT_SEC = 30;
 static constexpr uint8_t  MIN_WATCHDOG_TIMEOUT_SEC = 5;
@@ -216,6 +216,34 @@ String formatTimeFromMillis(unsigned long ms) {
   char buffer[9];
   snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", hours, minutes, secs);
   return String(buffer);
+}
+
+// Fonction utilitaire pour construire le nom du dispositif (évite duplication)
+String buildDeviceName() {
+  String deviceName = "OTT-";
+  if (DEVICE_ICCID.length() >= 4) {
+    deviceName += DEVICE_ICCID.substring(DEVICE_ICCID.length() - 4);
+  } else if (DEVICE_SERIAL.length() >= 4) {
+    deviceName += DEVICE_SERIAL.substring(DEVICE_SERIAL.length() - 4);
+  } else {
+    deviceName += "XXXX";
+  }
+  return deviceName;
+}
+
+// Fonction utilitaire pour valider des coordonnées GPS
+bool isValidGpsCoordinates(float lat, float lon) {
+  return (lat >= -90.0f && lat <= 90.0f && 
+          lon >= -180.0f && lon <= 180.0f && 
+          (lat != 0.0f || lon != 0.0f));
+}
+
+// Fonction utilitaire pour valider et limiter une String
+String sanitizeString(const String& input, size_t maxLength) {
+  if (input.length() > maxLength) {
+    return input.substring(0, maxLength);
+  }
+  return input;
 }
 
 float measureBattery();
@@ -805,8 +833,15 @@ void initModem()
   digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
   delay(100);
   digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL);
-  delay(2600);
+  delay(5000); // Augmenté de 2600ms à 5000ms pour laisser plus de temps au modem
   digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+  
+  // Vérifier que le modem répond avant de continuer
+  unsigned long testStart = millis();
+  while (!modem.testAT(500) && (millis() - testStart < 10000)) {
+    delay(500);
+    feedWatchdog();
+  }
 }
 
 bool startModem()
@@ -995,16 +1030,8 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   doc["device_serial"] = DEVICE_SERIAL;
   doc["firmware_version"] = FIRMWARE_VERSION;
   
-  // Calculer device_name
-  String deviceName = "OTT-";
-  if (DEVICE_ICCID.length() >= 4) {
-    deviceName += DEVICE_ICCID.substring(DEVICE_ICCID.length() - 4);
-  } else if (DEVICE_SERIAL.length() >= 4) {
-    deviceName += DEVICE_SERIAL.substring(DEVICE_SERIAL.length() - 4);
-  } else {
-    deviceName += "XXXX";
-  }
-  doc["device_name"] = deviceName;
+  // Calculer device_name (fonction utilitaire pour éviter duplication)
+  doc["device_name"] = buildDeviceName();
   
   // Mesures principales
   // Mesures principales (format unifié uniquement)
@@ -1012,8 +1039,8 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   doc["battery_percent"] = m.battery;
   doc["rssi"] = m.rssi;
   
-  // Position GPS/réseau cellulaire
-  if (latitude != nullptr && longitude != nullptr) {
+  // Position GPS/réseau cellulaire (validation avant inclusion)
+  if (latitude != nullptr && longitude != nullptr && isValidGpsCoordinates(*latitude, *longitude)) {
     doc["latitude"] = *latitude;
     doc["longitude"] = *longitude;
   }
@@ -1095,6 +1122,12 @@ void handleSerialCommand(const String& command)
     String jsonPayload = command.substring(7);
     jsonPayload.trim();
     
+    // SÉCURITÉ: Limiter la taille du payload pour éviter overflow
+    if (jsonPayload.length() > 512) {
+      Serial.println(F("❌ Payload trop long (max 512 caractères)"));
+      return;
+    }
+    
     StaticJsonDocument<512> payloadDoc;
     DeserializationError error = deserializeJson(payloadDoc, jsonPayload);
     
@@ -1163,6 +1196,12 @@ void handleSerialCommand(const String& command)
   if (lowered.startsWith("calibration ")) {
     String jsonPayload = command.substring(12);
     jsonPayload.trim();
+    
+    // SÉCURITÉ: Limiter la taille du payload
+    if (jsonPayload.length() > 256) {
+      Serial.println(F("❌ Payload trop long (max 256 caractères)"));
+      return;
+    }
     
     StaticJsonDocument<256> payloadDoc;
     DeserializationError error = deserializeJson(payloadDoc, jsonPayload);
@@ -1362,6 +1401,20 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
   Serial.println(F("[MODEM] attache réseau en cours (avec retry)"));
   logRadioSnapshot("attach:start");
   
+  // NOUVEAU: Vérifier CSQ avant de commencer
+  int8_t initialCsq = modem.getSignalQuality();
+  if (initialCsq == 99) {
+    Serial.println(F("[MODEM] ⚠️ CSQ=99 avant attachement - Reset modem"));
+    modem.restart();
+    delay(5000);
+    initialCsq = modem.getSignalQuality();
+    if (initialCsq == 99) {
+      Serial.println(F("[MODEM] ❌ CSQ toujours à 99 après reset - Problème matériel probable"));
+      logRadioSnapshot("attach:csq_fail");
+      return false;
+    }
+  }
+  
   while (millis() - start < timeoutMs && retryCount < maxRetries) {
     feedWatchdog();
     
@@ -1369,6 +1422,20 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
     if (modem.isNetworkConnected()) {
       logRadioSnapshot("attach:success");
       return true;
+    }
+    
+    // Vérifier CSQ avant chaque tentative
+    int8_t csq = modem.getSignalQuality();
+    if (csq == 99 && retryCount >= 2) {
+      Serial.println(F("[MODEM] ⚠️ CSQ=99 persistant après 2 tentatives - Reset modem"));
+      modem.restart();
+      delay(5000);
+      csq = modem.getSignalQuality();
+      if (csq == 99) {
+        Serial.println(F("[MODEM] ❌ CSQ toujours à 99 après reset"));
+        logRadioSnapshot("attach:csq_fail");
+        return false;
+      }
     }
     
     // Obtenir le statut d'enregistrement
@@ -1832,16 +1899,8 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
                 DEVICE_SERIAL.c_str(), 
                 FIRMWARE_VERSION);
   
-  // Calculer device_name
-  String deviceName = "OTT-";
-  if (DEVICE_ICCID.length() >= 4) {
-    deviceName += DEVICE_ICCID.substring(DEVICE_ICCID.length() - 4);
-  } else if (DEVICE_SERIAL.length() >= 4) {
-    deviceName += DEVICE_SERIAL.substring(DEVICE_SERIAL.length() - 4);
-  } else {
-    deviceName += "XXXX";
-  }
-  doc["device_name"] = deviceName;
+  // Calculer device_name (fonction utilitaire pour éviter duplication)
+  doc["device_name"] = buildDeviceName();
   
   // Mesures principales (format unifié uniquement)
   doc["flow_lpm"] = m.flow;
@@ -2087,20 +2146,36 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       sendLog("WARN", "UPDATE_CONFIG sans payload", "commands");
       return;
     }
-    if (payloadDoc.containsKey("apn")) {
-      NETWORK_APN = payloadDoc["apn"].as<String>();
+      if (payloadDoc.containsKey("apn")) {
+      String newApn = payloadDoc["apn"].as<String>();
+      // SÉCURITÉ: Valider et limiter la longueur de l'APN
+      if (newApn.length() > 0 && newApn.length() <= 64) {
+        NETWORK_APN = sanitizeString(newApn, 64);
+      }
     }
     // Note : Le champ "jwt" était utilisé dans d'anciennes versions (< v1.0).
     // L'authentification se fait maintenant uniquement par sim_iccid.
     // Le champ est ignoré pour compatibilité avec d'anciennes commandes UPDATE_CONFIG.
     if (payloadDoc.containsKey("iccid")) {
-      DEVICE_ICCID = payloadDoc["iccid"].as<String>();
+      String newIccid = payloadDoc["iccid"].as<String>();
+      // SÉCURITÉ: Valider longueur ICCID (20 chiffres max)
+      if (newIccid.length() > 0 && newIccid.length() <= 20) {
+        DEVICE_ICCID = sanitizeString(newIccid, 20);
+      }
     }
     if (payloadDoc.containsKey("serial")) {
-      DEVICE_SERIAL = payloadDoc["serial"].as<String>();
+      String newSerial = payloadDoc["serial"].as<String>();
+      // SÉCURITÉ: Valider format serial (OTT-XX-XXX ou OTT-YY-NNN, max 32 chars)
+      if (newSerial.length() > 0 && newSerial.length() <= 32 && newSerial.startsWith("OTT-")) {
+        DEVICE_SERIAL = sanitizeString(newSerial, 32);
+      }
     }
     if (payloadDoc.containsKey("sim_pin")) {
-      SIM_PIN = payloadDoc["sim_pin"].as<String>();
+      String newPin = payloadDoc["sim_pin"].as<String>();
+      // SÉCURITÉ: Valider longueur PIN (4-8 chiffres généralement)
+      if (newPin.length() >= 4 && newPin.length() <= 8) {
+        SIM_PIN = sanitizeString(newPin, 8);
+      }
     }
     if (payloadDoc.containsKey("sleep_minutes_default")) {
       configuredSleepMinutes = std::max<uint32_t>(static_cast<uint32_t>(1), payloadDoc["sleep_minutes_default"].as<uint32_t>());
@@ -2787,9 +2862,8 @@ bool getDeviceLocationFast(float* latitude, float* longitude)
       return has_cached ? (*latitude = cached_lat, *longitude = cached_lon, true) : false;
     }
     
-    // Valider coordonnées
-    if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0 && 
-        lat != 0.0 && lon != 0.0) {
+    // Valider coordonnées (utilise fonction utilitaire)
+    if (isValidGpsCoordinates(lat, lon)) {
       *latitude = lat;
       *longitude = lon;
       cached_lat = lat;
@@ -2862,7 +2936,6 @@ bool getDeviceLocation(float* latitude, float* longitude)
   // Tentative GPS avec timeout de 3 secondes (réduit de 10s)
   Serial.println(F("[GPS] Tentative acquisition GPS..."));
   unsigned long gpsStart = millis();
-  bool gpsSuccess = false;
   
   // 1 seule tentative avec timeout de 3s (au lieu de 3 tentatives × 10s)
   if (modem.getGPS(&lat, &lon, &speed, &alt, &vsat, &usat, &accuracy)) {
@@ -2871,15 +2944,13 @@ bool getDeviceLocation(float* latitude, float* longitude)
       return false;
     }
     
-    // Valider les coordonnées
-    if (lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0 && 
-        lat != 0.0 && lon != 0.0) {
+    // Valider les coordonnées (fonction utilitaire)
+    if (isValidGpsCoordinates(lat, lon)) {
       *latitude = lat;
       *longitude = lon;
       String timeStr = formatTimeFromMillis(millis());
       Serial.printf("%s[GPS] ✅ %.6f, %.6f (acc: %.0fm, sat: %d)\n", 
                     timeStr.c_str(), lat, lon, accuracy, usat);
-      gpsSuccess = true;
       return true;
     }
   }
