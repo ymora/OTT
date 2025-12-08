@@ -232,8 +232,15 @@ function MarkdownViewer({ fileName }) {
             return '/OTT'
           }
           // Détecter aussi depuis l'hostname GitHub Pages
-          if (origin.includes('github.io') && origin.includes('/OTT')) {
-            return '/OTT'
+          if (origin.includes('github.io')) {
+            // Sur GitHub Pages, si l'URL contient /OTT, c'est le basePath
+            if (pathname.includes('/OTT')) {
+              return '/OTT'
+            }
+            // Sinon, vérifier depuis l'origine (ymora.github.io/OTT)
+            if (origin.includes('ymora.github.io')) {
+              return '/OTT'
+            }
           }
         }
         // Sinon, utiliser la variable d'environnement (injectée au build)
@@ -241,6 +248,13 @@ function MarkdownViewer({ fileName }) {
       }
       
       const basePath = detectBasePath()
+      
+      // Logger pour debug (uniquement si on est sur GitHub Pages)
+      if (typeof window !== 'undefined' && window.location.origin.includes('github.io')) {
+        console.log('[SUIVI_TEMPS] BasePath détecté:', basePath)
+        console.log('[SUIVI_TEMPS] URL actuelle:', window.location.href)
+        console.log('[SUIVI_TEMPS] Pathname:', window.location.pathname)
+      }
       
       // Essayer plusieurs méthodes de chargement avec différents chemins
       const methods = [
