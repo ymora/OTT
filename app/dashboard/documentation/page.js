@@ -226,66 +226,90 @@ function MarkdownViewer({ fileName }) {
         // En mode statique (GitHub Pages), détecter depuis l'URL
         if (typeof window !== 'undefined') {
           const pathname = window.location.pathname
+          const origin = window.location.origin
           // Si on est sur /OTT/..., le basePath est /OTT
           if (pathname.startsWith('/OTT/')) {
             return '/OTT'
           }
+          // Détecter aussi depuis l'hostname GitHub Pages
+          if (origin.includes('github.io') && origin.includes('/OTT')) {
+            return '/OTT'
+          }
         }
-        // Sinon, utiliser la variable d'environnement
+        // Sinon, utiliser la variable d'environnement (injectée au build)
         return process.env.NEXT_PUBLIC_BASE_PATH || ''
       }
       
       const basePath = detectBasePath()
       
-      // Essayer plusieurs méthodes de chargement
+      // Essayer plusieurs méthodes de chargement avec différents chemins
       const methods = [
-        // 1. Essayer depuis la racine avec basePath (pour GitHub Pages)
+        // 1. Essayer depuis la racine avec basePath (pour GitHub Pages) - Format: /OTT/SUIVI_TEMPS_FACTURATION.md
         async () => {
-          const url = `${basePath}/${fileName}`
-          const response = await fetch(url + '?t=' + Date.now()) // Cache busting
-          if (response.ok) {
-            return await response.text()
-          }
-          throw new Error(`HTTP ${response.status}`)
+          const url = basePath ? `${basePath}/${fileName}` : `/${fileName}`
+          const response = await fetch(url + '?t=' + Date.now())
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
         },
-        // 2. Essayer depuis public/ avec basePath
+        // 2. Essayer avec withBasePath (utilise process.env.NEXT_PUBLIC_BASE_PATH)
         async () => {
           const url = withBasePath(`/${fileName}`)
-          const response = await fetch(url + '?t=' + Date.now()) // Cache busting
-          if (response.ok) {
-            return await response.text()
-          }
-          throw new Error(`HTTP ${response.status}`)
+          const response = await fetch(url + '?t=' + Date.now())
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
         },
         // 3. Essayer depuis la racine sans basePath (fallback local)
         async () => {
-          const response = await fetch(`/${fileName}?t=${Date.now()}`) // Cache busting
-          if (response.ok) {
-            return await response.text()
-          }
-          throw new Error(`HTTP ${response.status}`)
+          const url = `/${fileName}`
+          const response = await fetch(url + '?t=' + Date.now())
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
         },
-        // 4. Essayer depuis l'API (uniquement si disponible)
+        // 4. Essayer avec basePath mais sans slash initial (format alternatif)
         async () => {
-          const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
-          const response = await fetch(`${apiUrl}/api.php/docs/${fileName}?t=${Date.now()}`) // Cache busting
-          if (response.ok) {
-            return await response.text()
+          if (!basePath) throw new Error('Pas de basePath')
+          const url = `${basePath}${fileName.startsWith('/') ? fileName : '/' + fileName}`
+          const response = await fetch(url + '?t=' + Date.now())
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
+        },
+        // 5. Essayer depuis l'API (uniquement si pas en mode statique)
+        async () => {
+          // En mode statique (GitHub Pages), l'API n'est pas accessible
+          if (typeof window !== 'undefined' && window.location.origin.includes('github.io')) {
+            throw new Error('API non disponible sur GitHub Pages')
           }
-          throw new Error(`API HTTP ${response.status}`)
+          const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
+          const response = await fetch(`${apiUrl}/api.php/docs/${fileName}?t=${Date.now()}`)
+          if (!response.ok) throw new Error(`API HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
         }
       ]
       
       // Essayer chaque méthode jusqu'à ce qu'une fonctionne
-      for (const method of methods) {
+      const attemptedUrls = []
+      for (let i = 0; i < methods.length; i++) {
         try {
-          text = await method()
-          if (text) {
+          text = await methods[i]()
+          if (text && text.trim().length > 0) {
             break // Succès, sortir de la boucle
           }
         } catch (err) {
           lastError = err
-          logger.debug(`Méthode de chargement échouée: ${err.message}`)
+          // Logger l'URL tentée pour debug (même en production pour diagnostiquer)
+          if (err.message.includes('HTTP') || err.message.includes('API')) {
+            attemptedUrls.push(`Méthode ${i + 1}: ${err.message}`)
+          }
           continue // Essayer la méthode suivante
         }
       }
