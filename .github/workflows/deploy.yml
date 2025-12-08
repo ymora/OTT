@@ -76,6 +76,17 @@ jobs:
       - name: Ensure .nojekyll exists
         run: touch out/.nojekyll
       
+      # Vérifier la version du service worker
+      - name: Verify service worker version
+        run: |
+          if [ -f "out/sw.js" ]; then
+            echo "📋 Vérification version service worker..."
+            grep -E "CACHE_VERSION|v3\." out/sw.js | head -2 || echo "⚠️  Version non trouvée"
+            echo "✅ Service worker présent dans out/"
+          else
+            echo "⚠️  Service worker non trouvé dans out/"
+          fi
+      
       - name: Clean output directory
         run: |
           # Supprimer README.md s'il existe dans out/ (pour éviter que GitHub Pages le serve)

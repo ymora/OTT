@@ -78,7 +78,30 @@ export default function RootLayout({ children }) {
                     
                     // Enregistrer le service worker uniquement en production (version en ligne)
                     window.addEventListener('load', () => {
-                      navigator.serviceWorker.register(swPath)
+                      navigator.serviceWorker.register(swPath, { updateViaCache: 'none' })
+                        .then(function(registration) {
+                          // Vérifier les mises à jour du service worker régulièrement
+                          setInterval(function() {
+                            registration.update();
+                          }, 30 * 60 * 1000); // Toutes les 30 minutes
+                          
+                          // Écouter les mises à jour disponibles
+                          registration.addEventListener('updatefound', function() {
+                            const newWorker = registration.installing;
+                            if (newWorker) {
+                              newWorker.addEventListener('statechange', function() {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                  // Nouvelle version disponible - forcer la mise à jour
+                                  newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                  // Recharger après un court délai pour permettre l'activation
+                                  setTimeout(function() {
+                                    window.location.reload();
+                                  }, 1000);
+                                }
+                              });
+                            }
+                          });
+                        })
                         .catch(function(err) {
                           // Logger l'erreur sans polluer la console en production
                           // Note: logger n'est pas disponible dans ce contexte (script inline)
