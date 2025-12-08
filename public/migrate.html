@@ -192,8 +192,15 @@
             value="https://ott-jbln.onrender.com"
         >
         
+        <label for="migrationType" style="margin-top: 20px;">Type de migration :</label>
+        <select id="migrationType" class="api-url-input" style="margin-bottom: 20px;">
+            <option value="complete">Migration Complète (recommandée pour première installation)</option>
+            <option value="migration_add_min_max_columns.sql">Migration: Colonnes min/max (devices)</option>
+            <option value="migration_add_gps_to_measurements.sql">Migration: GPS dans measurements (latitude/longitude)</option>
+        </select>
+        
         <button id="migrateBtn" onclick="runMigration()">
-            🚀 Exécuter la Migration Complète
+            🚀 Exécuter la Migration
         </button>
         
         <div id="result" class="result"></div>
@@ -204,6 +211,7 @@
             const btn = document.getElementById('migrateBtn');
             const result = document.getElementById('result');
             const apiUrl = document.getElementById('apiUrl').value.trim();
+            const migrationType = document.getElementById('migrationType').value;
             
             if (!apiUrl) {
                 alert('Veuillez entrer l\'URL de votre API');
@@ -216,7 +224,8 @@
             
             // Afficher le résultat de chargement
             result.className = 'result loading';
-            result.innerHTML = '<strong>⏳ Migration en cours...</strong><p>Veuillez patienter, cela peut prendre 10-30 secondes...</p>';
+            const migrationName = migrationType === 'complete' ? 'Migration Complète' : migrationType;
+            result.innerHTML = `<strong>⏳ Migration en cours...</strong><p>Migration: ${migrationName}</p><p>Veuillez patienter, cela peut prendre 10-30 secondes...</p>`;
             
             try {
                 // Récupérer le token JWT depuis localStorage si disponible
@@ -229,24 +238,61 @@
                     headers['Authorization'] = `Bearer ${token}`;
                 }
                 
-                const response = await fetch(`${apiUrl}/api.php/admin/migrate-complete`, {
+                let endpoint, body;
+                
+                if (migrationType === 'complete') {
+                    // Migration complète
+                    endpoint = `${apiUrl}/api.php/admin/migrate-complete`;
+                    body = null;
+                } else {
+                    // Migration spécifique
+                    endpoint = `${apiUrl}/api.php/migrate`;
+                    body = JSON.stringify({ file: migrationType });
+                }
+                
+                const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: headers
+                    headers: headers,
+                    body: body
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
                     result.className = 'result success';
+                    let nextSteps = '';
+                    
+                    if (migrationType === 'complete') {
+                        nextSteps = `
+                            <p style="margin-top: 15px;"><strong>Prochaines étapes :</strong></p>
+                            <ul style="margin-top: 10px; padding-left: 20px;">
+                                <li>✅ Colonnes min/max ajoutées à devices</li>
+                                <li>⚠️  N'oubliez pas d'appliquer la migration GPS (latitude/longitude dans measurements)</li>
+                                <li>Testez votre application</li>
+                            </ul>
+                        `;
+                    } else if (migrationType === 'migration_add_gps_to_measurements.sql') {
+                        nextSteps = `
+                            <p style="margin-top: 15px;"><strong>✅ Migration GPS appliquée !</strong></p>
+                            <ul style="margin-top: 10px; padding-left: 20px;">
+                                <li>Les colonnes latitude et longitude ont été ajoutées à measurements</li>
+                                <li>Les coordonnées GPS seront maintenant stockées avec chaque mesure</li>
+                                <li>Testez l'envoi d'une mesure avec coordonnées GPS</li>
+                            </ul>
+                        `;
+                    } else {
+                        nextSteps = `
+                            <p style="margin-top: 15px;"><strong>✅ Migration appliquée !</strong></p>
+                            <ul style="margin-top: 10px; padding-left: 20px;">
+                                <li>Testez votre application</li>
+                            </ul>
+                        `;
+                    }
+                    
                     result.innerHTML = `
                         <strong>✅ Migration réussie !</strong>
                         <pre>${JSON.stringify(data, null, 2)}</pre>
-                        <p style="margin-top: 15px;"><strong>Prochaines étapes :</strong></p>
-                        <ul style="margin-top: 10px; padding-left: 20px;">
-                            <li>Testez votre application</li>
-                            <li>Essayez de créer/modifier un dispositif</li>
-                            <li>L'erreur "Database error" devrait avoir disparu !</li>
-                        </ul>
+                        ${nextSteps}
                     `;
                 } else {
                     result.className = 'result error';
@@ -272,7 +318,7 @@
                 `;
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '🚀 Exécuter la Migration Complète';
+                btn.innerHTML = '🚀 Exécuter la Migration';
             }
         }
         
