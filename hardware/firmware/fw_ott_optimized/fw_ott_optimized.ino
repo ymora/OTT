@@ -40,6 +40,7 @@
 #include <Update.h>
 #include <esp_task_wdt.h>
 #include <freertos/FreeRTOS.h>
+#include <esp_sleep.h>
 #include <vector>
 #include <algorithm>
 
