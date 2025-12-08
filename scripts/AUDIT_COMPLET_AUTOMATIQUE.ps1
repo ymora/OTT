@@ -956,6 +956,65 @@ if (Test-Path "scripts/deploy/export_static.sh") {
     $configScore -= 1.5
 }
 
+# 4.1. Vérifier workflow GitHub Actions
+Write-Host "`n3.1. Workflow GitHub Actions:" -ForegroundColor Yellow
+$workflowPath = ".github/workflows/deploy.yml"
+if (Test-Path $workflowPath) {
+    Write-OK "  deploy.yml présent"
+    $workflowContent = Get-Content $workflowPath -Raw -ErrorAction SilentlyContinue
+    
+    if ($workflowContent) {
+        # Vérifier que le workflow utilise Node.js
+        if ($workflowContent -match "node-version") {
+            Write-OK "    Node.js configuré"
+        } else {
+            Write-Warn "    Version Node.js non spécifiée"
+            $configWarnings += "Version Node.js non spécifiée dans deploy.yml"
+            $configScore -= 0.3
+        }
+        
+        # Vérifier que NEXT_STATIC_EXPORT est défini
+        if ($workflowContent -match "NEXT_STATIC_EXPORT.*true") {
+            Write-OK "    NEXT_STATIC_EXPORT=true configuré"
+        } else {
+            Write-Warn "    NEXT_STATIC_EXPORT peut ne pas être défini"
+            $configWarnings += "NEXT_STATIC_EXPORT non vérifié dans deploy.yml"
+            $configScore -= 0.5
+        }
+        
+        # Vérifier que NEXT_PUBLIC_BASE_PATH est défini
+        if ($workflowContent -match "NEXT_PUBLIC_BASE_PATH.*OTT") {
+            Write-OK "    NEXT_PUBLIC_BASE_PATH=/OTT configuré"
+        } else {
+            Write-Warn "    NEXT_PUBLIC_BASE_PATH peut ne pas être défini"
+            $configWarnings += "NEXT_PUBLIC_BASE_PATH non vérifié dans deploy.yml"
+            $configScore -= 0.5
+        }
+        
+        # Vérifier que le script generate_time_tracking.sh est appelé
+        if ($workflowContent -match "generate_time_tracking" -or $workflowContent -match "SUIVI_TEMPS") {
+            Write-OK "    Génération SUIVI_TEMPS configurée"
+        } else {
+            Write-Warn "    Génération SUIVI_TEMPS non vérifiée"
+            $configWarnings += "Génération SUIVI_TEMPS non vérifiée dans deploy.yml"
+            $configScore -= 0.3
+        }
+        
+        # Vérifier que export_static.sh est appelé
+        if ($workflowContent -match "export_static\.sh") {
+            Write-OK "    export_static.sh appelé"
+        } else {
+            Write-Err "    export_static.sh non appelé"
+            $configIssues += "export_static.sh non appelé dans deploy.yml"
+            $configScore -= 1.0
+        }
+    }
+} else {
+    Write-Warn "  deploy.yml introuvable"
+    $configWarnings += "Workflow GitHub Actions deploy.yml manquant"
+    $configScore -= 1.0
+}
+
 if ($packageJson) {
     $scripts = $packageJson.scripts
     if ($scripts.PSObject.Properties.Name -contains "dev") {
