@@ -1206,6 +1206,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleGetAlerts();
 } elseif(preg_match('#/measurements/latest$#', $path) && $method === 'GET') {
     handleGetLatestMeasurements();
+} elseif(preg_match('#/measurements/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    handleDeleteMeasurement($m[1]);
 
 // Patients (V1 compatible)
 } elseif(preg_match('#/patients$#', $path) && $method === 'GET') {

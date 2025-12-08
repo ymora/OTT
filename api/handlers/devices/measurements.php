@@ -24,8 +24,10 @@ function handlePostMeasurement() {
     // Extraire les données (format unifié uniquement)
     $iccid = $input['sim_iccid'] ?? null;
     $flowrate = isset($input['flow_lpm']) ? floatval($input['flow_lpm']) : 0;
-    $battery = isset($input['battery_percent']) ? intval($input['battery_percent']) : 100;
-    $rssi = isset($input['rssi']) ? intval($input['rssi']) : 0;
+    // CORRECTION: Utiliser floatval() pour préserver la précision (85.5% au lieu de 85%)
+    $battery = isset($input['battery_percent']) ? floatval($input['battery_percent']) : null;
+    // CORRECTION: Utiliser null comme défaut si non fourni (au lieu de 0 qui peut masquer un problème)
+    $rssi = isset($input['rssi']) ? intval($input['rssi']) : null;
     $status = $input['status'] ?? $input['mode'] ?? 'active';
     $timestamp = $input['timestamp'] ?? null;
     $firmware_version = $input['firmware_version'] ?? 'unknown';
@@ -193,9 +195,11 @@ function handlePostMeasurement() {
             $flowrateValue = is_numeric($flowrate) ? floatval($flowrate) : 0.0;
             
             try {
+                // CORRECTION: Ajouter latitude et longitude à chaque mesure pour tracer le déplacement
+                // Utiliser COALESCE pour gérer le cas où les colonnes n'existent pas encore (migration progressive)
                 $measurementStmt = $pdo->prepare("
-                    INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status)
-                    VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status)
+                    INSERT INTO measurements (device_id, timestamp, flowrate, battery, signal_strength, device_status, latitude, longitude)
+                    VALUES (:device_id, :timestamp, :flowrate, :battery, :rssi, :status, :latitude, :longitude)
                 ");
                 $measurementStmt->execute([
                     'device_id' => $device_id,
@@ -203,7 +207,9 @@ function handlePostMeasurement() {
                     'battery' => $battery !== null ? floatval($battery) : null,
                     'rssi' => $rssi !== null ? intval($rssi) : null,
                     'status' => $status,
-                    'timestamp' => $timestampValue
+                    'timestamp' => $timestampValue,
+                    'latitude' => ($latitude !== null && $latitude >= -90 && $latitude <= 90) ? floatval($latitude) : null,
+                    'longitude' => ($longitude !== null && $longitude >= -180 && $longitude <= 180) ? floatval($longitude) : null
                 ]);
                 error_log("[Measurement] ✅ Mesure enregistrée pour dispositif $device_id (ICCID: $iccid) - Flow: $flowrateValue, Bat: $battery, RSSI: $rssi");
             } catch(PDOException $measurementError) {
@@ -321,8 +327,18 @@ function handlePostMeasurement() {
         }
         http_response_code($e->getCode() == 23000 ? 409 : 500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        error_log('[handlePostMeasurement] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        error_log('[handlePostMeasurement] ❌ ERREUR SQL: ' . $e->getMessage());
+        error_log('[handlePostMeasurement] Code: ' . $e->getCode());
+        error_log('[handlePostMeasurement] ICCID: ' . ($iccid ?? 'unknown'));
+        
+        // Retourner l'erreur SQL complète dans la réponse pour diagnostic
+        // Le firmware pourra la voir dans la réponse HTTP
+        echo json_encode([
+            'success' => false, 
+            'error' => $errorMsg,
+            'error_code' => $e->getCode(),
+            'error_message' => $e->getMessage() // Toujours inclure le message complet pour diagnostic
+        ]);
     }
 }
 
@@ -334,12 +350,13 @@ function handleGetDeviceHistory($device_id) {
     global $pdo;
     
     try {
-        // Récupérer les mesures avec les coordonnées GPS du dispositif (dernières connues)
+        // Récupérer les mesures avec leurs coordonnées GPS (si disponibles) ou celles du dispositif (fallback)
+        // COALESCE permet d'utiliser les coordonnées de la mesure si disponibles, sinon celles du dispositif
         $stmt = $pdo->prepare("
             SELECT 
                 m.*,
-                d.latitude,
-                d.longitude
+                COALESCE(m.latitude, d.latitude) as latitude,
+                COALESCE(m.longitude, d.longitude) as longitude
             FROM measurements m
             JOIN devices d ON m.device_id = d.id
             WHERE m.device_id = :device_id 
@@ -475,5 +492,45 @@ function handleDiagnosticMeasurements() {
             'error' => 'Database error',
             'message' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Vérifiez les logs'
         ]);
+    }
+}
+
+/**
+ * DELETE /api.php/measurements/:id
+ * Supprimer définitivement une mesure (admin uniquement)
+ */
+function handleDeleteMeasurement($measurement_id) {
+    global $pdo;
+    
+    requireAdmin();
+    
+    try {
+        // Vérifier que la mesure existe
+        $stmt = $pdo->prepare("SELECT id, device_id FROM measurements WHERE id = :id");
+        $stmt->execute(['id' => $measurement_id]);
+        $measurement = $stmt->fetch();
+        
+        if (!$measurement) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Mesure non trouvée']);
+            return;
+        }
+        
+        // Supprimer la mesure
+        $deleteStmt = $pdo->prepare("DELETE FROM measurements WHERE id = :id");
+        $deleteStmt->execute(['id' => $measurement_id]);
+        
+        error_log("[Measurement] ✅ Mesure $measurement_id supprimée définitivement par admin (device_id: {$measurement['device_id']})");
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Mesure supprimée définitivement'
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleDeleteMeasurement] ❌ ERREUR: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }

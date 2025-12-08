@@ -1242,21 +1242,32 @@ void logRadioSnapshot(const char* stage)
 {
   RegStatus reg = modem.getRegistrationStatus();
   int8_t csq = modem.getSignalQuality();
-  // Convertir CSQ en dBm pour affichage
-  int16_t rssi_dbm = csqToRssi(csq);
   String oper = modem.getOperator();
   bool eps = modem.isNetworkConnected();
   bool gprs = modem.isGprsConnected();
 
-  Serial.printf("[MODEM][%s] CSQ=%d (RSSI=%d dBm) reg=%d (%s) oper=%s eps=%s gprs=%s\n",
-                stage,
-                csq,
-                rssi_dbm,
-                reg,
-                regStatusToString(reg),
-                oper.length() ? oper.c_str() : "<n/a>",
-                eps ? "ok" : "KO",
-                gprs ? "ok" : "KO");
+  // Afficher correctement CSQ et RSSI (CSQ=99 = signal invalide)
+  if (csq == 99) {
+    Serial.printf("[MODEM][%s] CSQ=99 (Signal invalide) reg=%d (%s) oper=%s eps=%s gprs=%s\n",
+                  stage,
+                  reg,
+                  regStatusToString(reg),
+                  oper.length() ? oper.c_str() : "<n/a>",
+                  eps ? "ok" : "KO",
+                  gprs ? "ok" : "KO");
+  } else {
+    // Convertir CSQ en dBm pour affichage (seulement si CSQ valide)
+    int16_t rssi_dbm = csqToRssi(csq);
+    Serial.printf("[MODEM][%s] CSQ=%d (RSSI=%d dBm) reg=%d (%s) oper=%s eps=%s gprs=%s\n",
+                  stage,
+                  csq,
+                  rssi_dbm,
+                  reg,
+                  regStatusToString(reg),
+                  oper.length() ? oper.c_str() : "<n/a>",
+                  eps ? "ok" : "KO",
+                  gprs ? "ok" : "KO");
+  }
   
   // Logs détaillés pour REG_DENIED
   if (reg == REG_DENIED) {
@@ -1271,6 +1282,15 @@ void logRadioSnapshot(const char* stage)
                       oper.c_str(), recommendedApn.c_str(), NETWORK_APN.c_str());
       }
     }
+  }
+  
+  // Logs détaillés pour CSQ=99 (signal invalide)
+  if (csq == 99) {
+    Serial.println(F("[MODEM] ⚠️  SIGNAL INVALIDE (CSQ=99) - Causes possibles:"));
+    Serial.println(F("[MODEM]   1. Antenne déconnectée ou défectueuse"));
+    Serial.println(F("[MODEM]   2. Pas de couverture réseau à cet emplacement"));
+    Serial.println(F("[MODEM]   3. Modem non initialisé correctement"));
+    Serial.println(F("[MODEM]   4. Problème matériel (câble, connecteur)"));
   }
 }
 
@@ -1364,16 +1384,28 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
                         recommendedApn.c_str(), NETWORK_APN.c_str());
           modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), recommendedApn.c_str(), "\"");
           modem.waitResponse(2000);
-          delay(2000); // Attendre que l'APN soit appliqué
+          
+          // Remplacer delay() long par boucle avec feedWatchdog()
+          unsigned long apnDelayStart = millis();
+          while (millis() - apnDelayStart < 2000) {
+            delay(100);
+            feedWatchdog();
+          }
           feedWatchdog();
         }
       }
     }
     
-    // Attendre l'enregistrement réseau
-    if (modem.waitForNetwork(10000)) {
-      logRadioSnapshot("attach:event");
-      return true;
+    // Attendre l'enregistrement réseau avec feedWatchdog() régulier
+    unsigned long networkWaitStart = millis();
+    bool networkAttached = false;
+    while (millis() - networkWaitStart < 10000 && !networkAttached) {
+      feedWatchdog();
+      if (modem.waitForNetwork(1000)) {
+        networkAttached = true;
+        logRadioSnapshot("attach:event");
+        return true;
+      }
     }
     
     // Log du statut actuel
@@ -1384,7 +1416,14 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
     uint32_t delayMs = baseDelay * (1 << retryCount); // 5s, 10s, 20s...
     if (delayMs > 30000) delayMs = 30000; // Max 30 secondes
     Serial.printf("[MODEM] Attente %lu ms avant prochaine tentative...\n", delayMs);
-    delay(delayMs);
+    
+    // Remplacer delay() long par boucle avec feedWatchdog() pour éviter timeout
+    unsigned long delayStart = millis();
+    while (millis() - delayStart < delayMs) {
+      delay(100); // Délai court
+      feedWatchdog(); // Réinitialiser watchdog régulièrement
+    }
+    
     retryCount++;
     feedWatchdog();
   }
@@ -1452,7 +1491,12 @@ bool connectData(uint32_t timeoutMs)
       Serial.printf("[MODEM] ✅ Connexion GPRS réussie avec APN: %s\n", currentApn.c_str());
       
       // Vérifier l'état complet de la connexion
-      delay(1000); // Attendre un peu pour que la connexion se stabilise
+      // Remplacer delay() par boucle avec feedWatchdog()
+      unsigned long stabilDelayStart = millis();
+      while (millis() - stabilDelayStart < 1000) {
+        delay(100);
+        feedWatchdog();
+      }
       bool networkOk = modem.isNetworkConnected();
       bool gprsOk = modem.isGprsConnected();
       Serial.printf("[MODEM] 📊 État connexion: Réseau=%s | GPRS=%s\n", 
@@ -1477,7 +1521,12 @@ bool connectData(uint32_t timeoutMs)
     apnIndex++;
     if (apnIndex < maxApnAttempts) {
       Serial.println(F("[MODEM] Essai avec APN suivant..."));
-      delay(3000);
+      // Remplacer delay() long par boucle avec feedWatchdog()
+      unsigned long apnRetryDelayStart = millis();
+      while (millis() - apnRetryDelayStart < 3000) {
+        delay(100);
+        feedWatchdog();
+      }
     }
     feedWatchdog();
   }
@@ -2141,7 +2190,12 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
     sendLog("INFO", "Configuration mise à jour à distance", "commands");
     Serial.println(F("[CMD] 🔄 Redémarrage du dispositif dans 2 secondes..."));
-    delay(2000);
+    // Remplacer delay() par boucle avec feedWatchdog() avant redémarrage
+    unsigned long rebootDelayStart = millis();
+    while (millis() - rebootDelayStart < 2000) {
+      delay(100);
+      feedWatchdog();
+    }
     stopModem();
     esp_restart();
   } else if (cmd.verb == "UPDATE_CALIBRATION") {

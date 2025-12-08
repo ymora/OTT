@@ -12,10 +12,13 @@ import Modal from '@/components/Modal'
  * Modal pour afficher l'historique des mesures d'un dispositif
  */
 export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
-  const { fetchWithAuth, API_URL } = useAuth()
+  const { fetchWithAuth, API_URL, currentUser } = useAuth()
   const [measurements, setMeasurements] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [deletingMeasurement, setDeletingMeasurement] = useState(null)
+  const [selectedMeasurements, setSelectedMeasurements] = useState(new Set())
+  const [deletingMultiple, setDeletingMultiple] = useState(false)
 
   const loadMeasurements = useCallback(async () => {
     if (!device?.id) return
@@ -58,6 +61,7 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     } else {
       setMeasurements([])
       setError(null)
+      setSelectedMeasurements(new Set()) // Réinitialiser la sélection quand le modal se ferme
     }
   }, [isOpen, device?.id, loadMeasurements])
 
@@ -76,6 +80,198 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     } catch {
       return dateString
     }
+  }
+
+  const handleDeleteMeasurement = async (measurementId) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer définitivement cette mesure ? Cette action est irréversible.')) {
+      return
+    }
+
+    setDeletingMeasurement(measurementId)
+    setError(null)
+
+    try {
+      const data = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/measurements/${measurementId}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+
+      if (data.success) {
+        // Retirer la mesure de la liste
+        setMeasurements(prev => prev.filter(m => m.id !== measurementId))
+        logger.info(`✅ Mesure ${measurementId} supprimée définitivement`)
+      } else {
+        const errorMsg = data.error || 'Erreur lors de la suppression'
+        logger.error(`❌ Erreur suppression mesure: ${errorMsg}`)
+        setError(errorMsg)
+      }
+    } catch (err) {
+      logger.error('Erreur suppression mesure:', err)
+      setError(err.message || 'Erreur lors de la suppression de la mesure')
+    } finally {
+      setDeletingMeasurement(null)
+    }
+  }
+
+  // Vérifier si l'utilisateur est admin (support de plusieurs formats de rôle)
+  const isAdmin = currentUser?.role_name === 'admin' || currentUser?.role === 'admin' || currentUser?.roles?.includes('admin')
+  
+  // Debug: logger le rôle pour diagnostiquer
+  useEffect(() => {
+    if (isOpen && currentUser) {
+      logger.debug(`[DeviceMeasurementsModal] User role check:`, {
+        role_name: currentUser.role_name,
+        role: currentUser.role,
+        roles: currentUser.roles,
+        isAdmin: isAdmin
+      })
+    }
+  }, [isOpen, currentUser, isAdmin])
+  
+  // Fonction pour gérer la sélection/désélection d'une mesure
+  const toggleMeasurementSelection = (measurementId) => {
+    setSelectedMeasurements(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(measurementId)) {
+        newSet.delete(measurementId)
+      } else {
+        newSet.add(measurementId)
+      }
+      return newSet
+    })
+  }
+  
+  // Fonction pour sélectionner/désélectionner toutes les mesures
+  const toggleSelectAll = () => {
+    if (selectedMeasurements.size === measurements.length) {
+      setSelectedMeasurements(new Set())
+    } else {
+      setSelectedMeasurements(new Set(measurements.map(m => m.id)))
+    }
+  }
+  
+  // Fonction pour supprimer plusieurs mesures
+  const handleDeleteMultiple = async () => {
+    if (selectedMeasurements.size === 0) return
+    
+    const count = selectedMeasurements.size
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer définitivement ${count} mesure${count > 1 ? 's' : ''} ? Cette action est irréversible.`)) {
+      return
+    }
+
+    setDeletingMultiple(true)
+    setError(null)
+
+    try {
+      const measurementIds = Array.from(selectedMeasurements)
+      let successCount = 0
+      let errorCount = 0
+
+      // Supprimer les mesures une par une
+      for (const measurementId of measurementIds) {
+        try {
+          const data = await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/measurements/${measurementId}`,
+            { method: 'DELETE' },
+            { requiresAuth: true }
+          )
+
+          if (data.success) {
+            successCount++
+          } else {
+            errorCount++
+          }
+        } catch (err) {
+          logger.error(`Erreur suppression mesure ${measurementId}:`, err)
+          errorCount++
+        }
+      }
+
+      if (successCount > 0) {
+        // Retirer les mesures supprimées de la liste
+        setMeasurements(prev => prev.filter(m => !selectedMeasurements.has(m.id)))
+        setSelectedMeasurements(new Set())
+        logger.info(`✅ ${successCount} mesure${successCount > 1 ? 's' : ''} supprimée${successCount > 1 ? 's' : ''} définitivement`)
+        
+        if (errorCount > 0) {
+          setError(`${successCount} mesure${successCount > 1 ? 's' : ''} supprimée${successCount > 1 ? 's' : ''}, ${errorCount} erreur${errorCount > 1 ? 's' : ''}`)
+        }
+      } else {
+        setError(`Erreur lors de la suppression de ${errorCount} mesure${errorCount > 1 ? 's' : ''}`)
+      }
+    } catch (err) {
+      logger.error('Erreur suppression multiple:', err)
+      setError(err.message || 'Erreur lors de la suppression multiple')
+    } finally {
+      setDeletingMultiple(false)
+    }
+  }
+
+  // Calculer les statistiques
+  const stats = measurements.length > 0 ? {
+    flowrate: {
+      avg: measurements.reduce((sum, m) => sum + (Number(m.flowrate) || 0), 0) / measurements.length,
+      min: Math.min(...measurements.map(m => Number(m.flowrate) || 0)),
+      max: Math.max(...measurements.map(m => Number(m.flowrate) || 0))
+    },
+    battery: {
+      avg: measurements.filter(m => m.battery != null).length > 0 
+        ? measurements.filter(m => m.battery != null).reduce((sum, m) => sum + Number(m.battery), 0) / measurements.filter(m => m.battery != null).length
+        : null,
+      min: measurements.filter(m => m.battery != null).length > 0
+        ? Math.min(...measurements.filter(m => m.battery != null).map(m => Number(m.battery)))
+        : null,
+      max: measurements.filter(m => m.battery != null).length > 0
+        ? Math.max(...measurements.filter(m => m.battery != null).map(m => Number(m.battery)))
+        : null
+    },
+    rssi: {
+      avg: measurements.filter(m => m.signal_strength != null && m.signal_strength !== -999).length > 0
+        ? measurements.filter(m => m.signal_strength != null && m.signal_strength !== -999).reduce((sum, m) => sum + Number(m.signal_strength), 0) / measurements.filter(m => m.signal_strength != null && m.signal_strength !== -999).length
+        : null,
+      min: measurements.filter(m => m.signal_strength != null && m.signal_strength !== -999).length > 0
+        ? Math.min(...measurements.filter(m => m.signal_strength != null && m.signal_strength !== -999).map(m => Number(m.signal_strength)))
+        : null,
+      max: measurements.filter(m => m.signal_strength != null && m.signal_strength !== -999).length > 0
+        ? Math.max(...measurements.filter(m => m.signal_strength != null && m.signal_strength !== -999).map(m => Number(m.signal_strength)))
+        : null
+    }
+  } : null
+
+  // Fonction pour exporter en CSV
+  const handleExportCSV = () => {
+    if (measurements.length === 0) return
+
+    const headers = ['Date & Heure', 'Débit (L/min)', 'Batterie (%)', 'RSSI (dBm)', 'Latitude', 'Longitude', 'Statut']
+    const rows = measurements.map(m => [
+      formatDate(m.timestamp),
+      m.flowrate !== null && m.flowrate !== undefined ? Number(m.flowrate).toFixed(2) : '',
+      m.battery !== null && m.battery !== undefined ? Number(m.battery).toFixed(1) : '',
+      m.signal_strength !== null && m.signal_strength !== undefined && m.signal_strength !== -999 ? m.signal_strength : '',
+      m.latitude != null && m.latitude !== 0 ? Number(m.latitude).toFixed(4) : '',
+      m.longitude != null && m.longitude !== 0 ? Number(m.longitude).toFixed(4) : '',
+      m.device_status || ''
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `mesures_${device?.device_name || device?.sim_iccid || 'dispositif'}_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   return (
@@ -107,19 +303,93 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
           </div>
         ) : (
           <>
-            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                <strong>{measurements.length}</strong> mesure{measurements.length > 1 ? 's' : ''} trouvée{measurements.length > 1 ? 's' : ''} 
-                {measurements.length > 0 && (
-                  <> (dernière mesure le {formatDate(measurements[0]?.timestamp)})</>
-                )}
-              </p>
+            <div className="mb-4 space-y-3">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-between">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>{measurements.length}</strong> mesure{measurements.length > 1 ? 's' : ''} trouvée{measurements.length > 1 ? 's' : ''} 
+                  {measurements.length > 0 && (
+                    <> (dernière mesure le {formatDate(measurements[0]?.timestamp)})</>
+                  )}
+                </p>
+                <button
+                  onClick={handleExportCSV}
+                  className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                  title="Exporter les mesures en CSV"
+                >
+                  <span>📥</span>
+                  <span>Exporter CSV</span>
+                </button>
+              </div>
+
+              {stats && (
+                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase">📊 Statistiques</p>
+                  <div className="grid grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <p className="font-medium text-gray-600 dark:text-gray-400 mb-1">Débit (L/min)</p>
+                      <p className="text-gray-900 dark:text-gray-100">
+                        Moy: <strong>{stats.flowrate.avg.toFixed(2)}</strong> | 
+                        Min: <strong>{stats.flowrate.min.toFixed(2)}</strong> | 
+                        Max: <strong>{stats.flowrate.max.toFixed(2)}</strong>
+                      </p>
+                    </div>
+                    {stats.battery.avg !== null && (
+                      <div>
+                        <p className="font-medium text-gray-600 dark:text-gray-400 mb-1">Batterie (%)</p>
+                        <p className="text-gray-900 dark:text-gray-100">
+                          Moy: <strong>{stats.battery.avg.toFixed(1)}</strong> | 
+                          Min: <strong>{stats.battery.min.toFixed(1)}</strong> | 
+                          Max: <strong>{stats.battery.max.toFixed(1)}</strong>
+                        </p>
+                      </div>
+                    )}
+                    {stats.rssi.avg !== null && (
+                      <div>
+                        <p className="font-medium text-gray-600 dark:text-gray-400 mb-1">RSSI (dBm)</p>
+                        <p className="text-gray-900 dark:text-gray-100">
+                          Moy: <strong>{stats.rssi.avg.toFixed(0)}</strong> | 
+                          Min: <strong>{stats.rssi.min}</strong> | 
+                          Max: <strong>{stats.rssi.max}</strong>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+
+            {isAdmin && selectedMeasurements.size > 0 && (
+              <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg flex items-center justify-between">
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  <strong>{selectedMeasurements.size}</strong> mesure{selectedMeasurements.size > 1 ? 's' : ''} sélectionnée{selectedMeasurements.size > 1 ? 's' : ''}
+                </p>
+                <button
+                  onClick={handleDeleteMultiple}
+                  disabled={deletingMultiple}
+                  className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Supprimer les mesures sélectionnées"
+                >
+                  <span>{deletingMultiple ? '⏳' : '🗑️'}</span>
+                  <span>{deletingMultiple ? 'Suppression...' : `Supprimer ${selectedMeasurements.size} mesure${selectedMeasurements.size > 1 ? 's' : ''}`}</span>
+                </button>
+              </div>
+            )}
 
             <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
                   <tr>
+                    {isAdmin && (
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase w-12">
+                        <input
+                          type="checkbox"
+                          checked={measurements.length > 0 && selectedMeasurements.size === measurements.length}
+                          onChange={toggleSelectAll}
+                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                          title="Sélectionner/désélectionner toutes les mesures"
+                        />
+                      </th>
+                    )}
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">
                       Date & Heure
                     </th>
@@ -138,14 +408,30 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">
                       Statut
                     </th>
+                    {isAdmin && (
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">
+                        Action
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {measurements.map((measurement, index) => (
                     <tr 
                       key={measurement.id || index} 
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${selectedMeasurements.has(measurement.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
                     >
+                      {isAdmin && (
+                        <td className="px-4 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedMeasurements.has(measurement.id)}
+                            onChange={() => toggleMeasurementSelection(measurement.id)}
+                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                            title="Sélectionner cette mesure"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-2 text-gray-700 dark:text-gray-300 font-mono text-xs">
                         {formatDate(measurement.timestamp)}
                       </td>
@@ -185,9 +471,15 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
                       <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                         {measurement.latitude != null && measurement.longitude != null && 
                          measurement.latitude !== 0 && measurement.longitude !== 0 ? (
-                          <span className="font-mono text-xs">
-                            {Number(measurement.latitude).toFixed(4)}, {Number(measurement.longitude).toFixed(4)}
-                          </span>
+                          <a
+                            href={`https://www.google.com/maps?q=${Number(measurement.latitude).toFixed(6)},${Number(measurement.longitude).toFixed(6)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                            title="Ouvrir dans Google Maps"
+                          >
+                            {Number(measurement.latitude).toFixed(4)}, {Number(measurement.longitude).toFixed(4)} 🗺️
+                          </a>
                         ) : (
                           <span className="text-gray-400 text-xs">-</span>
                         )}
@@ -201,6 +493,20 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
                           <span className="text-gray-400 text-xs">-</span>
                         )}
                       </td>
+                      {isAdmin && (
+                        <td className="px-4 py-2">
+                          <button
+                            className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => handleDeleteMeasurement(measurement.id)}
+                            disabled={deletingMeasurement === measurement.id || deletingMultiple}
+                            title="Supprimer définitivement cette mesure"
+                          >
+                            <span className="text-lg">
+                              {deletingMeasurement === measurement.id ? '⏳' : '🗑️'}
+                            </span>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
