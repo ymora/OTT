@@ -71,11 +71,22 @@ export function useApiData(endpoints, options = {}) {
         const promises = endpointsToUse.map(endpoint =>
           fetchJson(fetchWithAuth, API_URL, endpoint, memoizedFetchOptions, { requiresAuth })
             .catch(err => {
+              // Logger l'erreur avec tous les détails disponibles
               logger.error(`Erreur chargement ${endpoint}:`, err)
+              if (err.details) {
+                logger.error(`Détails erreur ${endpoint}:`, err.details)
+              }
+              if (err.code) {
+                logger.error(`Code erreur ${endpoint}:`, err.code)
+              }
               // Retourner un objet avec success: false pour indiquer l'erreur
               return { 
                 success: false, 
                 error: err.message || 'Erreur lors du chargement',
+                details: err.details || null,
+                code: err.code || null,
+                file: err.file || null,
+                line: err.line || null,
                 data: null 
               }
             })
@@ -119,7 +130,23 @@ export function useApiData(endpoints, options = {}) {
       }
     } catch (err) {
       logger.error('Erreur chargement données:', err)
-      setError(err.message || 'Erreur lors du chargement des données')
+      if (err.details) {
+        logger.error('Détails erreur:', err.details)
+      }
+      if (err.code) {
+        logger.error('Code erreur:', err.code)
+      }
+      // Construire un message d'erreur détaillé
+      let errorMessage = err.message || 'Erreur lors du chargement des données'
+      if (err.details && Array.isArray(err.details)) {
+        errorMessage += ` (${err.details.join(', ')})`
+      } else if (err.details) {
+        errorMessage += ` (${JSON.stringify(err.details)})`
+      }
+      if (err.file && err.line) {
+        errorMessage += ` [${err.file}:${err.line}]`
+      }
+      setError(errorMessage)
       setData(isMultiple ? {} : null)
     } finally {
       setLoading(false)
