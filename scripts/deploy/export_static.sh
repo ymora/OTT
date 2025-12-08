@@ -38,7 +38,28 @@ fi
 
 # Exporter le site statique
 echo "🔨 Build et export en cours..."
+echo "  📋 Variables d'environnement pour le build:"
+echo "    NEXT_STATIC_EXPORT=${NEXT_STATIC_EXPORT}"
+echo "    NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH}"
+echo "    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
+echo "    NODE_ENV=${NODE_ENV}"
+echo ""
+
+# Forcer un build propre sans cache
+echo "  🧹 Nettoyage du cache Next.js avant build..."
+rm -rf .next
+rm -rf node_modules/.cache
+echo "  ✅ Cache nettoyé"
+
+# Build avec vérification explicite des variables
+echo "  🔨 Lancement du build Next.js..."
+NEXT_STATIC_EXPORT="${NEXT_STATIC_EXPORT:-true}" \
+NEXT_PUBLIC_BASE_PATH="${NEXT_PUBLIC_BASE_PATH:-/OTT}" \
+NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://ott-jbln.onrender.com}" \
+NODE_ENV="${NODE_ENV:-production}" \
 npx next build
+
+echo "  ✅ Build terminé"
 
 # Vérifier que le build a réussi
 if [ ! -d "out" ]; then

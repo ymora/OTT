@@ -27,8 +27,18 @@ jobs:
           node-version: '20'
           cache: 'npm'
       
+      # Nettoyer complètement avant le build pour éviter les problèmes de cache
+      - name: Clean build artifacts
+        run: |
+          echo "🧹 Nettoyage complet des artefacts de build..."
+          rm -rf .next
+          rm -rf out
+          rm -rf node_modules/.cache
+          rm -rf .cache
+          echo "✅ Nettoyage terminé"
+      
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
       
       - name: Generate SUIVI_TEMPS_FACTURATION.md
         run: |
@@ -43,6 +53,10 @@ jobs:
           NEXT_STATIC_EXPORT: 'true'
           NEXT_PUBLIC_BASE_PATH: '/OTT'
           NODE_ENV: 'production'
+          # Forcer la régénération complète
+          NEXT_TELEMETRY_DISABLED: '1'
+          # S'assurer que Next.js ne cache pas
+          NEXT_PRIVATE_STANDALONE: 'true'
       
       - name: Verify build output
         run: |
