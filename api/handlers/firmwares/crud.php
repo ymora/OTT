@@ -27,16 +27,31 @@ function handleGetFirmwares() {
     }
     
     try {
+        // Vérifier si la colonne status existe
+        $hasStatusColumn = false;
+        try {
+            $checkStmt = $pdo->query("
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'firmware_versions' AND column_name = 'status'
+                )
+            ");
+            $hasStatusColumn = $checkStmt->fetchColumn();
+        } catch (Exception $e) {
+            error_log('[handleGetFirmwares] ⚠️ Erreur vérification colonne status: ' . $e->getMessage());
+        }
+        
         // IMPORTANT: Exclure ino_content et bin_content (BYTEA) de la liste car :
         // 1. Elles sont très volumineuses (peuvent être plusieurs MB)
         // 2. Elles ne sont pas nécessaires pour l'affichage de la liste
         // 3. Elles peuvent causer des erreurs JSON (Unexpected end of JSON input)
         // Ces colonnes sont récupérées uniquement via handleGetFirmwareIno() et handleDownloadFirmware()
+        $statusField = $hasStatusColumn ? 'fv.status,' : '';
         $stmt = $pdo->prepare("
             SELECT 
                 fv.id, fv.version, fv.file_path, fv.file_size, fv.checksum, 
                 fv.release_notes, fv.is_stable, fv.min_battery_pct, 
-                fv.uploaded_by, fv.status,
+                fv.uploaded_by, $statusField
                 fv.created_at, fv.updated_at,
                 u.email as uploaded_by_email, u.first_name, u.last_name
             FROM firmware_versions fv
@@ -45,6 +60,14 @@ function handleGetFirmwares() {
         ");
         $stmt->execute();
         $firmwares = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Ajouter status par défaut si la colonne n'existe pas
+        if (!$hasStatusColumn) {
+            foreach ($firmwares as &$fw) {
+                $fw['status'] = 'compiled'; // Valeur par défaut
+            }
+            unset($fw);
+        }
         
         // Vérifier que chaque fichier existe vraiment sur le disque
         // Pour chaque firmware, on doit vérifier :
@@ -60,7 +83,7 @@ function handleGetFirmwares() {
             
             $firmware_id = $firmware['id'];
             $firmware_version = $firmware['version'];
-            $firmware_status = $firmware['status'] ?? 'unknown';
+            $firmware_status = isset($firmware['status']) ? $firmware['status'] : 'compiled';
             
             // Vérifier que les fonctions helpers retournent des valeurs valides
             $version_dir = getVersionDir($firmware_version);

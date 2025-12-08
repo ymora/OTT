@@ -18,7 +18,23 @@ function handleGetPatients() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     try {
-        $hasNotificationsTable = tableExists('patient_notifications_preferences');
+        // Nettoyer le buffer de sortie AVANT tout header
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        
+        // Définir le Content-Type JSON AVANT tout autre output
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        
+        $hasNotificationsTable = false;
+        try {
+            $hasNotificationsTable = tableExists('patient_notifications_preferences');
+        } catch (Exception $e) {
+            error_log('[handleGetPatients] ⚠️ Erreur vérification table notifications: ' . $e->getMessage());
+        }
+        
         $whereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
         
         $countStmt = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE $whereClause");
