@@ -30,6 +30,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Generate SUIVI_TEMPS_FACTURATION.md
+        run: |
+          echo "📄 Génération du fichier SUIVI_TEMPS_FACTURATION.md..."
+          # Créer un fichier minimal si le script PowerShell n'est pas disponible
+          # Le fichier sera régénéré via l'API si nécessaire
+          cat > public/SUIVI_TEMPS_FACTURATION.md << 'EOF'
+          # Suivi du Temps - Projet OTT
+          ## Journal de travail pour facturation (Généré automatiquement)
+          
+          > **Note**: Ce fichier est généré automatiquement. Pour une version complète, utilisez le script d'audit ou l'API.
+          
+          **Période analysée** : En cours
+          **Développeur** : ymora
+          
+          ### Statistiques
+          - **Total heures** : En cours de calcul...
+          - **Total commits** : En cours de calcul...
+          
+          ---
+          *Ce fichier sera mis à jour lors du prochain audit complet.*
+          EOF
+          echo "✅ Fichier créé dans public/"
+          ls -lh public/SUIVI_TEMPS_FACTURATION.md || echo "⚠️  Fichier non trouvé après création"
+      
       - name: Build & export static site
         run: bash scripts/deploy/export_static.sh
         env:
