@@ -110,11 +110,27 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // IMPORTANT: Pour les fichiers .md (comme SUIVI_TEMPS_FACTURATION.md), ne jamais mettre en cache
+  // Ces fichiers sont générés dynamiquement et doivent être toujours à jour
+  if (pathname.endsWith('.md') || pathname.includes('.md?')) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' })
+        .then((response) => {
+          return response
+        })
+        .catch((err) => {
+          console.error('[SW] Erreur chargement fichier .md:', err)
+          return new Response('Fichier non disponible', { status: 404 })
+        })
+    )
+    return
+  }
+
   // Pour les fichiers _next/static (CSS, JS avec hash), utiliser "network first"
   // Ces fichiers changent de nom à chaque build, donc on ne doit pas les mettre en cache
   if (pathname.includes('/_next/static/')) {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-cache' })
         .then((response) => {
           // Ne pas mettre en cache les fichiers statiques avec hash
           // Ils changent à chaque build

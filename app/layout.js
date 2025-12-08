@@ -6,7 +6,10 @@ import { withBasePath } from '@/lib/utils'
 
 const inter = Inter({ subsets: ['latin'] })
 
-const isProduction = process.env.NODE_ENV === 'production'
+// Détecter si on est en production (export statique ou serveur)
+// En export statique, NODE_ENV peut ne pas être "production", donc on vérifie aussi l'absence de localhost
+const isProduction = process.env.NODE_ENV === 'production' || 
+                     (typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1'))
 const manifestHref = withBasePath('/manifest.json')
 const swPath = withBasePath('/sw.js')
 const icon192 = withBasePath('/icon-192.png')

@@ -38,6 +38,15 @@ const nextConfig = {
   // Désactiver la génération de pages d'erreur statiques en dev
   generateBuildId: async () => {
     return 'build-' + Date.now()
+  },
+  // Désactiver le cache lors du build pour éviter les problèmes
+  // En mode export statique, on veut toujours un build frais
+  webpack: (config, { dev, isServer }) => {
+    if (!dev && isStaticExport) {
+      // En export statique, désactiver certains caches pour forcer la régénération
+      config.cache = false
+    }
+    return config
   }
 }
 
