@@ -46,18 +46,23 @@ function handleGetFirmwares() {
         // 2. Elles ne sont pas nécessaires pour l'affichage de la liste
         // 3. Elles peuvent causer des erreurs JSON (Unexpected end of JSON input)
         // Ces colonnes sont récupérées uniquement via handleGetFirmwareIno() et handleDownloadFirmware()
-        $statusField = $hasStatusColumn ? 'fv.status,' : '';
-        $stmt = $pdo->prepare("
+        $sql = "
             SELECT 
                 fv.id, fv.version, fv.file_path, fv.file_size, fv.checksum, 
                 fv.release_notes, fv.is_stable, fv.min_battery_pct, 
-                fv.uploaded_by, $statusField
+                fv.uploaded_by" . ($hasStatusColumn ? ", fv.status" : "") . ",
                 fv.created_at, fv.updated_at,
                 u.email as uploaded_by_email, u.first_name, u.last_name
             FROM firmware_versions fv
             LEFT JOIN users u ON fv.uploaded_by = u.id AND u.deleted_at IS NULL
             ORDER BY fv.created_at DESC
-        ");
+        ";
+        
+        if (getenv('DEBUG_ERRORS') === 'true') {
+            error_log('[handleGetFirmwares] SQL: ' . substr($sql, 0, 200));
+        }
+        
+        $stmt = $pdo->prepare($sql);
         $stmt->execute();
         $firmwares = $stmt->fetchAll(PDO::FETCH_ASSOC);
         

@@ -114,7 +114,7 @@ function handleGetDevices() {
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
-        $devices = $stmt->fetchAll();
+        $devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         $totalPages = ceil($total / $limit);
         
