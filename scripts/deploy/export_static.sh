@@ -187,10 +187,22 @@ EOF
 fi
 
 # Vérification finale que le fichier est bien accessible
+echo ""
+echo "  🔍 Vérification finale du fichier dans out/..."
 if [ -f "out/SUIVI_TEMPS_FACTURATION.md" ]; then
-    echo "    ✅ Vérification finale: SUIVI_TEMPS_FACTURATION.md présent dans out/"
+    FILE_SIZE=$(wc -c < out/SUIVI_TEMPS_FACTURATION.md)
+    echo "    ✅ SUIVI_TEMPS_FACTURATION.md présent dans out/ ($FILE_SIZE bytes)"
+    echo "    📄 Contenu (premières 10 lignes):"
+    head -10 out/SUIVI_TEMPS_FACTURATION.md | sed 's/^/      /'
+    echo "    📍 Chemin relatif: out/SUIVI_TEMPS_FACTURATION.md"
+    echo "    🔗 URL attendue sur GitHub Pages: /OTT/SUIVI_TEMPS_FACTURATION.md"
+    echo "    ✅ Le fichier devrait être accessible via: https://ymora.github.io/OTT/SUIVI_TEMPS_FACTURATION.md"
 else
     echo "    ❌ ERREUR CRITIQUE: SUIVI_TEMPS_FACTURATION.md absent de out/ après toutes les tentatives"
+    echo "    📋 Contenu de out/ (premiers fichiers):"
+    ls -la out/ | head -15
+    echo "    📋 Recherche de fichiers similaires:"
+    find out/ -name "*SUIVI*" -o -name "*.md" 2>/dev/null | head -10 || echo "      Aucun fichier .md trouvé dans out/"
     exit 1
 fi
 
