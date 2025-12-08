@@ -100,15 +100,28 @@ register_shutdown_function(function() {
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
+        
+        // Logger l'erreur fatale
+        error_log('[SHUTDOWN] ❌ Erreur fatale détectée: ' . $error['message']);
+        error_log('[SHUTDOWN] Fichier: ' . $error['file'] . ' Ligne: ' . $error['line']);
+        error_log('[SHUTDOWN] Type: ' . $error['type']);
+        
         // S'assurer que le Content-Type est JSON
         if (!headers_sent()) {
             header('Content-Type: application/json; charset=utf-8');
             http_response_code(500);
         }
+        
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' 
+            ? $error['message'] . ' dans ' . basename($error['file']) . ':' . $error['line']
+            : 'Erreur serveur interne';
+            
         echo json_encode([
             'success' => false,
             'error' => 'Erreur serveur interne',
-            'details' => getenv('DEBUG_ERRORS') === 'true' ? $error['message'] : 'Vérifiez les logs du serveur'
+            'message' => $errorMsg,
+            'file' => getenv('DEBUG_ERRORS') === 'true' ? basename($error['file']) : null,
+            'line' => getenv('DEBUG_ERRORS') === 'true' ? $error['line'] : null
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
@@ -117,10 +130,10 @@ register_shutdown_function(function() {
 // Intercepter les warnings et notices pour les logger sans les afficher
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
     // Logger l'erreur
-    error_log("[PHP Error] $errstr in $errfile:$errline");
+    error_log("[PHP Error] Type: $errno | Message: $errstr | Fichier: $errfile:$errline");
     
     // Si c'est une erreur fatale, retourner du JSON
-    if (in_array($errno, [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+    if (in_array($errno, [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_RECOVERABLE_ERROR])) {
         // Nettoyer tout output précédent
         while (ob_get_level() > 0) {
             ob_end_clean();
