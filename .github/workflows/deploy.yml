@@ -46,7 +46,9 @@ jobs:
           bash scripts/deploy/generate_time_tracking.sh
       
       - name: Build & export static site
-        run: bash scripts/deploy/export_static.sh
+        run: |
+          chmod +x scripts/deploy/export_static.sh
+          bash scripts/deploy/export_static.sh
         env:
           NEXT_PUBLIC_API_URL: https://ott-jbln.onrender.com
           NEXT_PUBLIC_ENABLE_DEMO_RESET: 'false'
