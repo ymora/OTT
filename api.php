@@ -87,7 +87,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit(0);
 }
-// Content-Type sera défini par chaque handler (JSON par défaut, SSE pour compilation)
+
+// Définir Content-Type JSON par défaut pour toutes les routes API
+// (sera surchargé pour les routes HTML/SSE spécifiques)
+header('Content-Type: application/json; charset=utf-8');
 
 // Headers de sécurité (Phase 1 - Audit de Sécurité)
 header('X-Content-Type-Options: nosniff');
@@ -661,6 +664,22 @@ EXECUTE FUNCTION update_device_min_max();
                 'logs' => $logs
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
+    } catch (Exception $e) {
+        // Catch pour le try externe (ligne 402)
+        $errorMessage = $e->getMessage();
+        $errorCode = $e->getCode();
+        
+        error_log('[handleRunCompleteMigration] ❌ ERREUR externe: ' . $errorMessage);
+        error_log('[handleRunCompleteMigration] Code: ' . $errorCode);
+        error_log('[handleRunCompleteMigration] Stack trace: ' . $e->getTraceAsString());
+        
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Migration failed',
+            'message' => $errorMessage,
+            'code' => $errorCode
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 }
 

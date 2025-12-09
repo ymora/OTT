@@ -21,8 +21,11 @@ const getDefaultApiUrl = () => {
 
 // Priorité: 1) proxy Next.js si localhost, 2) variable d'environnement, 3) défaut Render
 const API_URL = (() => {
-  // Utiliser directement Render.com (le proxy Next.js cause des erreurs 500)
-  // En local, utiliser directement l'API distante pour éviter les problèmes de proxy
+  // En local, utiliser le proxy Next.js pour éviter les problèmes CORS
+  // En production, utiliser l'URL distante directement
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return window.location.origin
+  }
   return (process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com')
 })().replace(/\/$/, '')
  const isAbsoluteUrl = url => /^https?:\/\//i.test(url)
@@ -93,7 +96,14 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch(buildClientApiUrl('/api.php/auth/login'), {
+      const loginUrl = buildClientApiUrl('/api.php/auth/login')
+      
+      // Log pour debug
+      if (typeof window !== 'undefined') {
+        logger.debug('[AuthContext] Tentative de connexion vers:', loginUrl)
+      }
+      
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -169,9 +179,28 @@ export function AuthProvider({ children }) {
       if (err.message && err.message.includes('Erreur serveur')) {
         throw err
       }
-      // Sinon, c'est probablement une erreur de parsing JSON
+      
+      // Gérer spécifiquement les erreurs "Failed to fetch"
+      if (err.message && err.message.includes('Failed to fetch')) {
+        const loginUrl = buildClientApiUrl('/api.php/auth/login')
+        logger.error('[AuthContext] ❌ Erreur réseau lors de la connexion:', err)
+        logger.error('[AuthContext] URL tentée:', loginUrl)
+        
+        // Messages d'erreur plus spécifiques
+        let errorMessage = 'Impossible de se connecter au serveur.'
+        
+        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+          errorMessage = 'Impossible de se connecter au serveur. Vérifiez que le serveur Next.js est démarré et que le proxy fonctionne correctement.'
+        } else {
+          errorMessage = 'Impossible de se connecter au serveur. Vérifiez votre connexion internet et que l\'API est accessible.'
+        }
+        
+        throw new Error(errorMessage)
+      }
+      
+      // Sinon, c'est probablement une erreur de parsing JSON ou autre
       logger.error('[AuthContext] ❌ Erreur lors de la connexion:', err)
-      throw new Error('Erreur de connexion au serveur. Vérifiez votre connexion internet.')
+      throw new Error(err.message || 'Erreur de connexion au serveur. Vérifiez votre connexion internet.')
     }
   }
 

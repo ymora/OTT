@@ -47,39 +47,43 @@ function checkRateLimit($email, $maxAttempts = 5, $windowMinutes = 5) {
 function handleLogin() {
     global $pdo;
     
-    $input = json_decode(file_get_contents('php://input'), true);
-    $email = $input['email'] ?? '';
-    $password = $input['password'] ?? '';
-    
-    if (empty($email) || empty($password)) {
-        ob_end_clean();
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Email and password required']);
-        return;
+    // S'assurer que le Content-Type est JSON et nettoyer le buffer
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
     }
-    
-    // SÉCURITÉ: Rate limiting pour protéger contre les attaques par force brute
-    if (!checkRateLimit($email, 5, 5)) {
-        auditLog('user.login_rate_limited', 'user', null, null, ['email' => $email]);
+    while (ob_get_level() > 0) {
         ob_end_clean();
-        http_response_code(429);
-        echo json_encode([
-            'success' => false, 
-            'error' => 'Too many login attempts. Please try again in 5 minutes.'
-        ]);
-        return;
     }
     
     try {
+        $input = json_decode(file_get_contents('php://input'), true);
+        $email = $input['email'] ?? '';
+        $password = $input['password'] ?? '';
+        
+        if (empty($email) || empty($password)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Email and password required'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+    
+        // SÉCURITÉ: Rate limiting pour protéger contre les attaques par force brute
+        if (!checkRateLimit($email, 5, 5)) {
+            auditLog('user.login_rate_limited', 'user', null, null, ['email' => $email]);
+            http_response_code(429);
+            echo json_encode([
+                'success' => false, 
+                'error' => 'Too many login attempts. Please try again in 5 minutes.'
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
         $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE email = :email AND is_active = TRUE");
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch();
         
         if (!$user || !password_verify($password, $user['password_hash'])) {
             auditLog('user.login_failed', 'user', null, null, ['email' => $email]);
-            ob_end_clean();
             http_response_code(401);
-            echo json_encode(['success' => false, 'error' => 'Invalid credentials']);
+            echo json_encode(['success' => false, 'error' => 'Invalid credentials'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
         
@@ -96,13 +100,18 @@ function handleLogin() {
         unset($user['password_hash']);
         $user['permissions'] = $user['permissions'] ? explode(',', $user['permissions']) : [];
         
-        ob_end_clean();
-        echo json_encode(['success' => true, 'token' => $token, 'user' => $user]);
+        echo json_encode(['success' => true, 'token' => $token, 'user' => $user], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         
     } catch(PDOException $e) {
         error_log('[handleLogin] Database error: ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        echo json_encode(['success' => false, 'error' => $errorMsg], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch(Exception $e) {
+        error_log('[handleLogin] Error: ' . $e->getMessage());
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Server error';
+        echo json_encode(['success' => false, 'error' => $errorMsg], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 }
 
