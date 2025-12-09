@@ -373,6 +373,15 @@ function handleRunMigration() {
                 ]
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
+    } catch (Exception $e) {
+        error_log('[handleRunMigration] ❌ ERREUR GLOBALE: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Migration error',
+            'message' => $e->getMessage()
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
 }
 
 function handleRunCompleteMigration() {
@@ -1416,21 +1425,21 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleMigrateFirmwareStatus();
 } elseif(preg_match('#/admin/clear-firmwares$#', $path) && $method === 'POST') {
     handleClearFirmwares();
-       } elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
-           // Alias pour handleMigrateFirmwareStatus (même fonctionnalité)
-           handleMigrateFirmwareStatus();
-       } elseif(preg_match('#/docs/openapi\.json$#', $path) && $method === 'GET') {
-           // Endpoint OpenAPI/Swagger
-           header('Content-Type: application/json');
-           $openapiFile = __DIR__ . '/api/openapi.json';
-           if (file_exists($openapiFile)) {
-               readfile($openapiFile);
-           } else {
-               http_response_code(404);
-               echo json_encode(['success' => false, 'error' => 'OpenAPI spec not found']);
-           }
-           exit;
-       } else {
+} elseif(preg_match('#/admin/init-firmware-db$#', $path) && $method === 'POST') {
+    // Alias pour handleMigrateFirmwareStatus (même fonctionnalité)
+    handleMigrateFirmwareStatus();
+} elseif(preg_match('#/docs/openapi\.json$#', $path) && $method === 'GET') {
+    // Endpoint OpenAPI/Swagger
+    header('Content-Type: application/json');
+    $openapiFile = __DIR__ . '/api/openapi.json';
+    if (file_exists($openapiFile)) {
+        readfile($openapiFile);
+    } else {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'OpenAPI spec not found']);
+    }
+    exit;
+} else {
     // Log de debug conditionnel (seulement si DEBUG_ERRORS est activé)
     if (getenv('DEBUG_ERRORS') === 'true') {
         $debugInfo = [
