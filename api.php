@@ -37,6 +37,7 @@ ob_start();
 // Origines par défaut (production + développement local)
 $defaultAllowedOrigins = [
     'https://ymora.github.io',
+    'https://ymora.github.io/OTT',  // GitHub Pages avec basePath
     'http://localhost:3000',  // Développement local Next.js
     'http://localhost:3003',  // Autres ports locaux
     'http://localhost:5173'   // Vite dev server
