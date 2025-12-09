@@ -325,6 +325,10 @@ try {
 Write-Section "[5/15] Routes et Navigation - Verification Pages Menu"
 
 try {
+    # S'assurer qu'on est à la racine du projet
+    $rootPath = if (Test-Path "api.php") { "." } elseif (Test-Path "../api.php") { ".." } else { "." }
+    Push-Location $rootPath
+    
     $menuPages = @(
         @{Route="/dashboard"; File="app/dashboard/page.js"; Name="Vue Ensemble"},
         @{Route="/dashboard/dispositifs"; File="app/dashboard/dispositifs/page.js"; Name="Dispositifs OTT"},
@@ -335,7 +339,8 @@ try {
     
     $missingPages = 0
     foreach ($page in $menuPages) {
-        if (Test-Path $page.File) {
+        $fullPath = Join-Path $rootPath $page.File
+        if (Test-Path $fullPath) {
             Write-OK "$($page.Name) -> $($page.Route)"
         } else {
             Write-Err "$($page.Name) -> MANQUANT: $($page.File)"
@@ -343,6 +348,8 @@ try {
             $missingPages++
         }
     }
+    
+    Pop-Location
     
     $auditResults.Scores["Routes"] = [Math]::Max(10 - ($missingPages * 2), 0)
 } catch {
