@@ -48,15 +48,31 @@ $extraOrigins = array_filter(array_map('trim', explode(',', getenv('CORS_ALLOWED
 $allowedOrigins = array_unique(array_merge($defaultAllowedOrigins, $extraOrigins));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-if ($origin && in_array($origin, $allowedOrigins, true)) {
-    header("Access-Control-Allow-Origin: {$origin}");
-    header('Access-Control-Allow-Credentials: true');
+// Gestion CORS améliorée avec support basePath
+if ($origin) {
+    // Vérifier si l'origine correspond exactement ou commence par une origine autorisée
+    $isAllowed = false;
+    foreach ($allowedOrigins as $allowedOrigin) {
+        if ($origin === $allowedOrigin || strpos($origin, $allowedOrigin) === 0) {
+            $isAllowed = true;
+            break;
+        }
+    }
+    
+    if ($isAllowed) {
+        header("Access-Control-Allow-Origin: {$origin}");
+        header('Access-Control-Allow-Credentials: true');
+    } else {
+        // Si origine non autorisée, quand même autoriser pour éviter les erreurs CORS
+        // (la sécurité est gérée par l'authentification JWT)
+        header("Access-Control-Allow-Origin: {$origin}");
+        header('Access-Control-Allow-Credentials: true');
+    }
 } elseif (empty($origin)) {
     // Si pas d'origine (requête directe), autoriser toutes les origines
     header('Access-Control-Allow-Origin: *');
 } else {
-    // Si origine non autorisée, quand même autoriser pour éviter les erreurs CORS
-    // (la sécurité est gérée par l'authentification JWT)
+    // Fallback : autoriser l'origine demandée
     header("Access-Control-Allow-Origin: {$origin}");
     header('Access-Control-Allow-Credentials: true');
 }
@@ -65,6 +81,12 @@ header('Vary: Origin');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Device-ICCID, X-Requested-With, Cache-Control, Accept');
 header('Access-Control-Max-Age: 86400');
+
+// Gérer les requêtes OPTIONS (preflight CORS)
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit(0);
+}
 // Content-Type sera défini par chaque handler (JSON par défaut, SSE pour compilation)
 
 // Headers de sécurité (Phase 1 - Audit de Sécurité)
