@@ -1975,9 +1975,18 @@ if (Test-Path "api.php") {
         }
     }
 } else {
-    Write-Err "api.php introuvable !"
-    $criticalIssues += "api.php introuvable"
-    $structureScore = 0
+    # Chercher api.php depuis la racine
+    $apiPhpPath = if (Test-Path "api.php") { "api.php" } 
+                   elseif (Test-Path (Join-Path $rootPath "api.php")) { Join-Path $rootPath "api.php" }
+                   else { $null }
+    
+    if ($apiPhpPath -and (Test-Path $apiPhpPath)) {
+        Write-OK "api.php trouvé: $apiPhpPath"
+    } else {
+        Write-Err "api.php introuvable ! (cherché dans: $(Get-Location))"
+        $criticalIssues += "api.php introuvable"
+        $structureScore = 0
+    }
 }
 
 Write-Host ""
