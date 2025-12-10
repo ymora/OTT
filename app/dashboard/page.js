@@ -217,9 +217,9 @@ export default function DashboardPage() {
               onSelect={(device) => {
                 setSelectedDeviceOnMap(device)
               }}
-              />
-            </div>
+            />
           </div>
+        </div>
         )
       })()}
 
