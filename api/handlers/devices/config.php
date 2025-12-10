@@ -66,24 +66,63 @@ function handleUpdateDeviceConfig($device_id) {
         $updates = [];
         $params = ['device_id' => $device_id];
         
-        // Vérifier si gps_enabled existe en BDD (compatibilité migration)
+        // Vérifier si les colonnes existent en BDD (compatibilité migration)
         $hasGpsColumn = columnExists('device_configurations', 'gps_enabled');
         
-        // Liste de tous les champs configurables (ceux qui peuvent être sauvegardés en BDD)
-        // Note: Les paramètres réseau/modem/OTA sont envoyés au firmware mais pas stockés en BDD
-        // car ils sont gérés directement par le firmware via NVS
-        $fieldsToUpdate = ['sleep_minutes', 'measurement_duration_ms', 'send_every_n_wakeups', 'calibration_coefficients'];
+        // Liste de TOUS les champs configurables (sauvegardés en BDD ET envoyés au firmware)
+        // IMPORTANT: Tous les paramètres sont maintenant sauvegardés en BDD pour pouvoir
+        // les recharger dans le modal, même si le firmware les gère aussi via NVS
+        $fieldsToUpdate = [
+            'sleep_minutes', 
+            'measurement_duration_ms', 
+            'send_every_n_wakeups', 
+            'calibration_coefficients',
+            // Paramètres airflow
+            'airflow_passes',
+            'airflow_samples_per_pass',
+            'airflow_delay_ms',
+            // Paramètres modem
+            'watchdog_seconds',
+            'modem_boot_timeout_ms',
+            'sim_ready_timeout_ms',
+            'network_attach_timeout_ms',
+            'modem_max_reboots',
+            // Paramètres réseau
+            'apn',
+            'sim_pin',
+            // Paramètres OTA
+            'ota_primary_url',
+            'ota_fallback_url',
+            'ota_md5'
+        ];
         if ($hasGpsColumn) {
             $fieldsToUpdate[] = 'gps_enabled';
         }
         
         foreach($fieldsToUpdate as $field) {
+            // Vérifier si la colonne existe en BDD (pour compatibilité avec anciennes migrations)
+            if (!columnExists('device_configurations', $field)) {
+                continue; // Ignorer les colonnes qui n'existent pas encore
+            }
+            
             if (array_key_exists($field, $input)) {
-                if ($input[$field] === null) {
+                if ($input[$field] === null || $input[$field] === '') {
                     $updates[] = "$field = NULL";
                 } else {
                     $updates[] = "$field = :$field";
-                    $params[$field] = is_array($input[$field]) ? json_encode($input[$field]) : $input[$field];
+                    // Convertir les valeurs selon le type
+                    if (is_array($input[$field])) {
+                        $params[$field] = json_encode($input[$field]);
+                    } elseif (in_array($field, ['airflow_passes', 'airflow_samples_per_pass', 'airflow_delay_ms', 
+                                                'watchdog_seconds', 'modem_boot_timeout_ms', 'sim_ready_timeout_ms', 
+                                                'network_attach_timeout_ms', 'modem_max_reboots', 'sleep_minutes', 
+                                                'measurement_duration_ms', 'send_every_n_wakeups'])) {
+                        $params[$field] = (int)$input[$field];
+                    } elseif (in_array($field, ['gps_enabled'])) {
+                        $params[$field] = (bool)$input[$field];
+                    } else {
+                        $params[$field] = (string)$input[$field];
+                    }
                 }
             }
         }
