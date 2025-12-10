@@ -1139,7 +1139,7 @@ export default function DeviceModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
-                    APN
+                    APN <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1147,8 +1147,16 @@ export default function DeviceModal({
                     value={formData.apn || ''}
                     onChange={handleInputChange}
                     className="input w-full text-sm py-1.5"
-                    placeholder="Ex: internet"
+                    placeholder="free, orange, sl2sfr, internet..."
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Free: <code className="text-xs">free</code> | Orange: <code className="text-xs">orange</code> | SFR: <code className="text-xs">sl2sfr</code> | Bouygues: <code className="text-xs">mmsbouygtel</code>
+                  </p>
+                  {!formData.apn && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      ⚠️ APN requis pour la connexion réseau (oper, eps, gprs)
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
