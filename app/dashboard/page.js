@@ -14,7 +14,7 @@ import ErrorMessage from '@/components/ErrorMessage'
 const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
 
 export default function DashboardPage() {
-  const { isConnected, usbConnectedDevice, usbVirtualDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
+  const { isConnected, usbVirtualDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
   
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -28,7 +28,6 @@ export default function DashboardPage() {
     { requiresAuth: true }
   )
   
-  const [selectedDeviceOnMap, setSelectedDeviceOnMap] = useState(null)
   const [focusDeviceId, setFocusDeviceId] = useState(null)
   
   // États pour les accordéons des KPIs
@@ -76,9 +75,6 @@ export default function DashboardPage() {
     // Ajouter le dispositif virtuel au début de la liste
     return [usbVirtualDevice, ...devicesFromDb]
   }, [devicesFromDb, usbVirtualDevice])
-  const users = useMemo(() => data?.users?.users || [], [data?.users])
-  const patients = useMemo(() => data?.patients?.patients || [], [data?.patients])
-  const firmwares = useMemo(() => data?.firmwares?.firmwares || [], [data?.firmwares])
   const alerts = useMemo(() => {
     return (data?.alerts?.alerts || []).filter(a => a.status === 'unresolved')
   }, [data?.alerts])
@@ -202,7 +198,7 @@ export default function DashboardPage() {
       <ErrorMessage error={error} onRetry={refetch} />
 
       {/* Carte des dispositifs */}
-      {(() => {
+      {useMemo(() => {
         const activeDevices = devices.filter(d => !d.deleted_at)
         const geolocatedDevices = activeDevices.filter(d => d.latitude && d.longitude)
         return !loading && activeDevices.length > 0 && (
@@ -217,14 +213,12 @@ export default function DashboardPage() {
               <LeafletMap
                 devices={devices}
                 focusDeviceId={focusDeviceId}
-                onSelect={(device) => {
-                  setSelectedDeviceOnMap(device)
-                }}
+                onSelect={() => {}}
               />
             </div>
           </div>
         )
-      })()}
+      }, [devices, loading])}
 
       {/* Stats Cards - Indicateurs clés (KPIs + Non Assignés) - TAILLE RÉDUITE avec accordéons */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -281,7 +275,7 @@ export default function DashboardPage() {
           {kpiAccordions.online && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {(() => {
+                {useMemo(() => {
                   // Mémoriser les dispositifs en ligne pour éviter le recalcul
                   const onlineDevices = devices.filter(d => {
                     if (d.deleted_at) return false
@@ -300,7 +294,7 @@ export default function DashboardPage() {
                       🟢 {device.device_name || device.sim_iccid}
                     </button>
                   ))
-                })()}
+                }, [devices])}
                 </div>
               </div>
             )}
@@ -324,7 +318,7 @@ export default function DashboardPage() {
           {kpiAccordions.alerts && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {(() => {
+                {useMemo(() => {
                   // Optimisation : créer un Map pour éviter find() à chaque itération (exclure archivés)
                   const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
                   return alerts.filter(a => a.severity === 'critical').map(alert => {
@@ -339,7 +333,7 @@ export default function DashboardPage() {
                       </button>
                     ) : null
                   })
-                })()}
+                }, [devices, alerts])}
               </div>
                   </div>
                 )}
@@ -365,7 +359,7 @@ export default function DashboardPage() {
           {kpiAccordions.battery && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {(() => {
+                {useMemo(() => {
                   // Mémoriser la liste des batteries pour éviter le recalcul
                   const batteryList = stats.lowBatteryDevices > 0 
                     ? lowBatteryList 
@@ -376,17 +370,22 @@ export default function DashboardPage() {
                       })
                   return batteryList.map(device => {
                     const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
+                    const isLow = battery < 30
                     return (
                       <button
                         key={device.id}
                         onClick={() => zoomToDevice(device.id)}
-                        className={`w-full text-left text-xs px-2 py-1 hover:bg-${battery < 30 ? 'orange' : 'green'}-50 dark:hover:bg-${battery < 30 ? 'orange' : 'green'}-900/30 rounded transition-colors`}
+                        className={`w-full text-left text-xs px-2 py-1 rounded transition-colors ${
+                          isLow 
+                            ? 'hover:bg-orange-50 dark:hover:bg-orange-900/30' 
+                            : 'hover:bg-green-50 dark:hover:bg-green-900/30'
+                        }`}
                       >
                         {battery < 20 ? '🔴' : battery < 30 ? '🟠' : '🟢'} {device.device_name || device.sim_iccid} ({battery.toFixed(0)}%)
                       </button>
                     )
                   })
-                })()}
+                }, [stats.lowBatteryDevices, lowBatteryList, devices])}
               </div>
                   </div>
                 )}
@@ -452,7 +451,7 @@ export default function DashboardPage() {
               {kpiAccordions.alertsAction && (
                 <div className="px-3 pb-3 border-t border-red-200 dark:border-red-800 max-h-40 overflow-y-auto">
                   <div className="space-y-1 mt-2">
-                    {(() => {
+                    {useMemo(() => {
                       // Optimisation : créer un Map pour éviter find() à chaque itération
                       const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
                       return alerts.slice(0, 10).map(alert => {
@@ -467,7 +466,7 @@ export default function DashboardPage() {
                           </button>
                         ) : null
                       })
-                    })()}
+                    }, [devices, alerts])}
                     {alerts.length > 10 && (
                       <div className="text-xs text-gray-500 italic px-2">+{alerts.length - 10} autres...</div>
                     )}
