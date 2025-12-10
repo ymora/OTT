@@ -105,6 +105,8 @@ function handleUpdateDeviceConfig($device_id) {
             'measurement_duration_ms', 
             'send_every_n_wakeups', 
             'calibration_coefficients',
+            // Paramètres réseau (GPS, Itinérance)
+            'roaming_enabled',
             // Paramètres airflow
             'airflow_passes',
             'airflow_samples_per_pass',
@@ -125,6 +127,12 @@ function handleUpdateDeviceConfig($device_id) {
         ];
         if ($hasGpsColumn) {
             $fieldsToUpdate[] = 'gps_enabled';
+        }
+        
+        // Vérifier si roaming_enabled existe en BDD (compatibilité migration)
+        $hasRoamingColumn = columnExists('device_configurations', 'roaming_enabled');
+        if ($hasRoamingColumn) {
+            // Déjà dans la liste si la colonne existe
         }
         
         foreach($fieldsToUpdate as $field) {
@@ -170,6 +178,9 @@ function handleUpdateDeviceConfig($device_id) {
             if ($hasGpsColumn) {
                 $configFields[] = 'gps_enabled';
             }
+            if ($hasRoamingColumn) {
+                $configFields[] = 'roaming_enabled';
+            }
             
             // Paramètres airflow (envoyés au firmware, pas stockés en BDD)
             $airflowFields = ['airflow_passes', 'airflow_samples_per_pass', 'airflow_delay_ms'];
@@ -179,6 +190,7 @@ function handleUpdateDeviceConfig($device_id) {
             
             // Paramètres réseau (envoyés au firmware, pas stockés en BDD)
             $networkFields = ['apn', 'sim_pin'];
+            // Note: roaming_enabled est dans $fieldsToUpdate (stocké en BDD)
             
             // Paramètres OTA (envoyés au firmware, pas stockés en BDD)
             $otaFields = ['ota_primary_url', 'ota_fallback_url', 'ota_md5'];

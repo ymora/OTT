@@ -75,6 +75,7 @@ export default function DeviceModal({
     send_every_n_wakeups: 1,
     calibration_coefficients: [0, 1, 0],
     gps_enabled: false,
+    roaming_enabled: true, // Itinérance activée par défaut
     // Airflow
     airflow_passes: null,
     airflow_samples_per_pass: null,
@@ -130,6 +131,7 @@ export default function DeviceModal({
           send_every_n_wakeups: 1,
           calibration_coefficients: [0, 1, 0],
           gps_enabled: false,
+          roaming_enabled: true,
           airflow_passes: null,
           airflow_samples_per_pass: null,
           airflow_delay_ms: null,
@@ -165,6 +167,7 @@ export default function DeviceModal({
           send_every_n_wakeups: 1,
           calibration_coefficients: [0, 1, 0],
           gps_enabled: false,
+          roaming_enabled: true,
           airflow_passes: null,
           airflow_samples_per_pass: null,
           airflow_delay_ms: null,
@@ -218,6 +221,7 @@ export default function DeviceModal({
           send_every_n_wakeups: data.config.send_every_n_wakeups || 1,
           calibration_coefficients: data.config.calibration_coefficients || [0, 1, 0],
           gps_enabled: data.config.gps_enabled || false,
+          roaming_enabled: data.config.roaming_enabled !== undefined ? data.config.roaming_enabled : true,
           airflow_passes: data.config.airflow_passes || null,
           airflow_samples_per_pass: data.config.airflow_samples_per_pass || null,
           // Convertir ms → sec pour l'affichage (garder comme nombre)
@@ -386,6 +390,7 @@ export default function DeviceModal({
           send_every_n_wakeups: configPayload.send_every_n_wakeups,
           calibration_coefficients: configPayload.calibration_coefficients,
           gps_enabled: configPayload.gps_enabled,
+          roaming_enabled: configPayload.roaming_enabled,
           airflowPasses: configPayload.airflow_passes,
           airflowSamples: configPayload.airflow_samples_per_pass,
           airflowDelay: configPayload.airflow_delay_ms,
@@ -541,6 +546,9 @@ export default function DeviceModal({
       if (formData.gps_enabled != null) {
         configPayload.gps_enabled = formData.gps_enabled
       }
+      if (formData.roaming_enabled != null) {
+        configPayload.roaming_enabled = formData.roaming_enabled
+      }
       // Airflow
       if (formData.airflow_passes != null) {
         configPayload.airflow_passes = parseInt(formData.airflow_passes)
@@ -661,7 +669,7 @@ export default function DeviceModal({
                 hasChanged = !oldVal || !Array.isArray(oldVal) || 
                   oldVal.length !== newVal.length ||
                   oldVal.some((v, i) => Math.abs(v - newVal[i]) > 0.001)
-              } else if (key === 'gps_enabled') {
+              } else               if (key === 'gps_enabled' || key === 'roaming_enabled') {
                 hasChanged = oldVal !== newVal
               } else if (oldVal === null || oldVal === undefined || oldVal === '') {
                 hasChanged = newVal !== null && newVal !== undefined && newVal !== ''
@@ -680,6 +688,7 @@ export default function DeviceModal({
                 // Noms lisibles pour les clés
                 const keyNames = {
                   'gps_enabled': 'GPS',
+                  'roaming_enabled': 'Itinérance',
                   'sleep_minutes': 'Sommeil',
                   'measurement_duration_ms': 'Durée mesure',
                   'send_every_n_wakeups': 'Envoi tous les N wakeups',
@@ -723,6 +732,7 @@ export default function DeviceModal({
               const configSummary = Object.entries(configPayload)
                 .map(([key, val]) => {
                   if (key === 'gps_enabled') return `GPS: ${val ? 'ON' : 'OFF'}`
+                  if (key === 'roaming_enabled') return `Roaming: ${val ? 'ON' : 'OFF'}`
                   if (key === 'sleep_minutes') return `Sleep: ${val}min`
                   if (key === 'measurement_duration_ms') return `Durée: ${val}ms (${(val/1000).toFixed(1)}s)`
                   if (key === 'send_every_n_wakeups') return `Envoi: ${val}`
@@ -1148,7 +1158,7 @@ export default function DeviceModal({
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-end">
+                  <div className="flex items-end gap-2">
                     <div className="w-full">
                       <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
                         📍 GPS
@@ -1159,6 +1169,21 @@ export default function DeviceModal({
                           name="gps_enabled"
                           checked={formData.gps_enabled || false}
                           onChange={(e) => setFormData(prev => ({ ...prev, gps_enabled: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    <div className="w-full">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        🌐 Itinérance
+                      </label>
+                      <label className="relative inline-flex items-center cursor-pointer w-full justify-center">
+                        <input
+                          type="checkbox"
+                          name="roaming_enabled"
+                          checked={formData.roaming_enabled !== undefined ? formData.roaming_enabled : true}
+                          onChange={(e) => setFormData(prev => ({ ...prev, roaming_enabled: e.target.checked }))}
                           className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>

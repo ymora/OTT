@@ -179,6 +179,7 @@ static uint16_t airflowSamplesPerPass = 10;
 static uint16_t airflowSampleDelayMs = 5;
 static uint32_t watchdogTimeoutSeconds = WATCHDOG_TIMEOUT_DEFAULT_SEC;
 static bool gpsEnabled = false;  // GPS DÉSACTIVÉ par défaut (peut bloquer modem/consommer batterie)
+static bool roamingEnabled = true;  // Itinérance ACTIVÉE par défaut (permet utilisation réseau autre opérateur)
 
 // Variables pour mode hybride (détection changement flux)
 static float lastFlowValue = 0.0;
@@ -1587,7 +1588,19 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
       
       // Vérifier d'abord le statut d'enregistrement (plus fiable que waitForNetwork)
       RegStatus reg = modem.getRegistrationStatus();
-      if (reg == REG_OK_HOME || reg == REG_OK_ROAMING) {
+      
+      // Vérifier si l'itinérance est autorisée
+      if (reg == REG_OK_ROAMING && !roamingEnabled) {
+        Serial.println(F("[MODEM] ⚠️  Itinérance détectée mais désactivée - Rejet de la connexion"));
+        Serial.println(F("[MODEM] 💡 Activez l'itinérance dans la configuration pour autoriser le roaming"));
+        logRadioSnapshot("attach:roaming_rejected");
+        // Continuer à attendre une connexion sur le réseau de l'opérateur (REG_OK_HOME)
+        delay(2000);
+        feedWatchdog();
+        continue;
+      }
+      
+      if (reg == REG_OK_HOME || (reg == REG_OK_ROAMING && roamingEnabled)) {
         // Attendre un peu pour que la connexion se stabilise
         delay(1000);
         feedWatchdog();
@@ -2592,6 +2605,7 @@ void loadConfig()
   airflowSamplesPerPass = prefs.getUShort("flow_samples", airflowSamplesPerPass);
   airflowSampleDelayMs = prefs.getUShort("flow_delay", airflowSampleDelayMs);
   gpsEnabled = prefs.getBool("gps_enabled", false);
+  roamingEnabled = prefs.getBool("roaming_enabled", true);  // Activé par défaut
   watchdogTimeoutSeconds = prefs.getUInt("wdt_sec", watchdogTimeoutSeconds);
   modemBootTimeoutMs = prefs.getUInt("mdm_boot_ms", modemBootTimeoutMs);
   simReadyTimeoutMs = prefs.getUInt("sim_ready_ms", simReadyTimeoutMs);
@@ -2649,6 +2663,7 @@ void saveConfig()
   prefs.putUShort("flow_samples", airflowSamplesPerPass);
   prefs.putUShort("flow_delay", airflowSampleDelayMs);
   prefs.putBool("gps_enabled", gpsEnabled);
+  prefs.putBool("roaming_enabled", roamingEnabled);
   prefs.putUInt("wdt_sec", watchdogTimeoutSeconds);
   prefs.putUInt("mdm_boot_ms", modemBootTimeoutMs);
   prefs.putUInt("sim_ready_ms", simReadyTimeoutMs);

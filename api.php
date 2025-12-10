@@ -473,6 +473,9 @@ ADD COLUMN IF NOT EXISTS gps_enabled BOOLEAN DEFAULT false;
 COMMENT ON COLUMN device_configurations.gps_enabled IS 
 'Active/désactive le GPS pour ce dispositif. OFF par défaut.';
 
+COMMENT ON COLUMN device_configurations.roaming_enabled IS 
+'Active/désactive l''itinérance (roaming) pour ce dispositif. ON par défaut. Si désactivé, le dispositif rejette les connexions en itinérance (REG_OK_ROAMING).';
+
 UPDATE device_configurations 
 SET gps_enabled = false 
 WHERE gps_enabled IS NULL;
@@ -483,6 +486,7 @@ ADD COLUMN IF NOT EXISTS max_temp_celsius INTEGER DEFAULT 50;
 
 -- Ajouter les colonnes pour tous les paramètres configurables (pour sauvegarde en BDD)
 ALTER TABLE device_configurations
+ADD COLUMN IF NOT EXISTS roaming_enabled BOOLEAN DEFAULT true,
 ADD COLUMN IF NOT EXISTS airflow_passes INTEGER,
 ADD COLUMN IF NOT EXISTS airflow_samples_per_pass INTEGER,
 ADD COLUMN IF NOT EXISTS airflow_delay_ms INTEGER,
