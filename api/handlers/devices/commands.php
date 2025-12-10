@@ -135,10 +135,38 @@ function handleGetDeviceCommands($iccid) {
         return;
     }
     
-    $limit = min(intval($_GET['limit'] ?? 100), 500);
+    // Pagination
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    
+    // Si page est fourni, calculer offset
+    if ($page > 1 && $offset === 0) {
+        $offset = ($page - 1) * $limit;
+    }
+    
     $statusFilter = isset($_GET['status']) ? normalizeCommandStatus($_GET['status']) : null;
     
     try {
+        // Compter le total
+        $countSql = "
+            SELECT COUNT(*)
+            FROM device_commands dc
+            JOIN devices d ON dc.device_id = d.id
+            WHERE dc.device_id = :device_id AND d.deleted_at IS NULL
+        ";
+        $countParams = ['device_id' => $device['id']];
+        if ($statusFilter) {
+            $countSql .= " AND dc.status = :status";
+            $countParams['status'] = $statusFilter;
+        }
+        $countStmt = $pdo->prepare($countSql);
+        foreach ($countParams as $key => $value) {
+            $countStmt->bindValue(':' . $key, $value);
+        }
+        $countStmt->execute();
+        $total = intval($countStmt->fetchColumn());
+        
         $sql = "
             SELECT dc.*, d.sim_iccid, d.device_name,
                    p.first_name AS patient_first_name,
@@ -153,17 +181,31 @@ function handleGetDeviceCommands($iccid) {
             $sql .= " AND dc.status = :status";
             $params['status'] = $statusFilter;
         }
-        $sql .= " ORDER BY dc.created_at DESC LIMIT :limit";
+        $sql .= " ORDER BY dc.created_at DESC LIMIT :limit OFFSET :offset";
         
         $stmt = $pdo->prepare($sql);
         foreach ($params as $key => $value) {
             $stmt->bindValue(':' . $key, $value);
         }
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         
         $rows = $stmt->fetchAll();
-        echo json_encode(['success' => true, 'commands' => array_map('formatCommandForDashboard', $rows)]);
+        $totalPages = ceil($total / $limit);
+        echo json_encode([
+            'success' => true, 
+            'commands' => array_map('formatCommandForDashboard', $rows),
+            'pagination' => [
+                'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => ($offset + $limit) < $total,
+                'has_prev' => $offset > 0
+            ]
+        ]);
         
     } catch(PDOException $e) {
         http_response_code(500);
@@ -264,7 +306,20 @@ function handleListAllCommands() {
         $stmt->execute();
         $rows = $stmt->fetchAll();
         
-        $response = ['success' => true, 'commands' => array_map('formatCommandForDashboard', $rows)];
+        $totalPages = ceil($total / $limit);
+        $response = [
+            'success' => true, 
+            'commands' => array_map('formatCommandForDashboard', $rows),
+            'pagination' => [
+                'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => ($offset + $limit) < $total,
+                'has_prev' => $offset > 0
+            ]
+        ];
         SimpleCache::set($cacheKey, $response, 30);
         echo json_encode($response);
         

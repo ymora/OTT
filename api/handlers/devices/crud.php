@@ -197,6 +197,92 @@ function handleGetDevices() {
 }
 
 /**
+ * GET /api.php/devices/:id
+ * Récupérer un seul dispositif par son ID
+ */
+function handleGetDevice($device_id) {
+    global $pdo;
+    
+    // Nettoyer le buffer de sortie AVANT tout header
+    if (ob_get_level() > 0) {
+        ob_clean();
+    }
+    
+    // Définir le Content-Type JSON AVANT tout autre output
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT 
+                d.id,
+                d.sim_iccid,
+                d.device_serial,
+                d.device_name,
+                d.status,
+                d.patient_id,
+                d.installation_date,
+                d.first_use_date,
+                d.last_seen,
+                d.last_battery,
+                d.last_flowrate,
+                d.last_rssi,
+                d.latitude,
+                d.longitude,
+                d.created_at,
+                d.updated_at,
+                d.deleted_at,
+                p.first_name, 
+                p.last_name,
+                COALESCE(d.firmware_version, dc.firmware_version) as firmware_version,
+                COALESCE(dc.ota_pending, FALSE) as ota_pending,
+                COALESCE(dc.gps_enabled, FALSE) as gps_enabled,
+                (SELECT COUNT(*) FROM measurements m WHERE m.device_id = d.id) as measurement_count
+            FROM devices d
+            LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
+            LEFT JOIN device_configurations dc ON d.id = dc.device_id
+            WHERE d.id = :id
+        ");
+        $stmt->execute(['id' => $device_id]);
+        $device = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Device not found']);
+            return;
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'device' => $device
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch(PDOException $e) {
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        error_log('[handleGetDevice] ❌ Erreur DB: ' . $e->getMessage());
+        http_response_code(500);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    } catch(Throwable $e) {
+        if (ob_get_level() > 0) {
+            ob_clean();
+        }
+        error_log('[handleGetDevice] ❌ Erreur: ' . $e->getMessage());
+        http_response_code(500);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal server error';
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
+/**
  * POST /api.php/devices (ou POST /api.php/devices/register)
  * Créer ou restaurer un dispositif (UPSERT automatique)
  * Si l'ICCID existe déjà (même supprimé) : restaure et met à jour

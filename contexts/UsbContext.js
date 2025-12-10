@@ -1487,13 +1487,16 @@ export function UsbProvider({ children }) {
    * Cette fonction est appelée automatiquement quand un dispositif USB est détecté
    * 
    * @param {Object} deviceInfo - Informations du dispositif USB détecté
-   * @param {Function} fetchWithAuth - Fonction d'authentification
-   * @param {string} apiUrl - URL de l'API
    * @returns {Promise<Object|null>} - Le dispositif créé/mis à jour ou null en cas d'erreur
    */
-  const autoCreateOrUpdateDevice = useCallback(async (deviceInfo, fetchWithAuth, apiUrl) => {
+  const autoCreateOrUpdateDevice = useCallback(async (deviceInfo) => {
     if (!deviceInfo) {
       logger.warn('autoCreateOrUpdateDevice: deviceInfo vide')
+      return null
+    }
+
+    if (!fetchWithAuth || !API_URL) {
+      logger.warn('autoCreateOrUpdateDevice: fetchWithAuth ou API_URL non disponible')
       return null
     }
 
@@ -1509,6 +1512,9 @@ export function UsbProvider({ children }) {
       
       // Importer fetchJson
       const { fetchJson } = await import('@/lib/api')
+      
+      // Utiliser API_URL du contexte avec fallback
+      const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
       
       // 1. Vérifier si le dispositif existe déjà en BDD
       const devicesResponse = await fetchJson(fetchWithAuth, apiUrl, '/api.php/devices', {}, { requiresAuth: true })
@@ -1598,7 +1604,7 @@ export function UsbProvider({ children }) {
       logger.error('❌ [AUTO-CREATE] Erreur:', error)
       return null
     }
-  }, [])
+  }, [fetchWithAuth, API_URL])
 
   // Référence pour la fonction auto-create (accessible dans les callbacks)
   const autoCreateOrUpdateDeviceRef = useRef(autoCreateOrUpdateDevice)
@@ -1614,6 +1620,9 @@ export function UsbProvider({ children }) {
     }
 
     try {
+      // Importer fetchJson
+      const { fetchJson } = await import('@/lib/api')
+      
       setOtaMonitoringStatus(prev => ({ ...prev, isMonitoring: true, lastCheck: Date.now() }))
       
       let device = null

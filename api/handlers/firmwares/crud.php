@@ -60,6 +60,20 @@ function handleGetFirmwares() {
             error_log('[handleGetFirmwares] ⚠️ Erreur vérification colonne status: ' . $e->getMessage());
         }
         
+        // Pagination
+        $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+        $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+        $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+        
+        // Si page est fourni, calculer offset
+        if ($page > 1 && $offset === 0) {
+            $offset = ($page - 1) * $limit;
+        }
+        
+        // Compter le total
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
+        $total = intval($countStmt->fetchColumn());
+        
         // IMPORTANT: Exclure ino_content et bin_content (BYTEA) de la liste car :
         // 1. Elles sont très volumineuses (peuvent être plusieurs MB)
         // 2. Elles ne sont pas nécessaires pour l'affichage de la liste
@@ -75,6 +89,7 @@ function handleGetFirmwares() {
             FROM firmware_versions fv
             LEFT JOIN users u ON fv.uploaded_by = u.id AND u.deleted_at IS NULL
             ORDER BY fv.created_at DESC
+            LIMIT :limit OFFSET :offset
         ";
         
         if (getenv('DEBUG_ERRORS') === 'true') {
@@ -82,6 +97,8 @@ function handleGetFirmwares() {
         }
         
         $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         error_log('[handleGetFirmwares] Exécution de la requête SQL...');
         $stmt->execute();
         error_log('[handleGetFirmwares] Requête SQL exécutée avec succès');
@@ -224,12 +241,22 @@ function handleGetFirmwares() {
             header('Content-Type: application/json; charset=utf-8');
         }
         
+        $totalPages = ceil($total / $limit);
+        
         // Encoder en JSON avec gestion d'erreur
         $json = json_encode([
             'success' => true, 
             'firmwares' => $verifiedFirmwares,
-            'stats' => [
+            'pagination' => [
                 'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => ($offset + $limit) < $total,
+                'has_prev' => $offset > 0
+            ],
+            'stats' => [
                 'files_existing' => $existing,
                 'files_missing' => $missing
             ]

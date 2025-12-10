@@ -137,9 +137,37 @@ function handleGetLogs() {
     global $pdo;
     
     $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
+    
+    // Pagination
     $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    
+    // Si page est fourni, calculer offset
+    if ($page > 1 && $offset === 0) {
+        $offset = ($page - 1) * $limit;
+    }
     
     try {
+        // Compter le total
+        $countSql = "
+            SELECT COUNT(*)
+            FROM device_logs l
+            JOIN devices d ON l.device_id = d.id
+            WHERE d.deleted_at IS NULL
+        ";
+        $countParams = [];
+        if ($device_id) {
+            $countSql .= " AND l.device_id = :device_id";
+            $countParams['device_id'] = $device_id;
+        }
+        $countStmt = $pdo->prepare($countSql);
+        foreach ($countParams as $key => $value) {
+            $countStmt->bindValue(':' . $key, $value);
+        }
+        $countStmt->execute();
+        $total = intval($countStmt->fetchColumn());
+        
         $sql = "
             SELECT l.*, d.sim_iccid, d.device_name, p.first_name, p.last_name
             FROM device_logs l
@@ -154,16 +182,30 @@ function handleGetLogs() {
             $params['device_id'] = $device_id;
         }
         
-        $sql .= " ORDER BY l.timestamp DESC LIMIT :limit";
+        $sql .= " ORDER BY l.timestamp DESC LIMIT :limit OFFSET :offset";
         
         $stmt = $pdo->prepare($sql);
         foreach ($params as $key => $value) {
             $stmt->bindValue(':' . $key, $value);
         }
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         
-        echo json_encode(['success' => true, 'logs' => $stmt->fetchAll()]);
+        $totalPages = ceil($total / $limit);
+        echo json_encode([
+            'success' => true, 
+            'logs' => $stmt->fetchAll(),
+            'pagination' => [
+                'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => ($offset + $limit) < $total,
+                'has_prev' => $offset > 0
+            ]
+        ]);
         
     } catch(PDOException $e) {
         http_response_code(500);

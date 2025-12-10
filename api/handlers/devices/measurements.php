@@ -426,6 +426,16 @@ function handlePostMeasurement() {
 function handleGetDeviceHistory($device_id) {
     global $pdo;
     
+    // Pagination
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 1000) : 500;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    
+    // Si page est fourni, calculer offset
+    if ($page > 1 && $offset === 0) {
+        $offset = ($page - 1) * $limit;
+    }
+    
     try {
         // Vérifier si les colonnes GPS existent dans measurements
         $checkGpsColumns = $pdo->query("
@@ -444,6 +454,17 @@ function handleGetDeviceHistory($device_id) {
         $hasGpsColumns = ($checkGpsColumns['has_latitude'] === true || $checkGpsColumns['has_latitude'] === 't' || $checkGpsColumns['has_latitude'] === 1) &&
                          ($checkGpsColumns['has_longitude'] === true || $checkGpsColumns['has_longitude'] === 't' || $checkGpsColumns['has_longitude'] === 1);
         
+        // Compter le total
+        $countSql = "
+            SELECT COUNT(*)
+            FROM measurements m
+            JOIN devices d ON m.device_id = d.id
+            WHERE m.device_id = :device_id
+        ";
+        $countStmt = $pdo->prepare($countSql);
+        $countStmt->execute(['device_id' => $device_id]);
+        $total = intval($countStmt->fetchColumn());
+        
         // Construire la requête selon si les colonnes GPS existent
         if ($hasGpsColumns) {
             // Colonnes GPS existent : utiliser COALESCE pour prioriser les coordonnées de la mesure
@@ -456,7 +477,7 @@ function handleGetDeviceHistory($device_id) {
                 JOIN devices d ON m.device_id = d.id
                 WHERE m.device_id = :device_id 
                 ORDER BY m.timestamp DESC 
-                LIMIT 1000
+                LIMIT :limit OFFSET :offset
             ";
         } else {
             // Colonnes GPS n'existent pas encore : utiliser seulement celles du dispositif
@@ -469,13 +490,30 @@ function handleGetDeviceHistory($device_id) {
                 JOIN devices d ON m.device_id = d.id
                 WHERE m.device_id = :device_id 
                 ORDER BY m.timestamp DESC 
-                LIMIT 1000
+                LIMIT :limit OFFSET :offset
             ";
         }
         
         $stmt = $pdo->prepare($sql);
-        $stmt->execute(['device_id' => $device_id]);
-        echo json_encode(['success' => true, 'measurements' => $stmt->fetchAll()]);
+        $stmt->bindValue(':device_id', $device_id, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        $totalPages = ceil($total / $limit);
+        echo json_encode([
+            'success' => true, 
+            'measurements' => $stmt->fetchAll(),
+            'pagination' => [
+                'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => ($offset + $limit) < $total,
+                'has_prev' => $offset > 0
+            ]
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
@@ -489,7 +527,28 @@ function handleGetDeviceHistory($device_id) {
 function handleGetLatestMeasurements() {
     global $pdo;
     
+    // Pagination
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    
+    // Si page est fourni, calculer offset
+    if ($page > 1 && $offset === 0) {
+        $offset = ($page - 1) * $limit;
+    }
+    
     try {
+        // Compter le total
+        $countStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM measurements m
+            JOIN devices d ON m.device_id = d.id
+            WHERE m.timestamp >= NOW() - INTERVAL '24 HOURS'
+            AND d.deleted_at IS NULL
+        ");
+        $countStmt->execute();
+        $total = intval($countStmt->fetchColumn());
+        
         $stmt = $pdo->prepare("
             SELECT m.*, d.sim_iccid, d.device_name
             FROM measurements m
@@ -497,9 +556,26 @@ function handleGetLatestMeasurements() {
             WHERE m.timestamp >= NOW() - INTERVAL '24 HOURS'
             AND d.deleted_at IS NULL
             ORDER BY m.timestamp DESC
+            LIMIT :limit OFFSET :offset
         ");
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
-        echo json_encode(['success' => true, 'measurements' => $stmt->fetchAll()]);
+        
+        $totalPages = ceil($total / $limit);
+        echo json_encode([
+            'success' => true, 
+            'measurements' => $stmt->fetchAll(),
+            'pagination' => [
+                'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => ($offset + $limit) < $total,
+                'has_prev' => $offset > 0
+            ]
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);

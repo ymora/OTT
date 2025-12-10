@@ -174,8 +174,20 @@ function handleGetNotificationsQueue() {
     global $pdo;
     requirePermission('settings.view');
     
+    // Pagination
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 50;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    
+    // Si page est fourni, calculer offset
+    if ($page > 1 && $offset === 0) {
+        $offset = ($page - 1) * $limit;
+    }
+    
     try {
-        $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 50;
+        // Compter le total
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM notifications_queue");
+        $total = intval($countStmt->fetchColumn());
         
         $stmt = $pdo->prepare("
             SELECT nq.*, u.email, u.first_name, u.last_name, p.first_name as patient_first_name, p.last_name as patient_last_name
@@ -183,12 +195,26 @@ function handleGetNotificationsQueue() {
             LEFT JOIN users u ON nq.user_id = u.id AND u.deleted_at IS NULL
             LEFT JOIN patients p ON nq.patient_id = p.id AND p.deleted_at IS NULL
             ORDER BY nq.created_at DESC
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
         ");
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         
-        echo json_encode(['success' => true, 'queue' => $stmt->fetchAll()]);
+        $totalPages = ceil($total / $limit);
+        echo json_encode([
+            'success' => true, 
+            'queue' => $stmt->fetchAll(),
+            'pagination' => [
+                'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => ($offset + $limit) < $total,
+                'has_prev' => $offset > 0
+            ]
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);
@@ -602,11 +628,42 @@ function handleGetAuditLogs() {
     global $pdo;
     requirePermission('audit.view');
     
+    // Pagination
     $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    
+    // Si page est fourni, calculer offset
+    if ($page > 1 && $offset === 0) {
+        $offset = ($page - 1) * $limit;
+    }
+    
     $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : null;
     $action = isset($_GET['action']) ? $_GET['action'] : null;
     
     try {
+        // Compter le total
+        $countSql = "
+            SELECT COUNT(*)
+            FROM audit_logs al
+            WHERE 1=1
+        ";
+        $countParams = [];
+        if ($user_id) {
+            $countSql .= " AND al.user_id = :user_id";
+            $countParams['user_id'] = $user_id;
+        }
+        if ($action) {
+            $countSql .= " AND al.action LIKE :action";
+            $countParams['action'] = '%' . $action . '%';
+        }
+        $countStmt = $pdo->prepare($countSql);
+        foreach ($countParams as $key => $value) {
+            $countStmt->bindValue(':' . $key, $value);
+        }
+        $countStmt->execute();
+        $total = intval($countStmt->fetchColumn());
+        
         $sql = "
             SELECT al.*, u.email, u.first_name, u.last_name
             FROM audit_logs al
@@ -624,16 +681,30 @@ function handleGetAuditLogs() {
             $params['action'] = '%' . $action . '%';
         }
         
-        $sql .= " ORDER BY al.created_at DESC LIMIT :limit";
+        $sql .= " ORDER BY al.created_at DESC LIMIT :limit OFFSET :offset";
         
         $stmt = $pdo->prepare($sql);
         foreach ($params as $key => $value) {
             $stmt->bindValue(':' . $key, $value);
         }
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         
-        echo json_encode(['success' => true, 'logs' => $stmt->fetchAll()]);
+        $totalPages = ceil($total / $limit);
+        echo json_encode([
+            'success' => true, 
+            'logs' => $stmt->fetchAll(),
+            'pagination' => [
+                'total' => $total,
+                'limit' => $limit,
+                'offset' => $offset,
+                'page' => $page,
+                'total_pages' => $totalPages,
+                'has_next' => ($offset + $limit) < $total,
+                'has_prev' => $offset > 0
+            ]
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);

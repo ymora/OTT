@@ -903,6 +903,23 @@ function handleDatabaseView() {
        function handleHealthCheck() {
            global $pdo;
            
+           // Nettoyer le buffer de sortie AVANT tout header
+           if (ob_get_level() > 0) {
+               ob_clean();
+           }
+           
+           // Définir les headers CORS et JSON
+           header('Content-Type: application/json; charset=utf-8');
+           header('Access-Control-Allow-Origin: *');
+           header('Access-Control-Allow-Methods: GET, OPTIONS');
+           header('Access-Control-Allow-Headers: Content-Type, Authorization');
+           
+           // Gérer les requêtes OPTIONS (preflight)
+           if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+               http_response_code(200);
+               exit;
+           }
+           
            $health = [
                'success' => true,
                'service' => 'OTT API',
@@ -940,8 +957,8 @@ function handleDatabaseView() {
            $modules = [
                'api/helpers.php',
                'api/handlers/auth.php',
-               'api/handlers/devices.php',
-               'api/handlers/firmwares.php',
+               'api/handlers/devices/crud.php',
+               'api/handlers/firmwares/crud.php',
                'api/handlers/notifications.php'
            ];
            
@@ -955,7 +972,8 @@ function handleDatabaseView() {
            }
            
            http_response_code($health['status'] === 'online' ? 200 : 503);
-           echo json_encode($health, JSON_PRETTY_PRINT);
+           echo json_encode($health, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+           exit;
        }
 
 // ============================================================================
@@ -1284,15 +1302,22 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleListAllCommands();
 } elseif(preg_match('#/devices/(\d+)/history$#', $path, $m) && $method === 'GET') {
     handleGetDeviceHistory($m[1]);
+} elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'GET') {
+    // GET pour récupérer un seul dispositif
+    handleGetDevice($m[1]);
 } elseif(preg_match('#/device/(\d+)$#', $path, $m) && $method === 'GET') {
     // Compatibilité ancienne route
     handleGetDeviceHistory($m[1]);
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateDevice($m[1]);
+} elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PATCH') {
+    // PATCH pour mettre à jour un dispositif (pas pour restaurer)
+    handleUpdateDevice($m[1]);
+} elseif(preg_match('#/devices/(\d+)/restore$#', $path, $m) && $method === 'PATCH') {
+    // Route spécifique pour restaurer un dispositif archivé
+    handleRestoreDevice($m[1]);
 } elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteDevice($m[1]);
-} elseif(preg_match('#/devices/(\d+)$#', $path, $m) && $method === 'PATCH') {
-    handleRestoreDevice($m[1]);
 } elseif(preg_match('#/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'GET') {
     handleGetDeviceConfig($m[1]);
 } elseif(preg_match('#/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'PUT') {
