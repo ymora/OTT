@@ -1535,25 +1535,61 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
     }
     
     // Attendre l'enregistrement réseau avec feedWatchdog() régulier
-    // Augmenter le timeout à 30 secondes pour laisser plus de temps
+    // Augmenter le timeout à 60 secondes pour laisser plus de temps
     unsigned long networkWaitStart = millis();
     bool networkAttached = false;
-    while (millis() - networkWaitStart < 30000 && !networkAttached) {
+    uint8_t checkCount = 0;
+    while (millis() - networkWaitStart < 60000 && !networkAttached) {
       feedWatchdog();
-      if (modem.waitForNetwork(2000)) {
-        networkAttached = true;
-        logRadioSnapshot("attach:event");
-        Serial.println(F("[MODEM] ✅ Réseau attaché avec succès"));
-        return true;
-      }
-      // Vérifier périodiquement le statut d'enregistrement
+      
+      // Vérifier d'abord le statut d'enregistrement (plus fiable que waitForNetwork)
       RegStatus reg = modem.getRegistrationStatus();
       if (reg == REG_OK_HOME || reg == REG_OK_ROAMING) {
+        // Attendre un peu pour que la connexion se stabilise
+        delay(1000);
+        feedWatchdog();
+        
+        // Vérifier que isNetworkConnected() confirme
+        if (modem.isNetworkConnected()) {
+          networkAttached = true;
+          logRadioSnapshot("attach:success");
+          Serial.println(F("[MODEM] ✅ Réseau attaché (statut OK)"));
+          return true;
+        } else {
+          // Statut OK mais isNetworkConnected() retourne false - attendre un peu plus
+          Serial.println(F("[MODEM] ⏳ Statut OK mais connexion en cours de stabilisation..."));
+          delay(2000);
+          feedWatchdog();
+          if (modem.isNetworkConnected()) {
+            networkAttached = true;
+            logRadioSnapshot("attach:success");
+            Serial.println(F("[MODEM] ✅ Réseau attaché après stabilisation"));
+            return true;
+          }
+        }
+      }
+      
+      // Essayer aussi waitForNetwork avec un timeout plus long
+      if (checkCount % 5 == 0) { // Toutes les 5 itérations (environ toutes les 2.5 secondes)
+        if (modem.waitForNetwork(5000)) { // Timeout de 5 secondes au lieu de 2
+          networkAttached = true;
+          logRadioSnapshot("attach:event");
+          Serial.println(F("[MODEM] ✅ Réseau attaché avec succès (waitForNetwork)"));
+          return true;
+        }
+      }
+      
+      // Vérifier directement isNetworkConnected() périodiquement
+      if (checkCount % 3 == 0 && modem.isNetworkConnected()) {
         networkAttached = true;
-        logRadioSnapshot("attach:success");
-        Serial.println(F("[MODEM] ✅ Réseau attaché (statut OK)"));
+        logRadioSnapshot("attach:direct");
+        Serial.println(F("[MODEM] ✅ Réseau attaché (vérification directe)"));
         return true;
       }
+      
+      checkCount++;
+      delay(500); // Attendre 500ms entre les vérifications
+      feedWatchdog();
     }
     
     // Log du statut actuel
