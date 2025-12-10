@@ -73,34 +73,52 @@ function handleCompileFirmware($firmware_id) {
         // Vérifier que le firmware existe et est en attente de compilation
         try {
             sendSSE('log', 'info', 'Connexion établie, vérification du firmware...');
+            flush();
+            error_log('[handleCompileFirmware] Vérification firmware ID: ' . $firmware_id);
             
             // Inclure ino_content et bin_content pour stockage DB
             $stmt = $pdo->prepare("SELECT *, ino_content, bin_content FROM firmware_versions WHERE id = :id");
             $stmt->execute(['id' => $firmware_id]);
             $firmware = $stmt->fetch(PDO::FETCH_ASSOC);
+            error_log('[handleCompileFirmware] Firmware récupéré: ' . ($firmware ? 'OUI (version: ' . ($firmware['version'] ?? 'N/A') . ')' : 'NON'));
             
             if (!$firmware) {
+                error_log('[handleCompileFirmware] ❌ Firmware ID ' . $firmware_id . ' introuvable');
+                sendSSE('log', 'error', '❌ Firmware ID ' . $firmware_id . ' introuvable dans la base de données');
                 sendSSE('error', 'Firmware not found');
                 flush();
+                sleep(1); // Attendre que le client reçoive le message
                 return;
             }
             
             // Marquer immédiatement comme "compiling" dans la base de données
             // Cela permet de savoir que la compilation est en cours même si la connexion SSE se ferme
             // Permettre de compiler même si déjà compilé (pour recompiler)
-            $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = :id")->execute(['id' => $firmware_id]);
+            try {
+                $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = :id")->execute(['id' => $firmware_id]);
+                error_log('[handleCompileFirmware] ✅ Statut mis à jour à "compiling"');
+            } catch(PDOException $dbErr) {
+                error_log('[handleCompileFirmware] ⚠️ Erreur lors de la mise à jour du statut: ' . $dbErr->getMessage());
+                // Continuer quand même
+            }
             
             // Note: On permet maintenant de compiler même si le statut est 'compiled' ou 'error'
             // pour permettre de relancer la compilation
-            sendSSE('log', 'info', 'Démarrage de la compilation... (statut précédent: ' . ($firmware['status'] ?? 'unknown') . ')');
+            $previousStatus = $firmware['status'] ?? 'unknown';
+            sendSSE('log', 'info', 'Démarrage de la compilation... (statut précédent: ' . $previousStatus . ')');
             flush();
+            error_log('[handleCompileFirmware] Démarrage compilation - statut précédent: ' . $previousStatus);
             
             // Trouver le fichier .ino en utilisant la fonction helper simplifiée
             sendSSE('log', 'info', '🔍 Recherche du fichier .ino...');
+            flush();
             sendSSE('log', 'info', '   file_path DB: ' . ($firmware['file_path'] ?? 'N/A'));
+            flush();
             sendSSE('log', 'info', '   ID firmware: ' . $firmware_id);
+            flush();
             sendSSE('log', 'info', '   Stocké en DB (BYTEA): ' . (!empty($firmware['ino_content']) ? 'OUI' : 'NON'));
             flush();
+            error_log('[handleCompileFirmware] Recherche fichier .ino pour firmware ID: ' . $firmware_id);
             
             try {
             $ino_path = findFirmwareInoFile($firmware_id, $firmware);
