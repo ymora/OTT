@@ -2,7 +2,7 @@
 # AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL - OTT Dashboard
 # ===============================================================================
 # HAPPLYZ MEDICAL SAS
-# Version 2.1 - Analyse exhaustive optimisee
+# Version 2.2 - Analyse exhaustive optimisee avec detection variables inutilisees et optimisations
 #
 # Ce script effectue un audit 360 degres couvrant 16 domaines
 # Usage : .\scripts\AUDIT_COMPLET_AUTOMATIQUE.ps1 [-Verbose]
@@ -2440,14 +2440,22 @@ if ($todoFiles.Count -gt 0) {
 }
 
 # console.log oubliés (hors logger.js)
-$consoleLogs = Select-String -Path "*.js","*.jsx","*.ts","*.tsx" -Pattern "console\.(log|warn|error)" -ErrorAction SilentlyContinue | 
+$consoleLogs = Select-String -Path "*.js","*.jsx","*.ts","*.tsx" -Pattern "console\.(log|debug|warn|error)" -ErrorAction SilentlyContinue | 
     Where-Object { $_.Path -notmatch "node_modules|\.next|build|logger\.js|inject\.js" }
 $consoleCount = ($consoleLogs | Measure-Object).Count
-if ($consoleCount -gt 20) {
-    Write-Warn "$consoleCount console.log detectes (>20)"
-    $auditResults.Recommendations += "Remplacer console.log par logger"
+if ($consoleCount -gt 0) {
+    Write-Warn "$consoleCount console.log detectes"
+    # Afficher les fichiers concernés
+    $consoleFiles = $consoleLogs | Group-Object Path | Sort-Object Count -Descending
+    foreach ($file in $consoleFiles | Select-Object -First 5) {
+        Write-Info "  - $($file.Name): $($file.Count) occurrence(s)"
+    }
+    if ($consoleFiles.Count -gt 5) {
+        Write-Info "  ... et $($consoleFiles.Count - 5) autre(s) fichier(s)"
+    }
+    $auditResults.Recommendations += "Remplacer $consoleCount console.log par logger"
 } else {
-    Write-OK "$consoleCount console.log (acceptable)"
+    Write-OK "Aucun console.log detecte"
 }
 
 Write-Host ""
