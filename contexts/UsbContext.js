@@ -1628,18 +1628,24 @@ export function UsbProvider({ children }) {
       
       let device = null
       
-      // Si on a un deviceId, récupérer directement le dispositif
-      if (deviceId) {
-        const response = await fetchJson(
-          fetchWithAuth,
-          API_URL,
-          `/api.php/devices/${deviceId}`,
-          { method: 'GET' },
-          { requiresAuth: true }
-        )
-        
-        if (response.success && response.device) {
-          device = response.device
+      // Si on a un deviceId numérique, récupérer directement le dispositif
+      // L'API n'accepte que les IDs numériques pour /devices/{id}
+      if (deviceId && /^\d+$/.test(String(deviceId))) {
+        try {
+          const response = await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/devices/${deviceId}`,
+            { method: 'GET' },
+            { requiresAuth: true }
+          )
+          
+          if (response.success && response.device) {
+            device = response.device
+          }
+        } catch (error) {
+          // Si l'endpoint échoue, on continue avec la recherche dans la liste complète
+          logger.debug('⚠️ Erreur récupération device par ID, fallback sur liste complète:', error)
         }
       }
       
