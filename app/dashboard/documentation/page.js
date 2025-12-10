@@ -1135,14 +1135,19 @@ function MarkdownViewer({ fileName }) {
         labels: ['0-2h', '2-4h', '4-6h', '6-8h', '8-10h', '10h+'],
         datasets: [{
           label: 'Nombre de jours',
-          data: [
-            chartData.dailyData.filter(d => d.hours >= 0 && d.hours < 2).length,
-            chartData.dailyData.filter(d => d.hours >= 2 && d.hours < 4).length,
-            chartData.dailyData.filter(d => d.hours >= 4 && d.hours < 6).length,
-            chartData.dailyData.filter(d => d.hours >= 6 && d.hours < 8).length,
-            chartData.dailyData.filter(d => d.hours >= 8 && d.hours < 10).length,
-            chartData.dailyData.filter(d => d.hours >= 10).length
-          ],
+          data: (() => {
+            // Optimiser les filtres avec un seul passage sur les données
+            const ranges = [0, 0, 0, 0, 0, 0] // [0-2h, 2-4h, 4-6h, 6-8h, 8-10h, 10h+]
+            chartData.dailyData.forEach(d => {
+              if (d.hours >= 0 && d.hours < 2) ranges[0]++
+              else if (d.hours >= 2 && d.hours < 4) ranges[1]++
+              else if (d.hours >= 4 && d.hours < 6) ranges[2]++
+              else if (d.hours >= 6 && d.hours < 8) ranges[3]++
+              else if (d.hours >= 8 && d.hours < 10) ranges[4]++
+              else if (d.hours >= 10) ranges[5]++
+            })
+            return ranges
+          })(),
           backgroundColor: 'rgba(168, 85, 247, 0.8)',
           borderColor: 'rgb(168, 85, 247)',
           borderWidth: 2,
