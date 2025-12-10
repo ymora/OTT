@@ -709,7 +709,9 @@ export default function DebugTab() {
     
     const device = usbConnectedDevice || usbVirtualDevice
     const identifier = device.sim_iccid || device.device_serial
-    const deviceId = device.id // ID du dispositif dans la BDD si disponible
+    // ID du dispositif dans la BDD si disponible (uniquement si numérique)
+    // Les IDs temporaires comme "usb_info_123456" ne sont pas valides pour l'API
+    const deviceId = device.id && /^\d+$/.test(String(device.id)) ? device.id : null
     
     if (!identifier || !checkOtaSync) {
       return
