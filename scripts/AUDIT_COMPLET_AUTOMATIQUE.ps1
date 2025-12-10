@@ -965,7 +965,7 @@ if ($paginatedEndpoints.Count -gt 5) {
     $optimizationScore -= 0.5
 }
 
-# 4. Vérifier imports inutilisés React
+# 4. Vérifier imports inutilisés React (détection précise améliorée)
 Write-Host "`n4. Imports React:" -ForegroundColor Yellow
 $jsFiles = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
     $_.FullName -match '\\app\\|\\components\\|\\hooks\\' -and
@@ -977,39 +977,36 @@ $unusedImports = 0
 $unusedImportsDetails = @()
 foreach ($file in $jsFiles) {
     $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
-    if ($content) {
-        # Extraire les imports (tous les formats: import X from, import {X} from, import * as X from)
-        $importPatterns = @(
-            'import\s+\{([^}]+)\}\s+from\s+[''"]([^''"]+)[''"]',  # import {X, Y} from 'module'
-            'import\s+(\w+)\s+from\s+[''"]([^''"]+)[''"]',        # import X from 'module'
-            'import\s+\*\s+as\s+(\w+)\s+from\s+[''"]([^''"]+)[''"]' # import * as X from 'module'
-        )
+    $lines = Get-Content $file.FullName -ErrorAction SilentlyContinue
+    if ($content -and $lines) {
+        # Extraire les imports avec la même logique que detect-unused-imports.ps1
+        $imports = @()
+        foreach ($line in $lines) {
+            if ($line -match '^import\s+(?:(\w+)|(?:\{([^}]+)\})|(?:\*\s+as\s+(\w+)))\s+from') {
+                if ($matches[1]) {
+                    # import X from
+                    $imports += $matches[1]
+                } elseif ($matches[2]) {
+                    # import { X, Y } from
+                    $parts = $matches[2] -split ',' | ForEach-Object { $_.Trim() -replace 'as\s+\w+', '' -replace '\s+as\s+\w+', '' }
+                    $imports += $parts | ForEach-Object { if ($_ -match '^\s*(\w+)') { $matches[1] } }
+                } elseif ($matches[3]) {
+                    # import * as X from
+                    $imports += $matches[3]
+                }
+            }
+        }
         
-        foreach ($pattern in $importPatterns) {
-            $imports = [regex]::Matches($content, $pattern)
-            foreach ($imp in $imports) {
-                $modulePath = $imp.Groups[2].Value
-                if ($imp.Groups[1].Value) {
-                    # Format import {X, Y} from ou import X from
-                    $importedNames = $imp.Groups[1].Value -split ',' | ForEach-Object { $_.Trim() -replace 'as\s+\w+', '' }
-                    foreach ($name in $importedNames) {
-                        $cleanName = $name.Trim()
-                        if ($cleanName -and $cleanName -ne 'type' -and $cleanName.Length -gt 2) {
-                            # Extraire le nom du module pour vérification intelligente
-                            $moduleName = Split-Path $modulePath -Leaf
-                            $moduleName = $moduleName -replace '\.(js|jsx|ts|tsx)$', ''
-                            if ($moduleName -eq 'index') {
-                                $moduleName = Split-Path (Split-Path $modulePath -Parent) -Leaf
-                            }
-                            
-                            # Vérifier si utilisé dans le fichier (hors import)
-                            $contentWithoutImports = $content -replace 'import[^;]+;', ''
-                            if ($contentWithoutImports -notmatch "\b$([regex]::Escape($cleanName))\b") {
-                                $unusedImports++
-                                $unusedImportsDetails += "$($file.Name): $cleanName (de $modulePath)"
-                            }
-                        }
-                    }
+        # Vérifier chaque import
+        foreach ($import in $imports) {
+            if ($import) {
+                # Compter les occurrences (hors ligne d'import)
+                $pattern = "\b$([regex]::Escape($import))\b"
+                $count = ([regex]::Matches($content, $pattern)).Count
+                # Si seulement 1 occurrence, c'est probablement juste l'import
+                if ($count -le 1) {
+                    $unusedImports++
+                    $unusedImportsDetails += "$($file.Name): $import"
                 }
             }
         }
