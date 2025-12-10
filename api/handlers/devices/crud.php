@@ -787,13 +787,22 @@ function handleDeleteDevice($device_id) {
         }
         
         if ($forcePermanent && $isAdmin) {
-            $pdo->prepare("DELETE FROM device_events WHERE device_id = :id")->execute(['id' => $device_id]);
-            $pdo->prepare("DELETE FROM device_configurations WHERE device_id = :id")->execute(['id' => $device_id]);
-            $pdo->prepare("DELETE FROM device_commands WHERE device_id = :id")->execute(['id' => $device_id]);
-            $pdo->prepare("DELETE FROM alerts WHERE device_id = :id")->execute(['id' => $device_id]);
-            $pdo->prepare("DELETE FROM usb_logs WHERE device_identifier = :iccid OR device_identifier = :serial")
-                ->execute(['iccid' => $device['sim_iccid'], 'serial' => $device['device_serial']]);
-            $pdo->prepare("DELETE FROM devices WHERE id = :id")->execute(['id' => $device_id]);
+            // Préparer toutes les requêtes DELETE une seule fois pour optimiser
+            $deleteStmts = [
+                'events' => $pdo->prepare("DELETE FROM device_events WHERE device_id = :id"),
+                'config' => $pdo->prepare("DELETE FROM device_configurations WHERE device_id = :id"),
+                'commands' => $pdo->prepare("DELETE FROM device_commands WHERE device_id = :id"),
+                'alerts' => $pdo->prepare("DELETE FROM alerts WHERE device_id = :id"),
+                'usb_logs' => $pdo->prepare("DELETE FROM usb_logs WHERE device_identifier = :iccid OR device_identifier = :serial"),
+                'device' => $pdo->prepare("DELETE FROM devices WHERE id = :id")
+            ];
+            
+            $deleteStmts['events']->execute(['id' => $device_id]);
+            $deleteStmts['config']->execute(['id' => $device_id]);
+            $deleteStmts['commands']->execute(['id' => $device_id]);
+            $deleteStmts['alerts']->execute(['id' => $device_id]);
+            $deleteStmts['usb_logs']->execute(['iccid' => $device['sim_iccid'], 'serial' => $device['device_serial']]);
+            $deleteStmts['device']->execute(['id' => $device_id]);
             
             auditLog('device.permanently_deleted', 'device', $device_id, $device, null);
             $message = $wasAssigned 
