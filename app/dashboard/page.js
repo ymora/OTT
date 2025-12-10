@@ -4,14 +4,14 @@
 export const dynamic = 'force-dynamic'
 
 import { useMemo, useState } from 'react'
-import dynamicImport from 'next/dynamic'
+import dynamic from 'next/dynamic'
 import { useApiData, useAutoRefresh } from '@/hooks'
 import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 
 // Lazy load de la carte pour accélérer le chargement
-const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr: false })
+const LeafletMap = dynamic(() => import('@/components/LeafletMap'), { ssr: false })
 
 export default function DashboardPage() {
   const { isConnected, usbConnectedDevice, usbVirtualDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()

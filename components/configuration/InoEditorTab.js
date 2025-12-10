@@ -10,7 +10,7 @@ import Modal from '@/components/Modal'
 import logger from '@/lib/logger'
 
 export default function InoEditorTab({ onUploadSuccess }) {
-  const { fetchWithAuth, API_URL, token } = useAuth()
+  const { fetchWithAuth, API_URL } = useAuth()
   const [selectedFile, setSelectedFile] = useState(null)
   const [inoContent, setInoContent] = useState('')
   const [originalContent, setOriginalContent] = useState('')

@@ -514,8 +514,14 @@ function handleCreateTestDevices() {
         $created = [];
         $errors = [];
         
-        // Préparer la requête SELECT une seule fois avant la boucle pour éviter N+1
+        // Préparer toutes les requêtes une seule fois avant la boucle pour éviter N+1
         $checkStmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :sim_iccid AND deleted_at IS NULL");
+        $insertStmt = $pdo->prepare("
+            INSERT INTO devices (sim_iccid, device_serial, device_name, firmware_version, status, patient_id, installation_date, first_use_date)
+            VALUES (:sim_iccid, :device_serial, :device_name, :firmware_version, :status, NULL, NULL, NULL)
+            RETURNING *
+        ");
+        $configInsertStmt = $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id) ON CONFLICT (device_id) DO NOTHING");
         
         foreach ($testDevices as $testDevice) {
             try {
@@ -525,22 +531,16 @@ function handleCreateTestDevices() {
                     continue;
                 }
                 
-                $stmt = $pdo->prepare("
-                    INSERT INTO devices (sim_iccid, device_serial, device_name, firmware_version, status, patient_id, installation_date, first_use_date)
-                    VALUES (:sim_iccid, :device_serial, :device_name, :firmware_version, :status, NULL, NULL, NULL)
-                    RETURNING *
-                ");
-                $stmt->execute([
+                $insertStmt->execute([
                     'sim_iccid' => $testDevice['sim_iccid'],
                     'device_serial' => $testDevice['device_serial'],
                     'device_name' => $testDevice['device_name'],
                     'firmware_version' => $testDevice['firmware_version'],
                     'status' => $testDevice['status']
                 ]);
-                $device = $stmt->fetch();
+                $device = $insertStmt->fetch();
                 
-                $pdo->prepare("INSERT INTO device_configurations (device_id) VALUES (:device_id) ON CONFLICT (device_id) DO NOTHING")
-                    ->execute(['device_id' => $device['id']]);
+                $configInsertStmt->execute(['device_id' => $device['id']]);
                 
                 auditLog('device.created', 'device', $device['id'], null, $device);
                 $created[] = $device;
