@@ -53,5 +53,5 @@ Write-Host "  Actions GitHub: https://github.com/$repo/actions" -ForegroundColor
 Write-Host "  Pages Settings: https://github.com/$repo/settings/pages" -ForegroundColor Yellow
 Write-Host "  Site Live: $baseUrl" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "💡 Astuce: Le déploiement prend généralement 2-5 minutes après un push" -ForegroundColor Gray
+Write-Host "Astuce: Le deploiement prend generalement 2-5 minutes apres un push" -ForegroundColor Gray
 
