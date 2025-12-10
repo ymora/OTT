@@ -1429,7 +1429,10 @@ export default function DeviceModal({
             <Accordion title="🔄 OTA" defaultOpen={false}>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="URL principale pour télécharger les mises à jour du firmware (OTA - Over The Air). Le dispositif télécharge le nouveau firmware depuis cette URL quand une mise à jour est disponible."
+                  >
                     URL primaire
                   </label>
                   <input
@@ -1439,10 +1442,14 @@ export default function DeviceModal({
                     onChange={handleInputChange}
                     className="input w-full text-sm py-1.5"
                     placeholder="https://..."
+                    title="URL principale pour les mises à jour OTA. Exemple: https://votre-serveur.com/firmware/latest.bin"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="URL de secours pour les mises à jour OTA. Si le téléchargement depuis l'URL primaire échoue, le dispositif essaie cette URL de secours. Utile pour la redondance."
+                  >
                     URL de secours
                   </label>
                   <input
@@ -1452,10 +1459,14 @@ export default function DeviceModal({
                     onChange={handleInputChange}
                     className="input w-full text-sm py-1.5"
                     placeholder="https://..."
+                    title="URL de secours si l'URL primaire échoue. Optionnel mais recommandé pour la fiabilité."
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Checksum MD5 du fichier firmware attendu. Le dispositif vérifie que le firmware téléchargé correspond à ce MD5 pour s'assurer de l'intégrité et éviter les corruptions. Format: 32 caractères hexadécimaux."
+                  >
                     MD5 attendu (vérification)
                   </label>
                   <input
@@ -1466,7 +1477,7 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5 font-mono"
                     placeholder="a1b2c3d4e5f6..."
                     pattern="[a-fA-F0-9]{32}"
-                    title="32 caractères hexadécimaux"
+                    title="MD5 du firmware (32 caractères hex). Le dispositif vérifie l'intégrité du firmware téléchargé avec ce MD5 pour éviter les corruptions."
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Hash MD5 pour vérifier l'intégrité du firmware OTA
