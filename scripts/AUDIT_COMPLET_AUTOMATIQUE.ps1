@@ -31,7 +31,7 @@ Write-Host "====================================================================
 Write-Host "[AUDIT] AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL - OTT Dashboard" -ForegroundColor Cyan
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host "Date     : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
-Write-Host "Version  : 2.2 - Analyse Exhaustive Optimisée" -ForegroundColor Cyan
+Write-Host "Version  : 2.2 - Analyse Exhaustive Optimisée (variables inutilisées, optimisations .filter())" -ForegroundColor Cyan
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -657,6 +657,130 @@ try {
     Write-OK "Optimisations React: $memoUsage useMemo/useCallback"
     Write-OK "Cache: $cacheUsage utilisations"
     
+    # NOUVEAU: Vérifier optimisations .filter() sans useMemo
+    Write-Info "Analyse optimisations .filter() sans useMemo..."
+    $filterOptimizationIssues = @()
+    $pagesFiles = @($searchFiles | Where-Object { $_.FullName -match '\\app\\dashboard\\' -and $_.Name -eq 'page.js' })
+    foreach ($file in $pagesFiles) {
+        $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            $filterCount = ([regex]::Matches($content, "\.filter\(")).Count
+            $mapCount = ([regex]::Matches($content, "\.map\(")).Count
+            $findCount = ([regex]::Matches($content, "\.find\(")).Count
+            $useMemoCount = ([regex]::Matches($content, "useMemo")).Count
+            $useCallbackCount = ([regex]::Matches($content, "useCallback")).Count
+            $totalOptimizations = $useMemoCount + $useCallbackCount
+            $totalOperations = $filterCount + $mapCount + $findCount
+            
+            if ($filterCount -gt 5 -and $totalOptimizations -lt $filterCount) {
+                $filterOptimizationIssues += "$($file.Name): $filterCount .filter() mais seulement $totalOptimizations useMemo/useCallback"
+            }
+        }
+    }
+    if ($filterOptimizationIssues.Count -gt 0) {
+        Write-Warn "  $($filterOptimizationIssues.Count) fichier(s) avec beaucoup de .filter() sans useMemo"
+        foreach ($issue in $filterOptimizationIssues) {
+            Write-Info "    - $issue"
+        }
+        $auditResults.Warnings += "Performance: $($filterOptimizationIssues.Count) fichier(s) avec .filter() non optimisés"
+        $auditResults.Scores["Performance"] = [Math]::Max(7, $auditResults.Scores["Performance"] - 0.5)
+    } else {
+        Write-OK "  Optimisations .filter() appropriées"
+    }
+    
+    # NOUVEAU: Vérifier variables inutilisées
+    Write-Info "Analyse variables inutilisées..."
+    $unusedVariables = @()
+    foreach ($file in $pagesFiles) {
+        $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            # Extraire les déclarations de variables (const, let, var)
+            $varDeclarations = [regex]::Matches($content, "(const|let|var)\s+(\w+)\s*=", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+            foreach ($decl in $varDeclarations) {
+                $varName = $decl.Groups[2].Value
+                # Ignorer les hooks React et les variables système
+                if ($varName -notmatch '^(use|set|is|has|can|should|will|did|prev|next|current|ref)$') {
+                    # Compter les occurrences (déclaration + utilisations)
+                    $usageCount = ([regex]::Matches($content, "\b$([regex]::Escape($varName))\b")).Count
+                    # Si utilisé seulement 1 fois (déclaration), c'est inutilisé
+                    if ($usageCount -eq 1) {
+                        $unusedVariables += "$($file.Name): $varName"
+                    }
+                }
+            }
+        }
+    }
+    if ($unusedVariables.Count -gt 0) {
+        Write-Warn "  $($unusedVariables.Count) variable(s) possiblement inutilisée(s)"
+        foreach ($var in $unusedVariables | Select-Object -First 10) {
+            Write-Info "    - $var"
+        }
+        if ($unusedVariables.Count -gt 10) {
+            Write-Info "    ... et $($unusedVariables.Count - 10) autre(s)"
+        }
+        $auditResults.Warnings += "Code mort: $($unusedVariables.Count) variable(s) inutilisée(s) détectée(s)"
+        $auditResults.Scores["Performance"] = [Math]::Max(7, $auditResults.Scores["Performance"] - 0.3)
+    } else {
+        Write-OK "  Aucune variable inutilisée détectée"
+    }
+    
+    # NOUVEAU: Vérifier doublons de code (fonctions dupliquées)
+    Write-Info "Analyse doublons de code..."
+    $duplicateFunctions = @()
+    $allFunctionNames = @{}
+    foreach ($file in $pagesFiles) {
+        $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            # Extraire les noms de fonctions
+            $functions = [regex]::Matches($content, "(const|function)\s+(\w+)\s*=", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+            foreach ($func in $functions) {
+                $funcName = $func.Groups[2].Value
+                if ($allFunctionNames.ContainsKey($funcName)) {
+                    $duplicateFunctions += "$funcName (dans $($allFunctionNames[$funcName]) et $($file.Name))"
+                } else {
+                    $allFunctionNames[$funcName] = $file.Name
+                }
+            }
+        }
+    }
+    if ($duplicateFunctions.Count -gt 0) {
+        Write-Warn "  $($duplicateFunctions.Count) fonction(s) dupliquée(s) détectée(s)"
+        foreach ($dup in $duplicateFunctions | Select-Object -First 5) {
+            Write-Info "    - $dup"
+        }
+        $auditResults.Warnings += "Code dupliqué: $($duplicateFunctions.Count) fonction(s) dupliquée(s)"
+    } else {
+        Write-OK "  Aucun doublon de fonction détecté"
+    }
+    
+    # NOUVEAU: Vérifier complexité par fichier
+    Write-Info "Analyse complexité par fichier..."
+    $complexFiles = @()
+    foreach ($file in $pagesFiles) {
+        $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            $ifCount = ([regex]::Matches($content, "\bif\s*\(")).Count
+            $forCount = ([regex]::Matches($content, "\bfor\s*\(")).Count
+            $whileCount = ([regex]::Matches($content, "\bwhile\s*\(")).Count
+            $totalComplexity = $ifCount + $forCount + $whileCount
+            $lineCount = (Get-Content $file.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines
+            
+            # Fichier volumineux (>500 lignes) ou complexité élevée (>50 conditions)
+            if ($lineCount -gt 500 -or $totalComplexity -gt 50) {
+                $complexFiles += "$($file.Name): $lineCount lignes, $totalComplexity conditions (if:$ifCount, for:$forCount, while:$whileCount)"
+            }
+        }
+    }
+    if ($complexFiles.Count -gt 0) {
+        Write-Warn "  $($complexFiles.Count) fichier(s) volumineux ou complexe(s)"
+        foreach ($complex in $complexFiles) {
+            Write-Info "    - $complex"
+        }
+        $auditResults.Recommendations += "Refactorisation: $($complexFiles.Count) fichier(s) volumineux/complexe(s) à considérer"
+    } else {
+        Write-OK "  Complexité des fichiers acceptable"
+    }
+    
     # Requetes dans loops (N+1)
     $loopQueries = @($searchFiles | Where-Object { 
         $_.FullName -match '\\app\\|\\components\\|\\hooks\\' 
@@ -665,9 +789,13 @@ try {
     if ($loopQueries.Count -gt 0) {
         Write-Warn "Requetes dans loops detectees: $($loopQueries.Count)"
         $auditResults.Warnings += "Performance: $($loopQueries.Count) requetes dans loops"
-        $auditResults.Scores["Performance"] = 8
+        $auditResults.Scores["Performance"] = [Math]::Max(7, ($auditResults.Scores["Performance"] - 0.5))
     } else {
         Write-OK "Pas de requetes N+1 detectees"
+    }
+    
+    # Ajuster le score final de performance
+    if (-not $auditResults.Scores.ContainsKey("Performance")) {
         $auditResults.Scores["Performance"] = 10
     }
 } catch {
@@ -869,7 +997,14 @@ foreach ($file in $jsFiles) {
 
 if ($unusedImports -gt 10) {
     Write-Warn "  $unusedImports imports potentiellement inutilisés (à vérifier manuellement)"
+    foreach ($detail in $unusedImportsDetails | Select-Object -First 10) {
+        Write-Info "    - $detail"
+    }
+    if ($unusedImportsDetails.Count -gt 10) {
+        Write-Info "    ... et $($unusedImportsDetails.Count - 10) autre(s)"
+    }
     $optimizationScore -= 0.3
+    $auditResults.Warnings += "Code mort: $unusedImports import(s) potentiellement inutilisé(s)"
 } else {
     Write-OK "  Imports optimisés (< 10 suspects)"
 }
