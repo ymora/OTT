@@ -951,12 +951,30 @@ bool startModem()
   }
 
   // Configuration APN pour internet (type IP, pas MMS)
+  // Détecter l'opérateur et utiliser l'APN recommandé si disponible
+  String oper = modem.getOperator();
+  String apnToUse = NETWORK_APN;
+  if (oper.length() > 0) {
+    String recommendedApn = getRecommendedApnForOperator(oper);
+    if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
+      Serial.printf("[MODEM] ✅ Opérateur détecté: %s → Utilisation APN recommandé: %s (au lieu de %s)\n", 
+                    oper.c_str(), recommendedApn.c_str(), NETWORK_APN.c_str());
+      apnToUse = recommendedApn;
+      NETWORK_APN = apnToUse; // Mettre à jour pour cette session
+    } else {
+      Serial.printf("[MODEM] ℹ️  Opérateur détecté: %s → Utilisation APN configuré: %s\n", 
+                    oper.c_str(), NETWORK_APN.c_str());
+    }
+  } else {
+    Serial.printf("[MODEM] ⚠️  Opérateur non détecté → Utilisation APN configuré: %s\n", NETWORK_APN.c_str());
+  }
+  
   // Pour Free Mobile: APN="free" (internet), pas "mmsfree" (MMS uniquement)
   // Format: +CGDCONT=1,"IP","free" (1=context ID, IP=type internet, free=APN)
-  modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), NETWORK_APN.c_str(), "\"");
+  modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), apnToUse.c_str(), "\"");
   modem.waitResponse(2000);
   if (!isUsbMode) {
-    Serial.printf("[MODEM] APN=%s (type: IP pour internet)\n", NETWORK_APN.c_str());
+    Serial.printf("[MODEM] APN=%s (type: IP pour internet)\n", apnToUse.c_str());
   }
 
   if (!attachNetwork(networkAttachTimeoutMs)) {
@@ -1439,6 +1457,28 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
   Serial.println(F("[MODEM] attache réseau en cours (avec retry)"));
   logRadioSnapshot("attach:start");
   
+  // NOUVEAU: Détecter l'opérateur et utiliser l'APN recommandé dès le début si disponible
+  String oper = modem.getOperator();
+  String apnToUse = NETWORK_APN;
+  if (oper.length() > 0) {
+    Serial.printf("[MODEM] 📡 Opérateur détecté: %s\n", oper.c_str());
+    String recommendedApn = getRecommendedApnForOperator(oper);
+    if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
+      Serial.printf("[MODEM] ✅ Utilisation APN recommandé: %s (au lieu de %s)\n", 
+                    recommendedApn.c_str(), NETWORK_APN.c_str());
+      apnToUse = recommendedApn;
+      // Configurer l'APN recommandé dès le début
+      modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), apnToUse.c_str(), "\"");
+      modem.waitResponse(2000);
+      // Mettre à jour NETWORK_APN pour cette session
+      NETWORK_APN = apnToUse;
+    } else {
+      Serial.printf("[MODEM] ℹ️  Utilisation APN configuré: %s\n", NETWORK_APN.c_str());
+    }
+  } else {
+    Serial.printf("[MODEM] ⚠️  Opérateur non détecté, utilisation APN configuré: %s\n", NETWORK_APN.c_str());
+  }
+  
   // NOUVEAU: Attendre que le modem se stabilise et vérifier CSQ
   // Le modem peut avoir besoin de plus de temps après l'initialisation
   Serial.println(F("[MODEM] Attente stabilisation modem (5s)..."));
@@ -1512,16 +1552,19 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
     // Obtenir le statut d'enregistrement
     RegStatus reg = modem.getRegistrationStatus();
     
-    // Si REG_DENIED, essayer avec un APN alternatif
-    if (reg == REG_DENIED && retryCount == 0) {
-      String oper = modem.getOperator();
-      if (oper.length() > 0) {
-        String recommendedApn = getRecommendedApnForOperator(oper);
+    // Si REG_DENIED, essayer avec un APN alternatif (fallback)
+    if (reg == REG_DENIED && retryCount == 0 && apnToUse == NETWORK_APN) {
+      // Si on n'a pas encore utilisé l'APN recommandé, l'essayer maintenant
+      String oper2 = modem.getOperator();
+      if (oper2.length() > 0) {
+        String recommendedApn = getRecommendedApnForOperator(oper2);
         if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
-          Serial.printf("[MODEM] ⚠️  Tentative avec APN alternatif: %s (au lieu de %s)\n", 
+          Serial.printf("[MODEM] ⚠️  REG_DENIED - Tentative avec APN alternatif: %s (au lieu de %s)\n", 
                         recommendedApn.c_str(), NETWORK_APN.c_str());
           modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), recommendedApn.c_str(), "\"");
           modem.waitResponse(2000);
+          apnToUse = recommendedApn;
+          NETWORK_APN = apnToUse;
           
           // Remplacer delay() long par boucle avec feedWatchdog()
           unsigned long apnDelayStart = millis();
@@ -2384,6 +2427,7 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     // Afficher un résumé de ce qui a été modifié
     Serial.println("✅ [CMD] Configuration appliquée et sauvegardée en NVS");
     Serial.printf("    • Serial: %s | ICCID: %s\n", DEVICE_SERIAL.c_str(), DEVICE_ICCID.substring(0,10).c_str());
+    Serial.printf("    • APN: %s | PIN: %s\n", NETWORK_APN.c_str(), SIM_PIN.length() > 0 ? "***" : "non configuré");
     Serial.printf("    • Sleep: %d min | GPS: %s | Envoi: tous les %d wakeup(s)\n", 
                   configuredSleepMinutes, gpsEnabled ? "ON" : "OFF", sendEveryNWakeups);
     
