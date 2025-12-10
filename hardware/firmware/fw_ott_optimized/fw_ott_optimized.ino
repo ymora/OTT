@@ -2418,6 +2418,23 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
         }
       }
     }
+    if (payloadDoc.containsKey("roaming_enabled")) {
+      bool newRoamingState = payloadDoc["roaming_enabled"].as<bool>();
+      if (newRoamingState != roamingEnabled) {
+        roamingEnabled = newRoamingState;
+        Serial.printf("✅ [CMD] Itinérance changée: %s → %s\n", 
+                      roamingEnabled ? "OFF" : "ON", 
+                      roamingEnabled ? "ON" : "OFF");
+        if (roamingEnabled) {
+          Serial.println(F("[MODEM] ✅ Itinérance activée - Le dispositif peut utiliser le réseau d'autres opérateurs"));
+          sendLog("INFO", "Itinérance activée via commande OTA");
+        } else {
+          Serial.println(F("[MODEM] ⚠️  Itinérance désactivée - Seul le réseau de l'opérateur sera accepté"));
+          Serial.println(F("[MODEM] 💡 Si le dispositif est en itinérance, il se déconnectera au prochain cycle"));
+          sendLog("INFO", "Itinérance désactivée via commande OTA");
+        }
+      }
+    }
     if (payloadDoc.containsKey("ota_primary_url")) {
       otaPrimaryUrl = payloadDoc["ota_primary_url"].as<String>();
     }
@@ -2441,8 +2458,8 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     Serial.println("✅ [CMD] Configuration appliquée et sauvegardée en NVS");
     Serial.printf("    • Serial: %s | ICCID: %s\n", DEVICE_SERIAL.c_str(), DEVICE_ICCID.substring(0,10).c_str());
     Serial.printf("    • APN: %s | PIN: %s\n", NETWORK_APN.c_str(), SIM_PIN.length() > 0 ? "***" : "non configuré");
-    Serial.printf("    • Sleep: %d min | GPS: %s | Envoi: tous les %d wakeup(s)\n", 
-                  configuredSleepMinutes, gpsEnabled ? "ON" : "OFF", sendEveryNWakeups);
+    Serial.printf("    • Sleep: %d min | GPS: %s | Roaming: %s | Envoi: tous les %d wakeup(s)\n", 
+                  configuredSleepMinutes, gpsEnabled ? "ON" : "OFF", roamingEnabled ? "ON" : "OFF", sendEveryNWakeups);
     
     bool ackOk = acknowledgeCommand(cmd, true, "config updated");
     Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
