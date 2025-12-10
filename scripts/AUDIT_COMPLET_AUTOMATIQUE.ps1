@@ -997,14 +997,65 @@ foreach ($file in $jsFiles) {
             }
         }
         
-        # Vérifier chaque import
+        # Liste des hooks React standards (toujours utilisés, ignorer)
+        $reactHooks = @('useState', 'useEffect', 'useMemo', 'useCallback', 'useRef', 'useContext', 
+                        'useReducer', 'useLayoutEffect', 'useImperativeHandle', 'useDebugValue',
+                        'useRouter', 'usePathname', 'useSearchParams', 'useAuth', 'useUsb')
+        
+        # Vérifier chaque import avec détection améliorée
         foreach ($import in $imports) {
             if ($import) {
-                # Compter les occurrences (hors ligne d'import)
-                $pattern = "\b$([regex]::Escape($import))\b"
-                $count = ([regex]::Matches($content, $pattern)).Count
-                # Si seulement 1 occurrence, c'est probablement juste l'import
-                if ($count -le 1) {
+                # Ignorer les hooks React standards
+                if ($reactHooks -contains $import) {
+                    continue
+                }
+                
+                # Retirer les lignes d'import pour éviter les faux positifs
+                $contentWithoutImports = $content -replace '(?m)^import\s+[^;]+;?\s*$', ''
+                
+                # Patterns de détection d'utilisation (plus précis)
+                $usagePatterns = @(
+                    "<$import",           # JSX: <ComponentName
+                    "<$import\s",         # JSX: <ComponentName 
+                    "<$import>",          # JSX: <ComponentName>
+                    "</$import>",         # JSX: </ComponentName>
+                    "\b$import\s*\(",     # Appel fonction: ComponentName(
+                    "\b$import\s*\.",     # Propriété: ComponentName.
+                    "\b$import\s*\[",     # Tableau: ComponentName[
+                    "\b$import\s*\?",     # Optional: ComponentName?
+                    "\b$import\s*!",      # Non-null: ComponentName!
+                    "\b$import\s*:",      # Type/param: ComponentName:
+                    "\b$import\s*=",      # Assignation: ComponentName =
+                    "\b$import\s*,",      # Dans liste: ComponentName,
+                    "\b$import\s*}",      # Dans objet: ComponentName}
+                    "\b$import\s*\]",     # Dans tableau: ComponentName]
+                    "\b$import\s*;",      # Fin instruction: ComponentName;
+                    "\b$import\s*$",      # Fin ligne: ComponentName
+                    "new\s+$import",      # Instanciation: new ComponentName
+                    "typeof\s+$import",   # Typeof: typeof ComponentName
+                    "instanceof\s+$import" # Instanceof: instanceof ComponentName
+                )
+                
+                # Vérifier si l'import est utilisé dans le code (hors import)
+                $isUsed = $false
+                foreach ($pattern in $usagePatterns) {
+                    if ($contentWithoutImports -match $pattern) {
+                        $isUsed = $true
+                        break
+                    }
+                }
+                
+                # Vérification supplémentaire : recherche de mot complet (pour les cas complexes)
+                if (-not $isUsed) {
+                    $wordBoundaryPattern = "\b$([regex]::Escape($import))\b"
+                    $matches = [regex]::Matches($contentWithoutImports, $wordBoundaryPattern)
+                    # Si plus d'une occurrence (hors import), c'est utilisé
+                    if ($matches.Count -gt 0) {
+                        $isUsed = $true
+                    }
+                }
+                
+                if (-not $isUsed) {
                     $unusedImports++
                     $unusedImportsDetails += "$($file.Name): $import"
                 }
