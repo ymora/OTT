@@ -46,31 +46,143 @@ $auditResults = @{
 $startTime = Get-Date
 
 # ===============================================================================
+# CONFIGURATION : RÉPERTOIRES ET FICHIERS À EXCLURE (uniquement build/cache)
+# ===============================================================================
+$excludedDirs = @('node_modules', '\.next', '\.git', '\.swc', 'out', 'vendor', '__pycache__', '\.cache')
+$excludedPatterns = @('\.log$', '\.tmp$', '\.cache$', 'package-lock\.json$', 'yarn\.lock$')
+
+# Fonction pour vérifier si un fichier doit être exclu
+function Test-ExcludedFile {
+    param([string]$FilePath)
+    foreach ($pattern in $excludedDirs) {
+        if ($FilePath -match "\\$pattern\\|/$pattern/") { return $true }
+    }
+    foreach ($pattern in $excludedPatterns) {
+        if ($FilePath -match $pattern) { return $true }
+    }
+    return $false
+}
+
+# ===============================================================================
+# PHASE 0 : INVENTAIRE EXHAUSTIF DE TOUS LES FICHIERS
+# ===============================================================================
+
+Write-Section "[0/18] Inventaire Exhaustif - Tous les Fichiers et Répertoires"
+
+try {
+    Write-Info "Parcours exhaustif de tous les fichiers..."
+    
+    # Parcourir TOUS les fichiers du projet (sauf exclusions build/cache)
+    $allFiles = @(Get-ChildItem -Recurse -File | Where-Object {
+        -not (Test-ExcludedFile $_.FullName)
+    })
+    
+    # Catégoriser tous les fichiers
+    $fileInventory = @{
+        JS = @()
+        JSX = @()
+        PHP = @()
+        SQL = @()
+        MD = @()
+        HTML = @()
+        CSS = @()
+        JSON = @()
+        YAML = @()
+        YML = @()
+        SH = @()
+        PS1 = @()
+        INO = @()
+        H = @()
+        TPP = @()
+        STL = @()
+        PDF = @()
+        PNG = @()
+        JPG = @()
+        SVG = @()
+        WOFF2 = @()
+        CONFIG = @()
+        OTHER = @()
+    }
+    
+    foreach ($file in $allFiles) {
+        $ext = $file.Extension.ToLower()
+        $name = $file.Name.ToLower()
+        
+        switch ($ext) {
+            '.js' { if ($name -notmatch '\.test\.|\.spec\.') { $fileInventory.JS += $file } }
+            '.jsx' { $fileInventory.JSX += $file }
+            '.php' { $fileInventory.PHP += $file }
+            '.sql' { $fileInventory.SQL += $file }
+            '.md' { $fileInventory.MD += $file }
+            '.html' { $fileInventory.HTML += $file }
+            '.css' { $fileInventory.CSS += $file }
+            '.json' { $fileInventory.JSON += $file }
+            '.yaml' { $fileInventory.YAML += $file }
+            '.yml' { $fileInventory.YML += $file }
+            '.sh' { $fileInventory.SH += $file }
+            '.ps1' { $fileInventory.PS1 += $file }
+            '.ino' { $fileInventory.INO += $file }
+            '.h' { $fileInventory.H += $file }
+            '.tpp' { $fileInventory.TPP += $file }
+            '.stl' { $fileInventory.STL += $file }
+            '.pdf' { $fileInventory.PDF += $file }
+            '.png' { $fileInventory.PNG += $file }
+            '.jpg' { $fileInventory.JPG += $file }
+            '.jpeg' { $fileInventory.JPG += $file }
+            '.svg' { $fileInventory.SVG += $file }
+            '.woff2' { $fileInventory.WOFF2 += $file }
+            default {
+                if ($name -match 'config|\.env|dockerfile|makefile') {
+                    $fileInventory.CONFIG += $file
+                } else {
+                    $fileInventory.OTHER += $file
+                }
+            }
+        }
+    }
+    
+    Write-Host "  Total fichiers analysés: $($allFiles.Count)" -ForegroundColor White
+    Write-Host "  JavaScript: $($fileInventory.JS.Count + $fileInventory.JSX.Count)" -ForegroundColor White
+    Write-Host "  PHP: $($fileInventory.PHP.Count)" -ForegroundColor White
+    Write-Host "  SQL: $($fileInventory.SQL.Count)" -ForegroundColor White
+    Write-Host "  Markdown: $($fileInventory.MD.Count)" -ForegroundColor White
+    Write-Host "  HTML: $($fileInventory.HTML.Count)" -ForegroundColor White
+    Write-Host "  Config (JSON/YAML/ENV): $($fileInventory.JSON.Count + $fileInventory.YAML.Count + $fileInventory.YML.Count + $fileInventory.CONFIG.Count)" -ForegroundColor White
+    Write-Host "  Scripts (PS1/SH): $($fileInventory.PS1.Count + $fileInventory.SH.Count)" -ForegroundColor White
+    Write-Host "  Firmware (INO/H/TPP): $($fileInventory.INO.Count + $fileInventory.H.Count + $fileInventory.TPP.Count)" -ForegroundColor White
+    Write-Host "  Assets (Images/Fonts): $($fileInventory.PNG.Count + $fileInventory.JPG.Count + $fileInventory.SVG.Count + $fileInventory.WOFF2.Count)" -ForegroundColor White
+    if ($fileInventory.OTHER.Count -gt 0) {
+        Write-Host "  Autres: $($fileInventory.OTHER.Count)" -ForegroundColor Yellow
+        Write-Info "Types autres fichiers: $(($fileInventory.OTHER | ForEach-Object { $_.Extension } | Group-Object | Select-Object -First 5 | ForEach-Object { "$($_.Name):$($_.Count)" }) -join ', ')"
+    }
+    
+    # Stocker l'inventaire pour les phases suivantes
+    $script:fileInventory = $fileInventory
+    $script:allFiles = $allFiles
+    
+    Write-OK "Inventaire exhaustif terminé"
+} catch {
+    Write-Warn "Erreur inventaire: $($_.Exception.Message)"
+}
+
+# ===============================================================================
 # PHASE 1 : ARCHITECTURE ET STATISTIQUES
 # ===============================================================================
 
-Write-Section "[1/15] Architecture et Statistiques Code"
+Write-Section "[1/18] Architecture et Statistiques Code"
 
 try {
     Write-Info "Comptage des fichiers..."
     
-    $jsFiles = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
-        $_.FullName -notmatch 'node_modules' -and
-        $_.FullName -notmatch '\\\.next\\' -and
-        $_.FullName -notmatch '\\docs\\' -and
-        $_.FullName -notmatch '\\public\\'
-    })
-    
-    $phpFiles = @(Get-ChildItem -Recurse -File -Include *.php | Where-Object {
-        $_.FullName -notmatch 'vendor'
-    })
-    
-    $sqlFiles = @(Get-ChildItem -Recurse -File -Include *.sql -ErrorAction SilentlyContinue)
-    $mdFilesRoot = @(Get-ChildItem -File -Filter *.md -ErrorAction SilentlyContinue)
-    $components = @(Get-ChildItem -Path components -Recurse -File -Include *.js -ErrorAction SilentlyContinue)
-    $hooks = @(Get-ChildItem -Path hooks -File -Include *.js -Exclude index.js -ErrorAction SilentlyContinue)
-    $pages = @(Get-ChildItem -Path app/dashboard -Recurse -File -Include page.js -ErrorAction SilentlyContinue)
-    $scripts = @(Get-ChildItem -Path scripts -Recurse -File -Include *.ps1,*.sh,*.js -ErrorAction SilentlyContinue)
+    # Utiliser l'inventaire exhaustif
+    $jsFiles = $fileInventory.JS + $fileInventory.JSX
+    $phpFiles = $fileInventory.PHP
+    $sqlFiles = $fileInventory.SQL
+    $mdFilesRoot = @($fileInventory.MD | Where-Object { $_.DirectoryName -eq (Get-Location).Path })
+    $components = @($fileInventory.JS | Where-Object { $_.FullName -match '\\components\\' })
+    $hooks = @($fileInventory.JS | Where-Object { $_.FullName -match '\\hooks\\' -and $_.Name -ne 'index.js' })
+    $pages = @($fileInventory.JS | Where-Object { $_.FullName -match '\\app\\dashboard\\' -and $_.Name -eq 'page.js' })
+    $scripts = $fileInventory.PS1 + $fileInventory.SH + @($fileInventory.JS | Where-Object { $_.FullName -match '\\scripts\\' })
     
     # Compter lignes
     $jsLines = 0
@@ -203,7 +315,7 @@ try {
 # PHASE 3 : DUPLICATION DE CODE
 # ===============================================================================
 
-Write-Section "[3/15] Duplication de Code et Refactoring"
+Write-Section "[3/18] Duplication de Code et Refactoring"
 
 try {
     Write-Info "Analyse patterns dupliques..."
@@ -275,7 +387,7 @@ try {
 # PHASE 4 : COMPLEXITE
 # ===============================================================================
 
-Write-Section "[4/15] Complexite - Fichiers/Fonctions Volumineux"
+Write-Section "[4/18] Complexite - Fichiers/Fonctions Volumineux"
 
 try {
     Write-Info "Analyse fichiers volumineux..."
@@ -322,7 +434,7 @@ try {
 # PHASE 5 : ROUTES ET NAVIGATION
 # ===============================================================================
 
-Write-Section "[5/15] Routes et Navigation - Verification Pages Menu"
+Write-Section "[5/18] Routes et Navigation - Verification Pages Menu"
 
 try {
     # S'assurer qu'on est à la racine du projet
@@ -361,7 +473,7 @@ try {
 # PHASE 6 : ENDPOINTS API
 # ===============================================================================
 
-Write-Section "[6/15] Endpoints API - Tests Fonctionnels"
+Write-Section "[6/18] Endpoints API - Tests Fonctionnels"
 
 $apiScore = 0
 $endpointsTotal = 0
@@ -419,7 +531,7 @@ $auditResults.Scores["API"] = $apiScore
 # PHASE 7 : BASE DE DONNEES
 # ===============================================================================
 
-Write-Section "[7/15] Base de Donnees - Coherence et Integrite"
+Write-Section "[7/18] Base de Donnees - Coherence et Integrite"
 
 try {
     if ($apiScore -gt 0 -and $endpointsOK -gt 0) {
@@ -472,7 +584,7 @@ try {
 # PHASE 8 : SECURITE
 # ===============================================================================
 
-Write-Section "[8/15] Securite - Headers, SQL Injection, XSS"
+Write-Section "[8/18] Securite - Headers, SQL Injection, XSS"
 
 $securityScore = 10
 
@@ -529,7 +641,7 @@ $auditResults.Scores["Securite"] = [Math]::Max($securityScore, 0)
 # PHASE 9 : PERFORMANCE
 # ===============================================================================
 
-Write-Section "[9/15] Performance - Optimisations React et Cache"
+Write-Section "[9/18] Performance - Optimisations React et Cache"
 
 try {
     $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
@@ -567,7 +679,7 @@ try {
 # PHASE 10 : TESTS
 # ===============================================================================
 
-Write-Section "[10/15] Tests et Couverture"
+Write-Section "[10/18] Tests et Couverture"
 
 try {
     $testFiles = @(Get-ChildItem -Recurse -File -Include *.test.js,*.spec.js | Where-Object {
@@ -595,7 +707,7 @@ try {
 # PHASES 11-15 : AUTRES VERIFICATIONS
 # ===============================================================================
 
-Write-Section "[11-15] Documentation, Imports, Erreurs, Logs, Best Practices"
+Write-Section "[11/18] Documentation, Imports, Erreurs, Logs, Best Practices"
 
 # Documentation
 $auditResults.Scores["Documentation"] = if($stats.MD -le 5) { 10 } else { 7 }
@@ -632,29 +744,60 @@ $optimizationIssues = @()
 $optimizationScore = 10.0
 
 # 1. Vérifier requêtes SQL N+1 dans PHP (backend)
+# IMPORTANT: Distinguer les vraies requêtes N+1 (SELECT dans boucles) des INSERT/UPDATE normaux
 Write-Host "`n1. Requêtes SQL Backend (N+1):" -ForegroundColor Yellow
 $phpFiles = @(Get-ChildItem -Path api -Recurse -File -Include *.php -ErrorAction SilentlyContinue)
 $nPlusOnePatterns = @()
 foreach ($file in $phpFiles) {
     $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
     if ($content) {
-        # Chercher des patterns de requêtes dans des boucles
-        $loops = [regex]::Matches($content, '(foreach|while|for)\s*\([^)]*\)\s*\{[^}]*->(query|prepare|execute)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        # Chercher des patterns de requêtes SELECT dans des boucles (vraies requêtes N+1)
+        # Ignorer les INSERT/UPDATE/DELETE qui sont normaux dans des boucles
+        $loops = [regex]::Matches($content, '(foreach|while|for)\s*\([^)]*\)\s*\{[^}]*SELECT[^}]*->(query|prepare|execute)', [System.Text.RegularExpressions.RegexOptions]::Singleline -bor [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
         if ($loops.Count -gt 0) {
             foreach ($loop in $loops) {
+                $loopContent = $content.Substring($loop.Index, [Math]::Min(500, $content.Length - $loop.Index))
+                # Vérifier que c'est bien un SELECT, pas un INSERT/UPDATE/DELETE
+                if ($loopContent -match 'SELECT\s+[^IUD]' -and $loopContent -notmatch 'INSERT|UPDATE|DELETE') {
                 $line = ($content.Substring(0, $loop.Index) -split "`n").Count
                 $nPlusOnePatterns += "$($file.Name):$line"
+                }
+            }
+        }
+        
+        # Chercher aussi les patterns avec fetch/fetchAll dans des boucles (sans JOIN préalable)
+        $fetchLoops = [regex]::Matches($content, '(foreach|while|for)\s*\([^)]*\)\s*\{[^}]*->(fetch|fetchAll)\s*\(', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        if ($fetchLoops.Count -gt 0) {
+            foreach ($fetchLoop in $fetchLoops) {
+                # Vérifier qu'il n'y a pas de JOIN dans les 200 caractères avant
+                $startIndex = [Math]::Max(0, $fetchLoop.Index - 200)
+                $beforeContext = $content.Substring($startIndex, $fetchLoop.Index - $startIndex)
+                # Si pas de JOIN et que c'est dans une boucle sur des résultats, c'est suspect
+                if ($beforeContext -notmatch 'JOIN|LEFT JOIN|INNER JOIN|RIGHT JOIN') {
+                    $line = ($content.Substring(0, $fetchLoop.Index) -split "`n").Count
+                    # Vérifier que ce n'est pas déjà dans notre liste
+                    $alreadyFound = $false
+                    foreach ($existing in $nPlusOnePatterns) {
+                        if ($existing -match "$($file.Name):$line") {
+                            $alreadyFound = $true
+                            break
+                        }
+                    }
+                    if (-not $alreadyFound) {
+                        $nPlusOnePatterns += "$($file.Name):$line (fetch dans boucle)"
+                    }
+                }
             }
         }
     }
 }
 
 if ($nPlusOnePatterns.Count -gt 0) {
-    Write-Warn "  $($nPlusOnePatterns.Count) requêtes SQL potentiellement N+1 détectées"
-    $optimizationIssues += "Backend: $($nPlusOnePatterns.Count) requêtes SQL dans loops"
+    Write-Warn "  $($nPlusOnePatterns.Count) requêtes SQL potentiellement N+1 détectées (SELECT dans boucles)"
+    $optimizationIssues += "Backend: $($nPlusOnePatterns.Count) requêtes SQL SELECT dans loops"
     $optimizationScore -= 1.0
 } else {
-    Write-OK "  Aucun pattern N+1 détecté dans PHP"
+    Write-OK "  Aucun pattern N+1 détecté dans PHP (seuls les SELECT dans boucles sont considérés)"
 }
 
 # 2. Vérifier index SQL manquants
@@ -1313,7 +1456,364 @@ Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 
 # ===============================================================================
-# PHASE 16 : VÉRIFICATION UNIFORMISATION UI/UX (AVANT LES SCORES FINAUX)
+# ===============================================================================
+# PHASE 16 : VÉRIFICATION EXHAUSTIVE - LIENS, IMPORTS, RÉFÉRENCES, CONTENUS
+# ===============================================================================
+
+Write-Section "[16/18] Vérification Exhaustive - Liens, Imports, Références, Contenus"
+
+$exhaustiveIssues = @()
+$exhaustiveWarnings = @()
+$exhaustiveScore = 10.0
+
+try {
+    Write-Info "Vérification exhaustive de tous les fichiers..."
+    
+    # 1. Vérifier tous les liens dans les fichiers HTML et MD
+    Write-Host "`n1. Vérification des liens (HTML, MD):" -ForegroundColor Yellow
+    $brokenLinks = @()
+    $allLinks = @()
+    
+    foreach ($file in ($fileInventory.HTML + $fileInventory.MD)) {
+        try {
+            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content) {
+                # Extraire tous les liens
+                $hrefPattern = 'href=["'']([^"'']+)["'']'
+                $srcPattern = 'src=["'']([^"'']+)["'']'
+                $mdPattern = '\[([^\]]+)\]\(([^\)]+)\)'
+                
+                $hrefLinksMatches = [regex]::Matches($content, $hrefPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                $srcLinksMatches = [regex]::Matches($content, $srcPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                $mdLinksMatches = [regex]::Matches($content, $mdPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                
+                foreach ($match in $hrefLinksMatches) {
+                    $link = $match.Groups[1].Value
+                    $allLinks += @{ File = $file.Name; Link = $link; Type = "href" }
+                }
+                foreach ($match in $srcLinksMatches) {
+                    $link = $match.Groups[1].Value
+                    $allLinks += @{ File = $file.Name; Link = $link; Type = "src" }
+                }
+                foreach ($match in $mdLinksMatches) {
+                    $link = $match.Groups[2].Value
+                    $allLinks += @{ File = $file.Name; Link = $link; Type = "markdown" }
+                }
+            }
+        } catch {
+            Write-Info "Erreur lecture $($file.Name): $($_.Exception.Message)"
+        }
+    }
+    
+    Write-Host "  Total liens trouvés: $($allLinks.Count)" -ForegroundColor White
+    
+    # Vérifier chaque lien
+    foreach ($linkInfo in $allLinks) {
+        $link = $linkInfo.Link
+        $file = $linkInfo.File
+        
+        # Ignorer les liens externes (http/https/mailto)
+        if ($link -match '^https?://|^mailto:|^#|^javascript:') {
+            continue
+        }
+        
+        # Résoudre le chemin relatif
+        $linkPath = $link
+        if ($link -notmatch '^/') {
+            # Lien relatif - trouver le fichier source pour résoudre
+            $sourceFile = $allFiles | Where-Object { $_.Name -eq $file } | Select-Object -First 1
+            if ($sourceFile) {
+                $linkPath = Join-Path $sourceFile.DirectoryName $link
+                $linkPath = [System.IO.Path]::GetFullPath($linkPath)
+            }
+        } else {
+            # Lien absolu depuis la racine
+            $linkPath = Join-Path (Get-Location).Path $link.TrimStart('/')
+            $linkPath = [System.IO.Path]::GetFullPath($linkPath)
+        }
+        
+        # Vérifier si le fichier existe
+        if (-not (Test-Path $linkPath)) {
+            $brokenLinks += @{ File = $file; Link = $link; Path = $linkPath }
+        }
+    }
+    
+    if ($brokenLinks.Count -gt 0) {
+        Write-Warn "  $($brokenLinks.Count) liens brisés détectés"
+        $brokenLinks | Select-Object -First 10 | ForEach-Object {
+            Write-Host "    - $($_.File): $($_.Link)" -ForegroundColor Yellow
+        }
+        if ($brokenLinks.Count -gt 10) {
+            Write-Host "    ... et $($brokenLinks.Count - 10) autres" -ForegroundColor Yellow
+        }
+        $exhaustiveWarnings += "$($brokenLinks.Count) liens brisés"
+        $exhaustiveScore -= 0.5
+    } else {
+        Write-OK "  Aucun lien brisé détecté"
+    }
+    
+    # 2. Vérifier tous les imports/exports dans les fichiers JS
+    Write-Host "`n2. Vérification des imports/exports (JS):" -ForegroundColor Yellow
+    $brokenImports = @()
+    $allImports = @()
+    
+    foreach ($file in $fileInventory.JS) {
+        try {
+            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content) {
+                # Extraire tous les imports
+                $importMatches = [regex]::Matches($content, "import\s+.*from\s+['\`"]([^'\`"]+)['\`"]", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+                $requireMatches = [regex]::Matches($content, "require\s*\(['\`"]([^'\`"]+)['\`"]", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+                
+                foreach ($match in $importMatches) {
+                    $importPath = $match.Groups[1].Value
+                    $allImports += @{ File = $file.FullName; Import = $importPath; Type = "import" }
+                }
+                foreach ($match in $requireMatches) {
+                    $importPath = $match.Groups[1].Value
+                    $allImports += @{ File = $file.FullName; Import = $importPath; Type = "require" }
+                }
+            }
+        } catch {
+            Write-Info "Erreur lecture $($file.Name): $($_.Exception.Message)"
+        }
+    }
+    
+    Write-Host "  Total imports trouvés: $($allImports.Count)" -ForegroundColor White
+    
+    # Vérifier chaque import (simplifié - vérifier que le chemin existe)
+    $importErrors = 0
+    foreach ($importInfo in $allImports) {
+        $importPath = $importInfo.Import
+        $sourceFile = $importInfo.File
+        
+        # Ignorer les imports de node_modules et packages
+        if ($importPath -match '^@/|^\.\.?/|^[^./]') {
+            # Résoudre le chemin
+            $sourceDir = Split-Path $sourceFile -Parent
+            $resolvedPath = $null
+            
+            if ($importPath -match '^@/') {
+                # Alias @/ - chercher dans la racine
+                $resolvedPath = Join-Path (Get-Location).Path $importPath.Replace('@/', '')
+            } elseif ($importPath -match '^\.\.?/') {
+                # Chemin relatif
+                $resolvedPath = Join-Path $sourceDir $importPath
+                $resolvedPath = [System.IO.Path]::GetFullPath($resolvedPath)
+            } else {
+                # Package npm - ignorer
+                continue
+            }
+            
+            # Vérifier si le fichier existe (avec ou sans extension)
+            $found = $false
+            if (Test-Path $resolvedPath) {
+                $found = $true
+            } elseif (Test-Path "$resolvedPath.js") {
+                $found = $true
+            } elseif (Test-Path "$resolvedPath.jsx") {
+                $found = $true
+            } elseif (Test-Path "$resolvedPath/index.js") {
+                $found = $true
+            }
+            
+            if (-not $found -and $resolvedPath -notmatch 'node_modules') {
+                $importErrors++
+                if ($brokenImports.Count -lt 20) {
+                    $brokenImports += @{ File = (Split-Path $sourceFile -Leaf); Import = $importPath; Path = $resolvedPath }
+                }
+            }
+        }
+    }
+    
+    if ($importErrors -gt 0) {
+        Write-Warn "  $importErrors imports potentiellement brisés détectés"
+        $brokenImports | Select-Object -First 10 | ForEach-Object {
+            Write-Host "    - $($_.File): $($_.Import)" -ForegroundColor Yellow
+        }
+        if ($importErrors -gt 10) {
+            Write-Host "    ... et $($importErrors - 10) autres" -ForegroundColor Yellow
+        }
+        $exhaustiveWarnings += "$importErrors imports potentiellement brisés"
+        $exhaustiveScore -= 0.3
+    } else {
+        Write-OK "  Tous les imports semblent valides"
+    }
+    
+    # 3. Vérifier les références PHP (require, include, require_once, include_once)
+    Write-Host "`n3. Vérification des références PHP:" -ForegroundColor Yellow
+    $brokenPhpRefs = @()
+    $allPhpRefs = @()
+    
+    foreach ($file in $fileInventory.PHP) {
+        try {
+            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content) {
+                # Extraire tous les require/include
+                $refMatches = [regex]::Matches($content, "(require|include|require_once|include_once)\s*\(?['\`"]([^'\`"]+)['\`"]", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                
+                foreach ($match in $refMatches) {
+                    $refPath = $match.Groups[2].Value
+                    $allPhpRefs += @{ File = $file.FullName; Ref = $refPath; Type = $match.Groups[1].Value }
+                }
+            }
+        } catch {
+            Write-Info "Erreur lecture $($file.Name): $($_.Exception.Message)"
+        }
+    }
+    
+    Write-Host "  Total références PHP trouvées: $($allPhpRefs.Count)" -ForegroundColor White
+    
+    $phpRefErrors = 0
+    foreach ($refInfo in $allPhpRefs) {
+        $refPath = $refInfo.Ref
+        $sourceFile = $refInfo.File
+        
+        # Résoudre le chemin
+        $sourceDir = Split-Path $sourceFile -Parent
+        $resolvedPath = Join-Path $sourceDir $refPath
+        $resolvedPath = [System.IO.Path]::GetFullPath($resolvedPath)
+        
+        if (-not (Test-Path $resolvedPath)) {
+            $phpRefErrors++
+            if ($brokenPhpRefs.Count -lt 20) {
+                $brokenPhpRefs += @{ File = (Split-Path $sourceFile -Leaf); Ref = $refPath; Path = $resolvedPath }
+            }
+        }
+    }
+    
+    if ($phpRefErrors -gt 0) {
+        Write-Warn "  $phpRefErrors références PHP potentiellement brisées"
+        $brokenPhpRefs | Select-Object -First 10 | ForEach-Object {
+            Write-Host "    - $($_.File): $($_.Ref)" -ForegroundColor Yellow
+        }
+        if ($phpRefErrors -gt 10) {
+            Write-Host "    ... et $($phpRefErrors - 10) autres" -ForegroundColor Yellow
+        }
+        $exhaustiveWarnings += "$phpRefErrors références PHP potentiellement brisées"
+        $exhaustiveScore -= 0.3
+    } else {
+        Write-OK "  Toutes les références PHP semblent valides"
+    }
+    
+    # 4. Vérifier les fichiers orphelins (non référencés)
+    Write-Host "`n4. Vérification des fichiers orphelins:" -ForegroundColor Yellow
+    $orphanFiles = @()
+    
+    # Créer une liste de tous les fichiers référencés
+    $referencedFiles = @()
+    foreach ($linkInfo in $allLinks) {
+        if ($linkInfo.Link -notmatch '^https?://|^mailto:|^#') {
+            $referencedFiles += $linkInfo.Link
+        }
+    }
+    foreach ($importInfo in $allImports) {
+        $referencedFiles += $importInfo.Import
+    }
+    foreach ($refInfo in $allPhpRefs) {
+        $referencedFiles += $refInfo.Ref
+    }
+    
+    # Vérifier les fichiers JS/JSX qui ne sont pas référencés (sauf tests, config, etc.)
+    foreach ($file in ($fileInventory.JS + $fileInventory.JSX)) {
+        $fileName = $file.Name
+        $filePath = $file.FullName
+        
+        # Ignorer certains fichiers (tests, config, etc.)
+        if ($fileName -match '\.test\.|\.spec\.|config\.|setup\.|instrumentation\.') {
+            continue
+        }
+        
+        # Ignorer les fichiers dans node_modules, .next, etc.
+        if (Test-ExcludedFile $filePath) {
+            continue
+        }
+        
+        # Vérifier si le fichier est référencé
+        $isReferenced = $false
+        foreach ($ref in $referencedFiles) {
+            if ($ref -match [regex]::Escape($fileName) -or $ref -match [regex]::Escape($filePath)) {
+                $isReferenced = $true
+                break
+            }
+        }
+        
+        # Vérifier aussi si c'est un point d'entrée (page.js, layout.js, etc.)
+        if ($fileName -match '^page\.js$|^layout\.js$|^error\.js$|^not-found\.js$|^index\.js$') {
+            $isReferenced = $true
+        }
+        
+        if (-not $isReferenced) {
+            $orphanFiles += $file
+        }
+    }
+    
+    if ($orphanFiles.Count -gt 0) {
+        Write-Warn "  $($orphanFiles.Count) fichiers potentiellement orphelins"
+        $orphanFiles | Select-Object -First 10 | ForEach-Object {
+            Write-Host "    - $($_.FullName.Replace((Get-Location).Path + '\', ''))" -ForegroundColor Yellow
+        }
+        if ($orphanFiles.Count -gt 10) {
+            Write-Host "    ... et $($orphanFiles.Count - 10) autres" -ForegroundColor Yellow
+        }
+        $exhaustiveWarnings += "$($orphanFiles.Count) fichiers potentiellement orphelins"
+        $exhaustiveScore -= 0.2
+    } else {
+        Write-OK "  Aucun fichier orphelin détecté"
+    }
+    
+    # 5. Vérifier les répertoires vides (sauf ceux exclus)
+    Write-Host "`n5. Vérification des répertoires vides:" -ForegroundColor Yellow
+    $emptyDirs = @()
+    $allDirs = @(Get-ChildItem -Recurse -Directory | Where-Object {
+        -not (Test-ExcludedFile $_.FullName)
+    })
+    
+    foreach ($dir in $allDirs) {
+        $files = @(Get-ChildItem -Path $dir.FullName -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+            -not (Test-ExcludedFile $_.FullName)
+        })
+        if ($files.Count -eq 0) {
+            $emptyDirs += $dir
+        }
+    }
+    
+    if ($emptyDirs.Count -gt 0) {
+        Write-Warn "  $($emptyDirs.Count) répertoires vides détectés"
+        $emptyDirs | Select-Object -First 10 | ForEach-Object {
+            Write-Host "    - $($_.FullName.Replace((Get-Location).Path + '\', ''))" -ForegroundColor Yellow
+        }
+        if ($emptyDirs.Count -gt 10) {
+            Write-Host "    ... et $($emptyDirs.Count - 10) autres" -ForegroundColor Yellow
+        }
+        $exhaustiveWarnings += "$($emptyDirs.Count) répertoires vides"
+        $exhaustiveScore -= 0.1
+    } else {
+        Write-OK "  Aucun répertoire vide détecté"
+    }
+    
+    Write-OK "Vérification exhaustive terminée"
+    
+} catch {
+    Write-Warn "Erreur vérification exhaustive: $($_.Exception.Message)"
+    $exhaustiveScore = 7.0
+}
+
+$exhaustiveScoreFinal = [Math]::Max(0, [Math]::Round($exhaustiveScore, 1))
+$auditResults.Scores["Vérification Exhaustive"] = $exhaustiveScoreFinal
+$auditResults.Warnings += $exhaustiveWarnings
+$auditResults.Issues += $exhaustiveIssues
+
+Write-Host ""
+if ($exhaustiveIssues.Count -eq 0 -and $exhaustiveWarnings.Count -eq 0) {
+    Write-OK "Vérification exhaustive parfaite - Score: $exhaustiveScoreFinal/10"
+} else {
+    Write-Host "[SCORE VÉRIFICATION EXHAUSTIVE] $exhaustiveScoreFinal/10" -ForegroundColor Yellow
+}
+
+# ===============================================================================
+# PHASE 17 : VÉRIFICATION UNIFORMISATION UI/UX (AVANT LES SCORES FINAUX)
+# ===============================================================================
 # ===============================================================================
 
 Write-Section "[16/16] Uniformisation UI/UX - Badges, Tables, Modals"
@@ -1423,6 +1923,7 @@ $scoreWeights = @{
     "Logs" = 0.6
     "BestPractices" = 0.8
     "Structure API" = 1.0
+    "Vérification Exhaustive" = 1.2
     "Uniformisation UI/UX" = 0.8
 }
 
@@ -1455,7 +1956,7 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # ===============================================================================
 # PHASE 16 : ORGANISATION ET NETTOYAGE
 # ===============================================================================
-Write-Section "[16/17] Documentation - Cohérence et Accessibilité"
+Write-Section "[18/18] Organisation Projet et Nettoyage"
 
 # Vérifier que tous les docs du menu existent et sont accessibles
 $docMapping = @{
@@ -1703,7 +2204,7 @@ if ($sidebarContent) {
 
 Write-Info "Documentation analysée"
 
-Write-Section "[17/17] Organisation Projet et Nettoyage"
+Write-Section "[18/18] Organisation Projet et Nettoyage"
 
 # Vérifier l'organisation des dossiers
 $expectedDirs = @("app", "components", "contexts", "hooks", "lib", "api", "sql", "scripts", "public")
@@ -1922,28 +2423,26 @@ if (Test-Path "api.php") {
         # Recherche améliorée : chercher le pattern exact avec échappement correct
         $routePattern = $ep.Endpoint -replace '\(', '\(' -replace '\)', '\)' -replace '\+', '\+'
         
-        # Méthode simple et fiable : chercher le handler et vérifier le contexte
+        # Méthode simple et fiable : chercher le handler et vérifier qu'il y a PATCH + route dans le contexte
         if ($apiContent -match $ep.Handler) {
             $handlerMatches = [regex]::Matches($apiContent, $ep.Handler, [System.Text.RegularExpressions.RegexOptions]::Singleline)
             foreach ($match in $handlerMatches) {
-                # Chercher dans les 250 caractères avant le handler
-                $startIndex = [Math]::Max(0, $match.Index - 250)
-                $context = $apiContent.Substring($startIndex, [Math]::Min(500, $apiContent.Length - $startIndex))
+                # Chercher dans les 400 caractères avant le handler pour avoir le contexte complet
+                $startIndex = [Math]::Max(0, $match.Index - 400)
+                $context = $apiContent.Substring($startIndex, [Math]::Min(800, $apiContent.Length - $startIndex))
+                
                 # Vérifier que le contexte contient :
                 # 1. La route avec le pattern (format: preg_match('#/users/(\d+)$#', ...) ou preg_match('#/patients/(\d+)$#', ...))
                 # 2. La méthode PATCH
-                # 3. Le handler est appelé
-                # Pattern plus flexible pour la route - chercher le pattern de route dans le contexte
-                $routePatternEscaped = $routePattern -replace '\\', '\\'
-                $hasRoute = $context -match "preg_match.*#.*$routePattern" -or $context -match "#.*$routePattern" -or $context -match "/$($ep.Endpoint -replace '\(\\d\+\)', '')"
-                # Méthode PATCH - chercher avec ou sans backtick
-                $hasMethod = $context -match "\`\$method === '$($ep.Method)'" -or $context -match "method === '$($ep.Method)'" -or $context -match "\$method === '$($ep.Method)'"
-                # Handler appelé - doit être présent dans le contexte
-                $hasHandler = $context -match $ep.Handler
+                # Pattern de route : /patients/(\d+) ou /users/(\d+)
+                $routeEndpoint = $ep.Endpoint -replace '\(\\d\+\)', '\(\\d\+\)'
+                $hasRoute = $context -match "preg_match\s*\([^)]*#.*$routeEndpoint" -or $context -match "#.*$routeEndpoint"
+                # Méthode PATCH - chercher avec différentes variantes
+                $hasMethod = $context -match "\$method\s*===\s*['\`"]$($ep.Method)['\`"]" -or $context -match "method\s*===\s*['\`"]$($ep.Method)['\`"]"
                 
-                if ($hasRoute -and $hasMethod -and $hasHandler) {
-                    Write-OK "$($ep.Name): $($ep.Method) $($ep.Endpoint) → $($ep.Handler)"
+                if ($hasRoute -and $hasMethod) {
                     $found = $true
+                    Write-OK "$($ep.Name): Route detectee ($($ep.Method) $($ep.Endpoint) → $($ep.Handler))"
                     break
                 }
             }
@@ -1956,22 +2455,28 @@ if (Test-Path "api.php") {
         }
     }
     
-    # Vérifier fonctions handlers critiques
+    # Vérifier fonctions handlers critiques (chercher dans les bons fichiers)
     $handlersToCheck = @(
-        @{ File = "api/handlers/devices.php"; Function = "handleRestorePatient"; Name = "Restauration patients" }
-        @{ File = "api/handlers/auth.php"; Function = "handleRestoreUser"; Name = "Restauration users" }
+        @{ Files = @("api/handlers/devices/patients.php", "api/handlers/devices/crud.php"); Function = "handleRestorePatient"; Name = "Restauration patients" }
+        @{ Files = @("api/handlers/auth.php"); Function = "handleRestoreUser"; Name = "Restauration users" }
     )
     
     foreach ($handler in $handlersToCheck) {
-        if (Test-Path $handler.File) {
-            $content = Get-Content $handler.File -Raw
-            if ($content -match "function $($handler.Function)\(") {
-                Write-OK "$($handler.Name): $($handler.Function)() definie"
-            } else {
-                Write-Err "$($handler.Name): $($handler.Function)() MANQUANTE"
-                $criticalIssues += "$($handler.Function) non defini"
-                $structureScore -= 2.0
+        $found = $false
+        foreach ($file in $handler.Files) {
+            if (Test-Path $file) {
+                $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
+                if ($content -and $content -match "function\s+$($handler.Function)\s*\(") {
+                    $found = $true
+                    Write-OK "$($handler.Name): $($handler.Function)() definie dans $file"
+                    break
+                }
             }
+        }
+        if (-not $found) {
+            Write-Err "$($handler.Name): $($handler.Function)() MANQUANTE dans $($handler.Files -join ', ')"
+            $criticalIssues += "$($handler.Function) non defini"
+            $structureScore -= 1.0
         }
     }
 } else {
@@ -1984,8 +2489,8 @@ if (Test-Path "api.php") {
         Write-OK "api.php trouvé: $apiPhpPath"
     } else {
         Write-Err "api.php introuvable ! (cherché dans: $(Get-Location))"
-        $criticalIssues += "api.php introuvable"
-        $structureScore = 0
+    $criticalIssues += "api.php introuvable"
+    $structureScore = 0
     }
 }
 

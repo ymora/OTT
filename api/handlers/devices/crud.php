@@ -514,9 +514,11 @@ function handleCreateTestDevices() {
         $created = [];
         $errors = [];
         
+        // Préparer la requête SELECT une seule fois avant la boucle pour éviter N+1
+        $checkStmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :sim_iccid AND deleted_at IS NULL");
+        
         foreach ($testDevices as $testDevice) {
             try {
-                $checkStmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :sim_iccid AND deleted_at IS NULL");
                 $checkStmt->execute(['sim_iccid' => $testDevice['sim_iccid']]);
                 if ($checkStmt->fetch()) {
                     $errors[] = "Dispositif {$testDevice['sim_iccid']} existe déjà";

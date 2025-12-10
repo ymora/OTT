@@ -1055,6 +1055,25 @@ function processNotificationsQueue($pdo, $limit = 50) {
         $sent = 0;
         $failed = 0;
         
+        // Préparer les requêtes UPDATE une seule fois avant la boucle pour éviter N+1
+        $updateSentStmt = $pdo->prepare("
+            UPDATE notifications_queue 
+            SET status = 'sent', sent_at = NOW(), attempts = attempts + 1
+            WHERE id = :id
+        ");
+        
+        $updateFailedStmt = $pdo->prepare("
+            UPDATE notifications_queue 
+            SET status = :status, attempts = :attempts, error_message = :error
+            WHERE id = :id
+        ");
+        
+        $updateErrorStmt = $pdo->prepare("
+            UPDATE notifications_queue 
+            SET status = 'failed', attempts = attempts + 1, error_message = :error
+            WHERE id = :id
+        ");
+        
         foreach ($notifications as $notification) {
             $processed++;
             
@@ -1075,20 +1094,12 @@ function processNotificationsQueue($pdo, $limit = 50) {
                 
                 if ($success) {
                     $sent++;
-                    $pdo->prepare("
-                        UPDATE notifications_queue 
-                        SET status = 'sent', sent_at = NOW(), attempts = attempts + 1
-                        WHERE id = :id
-                    ")->execute(['id' => $notification['id']]);
+                    $updateSentStmt->execute(['id' => $notification['id']]);
                 } else {
                     $failed++;
                     $attempts = $notification['attempts'] + 1;
                     $status = ($attempts >= $notification['max_attempts']) ? 'failed' : 'pending';
-                    $pdo->prepare("
-                        UPDATE notifications_queue 
-                        SET status = :status, attempts = :attempts, error_message = :error
-                        WHERE id = :id
-                    ")->execute([
+                    $updateFailedStmt->execute([
                         'status' => $status,
                         'attempts' => $attempts,
                         'error' => 'Échec envoi ' . $notification['type'],
@@ -1098,11 +1109,7 @@ function processNotificationsQueue($pdo, $limit = 50) {
             } catch(Exception $e) {
                 $failed++;
                 error_log("Erreur processNotificationsQueue: " . $e->getMessage());
-                $pdo->prepare("
-                    UPDATE notifications_queue 
-                    SET attempts = attempts + 1, error_message = :error
-                    WHERE id = :id
-                ")->execute([
+                $updateErrorStmt->execute([
                     'error' => $e->getMessage(),
                     'id' => $notification['id']
                 ]);

@@ -163,6 +163,16 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
   const [hoveredDeviceId, setHoveredDeviceId] = useState(null)
   const hoverTimeoutRef = useRef(null)
 
+  // Cleanup du timeout au démontage du composant
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current)
+        hoverTimeoutRef.current = null
+      }
+    }
+  }, [])
+
   useEffect(() => {
     if (!focusDeviceId || !map) return
     const device = devices.find(d => String(d.id) === String(focusDeviceId))
