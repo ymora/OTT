@@ -317,9 +317,15 @@ function handleCompileFirmware($firmware_id) {
                 sendSSE('log', 'info', '✅ arduino-cli disponible - démarrage de la compilation réelle');
                 sendSSE('progress', 20);
                 
+                // Nettoyer les anciens répertoires de build au démarrage pour éviter l'accumulation
+                cleanupOldBuildDirs();
+                
                 // Créer un dossier temporaire pour la compilation
                 $build_dir = sys_get_temp_dir() . '/ott_firmware_build_' . $firmware_id . '_' . time();
                 mkdir($build_dir, 0755, true);
+                
+                // Variable pour garantir le nettoyage même en cas d'erreur
+                $build_dir_created = true;
                 
                 sendSSE('log', 'info', 'Préparation de l\'environnement de compilation...');
                 sendSSE('progress', 30);
@@ -954,10 +960,14 @@ function handleCompileFirmware($firmware_id) {
                         // Timeout de sécurité : si pas de sortie depuis 10 minutes
                         if ($current_time - $compile_last_output_time > 600) {
                             sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, la compilation semble bloquée');
-                            sendSSE('error', 'Timeout: La compilation a pris trop de temps');
-                            proc_terminate($compile_process);
-                            break;
-                        }
+                    sendSSE('error', 'Timeout: La compilation a pris trop de temps');
+                    proc_terminate($compile_process);
+                    // Nettoyer le répertoire de build en cas de timeout
+                    if (isset($build_dir) && $build_dir_created) {
+                        cleanupBuildDir($build_dir);
+                    }
+                    break;
+                }
                         
                         // Envoyer un keep-alive SSE toutes les 3 secondes
                         if ($current_time - $compile_last_keepalive >= 3) {
@@ -1035,49 +1045,38 @@ function handleCompileFirmware($firmware_id) {
                     }
                     sendSSE('error', 'Fichier .bin introuvable après compilation');
                     flush();
-                    exec('rm -rf ' . escapeshellarg($build_dir));
+                    if (isset($build_dir) && $build_dir_created) {
+                        cleanupBuildDir($build_dir);
+                    }
                     return;
                 }
                 
                 $compiled_bin = $bin_files[0];
-                $version_dir = getVersionDir($firmware['version']);
-                $bin_dir = $root_dir . '/hardware/firmware/' . $version_dir . '/';
-                if (!is_dir($bin_dir)) mkdir($bin_dir, 0755, true);
-                $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
-                $bin_path = $bin_dir . $bin_filename;
-                
-                if (!copy($compiled_bin, $bin_path)) {
-                    // Marquer le firmware comme erreur dans la base de données
-                    try {
-                        $pdo->prepare("
-                            UPDATE firmware_versions 
-                            SET status = 'error', error_message = 'Impossible de copier le fichier .bin compilé'
-                            WHERE id = :id
-                        ")->execute(['id' => $firmware_id]);
-                    } catch(PDOException $dbErr) {
-                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                    }
-                    sendSSE('error', 'Impossible de copier le fichier .bin compilé');
-                    flush();
-                    exec('rm -rf ' . escapeshellarg($build_dir));
-                    return;
-                }
                 
                 sendSSE('progress', 95);
-                sendSSE('log', 'info', 'Calcul des checksums...');
+                sendSSE('log', 'info', 'Calcul des checksums et lecture du fichier .bin...');
                 
-                $md5 = hash_file('md5', $bin_path);
-                $checksum = hash_file('sha256', $bin_path);
-                $file_size = filesize($bin_path);
+                // Lire directement depuis le répertoire de build (pas de copie sur disque pour économiser l'espace)
+                $bin_content_db = file_get_contents($compiled_bin);
+                if ($bin_content_db === false) {
+                    throw new Exception('Impossible de lire le fichier .bin compilé');
+                }
                 
-                // NOUVEAU: Lire le contenu du .bin pour stockage en DB
-                $bin_content_db = file_get_contents($bin_path);
+                // Calculer les checksums depuis le contenu en mémoire (plus efficace)
+                $md5 = hash('md5', $bin_content_db);
+                $checksum = hash('sha256', $bin_content_db);
+                $file_size = strlen($bin_content_db);
                 
                 // Mettre à jour la base de données avec le contenu en BYTEA
                 // IMPORTANT: Encoder les données BYTEA pour PostgreSQL
                 $bin_content_encoded = encodeByteaForPostgres($bin_content_db);
                 
+                // Libérer la mémoire immédiatement après encodage
+                unset($bin_content_db);
+                
                 $version_dir = getVersionDir($firmware['version']);
+                $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
+                
                 $pdo->prepare("
                     UPDATE firmware_versions 
                     SET file_path = :file_path, 
@@ -1094,8 +1093,13 @@ function handleCompileFirmware($firmware_id) {
                     'id' => $firmware_id
                 ]);
                 
-                // Nettoyer
-                exec('rm -rf ' . escapeshellarg($build_dir));
+                // Libérer la mémoire de l'encodage immédiatement
+                unset($bin_content_encoded);
+                
+                sendSSE('log', 'info', '✅ Fichier .bin stocké en base de données (pas de copie sur disque)');
+                
+                // Nettoyer le répertoire de build immédiatement après stockage en DB
+                cleanupBuildDir($build_dir);
                 
                 sendSSE('progress', 100);
                 sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
