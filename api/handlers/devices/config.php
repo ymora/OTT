@@ -43,8 +43,22 @@ function handleGetDeviceConfig($device_id) {
         echo json_encode(['success' => true, 'config' => $config]);
         
     } catch(PDOException $e) {
+        error_log("[Config Get] Erreur PDO: " . $e->getMessage());
+        error_log("[Config Get] Code: " . $e->getCode());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Database error',
+            'details' => (getenv('DEBUG_ERRORS') === 'true') ? $e->getMessage() : 'Erreur base de données. Vérifiez les logs serveur.'
+        ]);
+    } catch(Exception $e) {
+        error_log("[Config Get] Erreur générale: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Erreur serveur',
+            'details' => (getenv('DEBUG_ERRORS') === 'true') ? $e->getMessage() : 'Erreur lors de la récupération. Vérifiez les logs serveur.'
+        ]);
     }
 }
 
@@ -155,7 +169,7 @@ function handleUpdateDeviceConfig($device_id) {
                                                 'network_attach_timeout_ms', 'modem_max_reboots', 'sleep_minutes', 
                                                 'measurement_duration_ms', 'send_every_n_wakeups'])) {
                         $params[$field] = (int)$input[$field];
-                    } elseif (in_array($field, ['gps_enabled'])) {
+                    } elseif (in_array($field, ['gps_enabled', 'roaming_enabled'])) {
                         $params[$field] = (bool)$input[$field];
                     } else {
                         $params[$field] = (string)$input[$field];
@@ -166,9 +180,17 @@ function handleUpdateDeviceConfig($device_id) {
         
         $updates[] = "last_config_update = NOW()";
         
-        if (count($updates) > 1) {
-            $stmt = $pdo->prepare("UPDATE device_configurations SET " . implode(', ', $updates) . " WHERE device_id = :device_id");
-            $stmt->execute($params);
+        if (count($updates) > 0) {
+            try {
+                $stmt = $pdo->prepare("UPDATE device_configurations SET " . implode(', ', $updates) . " WHERE device_id = :device_id");
+                $stmt->execute($params);
+                error_log("[Config Update] UPDATE réussi pour device_id=$device_id, " . count($updates) . " champ(s) mis à jour");
+            } catch(PDOException $updateErr) {
+                error_log("[Config Update] Erreur UPDATE SQL: " . $updateErr->getMessage());
+                error_log("[Config Update] Requête: UPDATE device_configurations SET " . implode(', ', $updates) . " WHERE device_id = :device_id");
+                error_log("[Config Update] Paramètres: " . json_encode($params));
+                throw $updateErr; // Re-lancer pour être capturé par le catch global
+            }
             
             // Créer une commande UPDATE_CONFIG pour envoyer la nouvelle config au firmware
             // Inclure TOUS les paramètres (même ceux non stockés en BDD)
@@ -220,12 +242,29 @@ function handleUpdateDeviceConfig($device_id) {
             auditLog('device.config_updated', 'device', $device_id, $old_config, $input);
             echo json_encode(['success' => true, 'command_created' => !empty($configPayload)]);
         } else {
+            error_log("[Config Update] Aucun champ à mettre à jour pour device_id=$device_id");
             http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'No fields to update']);
         }
         
     } catch(PDOException $e) {
+        error_log("[Config Update] Erreur PDO: " . $e->getMessage());
+        error_log("[Config Update] Code: " . $e->getCode());
+        error_log("[Config Update] Trace: " . $e->getTraceAsString());
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Database error',
+            'details' => (getenv('DEBUG_ERRORS') === 'true') ? $e->getMessage() : 'Erreur base de données. Vérifiez les logs serveur.'
+        ]);
+    } catch(Exception $e) {
+        error_log("[Config Update] Erreur générale: " . $e->getMessage());
+        error_log("[Config Update] Trace: " . $e->getTraceAsString());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Erreur serveur',
+            'details' => (getenv('DEBUG_ERRORS') === 'true') ? $e->getMessage() : 'Erreur lors de la mise à jour. Vérifiez les logs serveur.'
+        ]);
     }
 }
