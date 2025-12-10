@@ -4,21 +4,16 @@
 export const dynamic = 'force-dynamic'
 
 import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import dynamicImport from 'next/dynamic'
 import { useApiData, useAutoRefresh } from '@/hooks'
-import { useAuth } from '@/contexts/AuthContext'
 import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
-import { formatDate } from '@/lib/dateUtils'
 
 // Lazy load de la carte pour accélérer le chargement
 const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr: false })
 
 export default function DashboardPage() {
-  const router = useRouter()
-  const { user } = useAuth()
   const { isConnected, usbConnectedDevice, usbVirtualDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
   
   // Charger les données avec useApiData
@@ -178,12 +173,6 @@ export default function DashboardPage() {
     [devices]
   )
 
-  // Tous les hooks doivent être appelés avant tout return conditionnel
-  const criticalItems = useMemo(() => 
-    alerts.filter(a => a.severity === 'critical' || a.severity === 'high'),
-    [alerts]
-  )
-  
   // Limiter à 5 pour l'affichage
   const lowBatteryListDisplay = useMemo(() => 
     lowBatteryList.slice(0, 5),
@@ -228,10 +217,11 @@ export default function DashboardPage() {
               onSelect={(device) => {
                 setSelectedDeviceOnMap(device)
               }}
-        />
-      </div>
-        </div>
-      )}
+              />
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Stats Cards - Indicateurs clés (KPIs + Non Assignés) - TAILLE RÉDUITE avec accordéons */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -288,22 +278,26 @@ export default function DashboardPage() {
           {kpiAccordions.online && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {devices.filter(d => {
-                  if (d.deleted_at) return false
-                  if (!d.last_seen) return false
-                  const lastSeen = new Date(d.last_seen)
-                  if (isNaN(lastSeen.getTime())) return false
-                  const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
-                  return hoursSince < 2
-                }).map(device => (
-                  <button
-                    key={device.id}
-                    onClick={() => zoomToDevice(device.id)}
-                    className="w-full text-left text-xs px-2 py-1 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
-                  >
-                    🟢 {device.device_name || device.sim_iccid}
-                  </button>
-                  ))}
+                {(() => {
+                  // Mémoriser les dispositifs en ligne pour éviter le recalcul
+                  const onlineDevices = devices.filter(d => {
+                    if (d.deleted_at) return false
+                    if (!d.last_seen) return false
+                    const lastSeen = new Date(d.last_seen)
+                    if (isNaN(lastSeen.getTime())) return false
+                    const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
+                    return hoursSince < 2
+                  })
+                  return onlineDevices.map(device => (
+                    <button
+                      key={device.id}
+                      onClick={() => zoomToDevice(device.id)}
+                      className="w-full text-left text-xs px-2 py-1 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
+                    >
+                      🟢 {device.device_name || device.sim_iccid}
+                    </button>
+                  ))
+                })()}
                 </div>
               </div>
             )}
@@ -342,7 +336,7 @@ export default function DashboardPage() {
                       </button>
                     ) : null
                   })
-                }, [devices, alerts])}
+                })()}
               </div>
                   </div>
                 )}
@@ -368,22 +362,28 @@ export default function DashboardPage() {
           {kpiAccordions.battery && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {(stats.lowBatteryDevices > 0 ? lowBatteryList : devices.filter(d => {
-                  if (d.deleted_at) return false
-                  const battery = d.last_battery
-                  return battery !== null && battery !== undefined && battery >= 30
-                })).map(device => {
-                  const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
-                  return (
-                    <button
-                      key={device.id}
-                      onClick={() => zoomToDevice(device.id)}
-                      className={`w-full text-left text-xs px-2 py-1 hover:bg-${battery < 30 ? 'orange' : 'green'}-50 dark:hover:bg-${battery < 30 ? 'orange' : 'green'}-900/30 rounded transition-colors`}
-                    >
-                      {battery < 20 ? '🔴' : battery < 30 ? '🟠' : '🟢'} {device.device_name || device.sim_iccid} ({battery.toFixed(0)}%)
-                    </button>
-                  )
-                })}
+                {(() => {
+                  // Mémoriser la liste des batteries pour éviter le recalcul
+                  const batteryList = stats.lowBatteryDevices > 0 
+                    ? lowBatteryList 
+                    : devices.filter(d => {
+                        if (d.deleted_at) return false
+                        const battery = d.last_battery
+                        return battery !== null && battery !== undefined && battery >= 30
+                      })
+                  return batteryList.map(device => {
+                    const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
+                    return (
+                      <button
+                        key={device.id}
+                        onClick={() => zoomToDevice(device.id)}
+                        className={`w-full text-left text-xs px-2 py-1 hover:bg-${battery < 30 ? 'orange' : 'green'}-50 dark:hover:bg-${battery < 30 ? 'orange' : 'green'}-900/30 rounded transition-colors`}
+                      >
+                        {battery < 20 ? '🔴' : battery < 30 ? '🟠' : '🟢'} {device.device_name || device.sim_iccid} ({battery.toFixed(0)}%)
+                      </button>
+                    )
+                  })
+                })()}
               </div>
                   </div>
                 )}
@@ -449,18 +449,22 @@ export default function DashboardPage() {
               {kpiAccordions.alertsAction && (
                 <div className="px-3 pb-3 border-t border-red-200 dark:border-red-800 max-h-40 overflow-y-auto">
                   <div className="space-y-1 mt-2">
-                    {alerts.slice(0, 10).map(alert => {
-                      const device = devices.find(d => d.id === alert.device_id)
-                      return device ? (
-                        <button
-                          key={alert.id}
-                          onClick={() => zoomToDevice(device.id)}
-                          className="w-full text-left text-xs px-2 py-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
-                        >
-                          {alert.severity === 'critical' ? '🔴' : '🟠'} {device.device_name || device.sim_iccid}
-                        </button>
-                      ) : null
-                    })}
+                    {(() => {
+                      // Optimisation : créer un Map pour éviter find() à chaque itération
+                      const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
+                      return alerts.slice(0, 10).map(alert => {
+                        const device = devicesMap.get(alert.device_id)
+                        return device ? (
+                          <button
+                            key={alert.id}
+                            onClick={() => zoomToDevice(device.id)}
+                            className="w-full text-left text-xs px-2 py-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                          >
+                            {alert.severity === 'critical' ? '🔴' : '🟠'} {device.device_name || device.sim_iccid}
+                          </button>
+                        ) : null
+                      })
+                    })()}
                     {alerts.length > 10 && (
                       <div className="text-xs text-gray-500 italic px-2">+{alerts.length - 10} autres...</div>
                     )}

@@ -251,9 +251,9 @@ function MarkdownViewer({ fileName }) {
       
       // Logger pour debug (uniquement si on est sur GitHub Pages)
       if (typeof window !== 'undefined' && window.location.origin.includes('github.io')) {
-        console.log('[SUIVI_TEMPS] BasePath détecté:', basePath)
-        console.log('[SUIVI_TEMPS] URL actuelle:', window.location.href)
-        console.log('[SUIVI_TEMPS] Pathname:', window.location.pathname)
+        logger.debug('[SUIVI_TEMPS] BasePath détecté:', basePath)
+        logger.debug('[SUIVI_TEMPS] URL actuelle:', window.location.href)
+        logger.debug('[SUIVI_TEMPS] Pathname:', window.location.pathname)
       }
       
       // Essayer plusieurs méthodes de chargement avec différents chemins
