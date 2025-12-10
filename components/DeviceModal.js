@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
+import Tooltip from '@/components/Tooltip'
 import logger from '@/lib/logger'
 import { useUsb } from '@/contexts/UsbContext'
 import { buildUpdateConfigPayload } from '@/lib/deviceCommands'
