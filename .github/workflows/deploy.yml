@@ -82,13 +82,28 @@ jobs:
       - name: Ensure .nojekyll exists
         run: touch out/.nojekyll
       
-      # Vérifier la version du service worker
-      - name: Verify service worker version
+      # Vérifier et mettre à jour la version du service worker
+      - name: Update service worker version
         run: |
           if [ -f "out/sw.js" ]; then
-            echo "📋 Vérification version service worker..."
-            grep -E "CACHE_VERSION|v3\." out/sw.js | head -2 || echo "⚠️  Version non trouvée"
-            echo "✅ Service worker présent dans out/"
+            echo "📋 Mise à jour version service worker..."
+            # Générer une version unique basée sur le timestamp et le commit SHA
+            BUILD_TIMESTAMP=$(date +%s)
+            COMMIT_SHA=$(git rev-parse --short HEAD)
+            NEW_VERSION="v3.1.$(echo $BUILD_TIMESTAMP | tail -c 4)"
+            echo "  Nouvelle version: $NEW_VERSION (commit: $COMMIT_SHA)"
+            
+            # Mettre à jour la version dans le service worker
+            sed -i "s/const CACHE_VERSION = '.*'/const CACHE_VERSION = '$NEW_VERSION'/" out/sw.js
+            sed -i "s/CACHE_VERSION = '.*'/CACHE_VERSION = '$NEW_VERSION'/" out/sw.js
+            
+            # Vérifier que la mise à jour a fonctionné
+            if grep -q "CACHE_VERSION = '$NEW_VERSION'" out/sw.js; then
+              echo "✅ Service worker mis à jour avec version $NEW_VERSION"
+              grep -E "CACHE_VERSION" out/sw.js | head -1
+            else
+              echo "⚠️  Impossible de mettre à jour la version du service worker"
+            fi
           else
             echo "⚠️  Service worker non trouvé dans out/"
           fi
@@ -136,6 +151,17 @@ jobs:
             fi
           fi
       
+      # Ajouter un fichier de version pour vérifier la synchronisation
+      - name: Create version file
+        run: |
+          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          echo "{\"version\":\"$COMMIT_SHORT\",\"timestamp\":\"$BUILD_TIMESTAMP\",\"commit\":\"$COMMIT_SHA\",\"message\":\"$COMMIT_MESSAGE\"}" > out/.version.json
+          echo "✅ Fichier de version créé:"
+          cat out/.version.json
+      
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -155,4 +181,15 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      
+      # Vérifier que le déploiement est réussi
+      - name: Verify deployment
+        run: |
+          echo "✅ Déploiement terminé"
+          echo "🌐 URL: ${{ steps.deployment.outputs.page_url }}"
+          echo ""
+          echo "📋 Pour vérifier que le site est à jour:"
+          echo "   curl -s ${{ steps.deployment.outputs.page_url }}/.version.json | jq ."
+          echo ""
+          echo "🔗 Actions GitHub: https://github.com/${{ github.repository }}/actions"
 

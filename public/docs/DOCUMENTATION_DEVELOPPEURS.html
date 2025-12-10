@@ -762,6 +762,264 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li>Démarre automatiquement le streaming USB si un dispositif est détecté</li>
     </ul>
     
+    <h3>⚙️ Valeurs par Défaut du Firmware</h3>
+    
+    <div class="alert alert-info">
+        <strong>ℹ️ Configuration Minimale</strong><br>
+        Le firmware <strong>a des valeurs par défaut</strong> pour tous les paramètres. Vous n'êtes <strong>pas obligé</strong> de tout configurer via le dashboard. Le firmware fonctionnera avec les valeurs par défaut, mais vous pouvez les personnaliser via le dashboard si nécessaire.
+    </div>
+    
+    <h4>📋 Réseau & Connexion</h4>
+    <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Paramètre</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Valeur par Défaut</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>APN</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>"free"</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Point d'accès réseau (Free Mobile)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>SIM PIN</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>"1234"</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Code PIN de la carte SIM</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>ICCID</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>"89330123456789012345"</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Identifiant SIM (sera remplacé automatiquement par l'ICCID réel)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Serial</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>"OTT-XX-XXX"</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Numéro de série temporaire (sera remplacé automatiquement par le backend)</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Itinérance</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>true</code> (activée)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Permet l'utilisation d'autres réseaux opérateurs</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>💤 Sommeil & Envoi</h4>
+    <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Paramètre</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Valeur par Défaut</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Sleep Minutes</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>1440</code> (24 heures)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Durée entre chaque envoi de mesure</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Send Every N Wakeups</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>1</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Envoi à chaque wakeup (1 = à chaque fois)</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>🌬️ Mesure Airflow</h4>
+    <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Paramètre</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Valeur par Défaut</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Passes</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>2</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Nombre de passes de mesure</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Samples per Pass</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>10</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Nombre d'échantillons par passe</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Delay (ms)</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>5</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Délai entre chaque échantillon</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>📡 Modem & Timeouts</h4>
+    <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Paramètre</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Valeur par Défaut</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Modem Boot Timeout</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>20000</code> ms (20s)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Timeout de démarrage du modem</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>SIM Ready Timeout</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>45000</code> ms (45s)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Timeout de préparation de la SIM</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Network Attach Timeout</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>120000</code> ms (120s)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Timeout d'attachement au réseau</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Modem Max Reboots</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>3</code></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Nombre maximum de redémarrages du modem</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>🛡️ Watchdog</h4>
+    <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Paramètre</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Valeur par Défaut</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Watchdog Timeout</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>30</code> secondes</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Timeout du watchdog (minimum: 5s)</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>📍 GPS</h4>
+    <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Paramètre</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Valeur par Défaut</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>GPS Enabled</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>false</code> (désactivé)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">GPS désactivé par défaut (peut bloquer le modem/consommer la batterie)</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>🔧 Calibration</h4>
+    <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Paramètre</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Valeur par Défaut</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>Coefficients a0, a1, a2</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><code>NAN</code> (non définis)</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Pas de calibration par défaut</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>🔄 OTA (Over-The-Air)</h4>
+    <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+        <thead>
+            <tr style="background: #f8f9fa;">
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Paramètre</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Valeur par Défaut</th>
+                <th style="padding: 0.75rem; border: 1px solid #ddd; text-align: left;">Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>OTA Primary URL</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Vide</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">URL principale pour les mises à jour OTA</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>OTA Fallback URL</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Vide</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">URL de secours pour les mises à jour OTA</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;"><strong>OTA MD5</strong></td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Vide</td>
+                <td style="padding: 0.75rem; border: 1px solid #ddd;">Hash MD5 attendu pour les mises à jour OTA</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h4>🔄 Comportement au Démarrage</h4>
+    <ol>
+        <li><strong>Premier boot</strong> : Le firmware utilise toutes les valeurs par défaut ci-dessus</li>
+        <li><strong>Chargement NVS</strong> : La fonction <code>loadConfig()</code> charge les valeurs depuis la mémoire non-volatile (NVS)</li>
+        <li><strong>Si valeur absente</strong> : Si une valeur n'est pas trouvée en NVS, la valeur par défaut est utilisée</li>
+        <li><strong>Sauvegarde</strong> : Les valeurs configurées via le dashboard sont sauvegardées en NVS et persistent après un reset</li>
+    </ol>
+    
+    <h4>✅ Ce qui est Automatique</h4>
+    <ul>
+        <li><strong>ICCID</strong> : Détecté automatiquement depuis la carte SIM</li>
+        <li><strong>Serial</strong> : Généré automatiquement par le backend au format <code>OTT-YY-NNN</code> (ex: <code>OTT-25-001</code>)</li>
+        <li><strong>APN</strong> : Détection automatique de l'opérateur et utilisation de l'APN recommandé si disponible</li>
+    </ul>
+    
+    <h4>🎯 Recommandations de Configuration</h4>
+    
+    <div class="alert alert-success">
+        <strong>✅ Configuration Minimale Requise</strong><br>
+        Pour un fonctionnement de base, vous pouvez laisser <strong>toutes les valeurs par défaut</strong>. Le firmware fonctionnera avec :
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li>APN <code>"free"</code> (si vous utilisez Free Mobile)</li>
+            <li>Sleep de 24 heures (1 envoi par jour)</li>
+            <li>Itinérance activée</li>
+        </ul>
+    </div>
+    
+    <p><strong>Configuration Recommandée</strong> : Pour optimiser le fonctionnement, configurez au minimum :</p>
+    <ol>
+        <li><strong>APN</strong> : Selon votre opérateur (ex: <code>"free"</code> pour Free, <code>"orange"</code> pour Orange, <code>"sfr"</code> pour SFR)</li>
+        <li><strong>SIM PIN</strong> : Le code PIN réel de votre carte SIM</li>
+        <li><strong>Sleep Minutes</strong> : Selon vos besoins (ex: <code>5</code> pour un envoi toutes les 5 minutes)</li>
+    </ol>
+    
+    <p><strong>Configuration Avancée</strong> : Pour un contrôle total, configurez également :</p>
+    <ul>
+        <li><strong>Watchdog</strong> : Selon vos besoins de stabilité</li>
+        <li><strong>Timeouts Modem</strong> : Si vous avez des problèmes de connexion</li>
+        <li><strong>GPS</strong> : Activer si vous avez besoin de la localisation</li>
+        <li><strong>Calibration</strong> : Si vous avez calibré votre capteur</li>
+    </ul>
+    
+    <div class="alert alert-warning">
+        <strong>💡 Important</strong><br>
+        <strong>Vous n'êtes pas obligé de tout configurer !</strong> Le firmware fonctionne avec les valeurs par défaut. Configurez uniquement ce qui est nécessaire pour votre cas d'usage spécifique.
+    </div>
+    
     <h3>🔄 Mise à Jour Automatique du Firmware Version</h3>
     <p>Lorsqu'un dispositif USB est connecté et envoie son <code>device_info</code>, le système :</p>
     <ol>

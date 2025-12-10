@@ -176,6 +176,25 @@ if [ -d "public/docs/screenshots" ] && [ ! -d "out/docs/screenshots" ]; then
     echo "    ✅ Screenshots copiés"
 fi
 
+# Mettre à jour la version du service worker pour forcer la mise à jour du cache
+echo "  🔄 Mise à jour version service worker..."
+if [ -f "out/sw.js" ]; then
+  BUILD_TIMESTAMP=$(date +%s)
+  COMMIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
+  NEW_VERSION="v3.1.$(echo $BUILD_TIMESTAMP | tail -c 4)"
+  echo "    Nouvelle version: $NEW_VERSION (commit: $COMMIT_SHA)"
+  # Utiliser sed avec backup pour compatibilité macOS/Linux
+  if sed --version >/dev/null 2>&1; then
+    # GNU sed (Linux)
+    sed -i "s/const CACHE_VERSION = '.*'/const CACHE_VERSION = '$NEW_VERSION'/" out/sw.js
+  else
+    # BSD sed (macOS)
+    sed -i.bak "s/const CACHE_VERSION = '.*'/const CACHE_VERSION = '$NEW_VERSION'/" out/sw.js
+    rm -f out/sw.js.bak
+  fi
+  echo "    ✅ Service worker mis à jour"
+fi
+
 # IMPORTANT: Next.js NE COPIE PAS automatiquement les fichiers .md de public/ vers out/
 # Il faut les copier manuellement APRÈS le build
 # Copier le fichier SUIVI_TEMPS_FACTURATION.md depuis public/ vers out/
@@ -267,6 +286,22 @@ if [ "$final_missing" -gt 0 ]; then
 fi
 
 echo "✅ Tous les fichiers de documentation sont présents"
+
+# Créer un fichier de version pour vérifier la synchronisation
+echo ""
+echo "📋 Création du fichier de version..."
+BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "local")
+COMMIT_SHORT=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
+COMMIT_MESSAGE=$(git log -1 --pretty=%B 2>/dev/null || echo "Local build")
+echo "{\"version\":\"$COMMIT_SHORT\",\"timestamp\":\"$BUILD_TIMESTAMP\",\"commit\":\"$COMMIT_SHA\",\"message\":\"$COMMIT_MESSAGE\"}" > out/.version.json
+if [ -f "out/.version.json" ]; then
+  echo "  ✅ Fichier de version créé:"
+  cat out/.version.json | head -1
+else
+  echo "  ⚠️  Impossible de créer le fichier de version"
+fi
+
 echo ""
 echo "✅ Export réussi !"
 file_count=$(find out -type f | wc -l)

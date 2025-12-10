@@ -2,10 +2,12 @@
 # AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL - OTT Dashboard
 # ===============================================================================
 # HAPPLYZ MEDICAL SAS
-# Version 2.2 - Analyse exhaustive optimisee avec detection variables inutilisees et optimisations
+# Version 2.4 - Audit Approfondi avec Vérifications de Sécurité
+# Corrections: Variables non utilisées supprimées, code optimisé
+# NOUVEAU: Audit fichier par fichier avec vérifications de sécurité approfondies
 #
-# Ce script effectue un audit 360 degres couvrant 16 domaines
-# Usage : .\scripts\AUDIT_COMPLET_AUTOMATIQUE.ps1 [-Verbose]
+# Ce script effectue un audit 360 degres couvrant 21 domaines
+# Usage : .\scripts\audit\AUDIT_COMPLET_AUTOMATIQUE.ps1 [-Verbose]
 # ===============================================================================
 
 param(
@@ -13,7 +15,6 @@ param(
     [string]$Password = "Ym120879",
     [string]$ApiUrl = "https://ott-jbln.onrender.com",
     [switch]$Verbose = $false,
-    [int]$MaxFunctionLines = 100,
     [int]$MaxFileLines = 500
 )
 
@@ -31,7 +32,7 @@ Write-Host "====================================================================
 Write-Host "[AUDIT] AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL - OTT Dashboard" -ForegroundColor Cyan
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host "Date     : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
-Write-Host "Version  : 2.2 - Analyse Exhaustive Optimisée (variables inutilisées, optimisations .filter())" -ForegroundColor Cyan
+Write-Host "Version  : 2.4 - Audit Approfondi avec Vérifications de Sécurité" -ForegroundColor Cyan
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -61,6 +62,312 @@ function Test-ExcludedFile {
         if ($FilePath -match $pattern) { return $true }
     }
     return $false
+}
+
+# ===============================================================================
+# FONCTIONS DE VÉRIFICATION APPROFONDIE AVEC SÉCURITÉ
+# ===============================================================================
+
+# Fonction pour vérifier si un fichier/fonction est utilisé ailleurs dans le projet
+function Test-FileUsage {
+    param(
+        [string]$FilePath,
+        [string]$FunctionName = $null,
+        [string]$SearchPattern = $null
+    )
+    
+    $relativePath = $FilePath.Replace((Get-Location).Path + "\", "")
+    $fileName = Split-Path $FilePath -Leaf
+    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($fileName)
+    
+    # Rechercher les usages dans tous les fichiers du projet (sauf exclusions)
+    $allFiles = Get-ChildItem -Recurse -File | Where-Object {
+        -not (Test-ExcludedFile $_.FullName) -and
+        $_.FullName -ne $FilePath
+    }
+    
+    $usageCount = 0
+    $usageDetails = @()
+    
+    foreach ($file in $allFiles) {
+        try {
+            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+            if (-not $content) { continue }
+            
+            # Vérifier les imports/requires
+            if ($file.Extension -match '\.(js|jsx|ts|tsx)$') {
+                # Import direct du fichier
+                if ($content -match "from\s+['\`"]\.\.?/.*$([regex]::Escape($baseName))|import.*['\`"]\.\.?/.*$([regex]::Escape($baseName))") {
+                    $usageCount++
+                    $usageDetails += "$($file.FullName.Replace((Get-Location).Path + '\', '')): import"
+                }
+                # Import du nom de base
+                if ($content -match "import.*['\`"]\.\.?/.*$([regex]::Escape($baseName))") {
+                    $usageCount++
+                    $usageDetails += "$($file.FullName.Replace((Get-Location).Path + '\', '')): import base"
+                }
+            }
+            
+            # Vérifier les requires PHP
+            if ($file.Extension -eq '.php') {
+                if ($content -match "require.*['\`"]$([regex]::Escape($relativePath))|include.*['\`"]$([regex]::Escape($relativePath))") {
+                    $usageCount++
+                    $usageDetails += "$($file.FullName.Replace((Get-Location).Path + '\', '')): require/include"
+                }
+            }
+            
+            # Si une fonction spécifique est recherchée
+            if ($FunctionName) {
+                $escapedFunc = [regex]::Escape($FunctionName)
+                if ($content -match "\b$escapedFunc\s*\(" -or $content -match "\b$escapedFunc\s*=" -or $content -match "\b$escapedFunc\s*:") {
+                    $usageCount++
+                    $usageDetails += "$($file.FullName.Replace((Get-Location).Path + '\', '')): fonction $FunctionName"
+                }
+            }
+            
+            # Si un pattern de recherche est fourni
+            if ($SearchPattern) {
+                if ($content -match $SearchPattern) {
+                    $usageCount++
+                    $usageDetails += "$($file.FullName.Replace((Get-Location).Path + '\', '')): pattern"
+                }
+            }
+        } catch {
+            # Ignorer les erreurs de lecture
+        }
+    }
+    
+    return @{
+        IsUsed = ($usageCount -gt 0)
+        UsageCount = $usageCount
+        Details = $usageDetails
+    }
+}
+
+# Fonction pour vérifier si un fichier est vraiment obsolète (avec vérifications approfondies)
+function Test-IsObsolete {
+    param(
+        [string]$FilePath,
+        [string]$Reason = ""
+    )
+    
+    $relativePath = $FilePath.Replace((Get-Location).Path + "\", "")
+    $fileName = Split-Path $FilePath -Leaf
+    
+    # Vérifier si le fichier existe
+    if (-not (Test-Path $FilePath)) {
+        return @{ IsObsolete = $false; Reason = "Fichier n'existe pas" }
+    }
+    
+    # Vérifier les usages
+    $usage = Test-FileUsage -FilePath $FilePath
+    
+    # Si utilisé, ne pas considérer comme obsolète
+    if ($usage.IsUsed) {
+        return @{ 
+            IsObsolete = $false
+            Reason = "Fichier utilisé dans $($usage.UsageCount) endroit(s): $($usage.Details -join ', ')"
+        }
+    }
+    
+    # Vérifier si c'est un fichier de configuration critique
+    $criticalFiles = @('package.json', 'next.config.js', 'api.php', 'docker-compose.yml', 'render.yaml', '.gitignore', '.env.example')
+    if ($criticalFiles -contains $fileName) {
+        return @{ IsObsolete = $false; Reason = "Fichier de configuration critique" }
+    }
+    
+    # Vérifier si c'est dans un dossier de build (normal qu'il ne soit pas référencé)
+    if ($relativePath -match '\\out\\|\\\.next\\|\\docs\\_next\\|\\node_modules\\') {
+        return @{ IsObsolete = $false; Reason = "Fichier de build (normal)" }
+    }
+    
+    # Vérifier l'âge du fichier (si très récent, peut-être pas obsolète)
+    $fileInfo = Get-Item $FilePath
+    $daysSinceModified = (New-TimeSpan -Start $fileInfo.LastWriteTime -End (Get-Date)).Days
+    if ($daysSinceModified -lt 7) {
+        return @{ 
+            IsObsolete = $false
+            Reason = "Fichier modifié il y a moins de 7 jours ($daysSinceModified jours)"
+        }
+    }
+    
+    # Si toutes les vérifications passent, considérer comme potentiellement obsolète
+    return @{ 
+        IsObsolete = $true
+        Reason = if ($Reason) { $Reason } else { "Non utilisé et ancien ($daysSinceModified jours)" }
+        Confidence = if ($daysSinceModified -gt 30) { "High" } else { "Medium" }
+    }
+}
+
+# Fonction pour vérifier si un endpoint API est utilisé
+function Test-ApiEndpointUsage {
+    param(
+        [string]$EndpointPath,
+        [string]$Method = "GET"
+    )
+    
+    # Rechercher dans tous les fichiers JS/JSX/TS/TSX
+    $jsFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx,*.ts,*.tsx | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\' -and
+        $_.FullName -notmatch '\\docs\\'
+    }
+    
+    $usageCount = 0
+    $usageDetails = @()
+    
+    # Extraire le chemin de l'endpoint (sans /api.php)
+    $endpointPattern = $EndpointPath -replace '/api\.php', ''
+    $escapedPattern = [regex]::Escape($endpointPattern)
+    
+    foreach ($file in $jsFiles) {
+        try {
+            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+            if (-not $content) { continue }
+            
+            # Chercher les patterns d'appel API
+            if ($content -match "['\`"]$escapedPattern['\`"]|fetchJson.*$escapedPattern|fetch\(.*$escapedPattern|axios\.(get|post|put|delete).*$escapedPattern") {
+                $usageCount++
+                $usageDetails += "$($file.FullName.Replace((Get-Location).Path + '\', ''))"
+            }
+        } catch {
+            # Ignorer les erreurs
+        }
+    }
+    
+    return @{
+        IsUsed = ($usageCount -gt 0)
+        UsageCount = $usageCount
+        Details = $usageDetails
+    }
+}
+
+# Fonction pour détecter le code mort avec sécurité (vérification approfondie)
+function Test-DeadCodeSafe {
+    param(
+        [string]$FilePath,
+        [string]$FunctionName
+    )
+    
+    # Vérifier d'abord si le fichier existe
+    if (-not (Test-Path $FilePath)) {
+        return @{ IsDeadCode = $false; Reason = "Fichier n'existe pas" }
+    }
+    
+    # Lire le contenu du fichier pour vérifier que la fonction existe
+    $content = Get-Content $FilePath -Raw -ErrorAction SilentlyContinue
+    if (-not $content) {
+        return @{ IsDeadCode = $false; Reason = "Impossible de lire le fichier" }
+    }
+    
+    # Vérifier si la fonction est exportée (peut être utilisée ailleurs)
+    $isExported = $false
+    if ($content -match "export\s+(default\s+)?(function|const)\s+$([regex]::Escape($FunctionName))" -or
+        $content -match "module\.exports\s*=\s*.*$([regex]::Escape($FunctionName))" -or
+        $content -match "exports\.$([regex]::Escape($FunctionName))") {
+        $isExported = $true
+    }
+    
+    # Vérifier les usages dans tout le projet
+    $usage = Test-FileUsage -FilePath $FilePath -FunctionName $FunctionName
+    
+    # Si exporté et utilisé, ce n'est pas du code mort
+    if ($isExported -and $usage.IsUsed) {
+        return @{ 
+            IsDeadCode = $false
+            Reason = "Fonction exportée et utilisée dans $($usage.UsageCount) endroit(s)"
+        }
+    }
+    
+    # Si utilisé mais pas exporté, peut être un faux positif
+    if ($usage.IsUsed -and -not $isExported) {
+        return @{ 
+            IsDeadCode = $false
+            Reason = "Fonction utilisée localement ($($usage.UsageCount) fois)"
+        }
+    }
+    
+    # Si non utilisé et non exporté, probablement du code mort
+    if (-not $usage.IsUsed -and -not $isExported) {
+        return @{ 
+            IsDeadCode = $true
+            Reason = "Fonction non exportée et non utilisée"
+            Confidence = "Medium"
+        }
+    }
+    
+    # Si exporté mais non utilisé, peut être du code mort (mais moins sûr)
+    if ($isExported -and -not $usage.IsUsed) {
+        return @{ 
+            IsDeadCode = $true
+            Reason = "Fonction exportée mais non utilisée"
+            Confidence = "Low"
+        }
+    }
+    
+    return @{ IsDeadCode = $false; Reason = "Vérification incomplète" }
+}
+
+# Fonction pour détecter les doublons avec comparaison de contenu
+function Test-DuplicateCode {
+    param(
+        [string]$File1,
+        [string]$File2
+    )
+    
+    if (-not (Test-Path $File1) -or -not (Test-Path $File2)) {
+        return @{ IsDuplicate = $false; Reason = "Un des fichiers n'existe pas" }
+    }
+    
+    $content1 = Get-Content $File1 -Raw -ErrorAction SilentlyContinue
+    $content2 = Get-Content $File2 -Raw -ErrorAction SilentlyContinue
+    
+    if (-not $content1 -or -not $content2) {
+        return @{ IsDuplicate = $false; Reason = "Impossible de lire un des fichiers" }
+    }
+    
+    # Comparer le contenu (normaliser les espaces)
+    $normalized1 = $content1 -replace '\s+', ' ' -replace '\r\n', '\n'
+    $normalized2 = $content2 -replace '\s+', ' ' -replace '\r\n', '\n'
+    
+    if ($normalized1 -eq $normalized2) {
+        return @{ 
+            IsDuplicate = $true
+            Reason = "Contenu identique"
+            Confidence = "High"
+        }
+    }
+    
+    # Calculer la similarité (simplifié)
+    $similarity = 0
+    $minLength = [Math]::Min($normalized1.Length, $normalized2.Length)
+    $maxLength = [Math]::Max($normalized1.Length, $normalized2.Length)
+    
+    if ($maxLength -gt 0) {
+        $commonChars = 0
+        for ($i = 0; $i -lt $minLength; $i++) {
+            if ($normalized1[$i] -eq $normalized2[$i]) {
+                $commonChars++
+            }
+        }
+        $similarity = ($commonChars / $maxLength) * 100
+    }
+    
+    if ($similarity -gt 90) {
+        return @{ 
+            IsDuplicate = $true
+            Reason = "Contenu très similaire ($([Math]::Round($similarity, 1))%)"
+            Confidence = "High"
+        }
+    } elseif ($similarity -gt 70) {
+        return @{ 
+            IsDuplicate = $true
+            Reason = "Contenu similaire ($([Math]::Round($similarity, 1))%)"
+            Confidence = "Medium"
+        }
+    }
+    
+    return @{ IsDuplicate = $false; Reason = "Contenu différent" }
 }
 
 # ===============================================================================
@@ -2106,52 +2413,7 @@ $auditResults.Scores["Uniformisation UI/UX"] = $uiScoreFinal
 Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 
-Write-Section "SCORES FINAUX"
-
-$scoreWeights = @{
-    "Architecture" = 1.0
-    "CodeMort" = 1.5
-    "Duplication" = 1.2
-    "Complexite" = 1.2
-    "Routes" = 0.8
-    "API" = 1.5
-    "Database" = 1.0
-    "Securite" = 2.0
-    "Performance" = 1.0
-    "Optimisation" = 1.2
-    "Configuration" = 1.5
-    "Tests" = 0.8
-    "Documentation" = 0.5
-    "Imports" = 0.5
-    "GestionErreurs" = 0.8
-    "Logs" = 0.6
-    "BestPractices" = 0.8
-    "Structure API" = 1.0
-    "Vérification Exhaustive" = 1.2
-    "Uniformisation UI/UX" = 0.8
-}
-
-$totalWeight = ($scoreWeights.Values | Measure-Object -Sum).Sum
-$weightedSum = 0
-
-Write-Host ""
-foreach ($key in ($scoreWeights.Keys | Sort-Object)) {
-    $score = if($auditResults.Scores.ContainsKey($key)) { $auditResults.Scores[$key] } else { 5 }
-    $weight = $scoreWeights[$key]
-    $weightedSum += $score * $weight
-    
-    $color = if($score -ge 9){"Green"}elseif($score -ge 7){"Yellow"}else{"Red"}
-    $status = if($score -ge 9){"[OK]"}elseif($score -ge 7){"[WARN]"}else{"[ERROR]"}
-    
-    Write-Host ("  {0,-18} {1,4}/10  (poids {2,3})  {3}" -f $key, $score, $weight, $status) -ForegroundColor $color
-}
-
-$scoreGlobal = [math]::Round($weightedSum / $totalWeight, 1)
-
-Write-Host ""
-Write-Host ("=" * 80) -ForegroundColor Gray
-Write-Host ("  [SCORE] SCORE GLOBAL PONDERE : {0}/10" -f $scoreGlobal) -ForegroundColor $(if($scoreGlobal -ge 9.5){"Green"}elseif($scoreGlobal -ge 8){"Yellow"}else{"Red"})
-Write-Host ("=" * 80) -ForegroundColor Gray
+# Les scores finaux seront calculés dans la phase 21 (après toutes les phases)
 
 # ===============================================================================
 # RESUME
@@ -2946,10 +3208,994 @@ Write-Host "[DEBUG] Score UI/UX assigné: $uiScoreFinal" -ForegroundColor Cyan
 $auditResults.Issues += $uiIssues
 $auditResults.Warnings += $uiWarnings
 
+# ===============================================================================
+# PHASE 18 : AUDIT APPROFONDI FICHIER PAR FICHIER (avec vérifications de sécurité)
+# ===============================================================================
+
+Write-Section "[18/21] Audit Approfondi - Vérification Fichier par Fichier"
+
+$deepAuditScore = 10.0
+$deepAuditIssues = @()
+$deepAuditWarnings = @()
+$deepAuditSafeToDelete = @()
+$deepAuditNeedsReview = @()
+
+Write-Info "Démarrage de l'audit approfondi fichier par fichier..."
+
+# 1. AUDIT APPROFONDI DES FICHIERS DE CODE
+Write-Host "`n1. Audit approfondi fichiers de code (JS/JSX/PHP)..." -ForegroundColor Yellow
+
+$codeFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx,*.php | Where-Object {
+    -not (Test-ExcludedFile $_.FullName) -and
+    $_.FullName -notmatch 'node_modules' -and
+    $_.FullName -notmatch '\\\.next\\' -and
+    $_.FullName -notmatch '\\docs\\_next\\'
+}
+
+$filesAnalyzed = 0
+$filesWithIssues = 0
+
+foreach ($file in $codeFiles) {
+    $filesAnalyzed++
+    $relativePath = $file.FullName.Replace((Get-Location).Path + "\", "")
+    
+    if ($Verbose) {
+        Write-Info "  Analyse: $relativePath"
+    }
+    
+    # Vérifier si le fichier est utilisé
+    $usage = Test-FileUsage -FilePath $file.FullName
+    
+    if (-not $usage.IsUsed) {
+        # Vérifier si c'est vraiment obsolète
+        $obsoleteCheck = Test-IsObsolete -FilePath $file.FullName
+        
+        if ($obsoleteCheck.IsObsolete) {
+            $filesWithIssues++
+            if ($obsoleteCheck.Confidence -eq "High") {
+                $deepAuditSafeToDelete += @{
+                    File = $relativePath
+                    Reason = $obsoleteCheck.Reason
+                    Confidence = "High"
+                }
+                $deepAuditScore -= 0.1
+            } else {
+                $deepAuditNeedsReview += @{
+                    File = $relativePath
+                    Reason = $obsoleteCheck.Reason
+                    Confidence = $obsoleteCheck.Confidence
+                }
+                $deepAuditScore -= 0.05
+            }
+        }
+    }
+    
+    # Vérifier le code mort dans le fichier (fonctions non utilisées)
+    try {
+        $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            # Extraire les fonctions
+            $functions = [regex]::Matches($content, "(export\s+)?(function|const)\s+(\w+)\s*[=(]", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+            foreach ($func in $functions) {
+                $funcName = $func.Groups[3].Value
+                # Ignorer les hooks React et fonctions système
+                if ($funcName -notmatch '^(use|set|is|has|can|should|will|did|prev|next|current|ref|handle|on|get|set)$') {
+                    $deadCodeCheck = Test-DeadCodeSafe -FilePath $file.FullName -FunctionName $funcName
+                    if ($deadCodeCheck.IsDeadCode) {
+                        if ($deadCodeCheck.Confidence -eq "High" -or $deadCodeCheck.Confidence -eq "Medium") {
+                            $deepAuditWarnings += "$relativePath::$funcName - $($deadCodeCheck.Reason)"
+                            $deepAuditScore -= 0.05
+                        }
+                    }
+                }
+            }
+        }
+    } catch {
+        # Ignorer les erreurs
+    }
+}
+
+Write-OK "  $filesAnalyzed fichier(s) analysé(s)"
+if ($filesWithIssues -gt 0) {
+    Write-Warn "  $filesWithIssues fichier(s) potentiellement obsolète(s)"
+}
+
+# 2. AUDIT APPROFONDI DES ENDPOINTS API
+Write-Host "`n2. Audit approfondi endpoints API..." -ForegroundColor Yellow
+
+# Extraire tous les endpoints depuis api.php
+$apiPhpContent = Get-Content "api.php" -Raw -ErrorAction SilentlyContinue
+$apiEndpoints = @()
+
+if ($apiPhpContent) {
+    # Extraire les routes avec preg_match
+    $routeMatches = [regex]::Matches($apiPhpContent, "preg_match\s*\([^,]+,\s*['\`"]([^'\`"]+)['\`"]", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+    foreach ($match in $routeMatches) {
+        $route = $match.Groups[1].Value
+        if ($route -match '^/api\.php/|^/') {
+            $apiEndpoints += $route
+        }
+    }
+}
+
+$unusedEndpoints = @()
+foreach ($endpoint in $apiEndpoints) {
+    $endpointUsage = Test-ApiEndpointUsage -EndpointPath $endpoint
+    if (-not $endpointUsage.IsUsed) {
+        $unusedEndpoints += @{
+            Endpoint = $endpoint
+            Reason = "Non utilisé dans le frontend"
+        }
+        $deepAuditScore -= 0.2
+    }
+}
+
+if ($unusedEndpoints.Count -gt 0) {
+    Write-Warn "  $($unusedEndpoints.Count) endpoint(s) API potentiellement non utilisé(s)"
+    foreach ($ep in $unusedEndpoints | Select-Object -First 5) {
+        Write-Info "    - $($ep.Endpoint)"
+    }
+    $deepAuditIssues += "$($unusedEndpoints.Count) endpoint(s) API non utilisé(s)"
+} else {
+    Write-OK "  Tous les endpoints API sont utilisés"
+}
+
+# 3. DÉTECTION APPROFONDIE DES DOUBLONS
+Write-Host "`n3. Détection approfondie des doublons..." -ForegroundColor Yellow
+
+$duplicatePairs = @()
+$checkedPairs = @{}
+
+foreach ($file1 in $codeFiles) {
+    foreach ($file2 in $codeFiles) {
+        if ($file1.FullName -eq $file2.FullName) { continue }
+        
+        $pairKey = if ($file1.FullName -lt $file2.FullName) { 
+            "$($file1.FullName)|$($file2.FullName)" 
+        } else { 
+            "$($file2.FullName)|$($file1.FullName)" 
+        }
+        
+        if ($checkedPairs.ContainsKey($pairKey)) { continue }
+        $checkedPairs[$pairKey] = $true
+        
+        # Vérifier seulement si les noms sont similaires (optimisation)
+        if ($file1.Name -eq $file2.Name) {
+            $duplicateCheck = Test-DuplicateCode -File1 $file1.FullName -File2 $file2.FullName
+            if ($duplicateCheck.IsDuplicate) {
+                $duplicatePairs += @{
+                    File1 = $file1.FullName.Replace((Get-Location).Path + "\", "")
+                    File2 = $file2.FullName.Replace((Get-Location).Path + "\", "")
+                    Reason = $duplicateCheck.Reason
+                    Confidence = $duplicateCheck.Confidence
+                }
+                $deepAuditScore -= 0.1
+            }
+        }
+    }
+}
+
+if ($duplicatePairs.Count -gt 0) {
+    Write-Warn "  $($duplicatePairs.Count) paire(s) de fichiers dupliqués détectée(s)"
+    foreach ($dup in $duplicatePairs | Select-Object -First 5) {
+        Write-Info "    - $($dup.File1) ≈ $($dup.File2) ($($dup.Reason))"
+    }
+    $deepAuditIssues += "$($duplicatePairs.Count) paire(s) de fichiers dupliqués"
+} else {
+    Write-OK "  Aucun doublon détecté"
+}
+
+# Résumé de l'audit approfondi
+$deepAuditScoreFinal = [Math]::Max(0, [Math]::Round($deepAuditScore, 1))
+
+Write-Host ""
+if ($deepAuditScoreFinal -eq 10.0) {
+    Write-OK "Audit approfondi parfait - Score: $deepAuditScoreFinal/10"
+} else {
+    Write-Warn "Audit approfondi: $deepAuditScoreFinal/10"
+    if ($deepAuditSafeToDelete.Count -gt 0) {
+        Write-Info "  $($deepAuditSafeToDelete.Count) fichier(s) sûrs à supprimer (confiance élevée)"
+    }
+    if ($deepAuditNeedsReview.Count -gt 0) {
+        Write-Info "  $($deepAuditNeedsReview.Count) fichier(s) nécessitant une revue manuelle"
+    }
+}
+
+Write-Host "[SCORE AUDIT APPROFONDI] $deepAuditScoreFinal/10" -ForegroundColor $(if ($deepAuditScoreFinal -ge 9) { "Green" } elseif ($deepAuditScoreFinal -ge 7) { "Yellow" } else { "Red" })
+
+# Ajouter au score global
+$auditResults.Scores["Audit Approfondi"] = $deepAuditScoreFinal
+$auditResults.Issues += $deepAuditIssues
+$auditResults.Warnings += $deepAuditWarnings
+
+# Ajouter les recommandations
+if ($deepAuditSafeToDelete.Count -gt 0) {
+    $auditResults.Recommendations += "⚠️ $($deepAuditSafeToDelete.Count) fichier(s) sûrs à supprimer (vérifiés en profondeur): $($deepAuditSafeToDelete[0..4].File -join ', ')"
+}
+if ($deepAuditNeedsReview.Count -gt 0) {
+    $auditResults.Recommendations += "🔍 $($deepAuditNeedsReview.Count) fichier(s) nécessitant une revue manuelle avant suppression"
+}
+if ($unusedEndpoints.Count -gt 0) {
+    $auditResults.Recommendations += "🔌 $($unusedEndpoints.Count) endpoint(s) API non utilisé(s) - vérifier si nécessaire pour le firmware ou futures fonctionnalités"
+}
+
 Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 
+# ===============================================================================
+# PHASE 19 : ÉLÉMENTS INUTILES (Fichiers obsolètes, redondants, mal organisés)
+# ===============================================================================
+
+Write-Section "[19/21] Éléments Inutiles - Fichiers Obsolètes et Redondants"
+
+$elementsInutilesScore = 10.0
+$elementsInutilesIssues = @()
+$elementsInutilesWarnings = @()
+
+# Variables pour stocker les résultats
+$fichiersLogs = @()
+$scriptsMigrationRedondants = @()
+$fichiersTestObsoletes = @()
+$dossiersVides = @()
+$fichiersDupliques = @()
+$codeMort = @()
+$scriptsRedondants = @()
+$fichiersTemporaires = @()
+$documentationObsolete = @()
+$ps1Obsoletes = @()
+$jsObsoletes = @()
+$sqlObsoletes = @()
+$sqlToIntegrateList = @()
+
+# 1. FICHIERS DE LOGS OBSOLÈTES
+Write-Info "Recherche fichiers de logs obsolètes..."
+$logFiles = Get-ChildItem -Path . -Recurse -Include "*.log","*.txt" -ErrorAction SilentlyContinue | 
+    Where-Object { 
+        $_.Name -match "^(audit_result|logs_serie|audit_resultat)" -or
+        $_.FullName -match "\\out\\" -or
+        $_.FullName -match "\\docs\\_next\\"
+    } |
+    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) }
+
+foreach ($file in $logFiles) {
+    $fichiersLogs += $file.FullName.Replace((Get-Location).Path + "\", "")
+    $elementsInutilesScore -= 0.1
+}
+
+if ($fichiersLogs.Count -gt 0) {
+    Write-Warn "$($fichiersLogs.Count) fichier(s) de log obsolète(s)"
+    $elementsInutilesIssues += "$($fichiersLogs.Count) fichier(s) de log obsolète(s)"
+}
+
+# 2. SCRIPTS DE MIGRATION REDONDANTS
+Write-Info "Recherche scripts de migration redondants..."
+$migrationScripts = @(
+    "scripts\run-config-migration.ps1",
+    "scripts\run-config-migration-simple.ps1",
+    "scripts\run-config-migration-direct.ps1",
+    "scripts\test-config-migration.ps1",
+    "scripts\apply-migration-gps.ps1",
+    "scripts\apply-migration-min-max.ps1",
+    "scripts\test-migration-min-max.ps1",
+    "MIGRER.ps1"
+)
+
+foreach ($script in $migrationScripts) {
+    $path = Join-Path (Get-Location) $script
+    if (Test-Path $path) {
+        $scriptsMigrationRedondants += $script
+        $elementsInutilesScore -= 0.2
+    }
+}
+
+if ($scriptsMigrationRedondants.Count -gt 0) {
+    Write-Warn "$($scriptsMigrationRedondants.Count) script(s) de migration redondant(s)"
+    $elementsInutilesIssues += "$($scriptsMigrationRedondants.Count) script(s) de migration redondant(s) (API le fait automatiquement)"
+}
+
+# 3. FICHIERS DE TEST OBSOLÈTES (avec vérification approfondie)
+Write-Info "Recherche fichiers de test obsolètes avec vérifications de sécurité..."
+$testFiles = @(
+    "test_compile_cli.php",
+    "test_compile_endpoint.html",
+    "test_compile_sse.ps1",
+    "test_compile.ps1",
+    "test-archived-users-debug.html",
+    "test-users-api.ps1",
+    "scripts\test-database-firmware.ps1",
+    "scripts\test-database-measurements.php",
+    "scripts\test-database-schema.sql",
+    "scripts\test-firmware-measurement.ps1",
+    "scripts\test-api-endpoints.ps1",
+    "scripts\test-check-measurement.ps1",
+    "scripts\test-send-measurement.ps1",
+    "scripts\test-send-measurement.sh",
+    "scripts\test-gps-column.js",
+    "scripts\test-ota-measurements.sql",
+    "scripts\check-measurements-direct.php"
+)
+
+foreach ($testFile in $testFiles) {
+    $path = Join-Path (Get-Location) $testFile
+    if (Test-Path $path) {
+        # Vérifier si vraiment obsolète avec vérifications approfondies
+        $obsoleteCheck = Test-IsObsolete -FilePath $path -Reason "Fichier de test"
+        if ($obsoleteCheck.IsObsolete) {
+            if ($obsoleteCheck.Confidence -eq "High") {
+                $fichiersTestObsoletes += "$testFile - $($obsoleteCheck.Reason) (confiance élevée)"
+                $elementsInutilesScore -= 0.1
+            } else {
+                $fichiersTestObsoletes += "$testFile - $($obsoleteCheck.Reason) (nécessite revue)"
+                $elementsInutilesScore -= 0.05
+            }
+        }
+    }
+}
+
+if ($fichiersTestObsoletes.Count -gt 0) {
+    Write-Warn "$($fichiersTestObsoletes.Count) fichier(s) de test obsolète(s)"
+    $elementsInutilesIssues += "$($fichiersTestObsoletes.Count) fichier(s) de test obsolète(s)"
+}
+
+# 4. DOSSIERS VIDES
+Write-Info "Recherche dossiers vides..."
+$emptyDirs = @("docs\archive", "audit\reports")
+foreach ($dir in $emptyDirs) {
+    $path = Join-Path (Get-Location) $dir
+    if (Test-Path $path) {
+        $items = Get-ChildItem $path -Recurse -ErrorAction SilentlyContinue
+        if ($items.Count -eq 0) {
+            $dossiersVides += $dir
+            $elementsInutilesScore -= 0.2
+        }
+    }
+}
+
+if ($dossiersVides.Count -gt 0) {
+    Write-Warn "$($dossiersVides.Count) dossier(s) vide(s)"
+    $elementsInutilesWarnings += "$($dossiersVides.Count) dossier(s) vide(s)"
+}
+
+# 5. FICHIERS DUPLIQUÉS (avec vérification approfondie)
+Write-Info "Recherche fichiers dupliqués avec comparaison de contenu..."
+$duplicates = @(
+    @{ Original = "public\SUIVI_TEMPS_FACTURATION.md"; Duplicate = "SUIVI_TEMPS_FACTURATION.md" },
+    @{ Original = "public\docs"; Duplicate = "docs\docs" },
+    @{ Original = "public\icon-192.png"; Duplicate = "docs\icon-192.png" },
+    @{ Original = "public\icon-512.png"; Duplicate = "docs\icon-512.png" },
+    @{ Original = "public\manifest.json"; Duplicate = "docs\manifest.json" },
+    @{ Original = "public\sw.js"; Duplicate = "docs\sw.js" },
+    @{ Original = "public\migrate.html"; Duplicate = "docs\migrate.html" },
+    @{ Original = "public\monitor-reboot.js"; Duplicate = "docs\monitor-reboot.js" }
+)
+
+foreach ($dup in $duplicates) {
+    $origPath = Join-Path (Get-Location) $dup.Original
+    $dupPath = Join-Path (Get-Location) $dup.Duplicate
+    if ((Test-Path $origPath) -and (Test-Path $dupPath)) {
+        # Vérifier si vraiment dupliqués avec comparaison de contenu
+        $duplicateCheck = Test-DuplicateCode -File1 $origPath -File2 $dupPath
+        if ($duplicateCheck.IsDuplicate) {
+            $fichiersDupliques += "$($dup.Duplicate) - $($duplicateCheck.Reason) (confiance: $($duplicateCheck.Confidence))"
+            $elementsInutilesScore -= 0.1
+        }
+    }
+}
+
+if ($fichiersDupliques.Count -gt 0) {
+    Write-Warn "$($fichiersDupliques.Count) fichier(s) dupliqué(s)"
+    $elementsInutilesWarnings += "$($fichiersDupliques.Count) fichier(s) dupliqué(s)"
+}
+
+# 6. CODE MORT - FONCTIONS NON UTILISÉES (avec vérification approfondie)
+Write-Info "Recherche code mort avec vérifications de sécurité..."
+$calibrationCommandPath = Join-Path (Get-Location) "lib\deviceCommands.js"
+if (Test-Path $calibrationCommandPath) {
+    $deadCodeCheck = Test-DeadCodeSafe -FilePath $calibrationCommandPath -FunctionName "createUpdateCalibrationCommand"
+    if ($deadCodeCheck.IsDeadCode -and ($deadCodeCheck.Confidence -eq "High" -or $deadCodeCheck.Confidence -eq "Medium")) {
+        $codeMort += "lib\deviceCommands.js::createUpdateCalibrationCommand - $($deadCodeCheck.Reason)"
+        $elementsInutilesScore -= 0.3
+    }
+}
+
+if (Test-Path $calibrationCommandPath) {
+    $deadCodeCheck = Test-DeadCodeSafe -FilePath $calibrationCommandPath -FunctionName "buildUpdateCalibrationPayload"
+    if ($deadCodeCheck.IsDeadCode -and ($deadCodeCheck.Confidence -eq "High" -or $deadCodeCheck.Confidence -eq "Medium")) {
+        $codeMort += "lib\deviceCommands.js::buildUpdateCalibrationPayload - $($deadCodeCheck.Reason)"
+        $elementsInutilesScore -= 0.3
+    }
+}
+
+if ($codeMort.Count -gt 0) {
+    Write-Warn "$($codeMort.Count) fonction(s) non utilisée(s)"
+    $elementsInutilesIssues += "$($codeMort.Count) fonction(s) non utilisée(s) (code mort)"
+}
+
+# 7. SCRIPTS REDONDANTS
+Write-Info "Recherche scripts redondants..."
+$redundantScripts = @(
+    @{ Script = "scripts\AUDIT_PAGES_DASHBOARD.ps1"; Reason = "Fonctionnalités intégrées dans AUDIT_COMPLET_AUTOMATIQUE.ps1" },
+    @{ Script = "scripts\diagnostic-deploiement.ps1"; Reason = "Redondant avec verifier-deploiement-github-pages.ps1" },
+    @{ Script = "scripts\verifier-base-donnees.ps1"; Reason = "Script de test obsolète" },
+    @{ Script = "scripts\audit-complet.js"; Reason = "Version JS obsolète, utiliser .ps1" },
+    @{ Script = "merge-to-main.ps1"; Reason = "Script de merge temporaire" },
+    @{ Script = "start-php-server.ps1"; Reason = "Utiliser docker-compose à la place" }
+)
+
+foreach ($script in $redundantScripts) {
+    $path = Join-Path (Get-Location) $script.Script
+    if (Test-Path $path) {
+        $scriptsRedondants += "$($script.Script) - $($script.Reason)"
+        $elementsInutilesScore -= 0.2
+    }
+}
+
+if ($scriptsRedondants.Count -gt 0) {
+    Write-Warn "$($scriptsRedondants.Count) script(s) redondant(s)"
+    $elementsInutilesIssues += "$($scriptsRedondants.Count) script(s) redondant(s)"
+}
+
+# 8. FICHIERS TEMPORAIRES
+Write-Info "Recherche fichiers temporaires..."
+$tempFiles = @(
+    "audit_result.txt",
+    "audit_resultat_20251210_001712.txt",
+    "audit_resultat_20251210_184809.txt",
+    "audit_final_20251210_190625.txt",
+    "logs_serie_20251206_090656.log",
+    "docs\AUDIT_COMPLET.json"
+)
+
+foreach ($tempFile in $tempFiles) {
+    $path = Join-Path (Get-Location) $tempFile
+    if (Test-Path $path) {
+        $fichiersTemporaires += $tempFile
+        $elementsInutilesScore -= 0.1
+    }
+}
+
+# Dossiers de build
+if (Test-Path "out") {
+    $outFiles = Get-ChildItem -Path "out" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object
+    if ($outFiles.Count -gt 0) {
+        $fichiersTemporaires += "out/ ($($outFiles.Count) fichiers)"
+        $elementsInutilesScore -= 0.2
+    }
+}
+
+if (Test-Path "docs\_next") {
+    $nextFiles = Get-ChildItem -Path "docs\_next" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object
+    if ($nextFiles.Count -gt 0) {
+        $fichiersTemporaires += "docs/_next/ ($($nextFiles.Count) fichiers)"
+        $elementsInutilesScore -= 0.2
+    }
+}
+
+if ($fichiersTemporaires.Count -gt 0) {
+    Write-Warn "$($fichiersTemporaires.Count) fichier(s) temporaire(s)"
+    $elementsInutilesWarnings += "$($fichiersTemporaires.Count) fichier(s) temporaire(s)"
+}
+
+# 9. DOCUMENTATION OBSOLÈTE
+Write-Info "Recherche documentation obsolète..."
+$obsDoc = @("docs\EXPLICATION_DEPLOIEMENT_GITHUB_PAGES.md")
+foreach ($doc in $obsDoc) {
+    $path = Join-Path (Get-Location) $doc
+    if (Test-Path $path) {
+        $referenced = Select-String -Path "*.md","*.js","*.jsx","*.ts","*.tsx" -Pattern ([regex]::Escape($doc)) -ErrorAction SilentlyContinue
+        if ($referenced.Count -eq 0) {
+            $documentationObsolete += $doc
+            $elementsInutilesScore -= 0.2
+        }
+    }
+}
+
+if ($documentationObsolete.Count -gt 0) {
+    Write-Warn "$($documentationObsolete.Count) documentation obsolète"
+    $elementsInutilesWarnings += "$($documentationObsolete.Count) documentation obsolète"
+}
+
+# 10. FICHIERS .PS1 OBSOLÈTES
+Write-Info "Recherche fichiers .ps1 obsolètes..."
+$allPs1 = Get-ChildItem -Path . -Recurse -Include "*.ps1" -ErrorAction SilentlyContinue | 
+    Where-Object { $_.FullName -notmatch "\\node_modules\\" -and $_.FullName -notmatch "\\out\\" }
+
+foreach ($file in $allPs1) {
+    $relativePath = $file.FullName.Replace((Get-Location).Path + "\", "")
+    $fileName = $file.Name
+    
+    # Scripts de test
+    if ($fileName -match "^test-|^test_") {
+        $ps1Obsoletes += $relativePath
+        $elementsInutilesScore -= 0.1
+        continue
+    }
+    
+    # Scripts de migration (sauf migrate_render.ps1)
+    if ($fileName -match "migration|migrate|MIGRER") {
+        if ($relativePath -notmatch "scripts\\db\\migrate_render.ps1") {
+            $ps1Obsoletes += $relativePath
+            $elementsInutilesScore -= 0.2
+            continue
+        }
+    }
+}
+
+if ($ps1Obsoletes.Count -gt 0) {
+    Write-Warn "$($ps1Obsoletes.Count) fichier(s) .ps1 obsolète(s)"
+    $elementsInutilesIssues += "$($ps1Obsoletes.Count) fichier(s) .ps1 obsolète(s)"
+}
+
+# 11. FICHIERS .JS OBSOLÈTES
+Write-Info "Recherche fichiers .js obsolètes..."
+$allJs = Get-ChildItem -Path . -Recurse -Include "*.js" -ErrorAction SilentlyContinue | 
+    Where-Object { 
+        $_.FullName -notmatch "\\node_modules\\" -and 
+        $_.FullName -notmatch "\\out\\" -and
+        $_.FullName -notmatch "\\docs\\_next\\" -and
+        $_.FullName -notmatch "\\\.next\\"
+    }
+
+foreach ($file in $allJs) {
+    $relativePath = $file.FullName.Replace((Get-Location).Path + "\", "")
+    $fileName = $file.Name
+    
+    # audit-complet.js obsolète
+    if ($fileName -eq "audit-complet.js") {
+        $jsObsoletes += $relativePath
+        $elementsInutilesScore -= 0.2
+        continue
+    }
+    
+    # Scripts de test dans scripts/
+    if ($fileName -match "^test-|^test_") {
+        if ($relativePath -match "^scripts\\") {
+            $jsObsoletes += $relativePath
+            $elementsInutilesScore -= 0.1
+            continue
+        }
+    }
+}
+
+if ($jsObsoletes.Count -gt 0) {
+    Write-Warn "$($jsObsoletes.Count) fichier(s) .js obsolète(s)"
+    $elementsInutilesIssues += "$($jsObsoletes.Count) fichier(s) .js obsolète(s)"
+}
+
+# 12. FICHIERS SQL OBSOLÈTES
+Write-Info "Recherche fichiers SQL obsolètes..."
+$sqlObsoletesList = @(
+    @{ File = "sql\add_config_columns.sql"; Reason = "API crée automatiquement les colonnes dans api/handlers/devices/config.php" },
+    @{ File = "sql\migration_add_min_max_columns.sql"; Reason = "Toutes les colonnes sont déjà dans sql/migration.sql" }
+)
+
+foreach ($sqlFile in $sqlObsoletesList) {
+    $path = Join-Path (Get-Location) $sqlFile.File
+    if (Test-Path $path) {
+        $sqlObsoletes += "$($sqlFile.File) - $($sqlFile.Reason)"
+        $elementsInutilesScore -= 0.3
+    }
+}
+
+# 12b. FICHIERS MAL ORGANISÉS (à la racine ou dans mauvais dossiers)
+Write-Info "Recherche fichiers mal organisés..."
+$fichiersMalOrganises = @()
+
+# Fichiers à la racine qui devraient être organisés
+$rootFilesToCheck = Get-ChildItem -Path . -File | Where-Object {
+    $_.Name -match "\.(ps1|md|txt)$" -and
+    $_.Name -notmatch "^(package|next|jest|tailwind|postcss|sentry|instrumentation|jsconfig|README|\.gitignore|\.dockerignore)" -and
+    $_.FullName -notmatch "\\node_modules\\"
+}
+
+foreach ($file in $rootFilesToCheck) {
+    $fileName = $file.Name
+    # Scripts de test à la racine
+    if ($fileName -match "^test_|^test-") {
+        $fichiersMalOrganises += "$fileName - Script de test à la racine (devrait être dans scripts/test/ ou supprimé)"
+        $elementsInutilesScore -= 0.2
+    }
+    # Rapports d'audit temporaires à la racine
+    if ($fileName -match "ANALYSE_.*\.txt$") {
+        $fichiersMalOrganises += "$fileName - Rapport d'audit temporaire à la racine (devrait être dans audit/reports/ ou supprimé)"
+        $elementsInutilesScore -= 0.1
+    }
+    # Documentation obsolète à la racine
+    if ($fileName -match "SCRIPTS_.*\.md$") {
+        $fichiersMalOrganises += "$fileName - Documentation obsolète à la racine (devrait être supprimée)"
+        $elementsInutilesScore -= 0.2
+    }
+}
+
+# Scripts mal organisés dans scripts/ (devraient être dans sous-dossiers)
+$scriptsRoot = Get-ChildItem -Path "scripts" -File -Filter "*.ps1" -ErrorAction SilentlyContinue
+foreach ($script in $scriptsRoot) {
+    $scriptName = $script.Name
+    # Scripts d'audit à la racine de scripts/
+    if ($scriptName -match "^(AUDIT|ANALYSER|NETTOYER|AUDITER)") {
+        $fichiersMalOrganises += "scripts\$scriptName - Script d'audit à la racine de scripts/ (devrait être dans scripts/audit/)"
+        $elementsInutilesScore -= 0.2
+    }
+    # Scripts de vérification à la racine de scripts/
+    if ($scriptName -match "^verifier-") {
+        $fichiersMalOrganises += "scripts\$scriptName - Script de vérification à la racine de scripts/ (devrait être dans scripts/verification/)"
+        $elementsInutilesScore -= 0.2
+    }
+    # Scripts de monitoring à la racine de scripts/
+    if ($scriptName -match "^(MONITOR|ANALYSER_LOGS)") {
+        $fichiersMalOrganises += "scripts\$scriptName - Script de monitoring à la racine de scripts/ (devrait être dans scripts/monitoring/)"
+        $elementsInutilesScore -= 0.2
+    }
+    # Scripts de nettoyage à la racine de scripts/
+    if ($scriptName -match "^nettoyer-") {
+        $fichiersMalOrganises += "scripts\$scriptName - Script de nettoyage à la racine de scripts/ (devrait être dans scripts/cleanup/)"
+        $elementsInutilesScore -= 0.2
+    }
+}
+
+if ($fichiersMalOrganises.Count -gt 0) {
+    Write-Warn "$($fichiersMalOrganises.Count) fichier(s) mal organisé(s)"
+    $elementsInutilesIssues += "$($fichiersMalOrganises.Count) fichier(s) mal organisé(s) (devrait être réorganisé)"
+    $elementsInutilesWarnings += "Exécuter scripts\REORGANISER_PROJET.ps1 pour réorganiser automatiquement"
+}
+
+# 12c. FICHIERS SQL À INTÉGRER (avant suppression)
+Write-Info "Recherche fichiers SQL à intégrer dans migration.sql..."
+$sqlToIntegrate = @(
+    @{ File = "sql\migration_add_gps_to_measurements.sql"; Target = "sql\migration.sql"; Reason = "Colonnes latitude/longitude doivent être dans migration.sql" }
+)
+
+foreach ($sqlFile in $sqlToIntegrate) {
+    $path = Join-Path (Get-Location) $sqlFile.File
+    $targetPath = Join-Path (Get-Location) $sqlFile.Target
+    if (Test-Path $path) {
+        # Vérifier si le contenu est déjà dans migration.sql
+        $sqlContent = Get-Content $path -Raw
+        $targetContent = Get-Content $targetPath -Raw -ErrorAction SilentlyContinue
+        
+        if ($targetContent -and $sqlContent) {
+            # Vérifier si les colonnes GPS sont déjà dans migration.sql
+            $gpsInMigration = $targetContent -match "ALTER TABLE measurements.*latitude|ADD COLUMN.*latitude.*measurements"
+            if (-not $gpsInMigration) {
+                $sqlToIntegrateList += "$($sqlFile.File) - $($sqlFile.Reason) (pas encore intégré dans $($sqlFile.Target))"
+                $elementsInutilesScore -= 0.5
+            } else {
+                # Déjà intégré, peut être supprimé
+                $sqlObsoletes += "$($sqlFile.File) - Déjà intégré dans $($sqlFile.Target), peut être supprimé"
+                $elementsInutilesScore -= 0.2
+            }
+        } else {
+            $sqlToIntegrateList += "$($sqlFile.File) - $($sqlFile.Reason) (fichier cible non trouvé)"
+            $elementsInutilesScore -= 0.5
+        }
+    }
+}
+
+if ($sqlObsoletes.Count -gt 0) {
+    Write-Warn "$($sqlObsoletes.Count) fichier(s) SQL obsolète(s)"
+    $elementsInutilesIssues += "$($sqlObsoletes.Count) fichier(s) SQL obsolète(s)"
+}
+
+if ($sqlToIntegrateList.Count -gt 0) {
+    Write-Err "$($sqlToIntegrateList.Count) fichier(s) SQL à intégrer avant suppression"
+    $elementsInutilesIssues += "$($sqlToIntegrateList.Count) fichier(s) SQL à intégrer dans migration.sql avant suppression"
+}
+
+# Calcul du score final
+$elementsInutilesScoreFinal = [Math]::Max(0, [Math]::Round($elementsInutilesScore, 1))
+
+# Afficher le résumé
+$totalElementsInutiles = $fichiersLogs.Count + $scriptsMigrationRedondants.Count + $fichiersTestObsoletes.Count + 
+                         $dossiersVides.Count + $fichiersDupliques.Count + $codeMort.Count + 
+                         $scriptsRedondants.Count + $fichiersTemporaires.Count + $documentationObsolete.Count +
+                         $ps1Obsoletes.Count + $jsObsoletes.Count + $sqlObsoletes.Count + $sqlToIntegrateList.Count + $fichiersMalOrganises.Count
+
+Write-Host ""
+if ($totalElementsInutiles -eq 0) {
+    Write-OK "Aucun élément inutile détecté - Score: $elementsInutilesScoreFinal/10"
+} else {
+    Write-Warn "$totalElementsInutiles élément(s) inutile(s) détecté(s)"
+    if ($elementsInutilesIssues.Count -gt 0) {
+        Write-Err "Problèmes détectés:"
+        $elementsInutilesIssues | Select-Object -First 10 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+        if ($elementsInutilesIssues.Count -gt 10) {
+            Write-Host "  ... et $($elementsInutilesIssues.Count - 10) autres problèmes" -ForegroundColor Red
+        }
+    }
+    if ($elementsInutilesWarnings.Count -gt 0) {
+        Write-Warn "Avertissements:"
+        $elementsInutilesWarnings | Select-Object -First 5 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    }
+    Write-Host "[SCORE ÉLÉMENTS INUTILES] $elementsInutilesScoreFinal/10" -ForegroundColor Yellow
+}
+
+# Ajouter au score global
+$auditResults.Scores["Éléments Inutiles"] = $elementsInutilesScoreFinal
+$auditResults.Issues += $elementsInutilesIssues
+$auditResults.Warnings += $elementsInutilesWarnings
+
+# Ajouter les recommandations
+if ($totalElementsInutiles -gt 0) {
+    $auditResults.Recommendations += "Nettoyer $totalElementsInutiles élément(s) inutile(s) (scripts obsolètes, fichiers de test, duplications)"
+    if ($sqlToIntegrateList.Count -gt 0) {
+        $auditResults.Recommendations += "⚠️ INTÉGRER les fichiers SQL dans migration.sql AVANT suppression: $($sqlToIntegrateList -join ', ')"
+    }
+    if ($scriptsMigrationRedondants.Count -gt 0) {
+        $auditResults.Recommendations += "Supprimer $($scriptsMigrationRedondants.Count) script(s) de migration redondant(s) (API le fait automatiquement)"
+    }
+    if ($sqlObsoletes.Count -gt 0) {
+        $auditResults.Recommendations += "Supprimer $($sqlObsoletes.Count) fichier(s) SQL obsolète(s)"
+    }
+    if ($fichiersTestObsoletes.Count -gt 0) {
+        $auditResults.Recommendations += "Supprimer $($fichiersTestObsoletes.Count) fichier(s) de test obsolète(s)"
+    }
+    if ($dossiersVides.Count -gt 0) {
+        $auditResults.Recommendations += "Supprimer $($dossiersVides.Count) dossier(s) vide(s)"
+    }
+    if ($fichiersDupliques.Count -gt 0) {
+        $auditResults.Recommendations += "Supprimer $($fichiersDupliques.Count) fichier(s) dupliqué(s)"
+    }
+    if ($fichiersTemporaires.Count -gt 0) {
+        $auditResults.Recommendations += "Supprimer $($fichiersTemporaires.Count) fichier(s) temporaire(s)"
+    }
+    if ($scriptsRedondants.Count -gt 0) {
+        $auditResults.Recommendations += "Supprimer $($scriptsRedondants.Count) script(s) redondant(s)"
+    }
+    if ($fichiersMalOrganises.Count -gt 0) {
+        $auditResults.Recommendations += "Réorganiser $($fichiersMalOrganises.Count) fichier(s) mal organisé(s) (exécuter: scripts\REORGANISER_PROJET.ps1 -AutoFix)"
+    }
+    $auditResults.Recommendations += "Exécuter scripts\audit\NETTOYER_ELEMENTS_INUTILES.ps1 pour nettoyer automatiquement"
+}
+
+Write-Host ""
+Write-Host ("=" * 80) -ForegroundColor Gray
+
+# ===============================================================================
+# PHASE 20 : VÉRIFICATION SYNCHRONISATION GITHUB PAGES
+# ===============================================================================
+
+Write-Section "[20/21] Vérification Synchronisation GitHub Pages"
+
+$deploymentScore = 10.0
+$deploymentIssues = @()
+$deploymentWarnings = @()
+$repo = "ymora/OTT"
+$baseUrl = "https://ymora.github.io/OTT"
+
+Write-Info "Vérification de la synchronisation entre le code local et GitHub Pages..."
+
+# Récupérer le commit local actuel
+try {
+    $localCommit = git rev-parse --short HEAD 2>$null
+    
+    if (-not $localCommit) {
+        Write-Err "Impossible de récupérer le commit local (pas un dépôt Git ?)"
+        $deploymentScore -= 5.0
+        $deploymentIssues += "Impossible de récupérer le commit local"
+    } else {
+        Write-Info "  Commit local: $localCommit"
+        
+        # Vérifier si le commit local est poussé
+        Write-Info "Vérification synchronisation avec origin/main..."
+        $remoteCommit = git rev-parse --short origin/main 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            if ($localCommit -eq $remoteCommit) {
+                Write-OK "Commit local synchronisé avec origin/main"
+            } else {
+                Write-Warn "Commit local différent de origin/main"
+                Write-Info "  Local:  $localCommit"
+                Write-Info "  Remote: $remoteCommit"
+                $deploymentScore -= 3.0
+                $deploymentWarnings += "Commit local non poussé sur origin/main"
+                
+                # Proposer de pousser automatiquement
+                Write-Info "💡 Solution: git push origin main"
+            }
+        } else {
+            Write-Warn "Impossible de récupérer le commit distant (pas de remote configuré ?)"
+            $deploymentScore -= 2.0
+            $deploymentWarnings += "Remote origin/main non accessible"
+        }
+        
+        # Vérifier le fichier de version sur GitHub Pages
+        Write-Info "Vérification fichier de version sur GitHub Pages..."
+        try {
+            $versionUrl = "$baseUrl/.version.json"
+            $versionResponse = Invoke-RestMethod -Uri $versionUrl -Method Get -TimeoutSec 10 -ErrorAction Stop
+            
+            $deployedCommit = $versionResponse.version
+            $deployedTimestamp = $versionResponse.timestamp
+            
+            Write-OK "Fichier de version trouvé sur GitHub Pages"
+            Write-Info "  Commit déployé: $deployedCommit"
+            Write-Info "  Timestamp: $deployedTimestamp"
+            
+            # Comparer avec le commit local
+            if ($localCommit -eq $deployedCommit) {
+                Write-OK "Le site GitHub Pages est à jour !"
+                Write-Info "  Le commit local ($localCommit) correspond au commit déployé ($deployedCommit)"
+            } else {
+                Write-Err "Le site GitHub Pages n'est PAS à jour !"
+                Write-Info "  Local:  $localCommit"
+                Write-Info "  Déployé: $deployedCommit"
+                $deploymentScore -= 5.0
+                $deploymentIssues += "Site GitHub Pages non synchronisé (local: $localCommit, déployé: $deployedCommit)"
+                
+                # Vérifier si le commit local est poussé
+                if ($localCommit -eq $remoteCommit) {
+                    Write-Warn "Le commit est poussé mais pas encore déployé"
+                    Write-Info "  Le workflow GitHub Actions est peut-être en cours..."
+                    $deploymentWarnings += "Déploiement en cours ou échoué - vérifier Actions GitHub"
+                    
+                    # Option de correction automatique
+                    if ($AutoFixDeployment) {
+                        Write-Info ""
+                        Write-Info "🔧 Correction automatique activée - Forçage du redéploiement..."
+                        try {
+                            $emptyCommitResult = git commit --allow-empty -m "chore: Force GitHub Pages deployment" 2>&1
+                            if ($LASTEXITCODE -eq 0) {
+                                $pushResult = git push origin main 2>&1
+                                if ($LASTEXITCODE -eq 0) {
+                                    Write-OK "Redéploiement forcé avec succès !"
+                                    Write-Info "  Le workflow GitHub Actions va se déclencher automatiquement"
+                                    $deploymentScore += 2.0  # Bonus pour correction automatique
+                                } else {
+                                    Write-Err "Échec du push: $pushResult"
+                                    $deploymentIssues += "Échec du push automatique: $pushResult"
+                                }
+                            } else {
+                                Write-Err "Échec du commit vide: $emptyCommitResult"
+                                $deploymentIssues += "Échec du commit vide: $emptyCommitResult"
+                            }
+                        } catch {
+                            Write-Err "Erreur lors du redéploiement: $($_.Exception.Message)"
+                            $deploymentIssues += "Erreur redéploiement automatique: $($_.Exception.Message)"
+                        }
+                    } else {
+                        # Proposer de forcer un redéploiement
+                        Write-Info ""
+                        Write-Info "💡 Pour forcer un redéploiement automatiquement, utiliser: -AutoFixDeployment"
+                        Write-Info "   .\scripts\audit\AUDIT_COMPLET_AUTOMATIQUE.ps1 -AutoFixDeployment"
+                    }
+                } else {
+                    Write-Warn "Le commit local n'est pas poussé sur GitHub"
+                    Write-Info "  Solution: git push origin main"
+                    $deploymentWarnings += "Commit local non poussé - exécuter: git push origin main"
+                    
+                    # Option de correction automatique
+                    if ($AutoFixDeployment) {
+                        Write-Info ""
+                        Write-Info "🔧 Correction automatique activée - Poussage du commit..."
+                        try {
+                            $pushResult = git push origin main 2>&1
+                            if ($LASTEXITCODE -eq 0) {
+                                Write-OK "Commit poussé avec succès !"
+                                Write-Info "  Le workflow GitHub Actions va se déclencher automatiquement"
+                                $deploymentScore += 2.0  # Bonus pour correction automatique
+                            } else {
+                                Write-Err "Échec du push: $pushResult"
+                                $deploymentIssues += "Échec du push automatique: $pushResult"
+                            }
+                        } catch {
+                            Write-Err "Erreur lors du push: $($_.Exception.Message)"
+                            $deploymentIssues += "Erreur push automatique: $($_.Exception.Message)"
+                        }
+                    } else {
+                        Write-Info ""
+                        Write-Info "💡 Pour pousser automatiquement, utiliser: -AutoFixDeployment"
+                        Write-Info "   .\scripts\audit\AUDIT_COMPLET_AUTOMATIQUE.ps1 -AutoFixDeployment"
+                    }
+                }
+            }
+        } catch {
+            Write-Warn "Impossible de récupérer le fichier de version sur GitHub Pages"
+            Write-Info "  Erreur: $($_.Exception.Message)"
+            Write-Info "  Le site est peut-être en cours de déploiement ou inaccessible"
+            $deploymentScore -= 3.0
+            $deploymentWarnings += "Fichier de version GitHub Pages inaccessible"
+            
+            # Vérifier si le site est accessible
+            try {
+                $siteResponse = Invoke-WebRequest -Uri $baseUrl -Method Head -TimeoutSec 5 -ErrorAction Stop
+                Write-OK "Site GitHub Pages accessible (HTTP $($siteResponse.StatusCode))"
+            } catch {
+                Write-Err "Site GitHub Pages non accessible"
+                $deploymentScore -= 2.0
+                $deploymentIssues += "Site GitHub Pages non accessible"
+            }
+        }
+    }
+} catch {
+    Write-Err "Erreur lors de la vérification de synchronisation: $($_.Exception.Message)"
+    $deploymentScore -= 5.0
+    $deploymentIssues += "Erreur lors de la vérification: $($_.Exception.Message)"
+}
+
+# Calcul du score final
+$deploymentScoreFinal = [Math]::Max(0, [Math]::Round($deploymentScore, 1))
+
+# Afficher le résumé
+Write-Host ""
+if ($deploymentScoreFinal -eq 10.0) {
+    Write-OK "Synchronisation GitHub Pages parfaite - Score: $deploymentScoreFinal/10"
+} elseif ($deploymentScoreFinal -ge 7.0) {
+    Write-Warn "Synchronisation GitHub Pages à améliorer - Score: $deploymentScoreFinal/10"
+    if ($deploymentWarnings.Count -gt 0) {
+        $deploymentWarnings | Select-Object -First 5 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    }
+} else {
+    Write-Err "Synchronisation GitHub Pages problématique - Score: $deploymentScoreFinal/10"
+    if ($deploymentIssues.Count -gt 0) {
+        $deploymentIssues | Select-Object -First 5 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+    }
+    if ($deploymentWarnings.Count -gt 0) {
+        $deploymentWarnings | Select-Object -First 3 | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    }
+}
+
+Write-Host "[SCORE SYNCHRONISATION GITHUB PAGES] $deploymentScoreFinal/10" -ForegroundColor $(if ($deploymentScoreFinal -ge 9) { "Green" } elseif ($deploymentScoreFinal -ge 7) { "Yellow" } else { "Red" })
+
+# Ajouter au score global
+$auditResults.Scores["Synchronisation GitHub Pages"] = $deploymentScoreFinal
+$auditResults.Issues += $deploymentIssues
+$auditResults.Warnings += $deploymentWarnings
+
+# Ajouter les recommandations
+if ($deploymentScoreFinal -lt 10.0) {
+    if ($deploymentIssues.Count -gt 0) {
+        $auditResults.Recommendations += "Synchroniser GitHub Pages avec le code local (exécuter: git push origin main)"
+        $auditResults.Recommendations += "Vérifier les Actions GitHub: https://github.com/$repo/actions"
+    }
+    if ($deploymentWarnings.Count -gt 0) {
+        $auditResults.Recommendations += "Vérifier que le workflow GitHub Actions s'est bien exécuté"
+        $auditResults.Recommendations += "Utiliser le script: .\scripts\verification\verifier-synchronisation-deploiement.ps1"
+    }
+}
+
+Write-Host ""
+Write-Host ("=" * 80) -ForegroundColor Gray
+
+# ===============================================================================
+# PHASE 21 : RÉSUMÉ FINAL ET VERDICT
+# ===============================================================================
+
+Write-Section "[21/21] Résumé Final et Verdict"
+
+# Recalculer le score global avec tous les scores (y compris les nouvelles phases)
+$totalWeight = ($scoreWeights.Values | Measure-Object -Sum).Sum
+$weightedSum = 0
+
+Write-Host ""
+Write-Host "Récapitulatif des scores:" -ForegroundColor Cyan
+foreach ($key in ($scoreWeights.Keys | Sort-Object)) {
+    $score = if($auditResults.Scores.ContainsKey($key)) { $auditResults.Scores[$key] } else { 5 }
+    $weight = $scoreWeights[$key]
+    $weightedSum += $score * $weight
+    
+    $color = if($score -ge 9){"Green"}elseif($score -ge 7){"Yellow"}else{"Red"}
+    $status = if($score -ge 9){"[OK]"}elseif($score -ge 7){"[WARN]"}else{"[ERROR]"}
+    
+    Write-Host ("  {0,-28} {1,4}/10  (poids {2,3})  {3}" -f $key, $score, $weight, $status) -ForegroundColor $color
+}
+
+$scoreGlobal = [math]::Round($weightedSum / $totalWeight, 1)
+
+Write-Host ""
+Write-Host ("=" * 80) -ForegroundColor Gray
+Write-Host ("  [SCORE] SCORE GLOBAL PONDERE : {0}/10" -f $scoreGlobal) -ForegroundColor $(if($scoreGlobal -ge 9.5){"Green"}elseif($scoreGlobal -ge 8){"Yellow"}else{"Red"})
+Write-Host ("=" * 80) -ForegroundColor Gray
+
+# Résumé des problèmes
+Write-Host ""
+Write-Host "Résumé des problèmes détectés:" -ForegroundColor Cyan
+Write-Host ("-" * 80) -ForegroundColor Gray
+Write-Host "  Problèmes critiques  : $($auditResults.Issues.Count)" -ForegroundColor $(if($auditResults.Issues.Count -eq 0){"Green"}else{"Red"})
+Write-Host "  Avertissements       : $($auditResults.Warnings.Count)" -ForegroundColor $(if($auditResults.Warnings.Count -eq 0){"Green"}else{"Yellow"})
+Write-Host "  Recommandations      : $($auditResults.Recommendations.Count)" -ForegroundColor $(if($auditResults.Recommendations.Count -eq 0){"Green"}else{"Yellow"})
+Write-Host ("-" * 80) -ForegroundColor Gray
+
 # Verdict final
+Write-Host ""
 if ($scoreGlobal -ge 9.5) {
     Write-Host "[EXCELLENT] Projet de qualite professionnelle !" -ForegroundColor Green
     $exitCode = 0

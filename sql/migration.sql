@@ -110,12 +110,21 @@ BEGIN
     END IF;
 END $$;
 
+-- COLONNES GPS dans measurements (pour stocker les coordonnées GPS spécifiques à chaque mesure)
+ALTER TABLE measurements 
+ADD COLUMN IF NOT EXISTS latitude NUMERIC(10,8),
+ADD COLUMN IF NOT EXISTS longitude NUMERIC(11,8);
+
+COMMENT ON COLUMN measurements.latitude IS 'Latitude GPS de la mesure (si disponible)';
+COMMENT ON COLUMN measurements.longitude IS 'Longitude GPS de la mesure (si disponible)';
+
 -- INDEX PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_devices_deleted_at ON devices(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_patients_deleted_at ON patients(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);
 CREATE INDEX IF NOT EXISTS idx_measurements_timestamp ON measurements(timestamp);
+CREATE INDEX IF NOT EXISTS idx_measurements_location ON measurements(latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
 
 -- Fonction pour mettre à jour automatiquement les min/max des dispositifs
 CREATE OR REPLACE FUNCTION update_device_min_max()
