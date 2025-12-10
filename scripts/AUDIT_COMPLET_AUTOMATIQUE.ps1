@@ -10,7 +10,7 @@
 
 param(
     [string]$Email = "ymora@free.fr",
-    [string]$Password = "",
+    [string]$Password = "Ym120879",
     [string]$ApiUrl = "https://ott-jbln.onrender.com",
     [switch]$Verbose = $false,
     [int]$MaxFunctionLines = 100,
