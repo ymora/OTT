@@ -202,24 +202,27 @@ export default function DashboardPage() {
       <ErrorMessage error={error} onRetry={refetch} />
 
       {/* Carte des dispositifs */}
-      {!loading && devices.filter(d => !d.deleted_at).length > 0 && (
-        <div id="map-container" className="card p-0 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {devices.filter(d => !d.deleted_at && d.latitude && d.longitude).length} dispositif(s) géolocalisé(s)
-            </p>
+      {(() => {
+        const activeDevices = devices.filter(d => !d.deleted_at)
+        const geolocatedDevices = activeDevices.filter(d => d.latitude && d.longitude)
+        return !loading && activeDevices.length > 0 && (
+          <div id="map-container" className="card p-0 overflow-hidden">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                {geolocatedDevices.length} dispositif(s) géolocalisé(s)
+              </p>
+            </div>
+            <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
+              <LeafletMap
+                devices={devices}
+                focusDeviceId={focusDeviceId}
+                onSelect={(device) => {
+                  setSelectedDeviceOnMap(device)
+                }}
+              />
+            </div>
           </div>
-          <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
-            <LeafletMap
-              devices={devices}
-              focusDeviceId={focusDeviceId}
-              onSelect={(device) => {
-                setSelectedDeviceOnMap(device)
-              }}
-            />
-          </div>
-        </div>
         )
       })()}
 
