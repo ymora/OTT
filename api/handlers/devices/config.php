@@ -59,6 +59,34 @@ function handleUpdateDeviceConfig($device_id) {
     $input = json_decode(file_get_contents('php://input'), true);
     
     try {
+        // Créer les colonnes manquantes automatiquement si elles n'existent pas
+        $columnsToAdd = [
+            'airflow_passes' => 'INTEGER',
+            'airflow_samples_per_pass' => 'INTEGER',
+            'airflow_delay_ms' => 'INTEGER',
+            'watchdog_seconds' => 'INTEGER',
+            'modem_boot_timeout_ms' => 'INTEGER',
+            'sim_ready_timeout_ms' => 'INTEGER',
+            'network_attach_timeout_ms' => 'INTEGER',
+            'modem_max_reboots' => 'INTEGER',
+            'apn' => 'VARCHAR(64)',
+            'sim_pin' => 'VARCHAR(8)',
+            'ota_primary_url' => 'TEXT',
+            'ota_fallback_url' => 'TEXT',
+            'ota_md5' => 'VARCHAR(32)'
+        ];
+        
+        foreach ($columnsToAdd as $column => $type) {
+            if (!columnExists('device_configurations', $column)) {
+                try {
+                    $pdo->exec("ALTER TABLE device_configurations ADD COLUMN IF NOT EXISTS $column $type");
+                    error_log("[Config] Colonne $column ajoutée automatiquement");
+                } catch (PDOException $e) {
+                    error_log("[Config] Erreur ajout colonne $column: " . $e->getMessage());
+                }
+            }
+        }
+        
         $stmt = $pdo->prepare("SELECT * FROM device_configurations WHERE device_id = :device_id");
         $stmt->execute(['device_id' => $device_id]);
         $old_config = $stmt->fetch();
