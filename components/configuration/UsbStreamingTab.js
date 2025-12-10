@@ -221,9 +221,13 @@ export default function DebugTab() {
   
   // Charger tous les dispositifs pour le tableau
   // Le hook useApiData se recharge automatiquement quand l'endpoint change (showArchived)
-  // Pas besoin de useEffect supplémentaire car useApiData détecte le changement d'endpoint via endpointsKey
+  // IMPORTANT: Passer un string unique au lieu d'un tableau pour éviter les problèmes de structure de données
+  const endpoint = useMemo(() => 
+    showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices', 
+    [showArchived]
+  )
   const { data: devicesData, loading: devicesLoading, refetch: refetchDevices, invalidateCache } = useApiData(
-    useMemo(() => [showArchived ? '/api.php/devices?include_deleted=true' : '/api.php/devices'], [showArchived]),
+    endpoint,
     { requiresAuth: true, autoLoad: !!user, cacheTTL: 3000 } // Cache de 3 secondes (optimisé pour le polling adaptatif)
   )
   
@@ -258,7 +262,18 @@ export default function DebugTab() {
     invalidateCache,
     refetch: refetchDevices
   })
-  const allDevicesFromApi = devicesData?.devices?.devices || []
+  // Extraire les dispositifs depuis la réponse API
+  // La structure de l'API est: { success: true, devices: [...] }
+  const allDevicesFromApi = useMemo(() => {
+    if (!devicesData) return []
+    // Si c'est un tableau directement (ne devrait pas arriver mais on gère)
+    if (Array.isArray(devicesData)) return devicesData
+    // Si c'est un objet avec devices (structure normale de l'API)
+    if (devicesData.devices && Array.isArray(devicesData.devices)) {
+      return devicesData.devices
+    }
+    return []
+  }, [devicesData])
   
   // Séparer les dispositifs actifs et archivés
   const allDevices = useMemo(() => {
@@ -274,7 +289,9 @@ export default function DebugTab() {
   }, [allDevices])
   
   // Dispositifs à afficher selon le toggle
-  const devicesToDisplay = showArchived ? allDevices : devices
+  const devicesToDisplay = useMemo(() => {
+    return showArchived ? allDevices : devices
+  }, [showArchived, allDevices, devices])
   
   // ========== STREAMING LOGS EN TEMPS RÉEL (pour admin à distance) ==========
   const [remoteLogs, setRemoteLogs] = useState([])

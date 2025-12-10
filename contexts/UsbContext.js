@@ -535,8 +535,8 @@ export function UsbProvider({ children }) {
               
               // Mettre à jour la base de données avec les informations disponibles
               updateDeviceFirmwareRef.current(identifier, firmwareVersion, {
-                last_seen: now,
-                status: 'usb_connected'
+                last_seen: now
+                // Ne pas mettre à jour le status car la contrainte SQL n'accepte que 'active' ou 'inactive'
                 // Pas de last_battery dans device_info, seulement dans les mesures
               })
               
@@ -729,8 +729,8 @@ export function UsbProvider({ children }) {
               if (identifier) {
                 const firmwareVersion = payload.firmware_version || ''
                 updateDeviceFirmwareRef.current(identifier, firmwareVersion, {
-                  last_seen: now,
-                  status: 'usb_connected'
+                  last_seen: now
+                  // Ne pas mettre à jour le status car la contrainte SQL n'accepte que 'active' ou 'inactive'
                 })
               }
             }
@@ -877,7 +877,7 @@ export function UsbProvider({ children }) {
                 if (identifier) {
                   updateDeviceFirmwareRef.current(identifier, null, {
                     last_seen: now,
-                    status: 'usb_connected',
+                    // Ne pas mettre à jour le status car la contrainte SQL n'accepte que 'active' ou 'inactive'
                     last_battery: measurement.battery !== null && measurement.battery !== undefined ? measurement.battery : undefined,
                     last_flowrate: measurement.flowrate !== null && measurement.flowrate !== undefined ? measurement.flowrate : undefined,
                     last_rssi: measurement.rssi !== null && measurement.rssi !== undefined && measurement.rssi !== -999 ? measurement.rssi : undefined
@@ -1017,8 +1017,8 @@ export function UsbProvider({ children }) {
                 
                 // Préparer les données à mettre à jour dans la base de données
                 const updateData = {
-                  last_seen: now,
-                  status: 'usb_connected'
+                  last_seen: now
+                  // Ne pas mettre à jour le status car la contrainte SQL n'accepte que 'active' ou 'inactive'
                 }
                 
                 // Ajouter la batterie si disponible
@@ -1537,8 +1537,9 @@ export function UsbProvider({ children }) {
         logger.log(`✅ [AUTO-CREATE] Dispositif trouvé (ID: ${existingDevice.id}), mise à jour...`)
         
         const updateData = {
-          last_seen: new Date().toISOString(),
-          status: 'usb_connected'
+          last_seen: new Date().toISOString()
+          // Ne pas mettre à jour le status car la contrainte SQL n'accepte que 'active' ou 'inactive'
+          // Le status 'usb_connected' n'est utilisé que pour l'affichage local (isVirtual)
         }
         
         // Mettre à jour firmware si disponible
@@ -1579,7 +1580,7 @@ export function UsbProvider({ children }) {
           sim_iccid: deviceInfo.sim_iccid || null,
           device_serial: deviceInfo.device_serial || null,
           firmware_version: deviceInfo.firmware_version || null,
-          status: 'usb_connected',
+          status: 'active', // Utiliser 'active' car la contrainte SQL n'accepte que 'active' ou 'inactive'
           last_seen: new Date().toISOString()
         }
 

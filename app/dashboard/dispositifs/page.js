@@ -91,7 +91,7 @@ export default function OutilsPage() {
             sim_iccid: updateData.sim_iccid || (identifier.startsWith('89') ? identifier : null),
             device_serial: updateData.device_serial || (!identifier.startsWith('89') ? identifier : null),
             firmware_version: firmwareVersion || null,
-            status: updateData.status || 'usb_connected',
+            status: 'active', // La contrainte SQL n'accepte que 'active' ou 'inactive'
             last_seen: updateData.last_seen || new Date().toISOString()
           }
           
