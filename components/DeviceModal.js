@@ -608,6 +608,116 @@ export default function DeviceModal({
           try {
             const result = await sendConfigToDevice(configPayload, editingItem.id)
             
+            // Comparer les valeurs initiales avec les nouvelles pour détecter les changements
+            const changes = []
+            const initialData = initialFormDataRef.current || {}
+            
+            // Fonction helper pour formater les valeurs
+            const formatValue = (key, val) => {
+              if (key === 'gps_enabled') return val ? 'ON' : 'OFF'
+              if (key === 'sleep_minutes') return `${val}min`
+              if (key === 'measurement_duration_ms') return `${(val/1000).toFixed(1)}s`
+              if (key === 'send_every_n_wakeups') return `${val}`
+              if (key === 'calibration_coefficients') return `[${val.join(',')}]`
+              if (key === 'airflow_passes') return `${val}`
+              if (key === 'airflow_samples_per_pass') return `${val}`
+              if (key === 'airflow_delay_ms') return `${(val/1000).toFixed(3)}s`
+              if (key === 'watchdog_seconds') return `${(val/60).toFixed(1)}min`
+              if (key === 'modem_boot_timeout_ms') return `${(val/1000).toFixed(1)}s`
+              if (key === 'sim_ready_timeout_ms') return `${(val/1000).toFixed(1)}s`
+              if (key === 'network_attach_timeout_ms') return `${(val/1000).toFixed(1)}s`
+              if (key === 'modem_max_reboots') return `${val}`
+              if (key === 'apn') return val
+              if (key === 'sim_pin') return '***'
+              if (key === 'ota_primary_url') return val.length > 30 ? val.substring(0, 30) + '...' : val
+              if (key === 'ota_fallback_url') return val.length > 30 ? val.substring(0, 30) + '...' : val
+              if (key === 'ota_md5') return val.length > 16 ? val.substring(0, 16) + '...' : val
+              return String(val)
+            }
+            
+            // Détecter les changements dans la configuration
+            Object.entries(configPayload).forEach(([key, newVal]) => {
+              // Convertir les valeurs pour comparaison (gérer les conversions sec→ms, min→sec)
+              let oldVal = initialData[key]
+              
+              // Conversions pour comparaison
+              if (key === 'measurement_duration_ms' && oldVal != null) {
+                oldVal = Math.round(parseFloat(oldVal) * 1000)
+              } else if (key === 'airflow_delay_ms' && oldVal != null) {
+                oldVal = Math.round(parseFloat(oldVal) * 1000)
+              } else if (key === 'watchdog_seconds' && oldVal != null) {
+                oldVal = Math.round(parseFloat(oldVal) * 60)
+              } else if (key === 'modem_boot_timeout_ms' && oldVal != null) {
+                oldVal = Math.round(parseFloat(oldVal) * 1000)
+              } else if (key === 'sim_ready_timeout_ms' && oldVal != null) {
+                oldVal = Math.round(parseFloat(oldVal) * 1000)
+              } else if (key === 'network_attach_timeout_ms' && oldVal != null) {
+                oldVal = Math.round(parseFloat(oldVal) * 1000)
+              }
+              
+              // Comparer les valeurs (gérer les cas spéciaux)
+              let hasChanged = false
+              if (key === 'calibration_coefficients') {
+                hasChanged = !oldVal || !Array.isArray(oldVal) || 
+                  oldVal.length !== newVal.length ||
+                  oldVal.some((v, i) => Math.abs(v - newVal[i]) > 0.001)
+              } else if (key === 'gps_enabled') {
+                hasChanged = oldVal !== newVal
+              } else if (oldVal === null || oldVal === undefined || oldVal === '') {
+                hasChanged = newVal !== null && newVal !== undefined && newVal !== ''
+              } else {
+                hasChanged = oldVal !== newVal
+              }
+              
+              if (hasChanged) {
+                // Utiliser les valeurs originales pour l'affichage (pas les valeurs converties)
+                const oldDisplay = initialData[key]
+                const oldFormatted = oldDisplay !== null && oldDisplay !== undefined && oldDisplay !== '' 
+                  ? formatValue(key, oldDisplay) 
+                  : '(vide)'
+                const newFormatted = formatValue(key, newVal)
+                
+                // Noms lisibles pour les clés
+                const keyNames = {
+                  'gps_enabled': 'GPS',
+                  'sleep_minutes': 'Sommeil',
+                  'measurement_duration_ms': 'Durée mesure',
+                  'send_every_n_wakeups': 'Envoi tous les N wakeups',
+                  'calibration_coefficients': 'Calibration',
+                  'airflow_passes': 'Passes airflow',
+                  'airflow_samples_per_pass': 'Échantillons/passe',
+                  'airflow_delay_ms': 'Délai airflow',
+                  'watchdog_seconds': 'Watchdog',
+                  'modem_boot_timeout_ms': 'Timeout boot modem',
+                  'sim_ready_timeout_ms': 'Timeout SIM',
+                  'network_attach_timeout_ms': 'Timeout réseau',
+                  'modem_max_reboots': 'Max redémarrages',
+                  'apn': 'APN',
+                  'sim_pin': 'PIN SIM',
+                  'ota_primary_url': 'OTA primaire',
+                  'ota_fallback_url': 'OTA secours',
+                  'ota_md5': 'MD5 OTA'
+                }
+                
+                changes.push(`${keyNames[key] || key}: ${oldFormatted} → ${newFormatted}`)
+              }
+            })
+            
+            // Détecter les changements dans les données du dispositif
+            if (initialData.device_name !== devicePayload.device_name) {
+              changes.push(`Nom: "${initialData.device_name || '(vide)'}" → "${devicePayload.device_name}"`)
+            }
+            if (initialData.device_serial !== devicePayload.device_serial) {
+              const oldSerial = initialData.device_serial || '(vide)'
+              const newSerial = devicePayload.device_serial || '(vide)'
+              if (oldSerial !== newSerial) {
+                changes.push(`Serial: "${oldSerial}" → "${newSerial}"`)
+              }
+            }
+            if (initialData.status !== devicePayload.status) {
+              changes.push(`Statut: ${initialData.status || '(vide)'} → ${devicePayload.status}`)
+            }
+            
             // Afficher un log bleu dans le terminal pour confirmer
             if (appendLog) {
               const configSummary = Object.entries(configPayload)
@@ -637,6 +747,14 @@ export default function DeviceModal({
               appendLog(`📤 [CONFIG] UPDATE_CONFIG (${result.method}) → ${configSummary}`, 'dashboard')
             }
             
+            // Message de succès avec les changements détectés
+            if (changes.length > 0) {
+              const changesText = changes.join(', ')
+              logger.log(`✅ Dispositif "${devicePayload.device_name}" mis à jour: ${changesText}`)
+            } else {
+              logger.log(`✅ Dispositif "${devicePayload.device_name}" mis à jour (aucun changement détecté)`)
+            }
+            
             // Si envoyé via USB, sauvegarder aussi en base pour cohérence
             if (result.method === 'USB') {
               try {
@@ -661,7 +779,30 @@ export default function DeviceModal({
           }
         }
 
-        logger.log(`✅ Dispositif modifié: ${devicePayload.device_name}`)
+        // Détecter les changements dans les données du dispositif (sans config)
+        const changes = []
+        const initialData = initialFormDataRef.current || {}
+        
+        if (initialData.device_name !== devicePayload.device_name) {
+          changes.push(`Nom: "${initialData.device_name || '(vide)'}" → "${devicePayload.device_name}"`)
+        }
+        if (initialData.device_serial !== devicePayload.device_serial) {
+          const oldSerial = initialData.device_serial || '(vide)'
+          const newSerial = devicePayload.device_serial || '(vide)'
+          if (oldSerial !== newSerial) {
+            changes.push(`Serial: "${oldSerial}" → "${newSerial}"`)
+          }
+        }
+        if (initialData.status !== devicePayload.status) {
+          changes.push(`Statut: ${initialData.status || '(vide)'} → ${devicePayload.status}`)
+        }
+        
+        if (changes.length > 0) {
+          const changesText = changes.join(', ')
+          logger.log(`✅ Dispositif "${devicePayload.device_name}" modifié: ${changesText}`)
+        } else {
+          logger.log(`✅ Dispositif "${devicePayload.device_name}" modifié (aucun changement détecté)`)
+        }
       } else {
         // Création - vérifier d'abord si le dispositif existe déjà
         const existingDevice = allDevices.find(d =>
@@ -690,7 +831,30 @@ export default function DeviceModal({
             }
           }
 
-          logger.log(`✅ Dispositif mis à jour: ${devicePayload.device_name}`)
+          // Détecter les changements
+          const changes = []
+          const initialData = initialFormDataRef.current || {}
+          
+          if (initialData.device_name !== devicePayload.device_name) {
+            changes.push(`Nom: "${initialData.device_name || '(vide)'}" → "${devicePayload.device_name}"`)
+          }
+          if (initialData.device_serial !== devicePayload.device_serial) {
+            const oldSerial = initialData.device_serial || '(vide)'
+            const newSerial = devicePayload.device_serial || '(vide)'
+            if (oldSerial !== newSerial) {
+              changes.push(`Serial: "${oldSerial}" → "${newSerial}"`)
+            }
+          }
+          if (initialData.status !== devicePayload.status) {
+            changes.push(`Statut: ${initialData.status || '(vide)'} → ${devicePayload.status}`)
+          }
+          
+          if (changes.length > 0) {
+            const changesText = changes.join(', ')
+            logger.log(`✅ Dispositif "${devicePayload.device_name}" mis à jour: ${changesText}`)
+          } else {
+            logger.log(`✅ Dispositif "${devicePayload.device_name}" mis à jour (aucun changement détecté)`)
+          }
         } else {
           // Créer un nouveau dispositif
           const endpoint = '/api.php/devices'
