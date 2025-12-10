@@ -61,6 +61,7 @@ function handleUpdateDeviceConfig($device_id) {
     try {
         // Créer les colonnes manquantes automatiquement si elles n'existent pas
         $columnsToAdd = [
+            'roaming_enabled' => 'BOOLEAN DEFAULT true',
             'airflow_passes' => 'INTEGER',
             'airflow_samples_per_pass' => 'INTEGER',
             'airflow_delay_ms' => 'INTEGER',
