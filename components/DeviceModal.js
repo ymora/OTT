@@ -1093,7 +1093,10 @@ export default function DeviceModal({
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    <label 
+                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                      title="Durée de veille entre chaque réveil du dispositif. Le dispositif se met en veille profonde pour économiser la batterie, puis se réveille après ce délai pour prendre une mesure et envoyer les données."
+                    >
                       ⏰ Veille (min)
                     </label>
                     <input
@@ -1104,13 +1107,17 @@ export default function DeviceModal({
                       className="input w-full text-sm py-1.5"
                       placeholder="1440 (24h)"
                       min="1"
+                      title="Durée en minutes entre chaque réveil. Exemple: 1440 = 24 heures, 60 = 1 heure"
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Par défaut: 1440 min (24h) - Intervalle entre envois OTA
                     </p>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    <label 
+                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                      title="Durée de la mesure de débit d'air en secondes. Le capteur prend plusieurs échantillons pendant cette durée pour calculer une valeur moyenne précise."
+                    >
                       ⏱️ Durée (sec)
                     </label>
                     <input
@@ -1122,10 +1129,14 @@ export default function DeviceModal({
                       className="input w-full text-sm py-1.5"
                       placeholder="5.0"
                       min="0.1"
+                      title="Durée de la mesure en secondes. Plus long = plus précis mais consomme plus de batterie. Recommandé: 3-10 secondes"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    <label 
+                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                      title="Fréquence d'envoi des données au serveur. 1 = envoi à chaque réveil, 2 = envoi tous les 2 réveils, etc. Utile pour économiser les données réseau."
+                    >
                       📤 Envoi (N réveils)
                     </label>
                     <input
@@ -1136,12 +1147,16 @@ export default function DeviceModal({
                       className="input w-full text-sm py-1.5"
                       min="1"
                       placeholder="1"
+                      title="Nombre de réveils entre chaque envoi. 1 = toujours envoyer, 2 = envoyer tous les 2 réveils"
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   <div className="col-span-3">
-                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                    <label 
+                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                      title="Coefficients de calibration pour convertir les valeurs brutes du capteur en débit réel (L/min). Formule: débit = a2 × valeur² + a1 × valeur + a0. Ces valeurs sont déterminées lors de l'étalonnage du dispositif."
+                    >
                       📐 Calibration (a0, a1, a2)
                     </label>
                     <div className="grid grid-cols-3 gap-2">
@@ -1154,16 +1169,20 @@ export default function DeviceModal({
                           onChange={(e) => handleCalibrationChange(index, e.target.value)}
                           className="input w-full text-sm py-1.5"
                           placeholder={`a${index}`}
+                          title={`Coefficient a${index} de la formule de calibration. Modifier uniquement si vous avez effectué un étalonnage.`}
                         />
                       ))}
                     </div>
                   </div>
                   <div className="flex items-end gap-2">
                     <div className="w-full">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                      <label 
+                        className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                        title="Active la localisation GPS du dispositif. Permet d'enregistrer la position géographique avec chaque mesure. Consomme plus de batterie et peut ralentir le démarrage du modem."
+                      >
                         📍 GPS
                       </label>
-                      <label className="relative inline-flex items-center cursor-pointer w-full justify-center">
+                      <label className="relative inline-flex items-center cursor-pointer w-full justify-center" title="Activer/désactiver le GPS">
                         <input
                           type="checkbox"
                           name="gps_enabled"
@@ -1175,10 +1194,13 @@ export default function DeviceModal({
                       </label>
                     </div>
                     <div className="w-full">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                      <label 
+                        className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                        title="Autorise le dispositif à utiliser le réseau d'autres opérateurs (itinérance/roaming) quand le réseau de votre opérateur n'est pas disponible. Peut entraîner des coûts supplémentaires selon votre forfait."
+                      >
                         🌐 Itinérance
                       </label>
-                      <label className="relative inline-flex items-center cursor-pointer w-full justify-center">
+                      <label className="relative inline-flex items-center cursor-pointer w-full justify-center" title="Activer/désactiver l'itinérance">
                         <input
                           type="checkbox"
                           name="roaming_enabled"
@@ -1198,7 +1220,10 @@ export default function DeviceModal({
             <Accordion title="💨 Airflow" defaultOpen={false}>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Nombre de fois que la mesure de débit est répétée. Chaque passe prend plusieurs échantillons. Plus de passes = mesure plus précise mais plus longue."
+                  >
                     Passes
                   </label>
                   <input
@@ -1209,10 +1234,14 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="2"
                     min="1"
+                    title="Nombre de passes de mesure. Recommandé: 2-5 passes"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Nombre de mesures prises pendant chaque passe. Plus d'échantillons = valeur moyenne plus précise mais mesure plus longue."
+                  >
                     Échantillons/passe
                   </label>
                   <input
@@ -1223,10 +1252,14 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="10"
                     min="1"
+                    title="Nombre d'échantillons par passe. Recommandé: 5-20 échantillons"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Temps d'attente entre chaque échantillon de mesure en secondes. Permet au capteur de se stabiliser entre les mesures."
+                  >
                     Délai (sec)
                   </label>
                   <input
@@ -1238,6 +1271,7 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="0.005"
                     min="0.001"
+                    title="Délai en secondes entre échantillons. Recommandé: 0.005-0.01 secondes"
                   />
                 </div>
               </div>
@@ -1247,7 +1281,10 @@ export default function DeviceModal({
             <Accordion title="📡 Modem" defaultOpen={false}>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Timeout du watchdog en minutes. Si le système ne répond pas pendant ce délai, le dispositif redémarre automatiquement pour éviter les blocages."
+                  >
                     Watchdog (min)
                   </label>
                   <input
@@ -1259,10 +1296,14 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="5.0"
                     min="0.1"
+                    title="Timeout en minutes avant redémarrage automatique. Recommandé: 3-10 minutes"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Temps maximum en secondes pour que le modem démarre. Si le modem ne démarre pas dans ce délai, le système considère qu'il y a un problème."
+                  >
                     Boot timeout (sec)
                   </label>
                   <input
@@ -1274,10 +1315,14 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="30.0"
                     min="0.1"
+                    title="Temps max en secondes pour démarrer le modem. Recommandé: 20-60 secondes"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Temps maximum en secondes pour que la carte SIM soit prête. La SIM doit être déverrouillée et initialisée avant de pouvoir utiliser le réseau."
+                  >
                     SIM ready timeout (sec)
                   </label>
                   <input
@@ -1289,10 +1334,14 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="10.0"
                     min="0.1"
+                    title="Temps max en secondes pour que la SIM soit prête. Recommandé: 5-15 secondes"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Temps maximum en secondes pour s'attacher au réseau mobile (4G/LTE). Le dispositif doit se connecter au réseau de l'opérateur avant de pouvoir envoyer des données."
+                  >
                     Network attach timeout (sec)
                   </label>
                   <input
@@ -1304,10 +1353,14 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="60.0"
                     min="0.1"
+                    title="Temps max en secondes pour s'attacher au réseau. Recommandé: 30-120 secondes"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Nombre maximum de redémarrages automatiques du modem en cas d'erreur. Si le modem échoue plusieurs fois, le système arrête de réessayer pour éviter une boucle infinie."
+                  >
                     Max reboots
                   </label>
                   <input
@@ -1318,6 +1371,7 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5"
                     placeholder="3"
                     min="0"
+                    title="Nombre max de redémarrages du modem. Recommandé: 2-5 redémarrages"
                   />
                 </div>
               </div>
@@ -1327,7 +1381,10 @@ export default function DeviceModal({
             <Accordion title="🌐 Réseau" defaultOpen={false}>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile. Chaque opérateur a son propre APN. Sans APN, le dispositif ne peut pas se connecter au réseau (oper, eps, gprs restent KO)."
+                  >
                     APN <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -1337,6 +1394,7 @@ export default function DeviceModal({
                     onChange={handleInputChange}
                     className="input w-full text-sm py-1.5"
                     placeholder="free, orange, sl2sfr, internet..."
+                    title="APN de votre opérateur. Free: 'free', Orange: 'orange', SFR: 'sl2sfr', Bouygues: 'mmsbouygtel'. Obligatoire pour la connexion réseau."
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Free: <code className="text-xs">free</code> | Orange: <code className="text-xs">orange</code> | SFR: <code className="text-xs">sl2sfr</code> | Bouygues: <code className="text-xs">mmsbouygtel</code>
@@ -1348,7 +1406,10 @@ export default function DeviceModal({
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                  <label 
+                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Code PIN de la carte SIM (4 à 8 chiffres). Nécessaire pour déverrouiller la SIM au démarrage. Si votre SIM n'a pas de PIN, laissez vide. Le PIN est stocké de manière sécurisée dans le dispositif."
+                  >
                     SIM PIN
                   </label>
                   <input
@@ -1358,6 +1419,7 @@ export default function DeviceModal({
                     onChange={handleInputChange}
                     className="input w-full text-sm py-1.5"
                     placeholder="0000"
+                    title="Code PIN de votre carte SIM (4-8 chiffres). Laissez vide si votre SIM n'a pas de PIN."
                   />
                 </div>
               </div>
