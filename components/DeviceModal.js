@@ -1174,7 +1174,7 @@ export default function DeviceModal({
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-end gap-2">
+                  <div className="flex items-end">
                     <div className="w-full">
                       <label 
                         className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
@@ -1188,24 +1188,6 @@ export default function DeviceModal({
                           name="gps_enabled"
                           checked={formData.gps_enabled || false}
                           onChange={(e) => setFormData(prev => ({ ...prev, gps_enabled: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                    <div className="w-full">
-                      <label 
-                        className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                        title="Autorise le dispositif à utiliser le réseau d'autres opérateurs (itinérance/roaming) quand le réseau de votre opérateur n'est pas disponible. Peut entraîner des coûts supplémentaires selon votre forfait."
-                      >
-                        🌐 Itinérance
-                      </label>
-                      <label className="relative inline-flex items-center cursor-pointer w-full justify-center" title="Activer/désactiver l'itinérance">
-                        <input
-                          type="checkbox"
-                          name="roaming_enabled"
-                          checked={formData.roaming_enabled !== undefined ? formData.roaming_enabled : true}
-                          onChange={(e) => setFormData(prev => ({ ...prev, roaming_enabled: e.target.checked }))}
                           className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -1379,48 +1361,74 @@ export default function DeviceModal({
 
             {/* Réseau - Accordéon fermé */}
             <Accordion title="🌐 Réseau" defaultOpen={false}>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile. Chaque opérateur a son propre APN. Sans APN, le dispositif ne peut pas se connecter au réseau (oper, eps, gprs restent KO)."
-                  >
-                    APN <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="apn"
-                    value={formData.apn || ''}
-                    onChange={handleInputChange}
-                    className="input w-full text-sm py-1.5"
-                    placeholder="free, orange, sl2sfr, internet..."
-                    title="APN de votre opérateur. Free: 'free', Orange: 'orange', SFR: 'sl2sfr', Bouygues: 'mmsbouygtel'. Obligatoire pour la connexion réseau."
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Free: <code className="text-xs">free</code> | Orange: <code className="text-xs">orange</code> | SFR: <code className="text-xs">sl2sfr</code> | Bouygues: <code className="text-xs">mmsbouygtel</code>
-                  </p>
-                  {!formData.apn && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                      ⚠️ APN requis pour la connexion réseau (oper, eps, gprs)
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label 
+                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                      title="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile. Chaque opérateur a son propre APN. Sans APN, le dispositif ne peut pas se connecter au réseau (oper, eps, gprs restent KO)."
+                    >
+                      APN <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="apn"
+                      value={formData.apn || ''}
+                      onChange={handleInputChange}
+                      className="input w-full text-sm py-1.5"
+                      placeholder="free, orange, sl2sfr, internet..."
+                      title="APN de votre opérateur. Free: 'free', Orange: 'orange', SFR: 'sl2sfr', Bouygues: 'mmsbouygtel'. Obligatoire pour la connexion réseau."
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Free: <code className="text-xs">free</code> | Orange: <code className="text-xs">orange</code> | SFR: <code className="text-xs">sl2sfr</code> | Bouygues: <code className="text-xs">mmsbouygtel</code>
                     </p>
-                  )}
+                    {!formData.apn && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        ⚠️ APN requis pour la connexion réseau (oper, eps, gprs)
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label 
+                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
+                      title="Code PIN de la carte SIM (4 à 8 chiffres). Nécessaire pour déverrouiller la SIM au démarrage. Si votre SIM n'a pas de PIN, laissez vide. Le PIN est stocké de manière sécurisée dans le dispositif."
+                    >
+                      SIM PIN
+                    </label>
+                    <input
+                      type="password"
+                      name="sim_pin"
+                      value={formData.sim_pin || ''}
+                      onChange={handleInputChange}
+                      className="input w-full text-sm py-1.5"
+                      placeholder="0000"
+                      title="Code PIN de votre carte SIM (4-8 chiffres). Laissez vide si votre SIM n'a pas de PIN."
+                    />
+                  </div>
                 </div>
-                <div>
+                <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                   <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Code PIN de la carte SIM (4 à 8 chiffres). Nécessaire pour déverrouiller la SIM au démarrage. Si votre SIM n'a pas de PIN, laissez vide. Le PIN est stocké de manière sécurisée dans le dispositif."
+                    className="block text-xs font-medium mb-2 text-gray-700 dark:text-gray-300 cursor-help"
+                    title="Autorise le dispositif à utiliser le réseau d'autres opérateurs (itinérance/roaming) quand le réseau de votre opérateur n'est pas disponible. Peut entraîner des coûts supplémentaires selon votre forfait."
                   >
-                    SIM PIN
+                    🌐 Itinérance (Roaming)
                   </label>
-                  <input
-                    type="password"
-                    name="sim_pin"
-                    value={formData.sim_pin || ''}
-                    onChange={handleInputChange}
-                    className="input w-full text-sm py-1.5"
-                    placeholder="0000"
-                    title="Code PIN de votre carte SIM (4-8 chiffres). Laissez vide si votre SIM n'a pas de PIN."
-                  />
+                  <label className="relative inline-flex items-center cursor-pointer" title="Activer/désactiver l'itinérance">
+                    <input
+                      type="checkbox"
+                      name="roaming_enabled"
+                      checked={formData.roaming_enabled !== undefined ? formData.roaming_enabled : true}
+                      onChange={(e) => setFormData(prev => ({ ...prev, roaming_enabled: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span className="ml-3 text-sm text-gray-700 dark:text-gray-300">
+                      {formData.roaming_enabled !== undefined && formData.roaming_enabled ? 'Activée' : 'Désactivée'}
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Permet au dispositif d'utiliser le réseau d'autres opérateurs si votre opérateur n'est pas disponible
+                  </p>
                 </div>
               </div>
             </Accordion>
