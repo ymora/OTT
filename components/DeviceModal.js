@@ -1093,12 +1093,11 @@ export default function DeviceModal({
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label 
-                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                      title="Durée de veille entre chaque réveil du dispositif. Le dispositif se met en veille profonde pour économiser la batterie, puis se réveille après ce délai pour prendre une mesure et envoyer les données."
-                    >
-                      ⏰ Veille (min)
-                    </label>
+                    <Tooltip content="Durée de veille entre chaque réveil du dispositif.\n\nLe dispositif se met en veille profonde pour économiser la batterie, puis se réveille après ce délai pour prendre une mesure et envoyer les données.">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        ⏰ Veille (min)
+                      </label>
+                    </Tooltip>
                     <input
                       type="number"
                       name="sleep_minutes"
@@ -1114,12 +1113,11 @@ export default function DeviceModal({
                     </p>
                   </div>
                   <div>
-                    <label 
-                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                      title="Durée de la mesure de débit d'air en secondes. Le capteur prend plusieurs échantillons pendant cette durée pour calculer une valeur moyenne précise."
-                    >
-                      ⏱️ Durée (sec)
-                    </label>
+                    <Tooltip content="Durée de la mesure de débit d'air en secondes.\n\nLe capteur prend plusieurs échantillons pendant cette durée pour calculer une valeur moyenne précise.">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        ⏱️ Durée (sec)
+                      </label>
+                    </Tooltip>
                     <input
                       type="number"
                       step="0.1"
@@ -1133,12 +1131,11 @@ export default function DeviceModal({
                     />
                   </div>
                   <div>
-                    <label 
-                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                      title="Fréquence d'envoi des données au serveur. 1 = envoi à chaque réveil, 2 = envoi tous les 2 réveils, etc. Utile pour économiser les données réseau."
-                    >
-                      📤 Envoi (N réveils)
-                    </label>
+                    <Tooltip content="Fréquence d'envoi des données au serveur.\n\n• 1 = envoi à chaque réveil\n• 2 = envoi tous les 2 réveils\n• etc.\n\nUtile pour économiser les données réseau.">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        📤 Envoi (N réveils)
+                      </label>
+                    </Tooltip>
                     <input
                       type="number"
                       name="send_every_n_wakeups"
@@ -1153,12 +1150,11 @@ export default function DeviceModal({
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   <div className="col-span-3">
-                    <label 
-                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                      title="Coefficients de calibration pour convertir les valeurs brutes du capteur en débit réel (L/min). Formule: débit = a2 × valeur² + a1 × valeur + a0. Ces valeurs sont déterminées lors de l'étalonnage du dispositif."
-                    >
-                      📐 Calibration (a0, a1, a2)
-                    </label>
+                    <Tooltip content="Coefficients de calibration pour convertir les valeurs brutes du capteur en débit réel (L/min).\n\nFormule: débit = a2 × valeur² + a1 × valeur + a0\n\nCes valeurs sont déterminées lors de l'étalonnage du dispositif.\nModifier uniquement si vous avez effectué un étalonnage.">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        📐 Calibration (a0, a1, a2)
+                      </label>
+                    </Tooltip>
                     <div className="grid grid-cols-3 gap-2">
                       {[0, 1, 2].map(index => (
                         <input
@@ -1176,12 +1172,11 @@ export default function DeviceModal({
                   </div>
                   <div className="flex items-end">
                     <div className="w-full">
-                      <label 
-                        className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                        title="Active la localisation GPS du dispositif. Permet d'enregistrer la position géographique avec chaque mesure. Consomme plus de batterie et peut ralentir le démarrage du modem."
-                      >
-                        📍 GPS
-                      </label>
+                      <Tooltip content="Active la localisation GPS du dispositif.\n\nPermet d'enregistrer la position géographique avec chaque mesure.\n\n⚠️ Consomme plus de batterie\n⚠️ Peut ralentir le démarrage du modem">
+                        <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                          📍 GPS
+                        </label>
+                      </Tooltip>
                       <label className="relative inline-flex items-center cursor-pointer w-full justify-center" title="Activer/désactiver le GPS">
                         <input
                           type="checkbox"
@@ -1202,12 +1197,11 @@ export default function DeviceModal({
             <Accordion title="💨 Airflow" defaultOpen={false}>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Nombre de fois que la mesure de débit est répétée. Chaque passe prend plusieurs échantillons. Plus de passes = mesure plus précise mais plus longue."
-                  >
-                    Passes
-                  </label>
+                  <Tooltip content="Nombre de fois que la mesure de débit est répétée.\n\nChaque passe prend plusieurs échantillons.\n\nPlus de passes = mesure plus précise mais plus longue.\n\nRecommandé: 2-5 passes">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Passes
+                      </label>
+                    </Tooltip>
                   <input
                     type="number"
                     name="airflow_passes"
@@ -1220,12 +1214,11 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Nombre de mesures prises pendant chaque passe. Plus d'échantillons = valeur moyenne plus précise mais mesure plus longue."
-                  >
-                    Échantillons/passe
-                  </label>
+                  <Tooltip content="Nombre de mesures prises pendant chaque passe.\n\nPlus d'échantillons = valeur moyenne plus précise mais mesure plus longue.\n\nRecommandé: 5-20 échantillons">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Échantillons/passe
+                      </label>
+                    </Tooltip>
                   <input
                     type="number"
                     name="airflow_samples_per_pass"
@@ -1238,12 +1231,11 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Temps d'attente entre chaque échantillon de mesure en secondes. Permet au capteur de se stabiliser entre les mesures."
-                  >
-                    Délai (sec)
-                  </label>
+                  <Tooltip content="Temps d'attente entre chaque échantillon de mesure en secondes.\n\nPermet au capteur de se stabiliser entre les mesures.\n\nRecommandé: 0.005-0.01 secondes">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Délai (sec)
+                      </label>
+                    </Tooltip>
                   <input
                     type="number"
                     step="0.1"
@@ -1263,12 +1255,11 @@ export default function DeviceModal({
             <Accordion title="📡 Modem" defaultOpen={false}>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Timeout du watchdog en minutes. Si le système ne répond pas pendant ce délai, le dispositif redémarre automatiquement pour éviter les blocages."
-                  >
-                    Watchdog (min)
-                  </label>
+                  <Tooltip content="Timeout du watchdog en minutes.\n\nSi le système ne répond pas pendant ce délai, le dispositif redémarre automatiquement pour éviter les blocages.\n\nRecommandé: 3-10 minutes">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Watchdog (min)
+                      </label>
+                    </Tooltip>
                   <input
                     type="number"
                     step="0.1"
@@ -1282,12 +1273,11 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Temps maximum en secondes pour que le modem démarre. Si le modem ne démarre pas dans ce délai, le système considère qu'il y a un problème."
-                  >
-                    Boot timeout (sec)
-                  </label>
+                  <Tooltip content="Temps maximum en secondes pour que le modem démarre.\n\nSi le modem ne démarre pas dans ce délai, le système considère qu'il y a un problème.\n\nRecommandé: 20-60 secondes">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Boot timeout (sec)
+                      </label>
+                    </Tooltip>
                   <input
                     type="number"
                     step="0.1"
@@ -1301,12 +1291,11 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Temps maximum en secondes pour que la carte SIM soit prête. La SIM doit être déverrouillée et initialisée avant de pouvoir utiliser le réseau."
-                  >
-                    SIM ready timeout (sec)
-                  </label>
+                  <Tooltip content="Temps maximum en secondes pour que la carte SIM soit prête.\n\nLa SIM doit être déverrouillée et initialisée avant de pouvoir utiliser le réseau.\n\nRecommandé: 5-15 secondes">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        SIM ready timeout (sec)
+                      </label>
+                    </Tooltip>
                   <input
                     type="number"
                     step="0.1"
@@ -1320,12 +1309,11 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Temps maximum en secondes pour s'attacher au réseau mobile (4G/LTE). Le dispositif doit se connecter au réseau de l'opérateur avant de pouvoir envoyer des données."
-                  >
-                    Network attach timeout (sec)
-                  </label>
+                  <Tooltip content="Temps maximum en secondes pour s'attacher au réseau mobile (4G/LTE).\n\nLe dispositif doit se connecter au réseau de l'opérateur avant de pouvoir envoyer des données.\n\nRecommandé: 30-120 secondes">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Network attach timeout (sec)
+                      </label>
+                    </Tooltip>
                   <input
                     type="number"
                     step="0.1"
@@ -1339,12 +1327,11 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Nombre maximum de redémarrages automatiques du modem en cas d'erreur. Si le modem échoue plusieurs fois, le système arrête de réessayer pour éviter une boucle infinie."
-                  >
-                    Max reboots
-                  </label>
+                  <Tooltip content="Nombre maximum de redémarrages automatiques du modem en cas d'erreur.\n\nSi le modem échoue plusieurs fois, le système arrête de réessayer pour éviter une boucle infinie.\n\nRecommandé: 2-5 redémarrages">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Max reboots
+                      </label>
+                    </Tooltip>
                   <input
                     type="number"
                     name="modem_max_reboots"
@@ -1364,12 +1351,11 @@ export default function DeviceModal({
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label 
-                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                      title="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile. Chaque opérateur a son propre APN. Sans APN, le dispositif ne peut pas se connecter au réseau (oper, eps, gprs restent KO)."
-                    >
-                      APN <span className="text-red-500">*</span>
-                    </label>
+                    <Tooltip content="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile.\n\nChaque opérateur a son propre APN.\n\n⚠️ Sans APN, le dispositif ne peut pas se connecter au réseau (oper, eps, gprs restent KO).\n\nExemples:\n• Free: 'free'\n• Orange: 'orange'\n• SFR: 'sl2sfr'\n• Bouygues: 'mmsbouygtel'">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        APN <span className="text-red-500">*</span>
+                      </label>
+                    </Tooltip>
                     <input
                       type="text"
                       name="apn"
@@ -1389,12 +1375,11 @@ export default function DeviceModal({
                     )}
                   </div>
                   <div>
-                    <label 
-                      className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                      title="Code PIN de la carte SIM (4 à 8 chiffres). Nécessaire pour déverrouiller la SIM au démarrage. Si votre SIM n'a pas de PIN, laissez vide. Le PIN est stocké de manière sécurisée dans le dispositif."
-                    >
-                      SIM PIN
-                    </label>
+                    <Tooltip content="Code PIN de la carte SIM (4 à 8 chiffres).\n\nNécessaire pour déverrouiller la SIM au démarrage.\n\nSi votre SIM n'a pas de PIN, laissez vide.\n\nLe PIN est stocké de manière sécurisée dans le dispositif.">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        SIM PIN
+                      </label>
+                    </Tooltip>
                     <input
                       type="password"
                       name="sim_pin"
@@ -1407,12 +1392,11 @@ export default function DeviceModal({
                   </div>
                 </div>
                 <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <label 
-                    className="block text-xs font-medium mb-2 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Autorise le dispositif à utiliser le réseau d'autres opérateurs (itinérance/roaming) quand le réseau de votre opérateur n'est pas disponible. Peut entraîner des coûts supplémentaires selon votre forfait."
-                  >
-                    🌐 Itinérance (Roaming)
-                  </label>
+                  <Tooltip content="Autorise le dispositif à utiliser le réseau d'autres opérateurs (itinérance/roaming) quand le réseau de votre opérateur n'est pas disponible.\n\n⚠️ Peut entraîner des coûts supplémentaires selon votre forfait.\n\nSi désactivée, le dispositif rejette les connexions en itinérance et ne fonctionne que sur le réseau de votre opérateur.">
+                    <label className="block text-xs font-medium mb-2 text-gray-700 dark:text-gray-300 cursor-help">
+                      🌐 Itinérance (Roaming)
+                    </label>
+                  </Tooltip>
                   <label className="relative inline-flex items-center cursor-pointer" title="Activer/désactiver l'itinérance">
                     <input
                       type="checkbox"
@@ -1437,12 +1421,11 @@ export default function DeviceModal({
             <Accordion title="🔄 OTA" defaultOpen={false}>
               <div className="space-y-3">
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="URL principale pour télécharger les mises à jour du firmware (OTA - Over The Air). Le dispositif télécharge le nouveau firmware depuis cette URL quand une mise à jour est disponible."
-                  >
-                    URL primaire
-                  </label>
+                  <Tooltip content="URL principale pour télécharger les mises à jour du firmware (OTA - Over The Air).\n\nLe dispositif télécharge le nouveau firmware depuis cette URL quand une mise à jour est disponible.\n\nExemple: https://votre-serveur.com/firmware/latest.bin">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        URL primaire
+                      </label>
+                    </Tooltip>
                   <input
                     type="url"
                     name="ota_primary_url"
@@ -1454,12 +1437,11 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="URL de secours pour les mises à jour OTA. Si le téléchargement depuis l'URL primaire échoue, le dispositif essaie cette URL de secours. Utile pour la redondance."
-                  >
-                    URL de secours
-                  </label>
+                  <Tooltip content="URL de secours pour les mises à jour OTA.\n\nSi le téléchargement depuis l'URL primaire échoue, le dispositif essaie cette URL de secours.\n\nUtile pour la redondance.\n\nOptionnel mais recommandé pour la fiabilité.">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        URL de secours
+                      </label>
+                    </Tooltip>
                   <input
                     type="url"
                     name="ota_fallback_url"
@@ -1471,12 +1453,11 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <label 
-                    className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help"
-                    title="Checksum MD5 du fichier firmware attendu. Le dispositif vérifie que le firmware téléchargé correspond à ce MD5 pour s'assurer de l'intégrité et éviter les corruptions. Format: 32 caractères hexadécimaux."
-                  >
-                    MD5 attendu (vérification)
-                  </label>
+                  <Tooltip content="Checksum MD5 du fichier firmware attendu.\n\nLe dispositif vérifie que le firmware téléchargé correspond à ce MD5 pour s'assurer de l'intégrité et éviter les corruptions.\n\nFormat: 32 caractères hexadécimaux (ex: a1b2c3d4e5f6...)\n\nLe dispositif refuse le firmware si le MD5 ne correspond pas.">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        MD5 attendu (vérification)
+                      </label>
+                    </Tooltip>
                   <input
                     type="text"
                     name="ota_md5"
