@@ -1809,6 +1809,17 @@ export default function DebugTab() {
                           </div>
                         </td>
                       </tr>
+                    ) : devicesToDisplay.length === 0 ? (
+                      <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                          <div className="flex flex-col items-center gap-3">
+                            <span className="text-4xl">🗄️</span>
+                            <p className="text-sm font-medium">
+                              {showArchived ? 'Aucun dispositif archivé' : 'Aucun dispositif'}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
                     ) : (
                       devicesToDisplay.map((device) => {
                   const deviceIsArchived = isArchived(device)

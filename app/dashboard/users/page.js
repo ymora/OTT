@@ -144,7 +144,11 @@ export default function UsersPage() {
                 {filteredUsers.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="py-8 text-center text-gray-500 dark:text-gray-400">
-                      {searchTerm ? 'Aucun utilisateur ne correspond à la recherche' : 'Aucun utilisateur'}
+                      {searchTerm 
+                        ? 'Aucun utilisateur ne correspond à la recherche' 
+                        : showArchived 
+                          ? 'Aucun utilisateur archivé' 
+                          : 'Aucun utilisateur'}
                     </td>
                   </tr>
                 ) : (

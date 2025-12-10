@@ -283,7 +283,11 @@ export default function PatientsPage() {
                 {filteredPatients.length === 0 ? (
                   <tr>
                     <td colSpan="8" className="py-8 text-center text-gray-500 dark:text-gray-400">
-                      {searchTerm ? 'Aucun patient ne correspond à la recherche' : 'Aucun patient'}
+                      {searchTerm 
+                        ? 'Aucun patient ne correspond à la recherche' 
+                        : showArchived 
+                          ? 'Aucun patient archivé' 
+                          : 'Aucun patient'}
                     </td>
                   </tr>
                 ) : (
