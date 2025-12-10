@@ -290,8 +290,14 @@ export default function DebugTab() {
   
   // Dispositifs à afficher selon le toggle
   const devicesToDisplay = useMemo(() => {
-    return showArchived ? allDevices : devices
-  }, [showArchived, allDevices, devices])
+    if (showArchived) {
+      // Afficher uniquement les dispositifs archivés
+      return archivedDevices
+    } else {
+      // Afficher uniquement les dispositifs actifs
+      return devices
+    }
+  }, [showArchived, allDevices, devices, archivedDevices])
   
   // ========== STREAMING LOGS EN TEMPS RÉEL (pour admin à distance) ==========
   const [remoteLogs, setRemoteLogs] = useState([])
@@ -1797,30 +1803,59 @@ export default function DebugTab() {
                       </tr>
                     )}
                     
-                    {allDevices.length === 0 && !usbVirtualDevice ? (
-                      <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
-                          <div className="flex flex-col items-center gap-3">
-                            <span className="text-4xl">🔌</span>
-                            <p className="text-sm font-medium">Aucun dispositif enregistré</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500">
-                              Connectez un dispositif USB pour l&apos;enregistrer automatiquement
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : devicesToDisplay.length === 0 ? (
-                      <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
-                          <div className="flex flex-col items-center gap-3">
-                            <span className="text-4xl">🗄️</span>
-                            <p className="text-sm font-medium">
-                              {showArchived ? 'Aucun dispositif archivé' : 'Aucun dispositif'}
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
+                    {(() => {
+                      // Cas 1: Aucun dispositif enregistré du tout
+                      if (allDevices.length === 0 && !usbVirtualDevice) {
+                        return (
+                          <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                              <div className="flex flex-col items-center gap-3">
+                                <span className="text-4xl">🔌</span>
+                                <p className="text-sm font-medium">Aucun dispositif enregistré</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500">
+                                  Connectez un dispositif USB pour l&apos;enregistrer automatiquement
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
+                      
+                      // Cas 2: Afficher les archives mais aucun dispositif archivé
+                      if (showArchived) {
+                        const archivedDevices = allDevices.filter(d => isArchived(d))
+                        if (archivedDevices.length === 0) {
+                          return (
+                            <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
+                              <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                                <div className="flex flex-col items-center gap-3">
+                                  <span className="text-4xl">🗄️</span>
+                                  <p className="text-sm font-medium">Aucun dispositif archivé</p>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        }
+                      }
+                      
+                      // Cas 3: Afficher les dispositifs actifs mais aucun à afficher
+                      if (!showArchived && devicesToDisplay.length === 0) {
+                        return (
+                          <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                              <div className="flex flex-col items-center gap-3">
+                                <span className="text-4xl">📱</span>
+                                <p className="text-sm font-medium">Aucun dispositif actif</p>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
+                      
+                      // Cas 4: Afficher les dispositifs
+                      return null
+                    })()}
+                    {devicesToDisplay.length > 0 && (
                       devicesToDisplay.map((device) => {
                   const deviceIsArchived = isArchived(device)
                   // Vérifier si ce dispositif est connecté en USB (données temps réel)
