@@ -974,20 +974,41 @@ $jsFiles = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
 })
 
 $unusedImports = 0
+$unusedImportsDetails = @()
 foreach ($file in $jsFiles) {
     $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
     if ($content) {
-        # Extraire les imports
-        $imports = [regex]::Matches($content, 'import\s+\{([^}]+)\}\s+from')
-        foreach ($imp in $imports) {
-            $importedNames = $imp.Groups[1].Value -split ',' | ForEach-Object { $_.Trim() -replace 'as\s+\w+', '' }
-            foreach ($name in $importedNames) {
-                $cleanName = $name.Trim()
-                if ($cleanName -and $cleanName -ne 'type' -and $cleanName.Length -gt 2) {
-                    # Vérifier si utilisé dans le fichier (hors import)
-                    $contentWithoutImports = $content -replace 'import[^;]+;', ''
-                    if ($contentWithoutImports -notmatch "\b$([regex]::Escape($cleanName))\b") {
-                        $unusedImports++
+        # Extraire les imports (tous les formats: import X from, import {X} from, import * as X from)
+        $importPatterns = @(
+            'import\s+\{([^}]+)\}\s+from\s+[''"]([^''"]+)[''"]',  # import {X, Y} from 'module'
+            'import\s+(\w+)\s+from\s+[''"]([^''"]+)[''"]',        # import X from 'module'
+            'import\s+\*\s+as\s+(\w+)\s+from\s+[''"]([^''"]+)[''"]' # import * as X from 'module'
+        )
+        
+        foreach ($pattern in $importPatterns) {
+            $imports = [regex]::Matches($content, $pattern)
+            foreach ($imp in $imports) {
+                $modulePath = $imp.Groups[2].Value
+                if ($imp.Groups[1].Value) {
+                    # Format import {X, Y} from ou import X from
+                    $importedNames = $imp.Groups[1].Value -split ',' | ForEach-Object { $_.Trim() -replace 'as\s+\w+', '' }
+                    foreach ($name in $importedNames) {
+                        $cleanName = $name.Trim()
+                        if ($cleanName -and $cleanName -ne 'type' -and $cleanName.Length -gt 2) {
+                            # Extraire le nom du module pour vérification intelligente
+                            $moduleName = Split-Path $modulePath -Leaf
+                            $moduleName = $moduleName -replace '\.(js|jsx|ts|tsx)$', ''
+                            if ($moduleName -eq 'index') {
+                                $moduleName = Split-Path (Split-Path $modulePath -Parent) -Leaf
+                            }
+                            
+                            # Vérifier si utilisé dans le fichier (hors import)
+                            $contentWithoutImports = $content -replace 'import[^;]+;', ''
+                            if ($contentWithoutImports -notmatch "\b$([regex]::Escape($cleanName))\b") {
+                                $unusedImports++
+                                $unusedImportsDetails += "$($file.Name): $cleanName (de $modulePath)"
+                            }
+                        }
                     }
                 }
             }
