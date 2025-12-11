@@ -27,6 +27,9 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
   const [flashModeState, setFlashModeState] = useState(flashMode) // 'usb' ou 'ota'
   const [otaStatus, setOtaStatus] = useState(null) // { status: 'pending'|'executing'|'executed'|'error', command: {...} }
   const [otaStats, setOtaStats] = useState({ lastCheck: null, attempts: 0 })
+  const [downloadProgress, setDownloadProgress] = useState(0) // Progression du téléchargement (0-100)
+  const [cacheUsed, setCacheUsed] = useState(false) // Indique si le cache navigateur a été utilisé
+  const [downloadStatus, setDownloadStatus] = useState(null) // Message de statut du téléchargement
   const stopReadingRef = useRef(null)
   const otaCheckIntervalRef = useRef(null)
   
@@ -180,12 +183,69 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
     const token = localStorage.getItem('token')
     if (!token) throw new Error('Token manquant')
 
-    const response = await fetch(`${API_URL}/api.php/firmwares/${firmware.id}/download`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
+    // Réinitialiser les états de téléchargement
+    setDownloadProgress(0)
+    setCacheUsed(false)
+    setDownloadStatus('Téléchargement en cours...')
 
-    if (!response.ok) throw new Error('Erreur téléchargement')
-    return await response.blob()
+    try {
+      const response = await fetch(`${API_URL}/api.php/firmwares/${firmware.id}/download`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      // Détecter si le cache a été utilisé (HTTP 304 Not Modified)
+      if (response.status === 304) {
+        setCacheUsed(true)
+        setDownloadStatus('✅ Fichier chargé depuis le cache navigateur (pas de téléchargement nécessaire)')
+        setDownloadProgress(100)
+        // Pour HTTP 304, on doit quand même récupérer le blob depuis le cache
+        // Le navigateur le fournira automatiquement
+        return await response.blob()
+      }
+
+      if (!response.ok) {
+        throw new Error(`Erreur téléchargement: ${response.status} ${response.statusText}`)
+      }
+
+      // Suivre la progression du téléchargement
+      const contentLength = response.headers.get('content-length')
+      const total = contentLength ? parseInt(contentLength, 10) : 0
+
+      if (total === 0) {
+        // Si la taille n'est pas connue, on télécharge directement
+        setDownloadStatus('Téléchargement en cours...')
+        const blob = await response.blob()
+        setDownloadProgress(100)
+        setDownloadStatus('✅ Téléchargement terminé')
+        return blob
+      }
+
+      // Télécharger avec suivi de progression
+      const reader = response.body.getReader()
+      const chunks = []
+      let received = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        chunks.push(value)
+        received += value.length
+        const percent = Math.round((received / total) * 100)
+        setDownloadProgress(percent)
+        setDownloadStatus(`Téléchargement: ${percent}% (${(received / 1024 / 1024).toFixed(2)} MB / ${(total / 1024 / 1024).toFixed(2)} MB)`)
+      }
+
+      // Reconstruire le blob
+      const blob = new Blob(chunks)
+      setDownloadProgress(100)
+      setDownloadStatus('✅ Téléchargement terminé')
+      return blob
+
+    } catch (error) {
+      setDownloadStatus(`❌ Erreur: ${error.message}`)
+      throw error
+    }
   }, [API_URL])
 
   // Vérifier le statut OTA
@@ -299,6 +359,12 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
       setFlashProgress(5)
       addLog('[USB] Téléchargement du firmware...')
       const firmwareBlob = await downloadFirmware(selectedFirmware)
+      // Afficher le message de cache si utilisé
+      if (cacheUsed) {
+        addLog(`[USB] ${downloadStatus}`)
+      } else {
+        addLog(`[USB] ${downloadStatus}`)
+      }
       setFlashProgress(10)
       const firmwareArrayBuffer = await firmwareBlob.arrayBuffer()
 
@@ -681,8 +747,33 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
                   : `🚀 Flasher v${selectedFirmware.version} (${flashModeState.toUpperCase()})`}
               </button>
 
-              {/* Barre de progression */}
-              {flashing && (
+              {/* Barre de progression du téléchargement */}
+              {downloadProgress > 0 && downloadProgress < 100 && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {downloadStatus || 'Téléchargement en cours...'}
+                    </span>
+                    <span className="font-semibold">{downloadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        cacheUsed ? 'bg-green-500' : 'bg-blue-500'
+                      }`}
+                      style={{ width: `${downloadProgress}%` }}
+                    />
+                  </div>
+                  {cacheUsed && (
+                    <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                      ✅ Fichier chargé depuis le cache navigateur (pas de téléchargement nécessaire)
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Barre de progression du flash */}
+              {flashing && downloadProgress >= 100 && (
                 <div className="mt-3 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                   <div
                     className="bg-primary-500 h-3 rounded-full transition-all duration-300"
