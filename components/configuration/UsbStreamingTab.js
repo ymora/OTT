@@ -2062,11 +2062,13 @@ export default function DebugTab() {
                         </button>
                         <button
                           onClick={() => {
-                            setDeviceForMeasurements(device)
-                            setShowMeasurementsModal(true)
+                            if (deviceDbData?.measurement_count && deviceDbData.measurement_count > 0) {
+                              setDeviceForMeasurements(device)
+                              setShowMeasurementsModal(true)
+                            }
                           }}
                           disabled={!deviceDbData?.measurement_count || deviceDbData.measurement_count === 0}
-                          className="p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                           title={deviceDbData?.measurement_count ? `Voir l'historique des mesures (${deviceDbData.measurement_count} mesure${deviceDbData.measurement_count > 1 ? 's' : ''})` : 'Aucune mesure enregistrée'}
                         >
                           <span className="text-lg">📊</span>
