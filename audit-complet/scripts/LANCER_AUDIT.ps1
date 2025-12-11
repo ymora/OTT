@@ -31,35 +31,19 @@ if (Test-Path $resultsDir) {
     }
 }
 
-# Lancer l'audit avec le chemin relatif correct et timeout
+# Lancer l'audit directement pour voir les logs en temps réel
 # IMPORTANT: Le script doit s'exécuter depuis la racine du projet
-$job = Start-Job -ScriptBlock {
-    param($scriptPath, $configFile, $verbose, $maxFileLines, $rootDir)
-    Set-Location $rootDir
-    & $scriptPath -ConfigFile $configFile -Verbose:$verbose -MaxFileLines $maxFileLines
-} -ArgumentList "$scriptDir\AUDIT_COMPLET_AUTOMATIQUE.ps1", "audit-complet\scripts\$ConfigFile", $Verbose, $MaxFileLines, $rootDir
+Write-Host "`n📋 Exécution de l'audit avec affichage des logs en temps réel..." -ForegroundColor Cyan
+Write-Host "═══════════════════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host ""
 
-# Timeout de 10 minutes
-$timeout = 600
-$elapsed = 0
-$interval = 5
+# Capturer la sortie dans une variable ET l'afficher en temps réel
+$resultFile = Join-Path $resultsDir "audit_resultat_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
 
-while ($job.State -eq 'Running' -and $elapsed -lt $timeout) {
-    Start-Sleep -Seconds $interval
-    $elapsed += $interval
-    Write-Host "." -NoNewline -ForegroundColor Gray
-}
+# Exécuter l'audit et rediriger la sortie vers le fichier ET la console
+& "$scriptDir\AUDIT_COMPLET_AUTOMATIQUE.ps1" -ConfigFile "audit-complet\scripts\$ConfigFile" -Verbose:$Verbose -MaxFileLines $MaxFileLines | Tee-Object -FilePath $resultFile
 
-if ($job.State -eq 'Running') {
-    Write-Host "`n⚠️ Timeout atteint (10 min), arrêt de l'audit..." -ForegroundColor Yellow
-    Stop-Job $job
-    Remove-Job $job
-} else {
-    Write-Host "`n✅ Audit terminé" -ForegroundColor Green
-    $result = Receive-Job $job
-    $resultFile = Join-Path $resultsDir "audit_resultat_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
-    $result | Out-File -FilePath $resultFile
-    $result
-    Remove-Job $job
-}
+Write-Host ""
+Write-Host "═══════════════════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "✅ Audit terminé - Résultats sauvegardés dans : $resultFile" -ForegroundColor Green
 

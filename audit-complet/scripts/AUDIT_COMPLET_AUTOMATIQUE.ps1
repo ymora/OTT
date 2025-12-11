@@ -123,7 +123,15 @@ if ([string]::IsNullOrEmpty($Password)) {
         $Password = "YM120879"  # Mot de passe par défaut pour éviter le blocage
     }
 }
-if ([string]::IsNullOrEmpty($ApiUrl)) { $ApiUrl = $env:AUDIT_API_URL }
+if ([string]::IsNullOrEmpty($ApiUrl)) { 
+    if ($env:AUDIT_API_URL) {
+        $ApiUrl = $env:AUDIT_API_URL
+    } elseif ($script:Config -and $script:Config.Api -and $script:Config.Api.BaseUrl) {
+        $ApiUrl = $script:Config.Api.BaseUrl
+    } else {
+        $ApiUrl = "https://ott-jbln.onrender.com"
+    }
+}
 
 # ===============================================================================
 # NETTOYAGE DES RÉSULTATS PRÉCÉDENTS
@@ -2872,10 +2880,14 @@ if (Test-Path "api.php") {
     
     # Extraire toutes les routes - Pattern amélioré pour capturer toutes les variantes
     # Chercher les patterns: elseif(preg_match('#...', $path, $m) && $method === '...')
+    # Utiliser [regex]::Escape() pour éviter les erreurs d'échappement avec les backslashes
     $routePatterns = @(
-        "elseif\(preg_match\('#([^']+)'#.*\) && \`$method === '([^']+)'\) \{[^\}]*handle(\w+)\(",
-        "elseif\(preg_match\('#([^']+)'#.*\$path.*\) && \$method === '([^']+)'\) \{[^\}]*handle(\w+)\("
+        [regex]::Escape("elseif(preg_match('#") + "([^']+)" + [regex]::Escape("'#") + ".*" + [regex]::Escape(") && $method === '") + "([^']+)" + [regex]::Escape("') {") + "[^{]*" + [regex]::Escape("handle(") + "(\w+)",
+        [regex]::Escape("elseif(preg_match('#") + "([^']+)" + [regex]::Escape("'#") + ".*\$path.*" + [regex]::Escape(") && $method === '") + "([^']+)" + [regex]::Escape("') {") + "[^{]*" + [regex]::Escape("handle(") + "(\w+)"
     )
+    
+    # Échapper les backslashes dans les patterns pour éviter les erreurs d'échappement
+    $routePatterns = $routePatterns | ForEach-Object { $_.Replace('\R', '\\R').Replace('\s', '\\s') }
     
     $routesByEndpoint = @{}
     $handlersCalled = @{}
