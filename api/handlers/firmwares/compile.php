@@ -1163,17 +1163,43 @@ function handleCompileFirmware($firmware_id) {
                         }
                         
                         if ($return !== 0) {
+                            // Vérifier si c'est une erreur de timeout HTTP
+                            $installOutputStr = implode("\n", $installOutput);
+                            $isTimeoutError = stripos($installOutputStr, 'request canceled') !== false || 
+                                             stripos($installOutputStr, 'Client.Timeout') !== false ||
+                                             stripos($installOutputStr, 'context cancellation') !== false;
+                            
+                            if ($isTimeoutError) {
+                                sendSSE('log', 'error', '❌ Timeout HTTP lors du téléchargement du core ESP32');
+                                sendSSE('log', 'error', '   Le téléchargement de ~568MB a été interrompu par un timeout HTTP');
+                                sendSSE('log', 'info', '   💡 Solution: Le core sera téléchargé progressivement lors des prochaines tentatives');
+                                sendSSE('log', 'info', '   💡 Alternative: Configurez un Persistent Disk sur Render.com pour éviter les re-téléchargements');
+                                
+                                // Vérifier si une partie du core a été téléchargée (peut être réutilisée)
+                                $corePath = $arduinoDataDir . '/packages/esp32';
+                                if (is_dir($corePath)) {
+                                    sendSSE('log', 'info', '   ✅ Une partie du core a été téléchargée, elle sera réutilisée lors de la prochaine tentative');
+                                }
+                                
+                                $errorMessage = 'Timeout HTTP lors du téléchargement du core ESP32. Relancez la compilation pour reprendre le téléchargement.';
+                            } else {
+                                $errorMessage = 'Erreur lors de l\'installation du core ESP32';
+                            }
+                            
                             // Marquer le firmware comme erreur dans la base de données
                             try {
                                 $pdo->prepare("
                                     UPDATE firmware_versions 
-                                    SET status = 'error', error_message = 'Erreur lors de l\'installation du core ESP32'
+                                    SET status = 'error', error_message = :error_message
                                     WHERE id = :id
-                                ")->execute(['id' => $firmware_id]);
+                                ")->execute([
+                                    'id' => $firmware_id,
+                                    'error_message' => $errorMessage
+                                ]);
                             } catch(PDOException $dbErr) {
                                 error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
                             }
-                            sendSSE('error', 'Erreur lors de l\'installation du core ESP32');
+                            sendSSE('error', $errorMessage);
                             flush();
                             return;
                         }
