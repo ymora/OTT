@@ -971,7 +971,7 @@ function handleCompileFirmware($firmware_id) {
                                                         
                                                         // Détecter les lignes de téléchargement (contiennent "MiB" et "%")
                                                         $isDownloadLine = preg_match('/\d+\.?\d*\s*(B|MiB|KiB)\s*\/\s*\d+\.?\d*\s*(B|MiB|KiB)\s*\d+\.?\d*%/', $lineTrimmed) ||
-                                                                     preg_match('/Downloading/', $lineTrimmed, PREG_OFFSET_CAPTURE) ||
+                                                                     preg_match('/Downloading/', $lineTrimmed) ||
                                                                      preg_match('/downloaded$/', $lineTrimmed);
                                                         
                                                         if ($isDownloadLine) {
