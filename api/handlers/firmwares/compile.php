@@ -820,8 +820,15 @@ function handleCompileFirmware($firmware_id) {
                     }
                 }
                 
-                if ($coreListReturn !== 0) {
-                    $coreListError = substr(implode("\n", $coreListOutput), 0, 4000);
+                // Analyser la sortie pour déterminer si c'est une vraie erreur ou juste "pas de core installé"
+                $coreListStr = implode("\n", $coreListOutput);
+                $isNoPlatformsInstalled = stripos($coreListStr, 'No platforms installed') !== false;
+                
+                // Le code 141 (SIGPIPE) n'est pas une erreur fatale - c'est souvent juste que le processus s'est terminé normalement
+                // Le code 0 est OK, et 141 peut aussi être OK si la sortie indique "No platforms installed"
+                if ($coreListReturn !== 0 && $coreListReturn !== 141) {
+                    // Vraie erreur (code différent de 0 et 141)
+                    $coreListError = substr($coreListStr, 0, 4000);
                     sendSSE('log', 'error', '❌ arduino-cli core list a échoué (code ' . $coreListReturn . ')');
                     sendSSE('log', 'error', '   Sortie: ' . $coreListError);
                     sendSSE('error', 'Échec de la vérification du core ESP32 (arduino-cli core list). Consultez les logs.');
@@ -829,13 +836,18 @@ function handleCompileFirmware($firmware_id) {
                     try {
                         $pdo->prepare("
                             UPDATE firmware_versions 
-                            SET status = 'error', error_message = 'core list failed'
+                            SET status = 'error', error_message = 'core list failed (code ' . $coreListReturn . ')'
                             WHERE id = :id
                         ")->execute(['id' => $firmware_id]);
                     } catch(PDOException $dbErr) {
                         error_log('[handleCompileFirmware] Erreur DB update status core list: ' . $dbErr->getMessage());
                     }
                     return;
+                } elseif ($coreListReturn === 141 && !$isNoPlatformsInstalled) {
+                    // Code 141 mais sortie inattendue - peut être une erreur
+                    sendSSE('log', 'warning', '⚠️ arduino-cli core list a retourné le code 141 (SIGPIPE)');
+                    sendSSE('log', 'info', '   Sortie: ' . substr($coreListStr, 0, 200));
+                    // Continuer quand même - ce n'est pas forcément une erreur fatale
                 }
                 
                 $coreListStr = implode("\n", $coreListOutput);
