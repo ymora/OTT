@@ -654,6 +654,16 @@ export default function InoEditorTab({ onUploadSuccess }) {
       const tokenEncoded = encodeURIComponent(token)
       const sseUrl = `${API_URL}/api.php/firmwares/compile/${firmwareId}?token=${tokenEncoded}`
 
+      // Logger pour diagnostic
+      console.log('[InoEditorTab] Connexion SSE vers:', sseUrl)
+      console.log('[InoEditorTab] API_URL:', API_URL)
+      
+      setCompileLogs(prev => [...prev, {
+        timestamp: new Date().toLocaleTimeString('fr-FR'),
+        message: `🔗 Connexion SSE vers: ${sseUrl.substring(0, 100)}...`,
+        level: 'info'
+      }])
+
       const eventSource = new EventSource(sseUrl)
       eventSourceRef.current = eventSource
 
@@ -661,9 +671,11 @@ export default function InoEditorTab({ onUploadSuccess }) {
       let lastMessageTime = Date.now()
       let statusCheckInterval = null
       const maxSilenceTime = 60000 // 60 secondes sans message = problème
+      let messageCount = 0
 
       eventSource.onopen = () => {
         lastMessageTime = Date.now() // Réinitialiser le timestamp à l'ouverture
+        console.log('[InoEditorTab] EventSource.onopen - Connexion établie')
         setCompileLogs(prev => [...prev, {
           timestamp: new Date().toLocaleTimeString('fr-FR'),
           message: '✅ Connexion SSE établie, démarrage de la compilation...',
@@ -674,14 +686,23 @@ export default function InoEditorTab({ onUploadSuccess }) {
       eventSource.onmessage = (event) => {
         // Mettre à jour le timestamp à chaque message reçu (même les keep-alive)
         lastMessageTime = Date.now()
+        messageCount++
+        
+        // Logger pour diagnostic
+        console.log(`[InoEditorTab] Message SSE #${messageCount} reçu:`, event.data.substring(0, 100))
         
         // Ignorer les keep-alive (lignes qui commencent par :)
         if (!event.data || event.data.trim() === '' || event.data.trim().startsWith(':')) {
+          // Logger les keep-alive pour diagnostic (tous les 10)
+          if (messageCount % 10 === 0) {
+            console.log(`[InoEditorTab] Keep-alive reçu (#${messageCount})`)
+          }
           return // Ignorer les keep-alive
         }
 
         try {
           const data = JSON.parse(event.data)
+          console.log(`[InoEditorTab] Message parsé:`, data.type, data.message?.substring(0, 50))
           
           // Afficher TOUS les types de messages
           if (data.type === 'log') {
