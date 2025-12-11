@@ -750,46 +750,51 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
                   : `🚀 Flasher v${selectedFirmware.version} (${flashModeState.toUpperCase()})`}
               </button>
 
-              {/* Barre de progression du téléchargement */}
-              {downloadProgress > 0 && (
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">
-                      {downloadStatus || 'Téléchargement en cours...'}
-                    </span>
-                    <span className="font-semibold">{downloadProgress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        cacheUsed ? 'bg-green-500' : 'bg-blue-500'
-                      }`}
-                      style={{ width: `${downloadProgress}%` }}
-                    />
-                  </div>
-                  {cacheUsed && (
-                    <p className="text-sm text-green-600 dark:text-green-400 font-medium">
-                      ✅ Fichier chargé depuis le cache navigateur (pas de téléchargement nécessaire)
-                    </p>
+              {/* Barres de progression */}
+              {(downloadProgress > 0 || (flashing && flashProgress > 0)) && (
+                <div className="mt-3 space-y-3">
+                  {/* Barre de progression du téléchargement */}
+                  {downloadProgress > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">
+                          {downloadStatus || 'Téléchargement en cours...'}
+                        </span>
+                        <span className="font-semibold">{downloadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            cacheUsed ? 'bg-green-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${downloadProgress}%` }}
+                        />
+                      </div>
+                      {cacheUsed && (
+                        <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                          ✅ Fichier chargé depuis le cache navigateur (pas de téléchargement nécessaire)
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
 
-              {/* Barre de progression du flash */}
-              {flashing && downloadProgress >= 100 && flashProgress > 0 && (
-                <div className="mt-3 space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Flash en cours...
-                    </span>
-                    <span className="font-semibold">{flashProgress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                    <div
-                      className="bg-primary-500 h-3 rounded-full transition-all duration-300"
-                      style={{ width: `${flashProgress}%` }}
-                    />
-                  </div>
+                  {/* Barre de progression du flash */}
+                  {flashing && flashProgress > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">
+                          Flash en cours...
+                        </span>
+                        <span className="font-semibold">{flashProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                        <div
+                          className="bg-primary-500 h-3 rounded-full transition-all duration-300"
+                          style={{ width: `${flashProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -69,6 +69,514 @@ function Get-ArrayFromApiResponse {
     return @()
 }
 
+# ===============================================================================
+# FONCTIONS D'INTÉGRATION D'OUTILS AUTOMATIQUES
+# ===============================================================================
+
+# Fonction pour exécuter ESLint et parser les résultats
+function Invoke-ESLintAnalysis {
+    param([string]$ProjectRoot)
+    
+    $result = @{
+        Success = $false
+        Errors = 0
+        Warnings = 0
+        Issues = @()
+        Score = 10
+    }
+    
+    try {
+        if (-not (Test-Path (Join-Path $ProjectRoot "package.json"))) {
+            Write-Info "  package.json non trouvé, ESLint ignoré"
+            return $result
+        }
+        
+        # Vérifier si ESLint est installé
+        $eslintInstalled = $false
+        try {
+            $npmList = npm list eslint --depth=0 2>&1
+            if ($LASTEXITCODE -eq 0 -or $npmList -match "eslint@") {
+                $eslintInstalled = $true
+            }
+        } catch {
+            # Ignorer
+        }
+        
+        if (-not $eslintInstalled) {
+            Write-Info "  ESLint non installé, ignoré"
+            return $result
+        }
+        
+        Write-Info "  Exécution ESLint..."
+        $eslintOutput = & npm run lint -- --format json 2>&1 | Out-String
+        
+        # Parser le JSON (ESLint peut retourner du JSON même avec des erreurs)
+        try {
+            # Extraire le JSON de la sortie (peut contenir des warnings npm)
+            $jsonStart = $eslintOutput.IndexOf('[')
+            $jsonEnd = $eslintOutput.LastIndexOf(']')
+            if ($jsonStart -ge 0 -and $jsonEnd -gt $jsonStart) {
+                $jsonContent = $eslintOutput.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
+                $eslintResults = $jsonContent | ConvertFrom-Json
+                
+                if ($eslintResults) {
+                    $result.Success = $true
+                    foreach ($file in $eslintResults) {
+                        if ($file.messages) {
+                            foreach ($message in $file.messages) {
+                                if ($message.severity -eq 2) {
+                                    $result.Errors++
+                                    $result.Issues += "$($file.filePath):$($message.line): $($message.message)"
+                                } elseif ($message.severity -eq 1) {
+                                    $result.Warnings++
+                                }
+                            }
+                        }
+                    }
+                    
+                    # Calculer le score (10 - erreurs*0.5 - warnings*0.1)
+                    $result.Score = [Math]::Max(0, 10 - ($result.Errors * 0.5) - ($result.Warnings * 0.1))
+                }
+            }
+        } catch {
+            # Si le parsing échoue, essayer de détecter des erreurs dans la sortie
+            if ($eslintOutput -match "error|Error|ERROR") {
+                $result.Errors = 1
+                $result.Score = 8
+            }
+        }
+    } catch {
+        Write-Info "  Erreur ESLint: $($_.Exception.Message)"
+    }
+    
+    return $result
+}
+
+# Fonction pour exécuter Jest et parser les résultats
+function Invoke-JestAnalysis {
+    param([string]$ProjectRoot)
+    
+    $result = @{
+        Success = $false
+        TestsTotal = 0
+        TestsPassed = 0
+        TestsFailed = 0
+        Coverage = 0
+        Score = 10
+    }
+    
+    try {
+        if (-not (Test-Path (Join-Path $ProjectRoot "package.json"))) {
+            Write-Info "  package.json non trouvé, Jest ignoré"
+            return $result
+        }
+        
+        # Vérifier si Jest est installé
+        $jestInstalled = $false
+        try {
+            $npmList = npm list jest --depth=0 2>&1
+            if ($LASTEXITCODE -eq 0 -or $npmList -match "jest@") {
+                $jestInstalled = $true
+            }
+        } catch {
+            # Ignorer
+        }
+        
+        if (-not $jestInstalled) {
+            Write-Info "  Jest non installé, ignoré"
+            return $result
+        }
+        
+        Write-Info "  Exécution Jest..."
+        $jestOutput = & npm test -- --json --coverage 2>&1 | Out-String
+        
+        # Parser le JSON Jest
+        try {
+            $jsonStart = $jestOutput.IndexOf('{')
+            $jsonEnd = $jestOutput.LastIndexOf('}')
+            if ($jsonStart -ge 0 -and $jsonEnd -gt $jsonStart) {
+                $jsonContent = $jestOutput.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
+                $jestResults = $jsonContent | ConvertFrom-Json
+                
+                if ($jestResults) {
+                    $result.Success = $true
+                    $result.TestsTotal = $jestResults.numTotalTests
+                    $result.TestsPassed = $jestResults.numPassedTests
+                    $result.TestsFailed = $jestResults.numFailedTests
+                    
+                    # Calculer la couverture si disponible
+                    if ($jestResults.coverageMap) {
+                        $totalLines = 0
+                        $coveredLines = 0
+                        foreach ($file in $jestResults.coverageMap.GetEnumerator()) {
+                            if ($file.Value.s) {
+                                $totalLines += $file.Value.s.Count
+                                $coveredLines += ($file.Value.s | Where-Object { $_ -gt 0 }).Count
+                            }
+                        }
+                        if ($totalLines -gt 0) {
+                            $result.Coverage = [Math]::Round(($coveredLines / $totalLines) * 100, 1)
+                        }
+                    }
+                    
+                    # Calculer le score
+                    if ($result.TestsTotal -gt 0) {
+                        $passRate = ($result.TestsPassed / $result.TestsTotal) * 10
+                        $coverageScore = ($result.Coverage / 100) * 3
+                        $result.Score = [Math]::Round($passRate + $coverageScore, 1)
+                    }
+                }
+            }
+        } catch {
+            Write-Info "  Erreur parsing Jest: $($_.Exception.Message)"
+        }
+    } catch {
+        Write-Info "  Erreur Jest: $($_.Exception.Message)"
+    }
+    
+    return $result
+}
+
+# Fonction pour exécuter npm audit et parser les résultats
+function Invoke-NpmAuditAnalysis {
+    param([string]$ProjectRoot)
+    
+    $result = @{
+        Success = $false
+        Vulnerabilities = 0
+        Critical = 0
+        High = 0
+        Moderate = 0
+        Low = 0
+        Score = 10
+    }
+    
+    try {
+        if (-not (Test-Path (Join-Path $ProjectRoot "package.json"))) {
+            Write-Info "  package.json non trouvé, npm audit ignoré"
+            return $result
+        }
+        
+        Write-Info "  Exécution npm audit..."
+        $auditOutput = & npm audit --json 2>&1 | Out-String
+        
+        # Parser le JSON npm audit
+        try {
+            $jsonStart = $auditOutput.IndexOf('{')
+            $jsonEnd = $auditOutput.LastIndexOf('}')
+            if ($jsonStart -ge 0 -and $jsonEnd -gt $jsonStart) {
+                $jsonContent = $auditOutput.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
+                $auditResults = $jsonContent | ConvertFrom-Json
+                
+                if ($auditResults -and $auditResults.metadata) {
+                    $result.Success = $true
+                    $result.Vulnerabilities = $auditResults.metadata.vulnerabilities.total
+                    $result.Critical = $auditResults.metadata.vulnerabilities.critical
+                    $result.High = $auditResults.metadata.vulnerabilities.high
+                    $result.Moderate = $auditResults.metadata.vulnerabilities.moderate
+                    $result.Low = $auditResults.metadata.vulnerabilities.low
+                    
+                    # Calculer le score (10 - critical*2 - high*1 - moderate*0.5 - low*0.1)
+                    $result.Score = [Math]::Max(0, 10 - ($result.Critical * 2) - ($result.High * 1) - ($result.Moderate * 0.5) - ($result.Low * 0.1))
+                }
+            }
+        } catch {
+            # Si le parsing échoue, vérifier si npm audit a trouvé des vulnérabilités
+            if ($auditOutput -match "found \d+ vulnerabilities") {
+                $result.Vulnerabilities = 1
+                $result.Score = 8
+            }
+        }
+    } catch {
+        Write-Info "  Erreur npm audit: $($_.Exception.Message)"
+    }
+    
+    return $result
+}
+
+# Fonction pour exécuter dependency-cruiser et parser les résultats
+function Invoke-DependencyCruiserAnalysis {
+    param([string]$ProjectRoot)
+    
+    $result = @{
+        Success = $false
+        CircularDependencies = 0
+        OrphanedModules = 0
+        Issues = @()
+        Score = 10
+    }
+    
+    try {
+        # Vérifier si dependency-cruiser est installé
+        $depcruiseInstalled = $false
+        try {
+            $npmList = npm list dependency-cruiser --depth=0 2>&1
+            if ($LASTEXITCODE -eq 0 -or $npmList -match "dependency-cruiser@") {
+                $depcruiseInstalled = $true
+            } else {
+                # Essayer npx
+                $npxCheck = & npx dependency-cruiser --version 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    $depcruiseInstalled = $true
+                }
+            }
+        } catch {
+            # Ignorer
+        }
+        
+        if (-not $depcruiseInstalled) {
+            Write-Info "  dependency-cruiser non installé (optionnel)"
+            return $result
+        }
+        
+        Write-Info "  Exécution dependency-cruiser..."
+        
+        # Créer un fichier temporaire pour les résultats
+        $tempFile = Join-Path $env:TEMP "depcruise-$(Get-Date -Format 'yyyyMMddHHmmss').json"
+        
+        try {
+            # Exécuter dependency-cruiser
+            if (Test-Path (Join-Path $ProjectRoot "node_modules\.bin\depcruise.cmd")) {
+                & (Join-Path $ProjectRoot "node_modules\.bin\depcruise.cmd") --output-type json --output $tempFile "app" "components" "hooks" "lib" 2>&1 | Out-Null
+            } else {
+                & npx dependency-cruiser --output-type json --output $tempFile "app" "components" "hooks" "lib" 2>&1 | Out-Null
+            }
+            
+            if (Test-Path $tempFile) {
+                $cruiseResults = Get-Content $tempFile -Raw | ConvertFrom-Json
+                
+                if ($cruiseResults -and $cruiseResults.summary) {
+                    $result.Success = $true
+                    $result.CircularDependencies = $cruiseResults.summary.circularDependencies
+                    $result.OrphanedModules = $cruiseResults.summary.orphanedModules
+                    
+                    # Calculer le score
+                    $result.Score = [Math]::Max(0, 10 - ($result.CircularDependencies * 1) - ($result.OrphanedModules * 0.5))
+                }
+                
+                Remove-Item $tempFile -ErrorAction SilentlyContinue
+            }
+        } catch {
+            Write-Info "  Erreur dependency-cruiser: $($_.Exception.Message)"
+            if (Test-Path $tempFile) {
+                Remove-Item $tempFile -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {
+        Write-Info "  Erreur dependency-cruiser: $($_.Exception.Message)"
+    }
+    
+    return $result
+}
+
+# Fonction pour exécuter jscpd et parser les résultats
+function Invoke-JscpdAnalysis {
+    param([string]$ProjectRoot)
+    
+    $result = @{
+        Success = $false
+        DuplicatedLines = 0
+        DuplicatedFiles = 0
+        Clones = @()
+        Score = 10
+    }
+    
+    try {
+        # Vérifier si jscpd est installé
+        $jscpdInstalled = $false
+        try {
+            $jscpdCheck = & jscpd --version 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $jscpdInstalled = $true
+            } else {
+                # Essayer npx
+                $npxCheck = & npx jscpd --version 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    $jscpdInstalled = $true
+                }
+            }
+        } catch {
+            # Ignorer
+        }
+        
+        if (-not $jscpdInstalled) {
+            Write-Info "  jscpd non installé (optionnel: npm install -g jscpd)"
+            return $result
+        }
+        
+        Write-Info "  Exécution jscpd..."
+        
+        # Créer un fichier temporaire pour les résultats
+        $tempFile = Join-Path $env:TEMP "jscpd-$(Get-Date -Format 'yyyyMMddHHmmss').json"
+        
+        try {
+            # Exécuter jscpd
+            $jscpdCmd = if (Get-Command jscpd -ErrorAction SilentlyContinue) { "jscpd" } else { "npx jscpd" }
+            & $jscpdCmd --format json --reporters json --output $tempFile --min-lines 5 --min-tokens 50 "app" "components" "hooks" "lib" 2>&1 | Out-Null
+            
+            if (Test-Path $tempFile) {
+                $jscpdResults = Get-Content $tempFile -Raw | ConvertFrom-Json
+                
+                if ($jscpdResults -and $jscpdResults.percentage) {
+                    $result.Success = $true
+                    $result.DuplicatedLines = $jscpdResults.percentage
+                    $result.DuplicatedFiles = $jscpdResults.clones.Count
+                    
+                    # Calculer le score (10 - pourcentage de duplication)
+                    $result.Score = [Math]::Max(0, 10 - ($result.DuplicatedLines / 10))
+                }
+                
+                Remove-Item $tempFile -ErrorAction SilentlyContinue
+            }
+        } catch {
+            Write-Info "  Erreur jscpd: $($_.Exception.Message)"
+            if (Test-Path $tempFile) {
+                Remove-Item $tempFile -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {
+        Write-Info "  Erreur jscpd: $($_.Exception.Message)"
+    }
+    
+    return $result
+}
+
+# Fonction pour exécuter PHPStan et parser les résultats
+function Invoke-PHPStanAnalysis {
+    param([string]$ProjectRoot)
+    
+    $result = @{
+        Success = $false
+        Errors = 0
+        Issues = @()
+        Score = 10
+    }
+    
+    try {
+        # Vérifier si PHPStan est installé
+        $phpstanPath = $null
+        if (Test-Path (Join-Path $ProjectRoot "vendor\bin\phpstan.bat")) {
+            $phpstanPath = Join-Path $ProjectRoot "vendor\bin\phpstan.bat"
+        } elseif (Test-Path (Join-Path $ProjectRoot "vendor\bin\phpstan")) {
+            $phpstanPath = Join-Path $ProjectRoot "vendor\bin\phpstan"
+        } elseif (Get-Command phpstan -ErrorAction SilentlyContinue) {
+            $phpstanPath = "phpstan"
+        }
+        
+        if (-not $phpstanPath) {
+            Write-Info "  PHPStan non installé (optionnel: composer require --dev phpstan/phpstan)"
+            return $result
+        }
+        
+        Write-Info "  Exécution PHPStan..."
+        
+        try {
+            # Exécuter PHPStan avec format JSON
+            $phpstanOutput = & $phpstanPath analyse --error-format json "api" 2>&1 | Out-String
+            
+            # Parser le JSON PHPStan
+            try {
+                $jsonStart = $phpstanOutput.IndexOf('[')
+                $jsonEnd = $phpstanOutput.LastIndexOf(']')
+                if ($jsonStart -ge 0 -and $jsonEnd -gt $jsonStart) {
+                    $jsonContent = $phpstanOutput.Substring($jsonStart, $jsonEnd - $jsonStart + 1)
+                    $phpstanResults = $jsonContent | ConvertFrom-Json
+                    
+                    if ($phpstanResults) {
+                        $result.Success = $true
+                        $result.Errors = $phpstanResults.Count
+                        
+                        foreach ($issue in $phpstanResults | Select-Object -First 10) {
+                            $result.Issues += "$($issue.path):$($issue.line): $($issue.message)"
+                        }
+                        
+                        # Calculer le score
+                        $result.Score = [Math]::Max(0, 10 - ($result.Errors * 0.2))
+                    }
+                }
+            } catch {
+                # Si le parsing échoue, compter les erreurs dans la sortie
+                if ($phpstanOutput -match "errors") {
+                    $result.Errors = 1
+                    $result.Score = 8
+                }
+            }
+        } catch {
+            Write-Info "  Erreur PHPStan: $($_.Exception.Message)"
+        }
+    } catch {
+        Write-Info "  Erreur PHPStan: $($_.Exception.Message)"
+    }
+    
+    return $result
+}
+
+# Fonction pour exécuter PSScriptAnalyzer et parser les résultats
+function Invoke-PSScriptAnalyzerAnalysis {
+    param([string]$ProjectRoot)
+    
+    $result = @{
+        Success = $false
+        Errors = 0
+        Warnings = 0
+        Issues = @()
+        Score = 10
+    }
+    
+    try {
+        # Vérifier si PSScriptAnalyzer est installé
+        $psaModule = Get-Module -ListAvailable -Name PSScriptAnalyzer
+        if (-not $psaModule) {
+            Write-Info "  PSScriptAnalyzer non installé (optionnel: Install-Module -Name PSScriptAnalyzer)"
+            return $result
+        }
+        
+        Write-Info "  Exécution PSScriptAnalyzer..."
+        
+        try {
+            Import-Module PSScriptAnalyzer -ErrorAction SilentlyContinue
+            
+            # Analyser les scripts PowerShell du projet
+            $ps1Files = Get-ChildItem -Path $ProjectRoot -Recurse -Filter "*.ps1" | Where-Object {
+                $_.FullName -notmatch 'node_modules' -and
+                $_.FullName -notmatch '\\\.git\\' -and
+                $_.FullName -notmatch '\\vendor\\'
+            }
+            
+            $allIssues = @()
+            foreach ($file in $ps1Files) {
+                try {
+                    $fileIssues = Invoke-ScriptAnalyzer -Path $file.FullName -ErrorAction SilentlyContinue
+                    if ($fileIssues) {
+                        $allIssues += $fileIssues
+                    }
+                } catch {
+                    # Ignorer les erreurs sur un fichier spécifique
+                }
+            }
+            
+            if ($allIssues) {
+                $result.Success = $true
+                $result.Errors = ($allIssues | Where-Object { $_.Severity -eq 'Error' }).Count
+                $result.Warnings = ($allIssues | Where-Object { $_.Severity -eq 'Warning' }).Count
+                
+                foreach ($issue in $allIssues | Select-Object -First 10) {
+                    $result.Issues += "$($issue.ScriptName):$($issue.Line): $($issue.Message)"
+                }
+                
+                # Calculer le score
+                $result.Score = [Math]::Max(0, 10 - ($result.Errors * 0.5) - ($result.Warnings * 0.1))
+            }
+        } catch {
+            Write-Info "  Erreur PSScriptAnalyzer: $($_.Exception.Message)"
+        }
+    } catch {
+        Write-Info "  Erreur PSScriptAnalyzer: $($_.Exception.Message)"
+    }
+    
+    return $result
+}
+
 $ErrorActionPreference = "Continue"
 
 # ===============================================================================
@@ -243,6 +751,28 @@ function Test-ExcludedFile {
 # ===============================================================================
 
 Write-Section "[0/18] Inventaire Exhaustif - Tous les Fichiers et Répertoires"
+
+# INTÉGRATION PSScriptAnalyzer - Analyse des scripts PowerShell
+Write-Host "`n  Analyse avec PSScriptAnalyzer (scripts PowerShell)..." -ForegroundColor Yellow
+$psaResult = Invoke-PSScriptAnalyzerAnalysis -ProjectRoot (Get-Location).Path
+if ($psaResult.Success) {
+    if ($psaResult.Errors -gt 0 -or $psaResult.Warnings -gt 0) {
+        Write-Warn "  PSScriptAnalyzer: $($psaResult.Errors) erreur(s), $($psaResult.Warnings) avertissement(s) dans les scripts PowerShell"
+        foreach ($issue in $psaResult.Issues | Select-Object -First 5) {
+            Write-Info "    - $issue"
+        }
+        if ($psaResult.Issues.Count -gt 5) {
+            Write-Info "    ... et $($psaResult.Issues.Count - 5) autre(s)"
+        }
+        $auditResults.Recommendations += "PSScriptAnalyzer: Corriger $($psaResult.Errors) erreur(s) et $($psaResult.Warnings) avertissement(s) dans les scripts PowerShell"
+    } else {
+        Write-OK "  PSScriptAnalyzer: Aucune erreur détectée dans les scripts PowerShell"
+    }
+    # Ajouter le score PSScriptAnalyzer aux résultats (pas de phase dédiée, donc on l'ajoute à l'inventaire)
+    if (-not $auditResults.Scores.ContainsKey("Scripts PowerShell")) {
+        $auditResults.Scores["Scripts PowerShell"] = $psaResult.Score
+    }
+}
 
 try {
     Write-Info "Parcours exhaustif de tous les fichiers..."
@@ -645,12 +1175,29 @@ try {
         }
     }
     
+    # INTÉGRATION JSCPD - Analyse précise de duplication
+    Write-Host "`n  Analyse avec jscpd (outil automatique)..." -ForegroundColor Yellow
+    $jscpdResult = Invoke-JscpdAnalysis -ProjectRoot (Get-Location).Path
+    if ($jscpdResult.Success) {
+        if ($jscpdResult.DuplicatedLines -gt 0) {
+            Write-Warn "  jscpd: $($jscpdResult.DuplicatedLines)% de code dupliqué ($($jscpdResult.DuplicatedFiles) fichiers)"
+            $auditResults.Recommendations += "jscpd détecte $($jscpdResult.DuplicatedLines)% de duplication - refactorer les clones"
+        } else {
+            Write-OK "  jscpd: Aucune duplication détectée"
+        }
+        # Utiliser le score jscpd pour améliorer le score de duplication
+        $duplicationScoreFromJscpd = $jscpdResult.Score
+    } else {
+        $duplicationScoreFromJscpd = 10
+    }
+    
     if ($duplications.Count -eq 0) {
         Write-OK "Pas de duplication excessive detectee"
-        $auditResults.Scores["Duplication"] = 10
+        $auditResults.Scores["Duplication"] = [Math]::Min(10, ($duplicationScoreFromJscpd + 10) / 2)
     } else {
         Write-Warn "$($duplications.Count) patterns a fort potentiel de refactoring"
-        $auditResults.Scores["Duplication"] = [Math]::Max(10 - $duplications.Count, 5)
+        $baseScore = [Math]::Max(10 - $duplications.Count, 5)
+        $auditResults.Scores["Duplication"] = [Math]::Min(10, ($baseScore + $duplicationScoreFromJscpd) / 2)
     }
 } catch {
     Write-Err "Erreur analyse duplication: $($_.Exception.Message)"
@@ -758,6 +1305,7 @@ Write-Section "[6/18] Endpoints API - Tests Fonctionnels"
 $apiScore = 0
 $endpointsTotal = 0
 $endpointsOK = 0
+$script:apiAuthFailed = $false  # Marquer si l'authentification a échoué pour réessayer plus tard
 
 try {
     Write-Info "Connexion API..."
@@ -802,21 +1350,23 @@ try {
         $apiScore = [math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
         
     } catch {
-        Write-Err "Echec authentification"
-        Write-Warn "Tests API ignores - API non accessible"
+        Write-Warn "Echec authentification (tentative 1/1)"
+        Write-Info "L'audit continue - Réessai à la fin de l'audit..."
+        $script:apiAuthFailed = $true
         $apiScore = 5
     }
     
 } catch {
-    Write-Err "Echec connexion API"
-    $auditResults.Issues += "API: Impossible de se connecter"
-    $apiScore = 0
+    Write-Warn "Echec connexion API (tentative 1/1)"
+    Write-Info "L'audit continue - Réessai à la fin de l'audit..."
+    $script:apiAuthFailed = $true
+    $apiScore = 5
 }
 
 $auditResults.Scores["API"] = $apiScore
 
 # ===============================================================================
-# PHASE 7 : BASE DE DONNEES
+# PHASE 7 : BASE DE DONNEES ET BACKEND PHP
 # ===============================================================================
 
 Write-Section "[7/18] Base de Donnees - Coherence et Integrite"
@@ -826,17 +1376,10 @@ $script:authHeaders = $null
 $script:authToken = $null
 
 try {
-    if ($apiScore -gt 0 -and $endpointsOK -gt 0) {
-        # Utiliser les headers de la phase 6 si disponibles, sinon ré-authentifier
-        if (-not $script:authHeaders -or -not $script:authToken) {
-            Write-Info "Ré-authentification pour phase BDD..."
-            $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
-            $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
-            $authResponse = Invoke-RestMethod -Uri "$ApiUrl$authEndpoint" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
-            $script:authToken = $authResponse.token
-            $script:authHeaders = @{Authorization = "Bearer $script:authToken"}
-        }
-        
+    # Si l'authentification a réussi dans la phase 6, continuer
+    # Sinon, on réessayera à la fin de l'audit
+    if ($apiScore -gt 0 -and $endpointsOK -gt 0 -and $script:authHeaders -and $script:authToken) {
+        # Utiliser les headers de la phase 6 si disponibles
         try {
             # Récupérer les données avec gestion d'erreur améliorée
             $devicesData = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
@@ -945,6 +1488,31 @@ try {
         $securityScore -= 1
     } else {
         Write-OK "XSS protege"
+    }
+    
+    # INTÉGRATION NPM AUDIT - Vulnérabilités npm
+    Write-Host "`n  Analyse avec npm audit (vulnérabilités npm)..." -ForegroundColor Yellow
+    $npmAuditResult = Invoke-NpmAuditAnalysis -ProjectRoot (Get-Location).Path
+    if ($npmAuditResult.Success) {
+        if ($npmAuditResult.Vulnerabilities -gt 0) {
+            Write-Warn "  npm audit: $($npmAuditResult.Vulnerabilities) vulnérabilité(s) détectée(s)"
+            if ($npmAuditResult.Critical -gt 0) {
+                Write-Err "    CRITIQUE: $($npmAuditResult.Critical) vulnérabilité(s) critique(s)"
+                $securityScore -= 2
+            }
+            if ($npmAuditResult.High -gt 0) {
+                Write-Warn "    HAUTE: $($npmAuditResult.High) vulnérabilité(s) haute(s)"
+                $securityScore -= 1
+            }
+            if ($npmAuditResult.Moderate -gt 0) {
+                Write-Info "    MODÉRÉE: $($npmAuditResult.Moderate) vulnérabilité(s) modérée(s)"
+            }
+            $auditResults.Recommendations += "npm audit: $($npmAuditResult.Vulnerabilities) vulnérabilité(s) - exécuter 'npm audit fix'"
+        } else {
+            Write-OK "  npm audit: Aucune vulnérabilité détectée"
+        }
+        # Utiliser le score npm audit pour améliorer le score de sécurité
+        $securityScore = [Math]::Min(10, ($securityScore + $npmAuditResult.Score) / 2)
     }
     
     Write-OK "Verification securite terminee"
@@ -1143,6 +1711,29 @@ try {
         $auditResults.Recommendations += "Ajouter tests E2E pour fonctionnalites critiques"
     } else {
         Write-OK "$($testFiles.Count) fichiers de tests"
+    }
+    
+    # INTÉGRATION JEST - Tests unitaires et couverture
+    Write-Host "`n  Analyse avec Jest (tests unitaires)..." -ForegroundColor Yellow
+    $jestResult = Invoke-JestAnalysis -ProjectRoot (Get-Location).Path
+    if ($jestResult.Success) {
+        if ($jestResult.TestsTotal -gt 0) {
+            Write-OK "  Jest: $($jestResult.TestsPassed)/$($jestResult.TestsTotal) tests réussis"
+            if ($jestResult.TestsFailed -gt 0) {
+                Write-Warn "    $($jestResult.TestsFailed) test(s) échoué(s)"
+                $auditResults.Recommendations += "Jest: $($jestResult.TestsFailed) test(s) à corriger"
+            }
+            if ($jestResult.Coverage -gt 0) {
+                Write-Host "    Couverture: $($jestResult.Coverage)%" -ForegroundColor $(if ($jestResult.Coverage -ge 70) { "Green" } elseif ($jestResult.Coverage -ge 50) { "Yellow" } else { "Red" })
+                if ($jestResult.Coverage -lt 70) {
+                    $auditResults.Recommendations += "Jest: Améliorer la couverture de code (actuellement $($jestResult.Coverage)%)"
+                }
+            }
+        } else {
+            Write-Warn "  Jest: Aucun test exécuté"
+        }
+        # Utiliser le score Jest pour améliorer le score de tests
+        $testScore = [Math]::Min(10, ($testScore + $jestResult.Score) / 2)
     }
     
     $auditResults.Scores["Tests"] = $testScore
@@ -1994,6 +2585,27 @@ $exhaustiveScore = 10.0
 
 try {
     Write-Info "Vérification exhaustive de tous les fichiers..."
+    
+    # INTÉGRATION DEPENDENCY-CRUISER - Analyse des dépendances
+    Write-Host "`n  Analyse avec dependency-cruiser (graphe de dépendances)..." -ForegroundColor Yellow
+    $depcruiseResult = Invoke-DependencyCruiserAnalysis -ProjectRoot (Get-Location).Path
+    if ($depcruiseResult.Success) {
+        if ($depcruiseResult.CircularDependencies -gt 0) {
+            Write-Warn "  dependency-cruiser: $($depcruiseResult.CircularDependencies) dépendance(s) circulaire(s) détectée(s)"
+            $exhaustiveWarnings += "$($depcruiseResult.CircularDependencies) dépendance(s) circulaire(s)"
+            $exhaustiveScore -= 1
+            $auditResults.Recommendations += "dependency-cruiser: Corriger $($depcruiseResult.CircularDependencies) dépendance(s) circulaire(s)"
+        } else {
+            Write-OK "  dependency-cruiser: Aucune dépendance circulaire"
+        }
+        if ($depcruiseResult.OrphanedModules -gt 0) {
+            Write-Warn "  dependency-cruiser: $($depcruiseResult.OrphanedModules) module(s) orphelin(s)"
+            $exhaustiveWarnings += "$($depcruiseResult.OrphanedModules) module(s) orphelin(s)"
+            $exhaustiveScore -= 0.5
+        }
+        # Utiliser le score dependency-cruiser pour améliorer le score exhaustif
+        $exhaustiveScore = [Math]::Min(10, ($exhaustiveScore + $depcruiseResult.Score) / 2)
+    }
     
     # 1. Vérifier tous les liens dans les fichiers HTML et MD
     Write-Host "`n1. Vérification des liens (HTML, MD):" -ForegroundColor Yellow
@@ -3924,6 +4536,175 @@ if ($deploymentScoreFinal -lt 10.0) {
 
 Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
+
+# ===============================================================================
+# RÉESSAI D'AUTHENTIFICATION API (si échec au début)
+# ===============================================================================
+
+if ($script:apiAuthFailed) {
+    Write-Host ""
+    Write-Section "[RÉESSAI] Authentification API - Tentatives Finales"
+    
+    $maxRetries = 3
+    $retryDelay = 5  # Secondes entre chaque tentative
+    $authSuccess = $false
+    
+    for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+        Write-Host "`n  Tentative $attempt/$maxRetries..." -ForegroundColor Yellow
+        
+        try {
+            $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
+            $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
+            
+            $authResponse = Invoke-RestMethod -Uri "$ApiUrl$authEndpoint" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
+            $script:authToken = $authResponse.token
+            $script:authHeaders = @{Authorization = "Bearer $script:authToken"}
+            $token = $script:authToken
+            $headers = $script:authHeaders
+            
+            Write-OK "Authentification réussie (tentative $attempt/$maxRetries)"
+            $authSuccess = $true
+            
+            # Maintenant que l'authentification est réussie, compléter les phases API et BDD
+            Write-Host "`n  Complétion des phases API et BDD..." -ForegroundColor Cyan
+            
+            # Compléter Phase 6 : Endpoints API
+            Write-Host "`n  === Tests Endpoints API ===" -ForegroundColor Yellow
+            $endpointsTotal = 0
+            $endpointsOK = 0
+            
+            if ($script:Config.Api.Endpoints) {
+                $endpoints = $script:Config.Api.Endpoints
+            } else {
+                $endpoints = @(
+                    @{Path="/api.php/devices"; Name="Dispositifs"},
+                    @{Path="/api.php/patients"; Name="Patients"},
+                    @{Path="/api.php/users"; Name="Utilisateurs"},
+                    @{Path="/api.php/alerts"; Name="Alertes"},
+                    @{Path="/api.php/firmwares"; Name="Firmwares"},
+                    @{Path="/api.php/roles"; Name="Roles"},
+                    @{Path="/api.php/permissions"; Name="Permissions"},
+                    @{Path="/api.php/health"; Name="Healthcheck"}
+                )
+            }
+            
+            foreach ($endpoint in $endpoints) {
+                $endpointsTotal++
+                try {
+                    $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 10
+                    Write-OK "  $($endpoint.Name)"
+                    $endpointsOK++
+                } catch {
+                    Write-Err "  $($endpoint.Name) - Erreur"
+                }
+            }
+            
+            if ($endpointsTotal -gt 0) {
+                $apiScore = [math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
+                $auditResults.Scores["API"] = $apiScore
+                Write-Host "  Score API mis à jour: $apiScore/10" -ForegroundColor $(if ($apiScore -ge 8) { "Green" } elseif ($apiScore -ge 6) { "Yellow" } else { "Red" })
+            }
+            
+            # Compléter Phase 7 : Base de Données
+            Write-Host "`n  === Analyse Base de Données ===" -ForegroundColor Yellow
+            try {
+                # Utiliser la configuration ou valeurs par défaut
+                if ($script:Config.Database -and $script:Config.Database.Entities) {
+                    $entities = $script:Config.Database.Entities
+                } else {
+                    $entities = @(
+                        @{ Name = "devices"; Field = "devices"; CountField = "Count"; UnassignedField = "patient_id"; UnassignedMessage = "dispositifs non assignes" }
+                        @{ Name = "patients"; Field = "patients"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                        @{ Name = "users"; Field = "users"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                        @{ Name = "alerts"; Field = "alerts"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                    )
+                }
+                
+                $dbScore = 10
+                foreach ($entity in $entities) {
+                    try {
+                        $endpointPath = "/api.php/$($entity.Name)"
+                        $response = Invoke-RestMethod -Uri "$ApiUrl$endpointPath" -Headers $script:authHeaders -TimeoutSec 10
+                        
+                        $data = Get-ArrayFromApiResponse -data $response -propertyName $entity.Field
+                        $count = if ($data) { $data.Count } else { 0 }
+                        
+                        Write-OK "  $($entity.Name): $count élément(s)"
+                        
+                        # Vérifier les éléments non assignés si applicable
+                        if ($entity.UnassignedField -and $count -gt 0) {
+                            $unassigned = @($data | Where-Object { -not $_.$($entity.UnassignedField) }).Count
+                            if ($unassigned -gt 0) {
+                                Write-Info "    $unassigned $($entity.UnassignedMessage)"
+                            }
+                        }
+                    } catch {
+                        Write-Err "  Erreur récupération $($entity.Name): $($_.Exception.Message)"
+                        $dbScore -= 1
+                    }
+                }
+                
+                $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
+                Write-Host "  Score BDD mis à jour: $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
+            } catch {
+                Write-Err "  Erreur analyse BDD: $($_.Exception.Message)"
+            }
+            
+            break  # Sortir de la boucle si l'authentification réussit
+            
+        } catch {
+            Write-Warn "  Échec authentification (tentative $attempt/$maxRetries): $($_.Exception.Message)"
+            if ($attempt -lt $maxRetries) {
+                Write-Info "  Attente de $retryDelay secondes avant la prochaine tentative..."
+                Start-Sleep -Seconds $retryDelay
+            }
+        }
+    }
+    
+    if (-not $authSuccess) {
+        Write-Err "`n  Échec définitif après $maxRetries tentatives"
+        Write-Warn "  Les phases API et BDD restent incomplètes"
+        $auditResults.Issues += "API: Échec définitif après $maxRetries tentatives d'authentification"
+    }
+    
+    # Recalculer le score global après les mises à jour
+    $scoreWeights = @{
+        "Architecture" = 1.0
+        "CodeMort" = 1.5
+        "Duplication" = 1.2
+        "Complexite" = 1.2
+        "Routes" = 0.8
+        "API" = 1.5
+        "Database" = 1.5
+        "Securite" = 2.0
+        "Performance" = 1.5
+        "Tests" = 1.2
+        "Documentation" = 0.8
+        "Structure API" = 1.0
+        "Vérification Exhaustive" = 1.2
+        "Uniformisation UI/UX" = 0.8
+        "Éléments Inutiles" = 1.0
+        "Synchronisation GitHub Pages" = 1.2
+    }
+    
+    $totalWeight = ($scoreWeights.Values | Measure-Object -Sum).Sum
+    $weightedSum = 0
+    
+    foreach ($key in ($scoreWeights.Keys | Sort-Object)) {
+        if ($auditResults.Scores.ContainsKey($key)) {
+            $weight = $scoreWeights[$key]
+            $score = $auditResults.Scores[$key]
+            $weightedSum += $score * $weight
+        }
+    }
+    
+    $scoreGlobal = [math]::Round($weightedSum / $totalWeight, 1)
+    
+    Write-Host ""
+    Write-Host ("  [SCORE] SCORE GLOBAL PONDERE (mis à jour) : {0}/10" -f $scoreGlobal) -ForegroundColor $(if($scoreGlobal -ge 9.5){"Green"}elseif($scoreGlobal -ge 8){"Yellow"}else{"Red"})
+    Write-Host ""
+    Write-Host ("=" * 80) -ForegroundColor Gray
+}
 
 # Verdict final
 if ($scoreGlobal -ge 9.5) {
