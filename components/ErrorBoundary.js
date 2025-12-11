@@ -84,7 +84,7 @@ class ErrorBoundary extends React.Component {
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mb-4 p-3 bg-gray-100 rounded text-xs">
                 <summary className="cursor-pointer font-semibold text-gray-700 mb-2">
-                  Détails de l'erreur (mode développement)
+                  Détails de l&apos;erreur (mode développement)
                 </summary>
                 <pre className="whitespace-pre-wrap text-red-600 overflow-auto">
                   {this.state.error.toString()}
@@ -104,7 +104,7 @@ class ErrorBoundary extends React.Component {
                 onClick={() => window.location.href = '/'}
                 className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 transition-colors"
               >
-                Retour à l'accueil
+                Retour à l&apos;accueil
               </button>
             </div>
           </div>

@@ -1393,7 +1393,7 @@ export default function DeviceModal({
                   </div>
                 </div>
                 <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                  <Tooltip content="Autorise le dispositif à utiliser le réseau d'autres opérateurs (itinérance/roaming) quand le réseau de votre opérateur n'est pas disponible.\n\n⚠️ Peut entraîner des coûts supplémentaires selon votre forfait.\n\nSi désactivée, le dispositif rejette les connexions en itinérance et ne fonctionne que sur le réseau de votre opérateur.">
+                  <Tooltip content="Autorise le dispositif à utiliser le réseau d&apos;autres opérateurs (itinérance/roaming) quand le réseau de votre opérateur n&apos;est pas disponible.\n\n⚠️ Peut entraîner des coûts supplémentaires selon votre forfait.\n\nSi désactivée, le dispositif rejette les connexions en itinérance et ne fonctionne que sur le réseau de votre opérateur.">
                     <label className="block text-xs font-medium mb-2 text-gray-700 dark:text-gray-300 cursor-help">
                       🌐 Itinérance (Roaming)
                     </label>
@@ -1412,7 +1412,7 @@ export default function DeviceModal({
                     </span>
                   </label>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Permet au dispositif d'utiliser le réseau d'autres opérateurs si votre opérateur n'est pas disponible
+                    Permet au dispositif d&apos;utiliser le réseau d&apos;autres opérateurs si votre opérateur n&apos;est pas disponible
                   </p>
                 </div>
               </div>
@@ -1454,7 +1454,7 @@ export default function DeviceModal({
                   />
                 </div>
                 <div>
-                  <Tooltip content="Checksum MD5 du fichier firmware attendu.\n\nLe dispositif vérifie que le firmware téléchargé correspond à ce MD5 pour s'assurer de l'intégrité et éviter les corruptions.\n\nFormat: 32 caractères hexadécimaux (ex: a1b2c3d4e5f6...)\n\nLe dispositif refuse le firmware si le MD5 ne correspond pas.">
+                  <Tooltip content="Checksum MD5 du fichier firmware attendu.\n\nLe dispositif vérifie que le firmware téléchargé correspond à ce MD5 pour s&apos;assurer de l&apos;intégrité et éviter les corruptions.\n\nFormat: 32 caractères hexadécimaux (ex: a1b2c3d4e5f6...)\n\nLe dispositif refuse le firmware si le MD5 ne correspond pas.">
                       <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
                         MD5 attendu (vérification)
                       </label>
@@ -1467,10 +1467,10 @@ export default function DeviceModal({
                     className="input w-full text-sm py-1.5 font-mono"
                     placeholder="a1b2c3d4e5f6..."
                     pattern="[a-fA-F0-9]{32}"
-                    title="MD5 du firmware (32 caractères hex). Le dispositif vérifie l'intégrité du firmware téléchargé avec ce MD5 pour éviter les corruptions."
+                    title="MD5 du firmware (32 caractères hex). Le dispositif vérifie l&apos;intégrité du firmware téléchargé avec ce MD5 pour éviter les corruptions."
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Hash MD5 pour vérifier l'intégrité du firmware OTA
+                    Hash MD5 pour vérifier l&apos;intégrité du firmware OTA
                   </p>
                 </div>
               </div>

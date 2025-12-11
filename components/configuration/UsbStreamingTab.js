@@ -1657,7 +1657,7 @@ export default function DebugTab() {
               )}
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              La configuration du dispositif sera réinitialisée aux paramètres d'origine.
+              La configuration du dispositif sera réinitialisée aux paramètres d&apos;origine.
             </p>
           </>
         )}

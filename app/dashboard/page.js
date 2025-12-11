@@ -175,6 +175,113 @@ export default function DashboardPage() {
     [lowBatteryList]
   )
 
+  // Mémoriser la carte des dispositifs (doit être avant le return conditionnel)
+  const mapComponent = useMemo(() => {
+    const activeDevices = devices.filter(d => !d.deleted_at)
+    const geolocatedDevices = activeDevices.filter(d => d.latitude && d.longitude)
+    if (loading || activeDevices.length === 0) return null
+    return (
+      <div id="map-container" className="card p-0 overflow-hidden">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            {geolocatedDevices.length} dispositif(s) géolocalisé(s)
+          </p>
+        </div>
+        <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
+          <LeafletMap
+            devices={devices}
+            focusDeviceId={focusDeviceId}
+            onSelect={() => {}}
+          />
+        </div>
+      </div>
+    )
+  }, [devices, loading, focusDeviceId])
+
+  // Mémoriser les dispositifs en ligne
+  const onlineDevicesList = useMemo(() => {
+    const onlineDevices = devices.filter(d => {
+      if (d.deleted_at) return false
+      if (!d.last_seen) return false
+      const lastSeen = new Date(d.last_seen)
+      if (isNaN(lastSeen.getTime())) return false
+      const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
+      return hoursSince < 2
+    })
+    return onlineDevices.map(device => (
+      <button
+        key={device.id}
+        onClick={() => zoomToDevice(device.id)}
+        className="w-full text-left text-xs px-2 py-1 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
+      >
+        🟢 {device.device_name || device.sim_iccid}
+      </button>
+    ))
+  }, [devices])
+
+  // Mémoriser les alertes critiques
+  const criticalAlertsList = useMemo(() => {
+    const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
+    return alerts.filter(a => a.severity === 'critical').map(alert => {
+      const device = devicesMap.get(alert.device_id)
+      return device ? (
+        <button
+          key={alert.id}
+          onClick={() => zoomToDevice(device.id)}
+          className="w-full text-left text-xs px-2 py-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+        >
+          🔴 {device.device_name || device.sim_iccid}
+        </button>
+      ) : null
+    })
+  }, [devices, alerts])
+
+  // Mémoriser la liste des batteries
+  const batteryListDisplay = useMemo(() => {
+    const batteryList = stats.lowBatteryDevices > 0 
+      ? lowBatteryList 
+      : devices.filter(d => {
+          if (d.deleted_at) return false
+          const battery = d.last_battery
+          return battery !== null && battery !== undefined && battery >= 30
+        })
+    return batteryList.map(device => {
+      const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
+      const isLow = battery < 30
+      return (
+        <button
+          key={device.id}
+          onClick={() => zoomToDevice(device.id)}
+          className={`w-full text-left text-xs px-2 py-1 rounded transition-colors ${
+            isLow 
+              ? 'hover:bg-orange-50 dark:hover:bg-orange-900/30' 
+              : 'hover:bg-green-50 dark:hover:bg-green-900/30'
+          }`}
+        >
+          {battery < 20 ? '🔴' : battery < 30 ? '🟠' : '🟢'} {device.device_name || device.sim_iccid} ({battery.toFixed(0)}%)
+        </button>
+      )
+    })
+  }, [stats.lowBatteryDevices, lowBatteryList, devices])
+
+  // Mémoriser les alertes actives
+  const activeAlertsList = useMemo(() => {
+    const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
+    return alerts.slice(0, 10).map(alert => {
+      const device = devicesMap.get(alert.device_id)
+      return device ? (
+        <button
+          key={alert.id}
+          onClick={() => zoomToDevice(device.id)}
+          className="w-full text-left text-xs px-2 py-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+        >
+          {alert.severity === 'critical' ? '🔴' : '🟠'} {device.device_name || device.sim_iccid}
+        </button>
+      ) : null
+    })
+  }, [devices, alerts])
+
   if (loading) {
     return (
       <div className="space-y-6 animate-fade-in">
@@ -198,27 +305,7 @@ export default function DashboardPage() {
       <ErrorMessage error={error} onRetry={refetch} />
 
       {/* Carte des dispositifs */}
-      {useMemo(() => {
-        const activeDevices = devices.filter(d => !d.deleted_at)
-        const geolocatedDevices = activeDevices.filter(d => d.latitude && d.longitude)
-        return !loading && activeDevices.length > 0 && (
-          <div id="map-container" className="card p-0 overflow-hidden">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                {geolocatedDevices.length} dispositif(s) géolocalisé(s)
-              </p>
-            </div>
-            <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
-              <LeafletMap
-                devices={devices}
-                focusDeviceId={focusDeviceId}
-                onSelect={() => {}}
-              />
-            </div>
-          </div>
-        )
-      }, [devices, loading])}
+      {mapComponent}
 
       {/* Stats Cards - Indicateurs clés (KPIs + Non Assignés) - TAILLE RÉDUITE avec accordéons */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -275,26 +362,7 @@ export default function DashboardPage() {
           {kpiAccordions.online && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {useMemo(() => {
-                  // Mémoriser les dispositifs en ligne pour éviter le recalcul
-                  const onlineDevices = devices.filter(d => {
-                    if (d.deleted_at) return false
-                    if (!d.last_seen) return false
-                    const lastSeen = new Date(d.last_seen)
-                    if (isNaN(lastSeen.getTime())) return false
-                    const hoursSince = (new Date() - lastSeen) / (1000 * 60 * 60)
-                    return hoursSince < 2
-                  })
-                  return onlineDevices.map(device => (
-                    <button
-                      key={device.id}
-                      onClick={() => zoomToDevice(device.id)}
-                      className="w-full text-left text-xs px-2 py-1 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
-                    >
-                      🟢 {device.device_name || device.sim_iccid}
-                    </button>
-                  ))
-                }, [devices])}
+                {onlineDevicesList}
                 </div>
               </div>
             )}
@@ -318,22 +386,7 @@ export default function DashboardPage() {
           {kpiAccordions.alerts && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {useMemo(() => {
-                  // Optimisation : créer un Map pour éviter find() à chaque itération (exclure archivés)
-                  const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
-                  return alerts.filter(a => a.severity === 'critical').map(alert => {
-                    const device = devicesMap.get(alert.device_id)
-                    return device ? (
-                      <button
-                        key={alert.id}
-                        onClick={() => zoomToDevice(device.id)}
-                        className="w-full text-left text-xs px-2 py-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
-                      >
-                        🔴 {device.device_name || device.sim_iccid}
-                      </button>
-                    ) : null
-                  })
-                }, [devices, alerts])}
+                {criticalAlertsList}
               </div>
                   </div>
                 )}
@@ -359,33 +412,7 @@ export default function DashboardPage() {
           {kpiAccordions.battery && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {useMemo(() => {
-                  // Mémoriser la liste des batteries pour éviter le recalcul
-                  const batteryList = stats.lowBatteryDevices > 0 
-                    ? lowBatteryList 
-                    : devices.filter(d => {
-                        if (d.deleted_at) return false
-                        const battery = d.last_battery
-                        return battery !== null && battery !== undefined && battery >= 30
-                      })
-                  return batteryList.map(device => {
-                    const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
-                    const isLow = battery < 30
-                    return (
-                      <button
-                        key={device.id}
-                        onClick={() => zoomToDevice(device.id)}
-                        className={`w-full text-left text-xs px-2 py-1 rounded transition-colors ${
-                          isLow 
-                            ? 'hover:bg-orange-50 dark:hover:bg-orange-900/30' 
-                            : 'hover:bg-green-50 dark:hover:bg-green-900/30'
-                        }`}
-                      >
-                        {battery < 20 ? '🔴' : battery < 30 ? '🟠' : '🟢'} {device.device_name || device.sim_iccid} ({battery.toFixed(0)}%)
-                      </button>
-                    )
-                  })
-                }, [stats.lowBatteryDevices, lowBatteryList, devices])}
+                {batteryListDisplay}
               </div>
                   </div>
                 )}
@@ -451,22 +478,7 @@ export default function DashboardPage() {
               {kpiAccordions.alertsAction && (
                 <div className="px-3 pb-3 border-t border-red-200 dark:border-red-800 max-h-40 overflow-y-auto">
                   <div className="space-y-1 mt-2">
-                    {useMemo(() => {
-                      // Optimisation : créer un Map pour éviter find() à chaque itération
-                      const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
-                      return alerts.slice(0, 10).map(alert => {
-                        const device = devicesMap.get(alert.device_id)
-                        return device ? (
-                          <button
-                            key={alert.id}
-                            onClick={() => zoomToDevice(device.id)}
-                            className="w-full text-left text-xs px-2 py-1 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
-                          >
-                            {alert.severity === 'critical' ? '🔴' : '🟠'} {device.device_name || device.sim_iccid}
-                          </button>
-                        ) : null
-                      })
-                    }, [devices, alerts])}
+                    {activeAlertsList}
                     {alerts.length > 10 && (
                       <div className="text-xs text-gray-500 italic px-2">+{alerts.length - 10} autres...</div>
                     )}
