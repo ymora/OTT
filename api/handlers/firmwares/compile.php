@@ -911,7 +911,8 @@ function handleCompileFirmware($firmware_id) {
                             }
                         }
                         
-                        sendSSE('log', 'info', 'Installation du core ESP32...');
+                        sendSSE('log', 'info', 'Téléchargement et installation du core ESP32...');
+                        sendSSE('log', 'info', '📥 Phase 1: Téléchargement (~568MB)');
                         sendSSE('progress', 45);
                         
                         // Exécuter avec output en temps réel pour voir la progression
@@ -1004,9 +1005,10 @@ function handleCompileFirmware($firmware_id) {
                                                         }
                                                         
                                                         if ($isDownloadLine) {
-                                                            // Ligne de progression de téléchargement - toujours afficher
+                                                            // Ligne de progression de téléchargement
                                                             $logLevel = 'info';
                                                             $currentlyDownloading = true; // On est en phase de téléchargement
+                                                            $skipRawLine = false; // Par défaut, on affiche la ligne brute
                                                             
                                                             // Mettre à jour la progression globale (45% à 50% pour le téléchargement du core)
                                                             if ($downloadPercent !== null) {
@@ -1014,14 +1016,16 @@ function handleCompileFirmware($firmware_id) {
                                                                 // On mappe 0-100% du téléchargement vers 45-50% de la compilation totale
                                                                 $globalProgress = 45 + ($downloadPercent / 100) * 5;
                                                                 sendSSE('progress', intval($globalProgress));
-                                                                // Afficher aussi un message de progression pour plus de visibilité
-                                                                sendSSE('log', 'info', '📊 Progression installation core: ' . number_format($downloadPercent, 1) . '% (compilation totale: ' . intval($globalProgress) . '%)');
+                                                                // Afficher un message de progression formaté (on n'affichera PAS la ligne brute pour éviter les doublons)
+                                                                sendSSE('log', 'info', '📊 Téléchargement: ' . number_format($downloadPercent, 1) . '% (compilation totale: ' . intval($globalProgress) . '%)');
+                                                                $skipRawLine = true; // Ne pas afficher la ligne brute car on a déjà un message formaté
                                                                 flush();
                                                             } else {
                                                                 // Même sans pourcentage, envoyer un message pour montrer qu'on est en téléchargement
                                                                 // Ne pas spammer, seulement pour les lignes importantes
                                                                 if (preg_match('/Downloading packages|Starting download/i', $lineTrimmed)) {
                                                                     sendSSE('log', 'info', '📥 Début du téléchargement du core ESP32...');
+                                                                    $skipRawLine = true; // Ne pas afficher la ligne brute
                                                                     flush();
                                                                 }
                                                             }
@@ -1030,8 +1034,15 @@ function handleCompileFirmware($firmware_id) {
                                                             if (preg_match('/downloaded$/', $lineTrimmed)) {
                                                                 $currentlyDownloading = false;
                                                                 sendSSE('progress', 48); // Progression intermédiaire
-                                                                sendSSE('log', 'info', '✅ Téléchargement terminé, installation en cours...');
+                                                                sendSSE('log', 'info', '✅ Téléchargement terminé');
+                                                                sendSSE('log', 'info', '🔧 Phase 2: Installation des outils et configuration...');
+                                                                $skipRawLine = true; // Ne pas afficher la ligne brute
                                                                 flush();
+                                                            }
+                                                            
+                                                            // Ne pas afficher la ligne brute si on a déjà envoyé un message formaté
+                                                            if ($skipRawLine) {
+                                                                continue; // Passer à la ligne suivante sans afficher celle-ci
                                                             }
                                                         } elseif (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
                                                                   preg_match('/error:/i', $lineTrimmed) || preg_match('/fatal/i', $lineTrimmed)) {
