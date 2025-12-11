@@ -91,6 +91,21 @@ function cleanupBuildDir($build_dir) {
 function handleCompileFirmware($firmware_id) {
     global $pdo;
     
+    // Variable pour suivre la progression maximale (éviter les retours en arrière)
+    static $maxProgress = 0;
+    
+    // Fonction helper pour envoyer la progression en s'assurant qu'elle ne recule jamais
+    $sendProgress = function($progress) use (&$maxProgress) {
+        $progress = intval($progress);
+        if ($progress > $maxProgress) {
+            $maxProgress = $progress;
+            sendSSE('progress', $maxProgress);
+            return true;
+        }
+        // Ne pas envoyer si la progression recule
+        return false;
+    };
+    
     // CRITIQUE: Ignorer l'arrêt du script si la connexion client se ferme
     // Cela garantit que la compilation continue même si l'utilisateur change d'onglet
     ignore_user_abort(true);
@@ -377,7 +392,7 @@ function handleCompileFirmware($firmware_id) {
             }
             
             sendSSE('log', 'info', 'Démarrage de la compilation...');
-            sendSSE('progress', 10);
+            $sendProgress(10);
             flush();
             echo ": keep-alive\n\n";
             flush();
@@ -467,7 +482,7 @@ function handleCompileFirmware($firmware_id) {
                 error_log('[handleCompileFirmware] Étape: arduino-cli disponible');
                 sendSSE('log', 'info', '✅ arduino-cli disponible - démarrage de la compilation réelle');
                 sendSSE('log', 'info', '   Chemin: ' . $arduinoCli);
-                sendSSE('progress', 20);
+                $sendProgress(20);
                 flush();
                 
                 // Définir HOME temporairement pour le test (avant la définition complète de $envStr)
@@ -523,7 +538,7 @@ function handleCompileFirmware($firmware_id) {
                 $build_dir_created = true;
                 
                 sendSSE('log', 'info', 'Préparation de l\'environnement de compilation...');
-                sendSSE('progress', 30);
+                $sendProgress(30);
                 
                 // Copier le fichier .ino dans le dossier de build
                 $sketch_name = 'fw_ott_optimized';
@@ -632,7 +647,7 @@ function handleCompileFirmware($firmware_id) {
                 }
                 
                 sendSSE('log', 'info', 'Vérification du core ESP32...');
-                sendSSE('progress', 40);
+                $sendProgress(40);
                 flush();
                 
                 // Définir descriptorspec pour proc_open (nécessaire pour core list)
@@ -904,7 +919,7 @@ function handleCompileFirmware($firmware_id) {
                 if ($esp32Installed) {
                     sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
                     sendSSE('log', 'info', '   Source: hardware/arduino-data/ (cache local ou disque persistant)');
-                    sendSSE('progress', 50);
+                    $sendProgress(50);
                 } else {
                     // Vérifier si le core existe dans hardware/arduino-data/ mais n'est pas encore indexé
                     $corePath = $arduinoDataDir . '/packages/esp32/hardware/esp32';
@@ -913,14 +928,14 @@ function handleCompileFirmware($firmware_id) {
                         sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
                         sendSSE('log', 'info', '   ⚠️ Note: Le core existe mais n\'est pas indexé par arduino-cli');
                         sendSSE('log', 'info', '   Le core sera utilisé directement sans re-téléchargement');
-                        sendSSE('progress', 50);
+                        $sendProgress(50);
                     } else {
                         sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
                         sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~568MB, une seule fois)...');
                         sendSSE('log', 'info', '   ✅ Le core sera stocké dans hardware/arduino-data/');
                         sendSSE('log', 'info', '   💡 Pour éviter de retélécharger à chaque déploiement, configurez un Persistent Disk sur Render.com');
                         sendSSE('log', 'info', '   📖 Voir: docs/RENDER_PERSISTENT_DISK.md');
-                        sendSSE('progress', 42);
+                        $sendProgress(42);
                         
                         // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
                         $indexFile = $arduinoDataDir . '/package_index.json';
@@ -945,7 +960,7 @@ function handleCompileFirmware($firmware_id) {
                         
                         sendSSE('log', 'info', 'Téléchargement et installation du core ESP32...');
                         sendSSE('log', 'info', '📥 Phase 1: Téléchargement (~568MB)');
-                        sendSSE('progress', 45);
+                        $sendProgress(45);
                         
                         // Exécuter avec output en temps réel pour voir la progression
                         $descriptorspec = [
@@ -1047,7 +1062,7 @@ function handleCompileFirmware($firmware_id) {
                                                                 // Le téléchargement du core représente 5% de la compilation totale (45% à 50%)
                                                                 // On mappe 0-100% du téléchargement vers 45-50% de la compilation totale
                                                                 $globalProgress = 45 + ($downloadPercent / 100) * 5;
-                                                                sendSSE('progress', intval($globalProgress));
+                                                                $sendProgress(intval($globalProgress));
                                                                 // Ne pas afficher de message de progression dans les logs, seulement le % dans la barre
                                                                 $skipRawLine = true; // Ne pas afficher la ligne brute
                                                                 flush();
@@ -1064,7 +1079,7 @@ function handleCompileFirmware($firmware_id) {
                                                             // Si on voit "downloaded", on a fini le téléchargement
                                                             if (preg_match('/downloaded$/', $lineTrimmed)) {
                                                                 $currentlyDownloading = false;
-                                                                sendSSE('progress', 48); // Progression intermédiaire
+                                                                $sendProgress(48); // Progression intermédiaire
                                                                 sendSSE('log', 'info', '✅ Téléchargement terminé');
                                                                 sendSSE('log', 'info', '🔧 Phase 2: Installation des outils et configuration...');
                                                                 $skipRawLine = true; // Ne pas afficher la ligne brute
@@ -1193,14 +1208,14 @@ function handleCompileFirmware($firmware_id) {
                             $return = proc_close($process);
                             
                             // Mettre à jour la progression à 50% à la fin du téléchargement/installation
-                            sendSSE('progress', 50);
+                            $sendProgress(50);
                             flush();
                         } else {
                             // Fallback sur exec si proc_open échoue
                             exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $installOutput, $return);
                             sendSSE('log', 'info', implode("\n", $installOutput));
                             // Mettre à jour la progression à 50% même en fallback
-                            sendSSE('progress', 50);
+                            $sendProgress(50);
                             flush();
                         }
                         
@@ -1265,7 +1280,7 @@ function handleCompileFirmware($firmware_id) {
                 
                 sendSSE('log', 'info', 'Compilation du firmware...');
                 sendSSE('log', 'info', 'Commande: ' . $compile_cmd);
-                sendSSE('progress', 60);
+                $sendProgress(60);
                 flush();
                 
                 // Logger la commande pour diagnostic
@@ -1450,7 +1465,7 @@ function handleCompileFirmware($firmware_id) {
                     return;
                 }
                 
-                sendSSE('progress', 80);
+                $sendProgress(80);
                 sendSSE('log', 'info', 'Recherche du fichier .bin généré...');
                 
                 // Trouver le fichier .bin
@@ -1480,7 +1495,7 @@ function handleCompileFirmware($firmware_id) {
                 
                 $compiled_bin = $bin_files[0];
                 
-                sendSSE('progress', 95);
+                $sendProgress(95);
                 sendSSE('log', 'info', 'Calcul des checksums et lecture du fichier .bin...');
                 
                 // Lire directement depuis le répertoire de build (pas de copie sur disque pour économiser l'espace)
@@ -1528,7 +1543,7 @@ function handleCompileFirmware($firmware_id) {
                 // Nettoyer le répertoire de build immédiatement après stockage en DB
                 cleanupBuildDir($build_dir);
                 
-                sendSSE('progress', 100);
+                $sendProgress(100);
                 sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
                 sendSSE('success', 'Firmware v' . $firmware['version'] . ' compilé avec succès', $firmware['version']);
                 

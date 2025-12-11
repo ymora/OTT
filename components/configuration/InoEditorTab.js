@@ -723,7 +723,11 @@ export default function InoEditorTab({ onUploadSuccess }) {
               level: data.level || 'info'
             }])
           } else if (data.type === 'progress') {
-            setCompileProgress(data.progress || 0)
+            // S'assurer que la progression ne peut que monter (éviter les retours en arrière)
+            setCompileProgress(prev => {
+              const newProgress = data.progress || 0
+              return Math.max(prev, newProgress) // Ne garder que la valeur la plus élevée
+            })
             // Ne plus afficher la progression dans les logs, seulement dans la barre
           } else if (data.type === 'success') {
             setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
