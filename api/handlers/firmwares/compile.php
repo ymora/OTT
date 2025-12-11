@@ -1006,6 +1006,7 @@ function handleCompileFirmware($firmware_id) {
                                                         if ($isDownloadLine) {
                                                             // Ligne de progression de téléchargement - toujours afficher
                                                             $logLevel = 'info';
+                                                            $currentlyDownloading = true; // On est en phase de téléchargement
                                                             
                                                             // Mettre à jour la progression globale (45% à 50% pour le téléchargement du core)
                                                             if ($downloadPercent !== null) {
@@ -1014,6 +1015,11 @@ function handleCompileFirmware($firmware_id) {
                                                                 $globalProgress = 45 + ($downloadPercent / 100) * 5;
                                                                 sendSSE('progress', intval($globalProgress));
                                                                 flush();
+                                                            }
+                                                            
+                                                            // Si on voit "downloaded", on a fini le téléchargement
+                                                            if (preg_match('/downloaded$/', $lineTrimmed)) {
+                                                                $currentlyDownloading = false;
                                                             }
                                                         } elseif (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
                                                                   preg_match('/error:/i', $lineTrimmed) || preg_match('/fatal/i', $lineTrimmed)) {
