@@ -1071,42 +1071,36 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     requireAuth();
     requireAdmin();
     
-    $scriptPath = __DIR__ . '/scripts/generate_time_tracking.ps1';
-    $outputFile = __DIR__ . '/SUIVI_TEMPS_FACTURATION.md';
+    // Générer directement dans public/ (fichier principal utilisé par le dashboard et les scripts)
+    $publicPath = __DIR__ . '/../public/SUIVI_TEMPS_FACTURATION.md';
+    $publicDir = dirname($publicPath);
     
-    // Détecter l'OS
-    $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+    // Créer le dossier public/ s'il n'existe pas
+    if (!is_dir($publicDir)) {
+        @mkdir($publicDir, 0755, true);
+    }
     
-    if ($isWindows && file_exists($scriptPath)) {
-        // Windows : utiliser PowerShell
-        $command = 'powershell.exe -ExecutionPolicy Bypass -File "' . $scriptPath . '"';
-    } else {
-        // Linux/Unix : utiliser git log directement (fallback)
-        // Note: Le script PowerShell pourrait être converti en bash pour une meilleure compatibilité
-        $command = 'git log --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --all --no-merges > /dev/null 2>&1';
-        // Pour l'instant, on retourne une erreur si on n'est pas sur Windows
-        http_response_code(501);
+    // Utiliser le script bash qui génère directement dans public/
+    $bashScript = __DIR__ . '/scripts/deploy/generate_time_tracking.sh';
+    
+    if (!file_exists($bashScript)) {
+        http_response_code(500);
         header('Content-Type: application/json');
         echo json_encode([
             'success' => false,
-            'error' => 'Génération automatique disponible uniquement sur Windows. Veuillez exécuter manuellement scripts/generate_time_tracking.ps1'
+            'error' => 'Script de génération non trouvé: scripts/deploy/generate_time_tracking.sh'
         ]);
         exit;
     }
     
-    // Exécuter le script
+    // Exécuter le script bash (fonctionne sur Windows avec Git Bash/WSL ou Linux)
     $output = [];
     $returnVar = 0;
+    $command = 'bash "' . $bashScript . '"';
     exec($command . ' 2>&1', $output, $returnVar);
     
-    if ($returnVar === 0 && file_exists($outputFile)) {
-        // Copier aussi dans public/ pour faciliter l'accès frontend
-        $publicPath = __DIR__ . '/../public/SUIVI_TEMPS_FACTURATION.md';
-        $publicDir = dirname($publicPath);
-        if (is_dir($publicDir) || @mkdir($publicDir, 0755, true)) {
-            @copy($outputFile, $publicPath);
-        }
-        
+    // Vérifier que le fichier a été créé dans public/
+    if (file_exists($publicPath)) {
         auditLog('admin.regenerate_time_tracking', 'admin', null, null, ['file' => 'SUIVI_TEMPS_FACTURATION.md']);
         http_response_code(200);
         header('Content-Type: application/json');
@@ -1114,8 +1108,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
             'success' => true,
             'message' => 'Fichier SUIVI_TEMPS_FACTURATION.md régénéré avec succès',
             'file' => 'SUIVI_TEMPS_FACTURATION.md',
-            'output' => implode("\n", $output),
-            'copied_to_public' => file_exists($publicPath)
+            'path' => 'public/SUIVI_TEMPS_FACTURATION.md',
+            'output' => implode("\n", $output)
         ]);
     } else {
         http_response_code(500);
@@ -1168,34 +1162,22 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     
     // Si c'est le fichier de suivi du temps et qu'il n'existe pas, essayer de le générer
     if (!$filePath && $fileName === 'SUIVI_TEMPS_FACTURATION.md') {
-        $scriptPath = __DIR__ . '/scripts/generate_time_tracking.ps1';
-        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        // Utiliser le script bash qui génère directement dans public/
+        $bashScript = __DIR__ . '/../scripts/deploy/generate_time_tracking.sh';
         
-        if ($isWindows && file_exists($scriptPath)) {
+        if (file_exists($bashScript)) {
             // Essayer de générer le fichier automatiquement
-            $command = 'powershell.exe -ExecutionPolicy Bypass -File "' . $scriptPath . '"';
+            $command = 'bash "' . $bashScript . '"';
             $output = [];
             $returnVar = 0;
             exec($command . ' 2>&1', $output, $returnVar);
             
-            // Chercher à nouveau après génération
-            foreach ($possiblePaths as $path) {
-                if (file_exists($path) && is_readable($path)) {
-                    $filePath = $path;
-                    break;
-                }
-            }
-            
-            if ($filePath) {
+            // Chercher à nouveau dans public/ après génération
+            $publicPath = __DIR__ . '/../public/' . $fileName;
+            if (file_exists($publicPath) && is_readable($publicPath)) {
+                $filePath = $publicPath;
                 if (getenv('DEBUG_ERRORS') === 'true') {
                     error_log('[ROUTER] Fichier SUIVI_TEMPS_FACTURATION.md généré automatiquement: ' . $filePath);
-                }
-                
-                // Essayer de copier dans public/ pour faciliter l'accès frontend
-                $publicPath = __DIR__ . '/../public/' . $fileName;
-                $publicDir = dirname($publicPath);
-                if (is_dir($publicDir) || mkdir($publicDir, 0755, true)) {
-                    @copy($filePath, $publicPath);
                 }
             } else {
                 if (getenv('DEBUG_ERRORS') === 'true') {
@@ -1203,18 +1185,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
                 }
             }
         } else {
-            // Sur Linux/Render, essayer de générer avec git directement
-            $gitCommand = 'cd ' . escapeshellarg(__DIR__) . ' && git log --pretty=format:"%ad|%an|%s|%h" --date=format:"%Y-%m-%d %H:%M" --all --no-merges 2>&1';
-            $gitOutput = [];
-            $gitReturnVar = 0;
-            exec($gitCommand, $gitOutput, $gitReturnVar);
-            
-            if ($gitReturnVar === 0 && !empty($gitOutput)) {
-                // Git est disponible, mais on ne peut pas exécuter le script PowerShell
-                // On retourne un message indiquant qu'il faut générer le fichier manuellement
-                if (getenv('DEBUG_ERRORS') === 'true') {
-                    error_log('[ROUTER] Git disponible mais script PowerShell non exécutable sur cette plateforme');
-                }
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[ROUTER] Script de génération non trouvé: scripts/deploy/generate_time_tracking.sh');
             }
         }
     }
@@ -1240,7 +1212,7 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
                 'success' => false, 
                 'error' => 'File not found. The file SUIVI_TEMPS_FACTURATION.md could not be generated automatically.',
                 'fileName' => $fileName,
-                'hint' => 'Please run manually: scripts/generate_time_tracking.ps1 (Windows) or ensure git is available and the script can execute.',
+                'hint' => 'Please run manually: scripts/deploy/generate_time_tracking.sh or scripts/audit/AUDIT_COMPLET_AUTOMATIQUE.ps1',
                 'possiblePaths' => $possiblePaths,
                 'os' => PHP_OS,
                 'isWindows' => strtoupper(substr(PHP_OS, 0, 3)) === 'WIN'

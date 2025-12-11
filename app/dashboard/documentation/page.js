@@ -143,11 +143,14 @@ export default function DocumentationPage() {
             sendThemeToIframe()
           }
           sendWithRetry() // Immédiatement
-          // Utiliser des timeouts avec références pour cleanup si nécessaire
+          // Utiliser des timeouts avec cleanup via useEffect
           const timeout1 = setTimeout(sendWithRetry, 100) // Après 100ms
           const timeout2 = setTimeout(sendWithRetry, 500) // Après 500ms
-          // Note: Cleanup géré par le démontage du composant (iframe reste monté)
-          // Les timeouts sont courts et ne posent pas de problème de fuite mémoire
+          
+          // Stocker les timeouts pour cleanup
+          if (iframeRef.current) {
+            iframeRef.current._timeouts = [timeout1, timeout2]
+          }
         }}
       />
     </div>
@@ -828,133 +831,7 @@ function MarkdownViewer({ fileName }) {
     }
   }, [chartData, timeView])
 
-  // Convertir markdown basique en HTML (version améliorée)
-  const convertMarkdown = (md) => {
-    let html = md
-    
-    // Tables (doit être fait avant les autres remplacements)
-    const lines = html.split('\n')
-    let inTable = false
-    let tableRows = []
-    let result = []
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      const isTableRow = line.trim().startsWith('|') && line.trim().endsWith('|')
-      const isTableSeparator = isTableRow && line.includes('---')
-      
-      if (isTableRow && !isTableSeparator) {
-        if (!inTable) {
-          inTable = true
-          tableRows = []
-        }
-        const cells = line.split('|').map(c => c.trim()).filter(c => c)
-        tableRows.push(cells)
-      } else if (isTableSeparator) {
-        // Ignorer la ligne de séparation
-        continue
-      } else {
-        if (inTable && tableRows.length > 0) {
-          // Fermer le tableau
-          result.push('<div class="overflow-x-auto my-6"><table class="min-w-full border-collapse border border-gray-300 dark:border-gray-600 shadow-sm">')
-          tableRows.forEach((row, idx) => {
-            const tag = idx === 0 ? 'th' : 'td'
-            const cellClass = idx === 0 
-              ? 'px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 font-bold text-left text-gray-900 dark:text-gray-100' 
-              : 'px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'
-            result.push(`<tr class="${idx % 2 === 0 ? 'bg-white dark:bg-[rgb(var(--night-surface))]' : 'bg-gray-50 dark:bg-gray-900/50'}">`)
-            row.forEach(cell => {
-              // Détecter si c'est une cellule avec du texte en gras (Total, etc.)
-              const isBold = cell.includes('**')
-              const cellContent = cell.replace(/\*\*/g, '')
-              const finalClass = isBold ? cellClass + ' font-bold' : cellClass
-              result.push(`<${tag} class="${finalClass}">${cellContent}</${tag}>`)
-            })
-            result.push(`</tr>`)
-          })
-          result.push('</table></div>')
-          tableRows = []
-          inTable = false
-        }
-        result.push(line)
-      }
-    }
-    
-    if (inTable && tableRows.length > 0) {
-      result.push('<div class="overflow-x-auto my-6"><table class="min-w-full border-collapse border border-gray-300 dark:border-gray-600 shadow-sm">')
-      tableRows.forEach((row, idx) => {
-        const tag = idx === 0 ? 'th' : 'td'
-        const cellClass = idx === 0 
-          ? 'px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 font-bold text-left text-gray-900 dark:text-gray-100' 
-          : 'px-4 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'
-        result.push(`<tr class="${idx % 2 === 0 ? 'bg-white dark:bg-[rgb(var(--night-surface))]' : 'bg-gray-50 dark:bg-gray-900/50'}">`)
-        row.forEach(cell => {
-          const isBold = cell.includes('**')
-          const cellContent = cell.replace(/\*\*/g, '')
-          const finalClass = isBold ? cellClass + ' font-bold' : cellClass
-          result.push(`<${tag} class="${finalClass}">${cellContent}</${tag}>`)
-        })
-        result.push(`</tr>`)
-      })
-      result.push('</table></div>')
-    }
-    
-    html = result.join('\n')
-    
-    // Headers (avec meilleur style)
-    html = html
-      .replace(/^#### (.*$)/gim, '<h4 class="text-lg font-bold mt-6 mb-3 text-gray-800 dark:text-gray-200">$1</h4>')
-      .replace(/^### (.*$)/gim, '<h3 class="text-xl font-bold mt-8 mb-4 text-gray-800 dark:text-gray-200 border-l-4 border-primary-500 dark:border-primary-400 pl-4">$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2 class="text-2xl font-bold mt-10 mb-5 text-primary-600 dark:text-primary-400 border-b-2 border-primary-300 dark:border-primary-600 pb-2">$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1 class="text-4xl font-bold mt-12 mb-6 text-gray-900 dark:text-gray-100 border-b-4 border-primary-500 dark:border-primary-400 pb-4">$1</h1>')
-    
-    // Bold
-    html = html.replace(/\*\*(.*?)\*\*/gim, '<strong class="font-bold">$1</strong>')
-    
-    // Lists (avec regroupement amélioré)
-    const listRegex = /(?:^[-*+] .*(?:\n|$))+/gm
-    html = html.replace(listRegex, (match) => {
-      const items = match.split('\n').filter(l => l.trim().match(/^[-*+]/))
-      return '<ul class="list-disc ml-6 mb-6 space-y-2 text-gray-700 dark:text-gray-300">' + 
-        items.map(item => {
-          const content = item.replace(/^[-*+] /, '')
-          // Traiter le contenu (gras, etc.)
-          const processed = content.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gray-900 dark:text-gray-100">$1</strong>')
-          return `<li class="leading-relaxed">${processed}</li>`
-        }).join('') + 
-        '</ul>'
-    })
-    
-    // Code blocks
-    html = html.replace(/```([\s\S]*?)```/gim, (match, code) => {
-      return `<pre class="bg-gray-100 dark:bg-gray-800 p-4 rounded overflow-x-auto my-4"><code class="text-sm">${code.trim()}</code></pre>`
-    })
-    
-    // Inline code
-    html = html.replace(/`([^`]+)`/gim, '<code class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">$1</code>')
-    
-    // Horizontal rules (séparateurs de sections)
-    html = html.replace(/^---$/gim, '<hr class="my-10 border-t-2 border-gray-300 dark:border-gray-600" />')
-    
-    // Paragraphes (seulement pour le texte brut non formaté)
-    // Diviser par doubles sauts de ligne, mais préserver les éléments HTML
-    const blocks = html.split(/\n\n+/)
-    html = blocks.map(block => {
-      const trimmed = block.trim()
-      // Ignorer si vide, ou si c'est déjà du HTML (tableaux, listes, headers, etc.)
-      if (!trimmed || 
-          trimmed.startsWith('<') || 
-          trimmed.match(/^#+\s/) ||
-          trimmed.match(/^[-*+]\s/) ||
-          trimmed.match(/^\|/)) {
-        return block
-      }
-      // Si c'est du texte brut, l'entourer d'un paragraphe
-      return `<p class="mb-4 text-gray-700 dark:text-gray-300 leading-relaxed">${trimmed}</p>`
-    }).join('\n\n')
-    
-    return html
-  }
+  // Note: convertMarkdown supprimé - non utilisé (le markdown est géré par le composant MarkdownViewer)
 
   // Calculer des statistiques supplémentaires
   const stats = useMemo(() => {

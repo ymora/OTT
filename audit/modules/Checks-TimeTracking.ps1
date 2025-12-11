@@ -171,16 +171,16 @@ _Rapport généré automatiquement le $(Get-Date -Format 'yyyy-MM-dd HH:mm')_
 _Basé sur l'analyse Git des commits_
 "@
         
-        # Sauvegarder
-        $reportPath = Join-Path $ProjectPath "SUIVI_TEMPS_FACTURATION.md"
+        # Sauvegarder uniquement dans public/ (fichier principal utilisé par le dashboard et les scripts)
         $publicPath = Join-Path $ProjectPath "public" "SUIVI_TEMPS_FACTURATION.md"
+        $publicDir = Split-Path $publicPath -Parent
         
-        $report | Out-File -FilePath $reportPath -Encoding UTF8
-        if (Test-Path (Split-Path $publicPath -Parent)) {
-            $report | Out-File -FilePath $publicPath -Encoding UTF8 -ErrorAction SilentlyContinue
+        if (-not (Test-Path $publicDir)) {
+            New-Item -ItemType Directory -Path $publicDir -Force | Out-Null
         }
+        $report | Out-File -FilePath $publicPath -Encoding UTF8
         
-        Write-OK "Rapport généré: SUIVI_TEMPS_FACTURATION.md"
+        Write-OK "Rapport généré: public\SUIVI_TEMPS_FACTURATION.md"
         Write-Host "  Total estimé: ~$totalHours heures sur $daysWorked jours" -ForegroundColor Green
         Write-Host "  Moyenne: ~${avgHours}h/jour" -ForegroundColor Green
         

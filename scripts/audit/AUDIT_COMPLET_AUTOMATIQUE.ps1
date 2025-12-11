@@ -848,21 +848,67 @@ try {
             $usersData = Invoke-RestMethod -Uri "$ApiUrl/api.php/users" -Headers $headers -TimeoutSec 10
             $alertsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/alerts" -Headers $headers -TimeoutSec 10
             
-            $devices = if($devicesData.devices) { $devicesData.devices } else { @() }
-            $patients = if($patientsData.patients) { $patientsData.patients } else { @() }
-            $users = if($usersData.users) { $usersData.users } else { @() }
-            $alerts = if($alertsData.alerts) { $alertsData.alerts } else { @() }
+            # Extraction robuste des données avec vérification de null et de la structure
+            $devices = @()
+            if ($devicesData -and $devicesData.PSObject.Properties['devices']) {
+                $devices = if ($devicesData.devices -is [Array]) { $devicesData.devices } else { @($devicesData.devices) }
+            } elseif ($devicesData -and $devicesData.success -eq $true) {
+                $devices = @()  # Pas de devices dans la réponse
+            }
             
-            Write-Host "  Dispositifs   : $($devices.Count)" -ForegroundColor White
-            Write-Host "  Patients      : $($patients.Count)" -ForegroundColor White
-            Write-Host "  Utilisateurs  : $($users.Count)" -ForegroundColor White
-            Write-Host "  Alertes       : $($alerts.Count)" -ForegroundColor White
+            $patients = @()
+            if ($patientsData -and $patientsData.PSObject.Properties['patients']) {
+                $patients = if ($patientsData.patients -is [Array]) { $patientsData.patients } else { @($patientsData.patients) }
+            } elseif ($patientsData -and $patientsData.success -eq $true) {
+                $patients = @()  # Pas de patients dans la réponse
+            }
             
-            # Dispositifs non assignes
-            $unassigned = @($devices | Where-Object { -not $_.patient_id }).Count
+            $users = @()
+            if ($usersData -and $usersData.PSObject.Properties['users']) {
+                $users = if ($usersData.users -is [Array]) { $usersData.users } else { @($usersData.users) }
+            } elseif ($usersData -and $usersData.success -eq $true) {
+                $users = @()  # Pas de users dans la réponse
+            }
+            
+            $alerts = @()
+            if ($alertsData -and $alertsData.PSObject.Properties['alerts']) {
+                $alerts = if ($alertsData.alerts -is [Array]) { $alertsData.alerts } else { @($alertsData.alerts) }
+            } elseif ($alertsData -and $alertsData.success -eq $true) {
+                $alerts = @()  # Pas d'alerts dans la réponse
+            }
+            
+            # Afficher les compteurs avec vérification de la pagination si disponible
+            $devicesCount = $devices.Count
+            $patientsCount = $patients.Count
+            $usersCount = $users.Count
+            $alertsCount = $alerts.Count
+            
+            # Si les tableaux sont vides mais que la pagination indique un total, utiliser le total
+            if ($devicesCount -eq 0 -and $devicesData.pagination -and $devicesData.pagination.total) {
+                $devicesCount = $devicesData.pagination.total
+            }
+            if ($patientsCount -eq 0 -and $patientsData.pagination -and $patientsData.pagination.total) {
+                $patientsCount = $patientsData.pagination.total
+            }
+            
+            Write-Host "  Dispositifs   : $devicesCount" -ForegroundColor White
+            Write-Host "  Patients      : $patientsCount" -ForegroundColor White
+            Write-Host "  Utilisateurs  : $usersCount" -ForegroundColor White
+            Write-Host "  Alertes       : $alertsCount" -ForegroundColor White
+            
+            # Dispositifs non assignes (seulement si on a des devices dans le tableau)
+            $unassigned = 0
+            if ($devices.Count -gt 0) {
+                $unassigned = @($devices | Where-Object { -not $_.patient_id }).Count
+            } elseif ($devicesData.pagination -and $devicesData.pagination.total -gt 0) {
+                # Si on a un total mais pas les données détaillées, on ne peut pas vérifier
+                $unassigned = -1  # Indique qu'on ne peut pas déterminer
+            }
             if ($unassigned -gt 0) {
-                Write-Warn "$unassigned dispositifs non assignes"
-                $auditResults.Recommendations += "Assigner les $unassigned dispositifs"
+                Write-Warn "$unassigned dispositif(s) non assigne(s)"
+                $auditResults.Recommendations += "Assigner les $unassigned dispositif(s)"
+            } elseif ($unassigned -eq -1) {
+                Write-Info "Impossible de verifier les dispositifs non assignes (pagination active)"
             }
             
             # Alertes non resolues
@@ -1946,11 +1992,14 @@ _Rapport genere automatiquement le $(Get-Date -Format 'yyyy-MM-dd HH:mm')_
 _Base sur l'analyse Git des commits de ymora_
 "@
     
-    # Sauvegarder
-    $report | Out-File -FilePath "SUIVI_TEMPS_FACTURATION.md" -Encoding UTF8
-    $report | Out-File -FilePath "public\SUIVI_TEMPS_FACTURATION.md" -Encoding UTF8 -ErrorAction SilentlyContinue
+    # Sauvegarder uniquement dans public/ (fichier principal utilisé par le dashboard et les scripts)
+    $publicDir = "public"
+    if (-not (Test-Path $publicDir)) {
+        New-Item -ItemType Directory -Path $publicDir -Force | Out-Null
+    }
+    $report | Out-File -FilePath "public\SUIVI_TEMPS_FACTURATION.md" -Encoding UTF8
     
-    Write-OK "Rapport genere: SUIVI_TEMPS_FACTURATION.md"
+    Write-OK "Rapport genere: public\SUIVI_TEMPS_FACTURATION.md"
     Write-Host "  Total estime: ~$totalHours heures sur $daysWorked jours" -ForegroundColor Green
     Write-Host "  Moyenne: ~${avgHours}h/jour" -ForegroundColor Green
     

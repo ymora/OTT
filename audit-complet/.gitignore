@@ -1,0 +1,10 @@
+# Résultats d'audit (peuvent être volumineux)
+resultats/*.txt
+
+# Configuration personnalisée (peut contenir des secrets)
+scripts/audit.config.ps1
+
+# Fichiers temporaires
+*.tmp
+*.log
+

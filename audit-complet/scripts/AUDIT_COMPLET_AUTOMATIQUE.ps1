@@ -10,30 +10,152 @@
 # ===============================================================================
 
 param(
-    [string]$Email = "ymora@free.fr",
-    [string]$Password = "Ym120879",
-    [string]$ApiUrl = "https://ott-jbln.onrender.com",
+    [string]$Email = "",
+    [string]$Password = "",
+    [string]$ApiUrl = "",
+    [string]$ConfigFile = "audit-complet/scripts/audit.config.ps1",
     [switch]$Verbose = $false,
     [int]$MaxFileLines = 500
 )
 
-$ErrorActionPreference = "Continue"
-
-# Fonctions d affichage
+# ===============================================================================
+# FONCTIONS D'AFFICHAGE (définies en premier pour être disponibles partout)
+# ===============================================================================
 function Write-Section { param([string]$Text) Write-Host "`n=== $Text ===" -ForegroundColor Cyan }
 function Write-OK { param([string]$Text) Write-Host "  [OK] $Text" -ForegroundColor Green }
 function Write-Warn { param([string]$Text) Write-Host "  [WARN] $Text" -ForegroundColor Yellow }
 function Write-Err { param([string]$Text) Write-Host "  [ERROR] $Text" -ForegroundColor Red }
 function Write-Info { param([string]$Text) if($Verbose) { Write-Host "  [INFO] $Text" -ForegroundColor Gray } }
 
+# Fonction helper pour extraire un tableau depuis une réponse API
+function Get-ArrayFromApiResponse {
+    param($data, $propertyName)
+    
+    if ($null -eq $data) { return @() }
+    
+    # Si c'est directement un tableau
+    if ($data -is [Array]) {
+        return $data
+    }
+    
+    # Si c'est un PSCustomObject avec la propriété
+    if ($data -is [PSCustomObject]) {
+        $prop = $data.PSObject.Properties[$propertyName]
+        if ($null -ne $prop -and $prop.Value) {
+            $value = $prop.Value
+            if ($value -is [Array]) {
+                return $value
+            } elseif ($value -is [PSCustomObject]) {
+                # Convertir en tableau si nécessaire
+                return @($value)
+            }
+        }
+    }
+    
+    # Essayer d'accéder directement à la propriété
+    try {
+        $value = $data.$propertyName
+        if ($null -ne $value) {
+            if ($value -is [Array]) {
+                return $value
+            } else {
+                return @($value)
+            }
+        }
+    } catch {
+        # Ignorer les erreurs
+    }
+    
+    return @()
+}
+
+$ErrorActionPreference = "Continue"
+
+# Utiliser les variables d'environnement si les paramètres sont vides
+if ([string]::IsNullOrEmpty($Email)) { $Email = $env:AUDIT_EMAIL }
+if ([string]::IsNullOrEmpty($Password)) { $Password = $env:AUDIT_PASSWORD }
+if ([string]::IsNullOrEmpty($ApiUrl)) { $ApiUrl = $env:AUDIT_API_URL }
+
+# ===============================================================================
+# NETTOYAGE DES RÉSULTATS PRÉCÉDENTS
+# ===============================================================================
+function Clear-PreviousAuditResults {
+    $resultsDir = Join-Path (Get-Location) "audit-complet\resultats"
+    
+    if (Test-Path $resultsDir) {
+        $oldResults = Get-ChildItem -Path $resultsDir -Filter "audit_resultat_*.txt" -ErrorAction SilentlyContinue
+        if ($oldResults) {
+            $count = $oldResults.Count
+            Remove-Item -Path $oldResults.FullName -Force -ErrorAction SilentlyContinue
+            Write-Host "  [INFO] Nettoyage: $count résultat(s) d'audit précédent(s) supprimé(s)" -ForegroundColor Gray
+        }
+    }
+}
+
+# ===============================================================================
+# CHARGEMENT DE LA CONFIGURATION
+# ===============================================================================
+$configPath = Join-Path (Get-Location) $ConfigFile
+if (Test-Path $configPath) {
+    try {
+        $script:Config = & $configPath
+        Write-Info "Configuration chargée depuis: $ConfigFile"
+    } catch {
+        Write-Err "Erreur lors du chargement de la configuration: $($_.Exception.Message)"
+        Write-Warn "Utilisation des valeurs par défaut"
+        $script:Config = $null
+    }
+} else {
+    Write-Warn "Fichier de configuration non trouvé: $ConfigFile"
+    Write-Warn "Utilisation des valeurs par défaut (projet OTT)"
+    $script:Config = $null
+}
+
+# Valeurs par défaut si config non chargée ou valeurs manquantes
+if ($null -eq $script:Config) {
+    $script:Config = @{
+        Project = @{ Name = "OTT Dashboard"; Company = "HAPPLYZ MEDICAL SAS" }
+        Api = @{ BaseUrl = "https://ott-jbln.onrender.com"; AuthEndpoint = "/api.php/auth/login" }
+        GitHub = @{ Repo = "ymora/OTT"; BaseUrl = "https://ymora.github.io/OTT"; BasePath = "/OTT" }
+    }
+}
+
+# Utiliser la configuration ou les paramètres
+if ([string]::IsNullOrEmpty($ApiUrl)) {
+    if ($script:Config -and $script:Config.Api -and $script:Config.Api.BaseUrl) {
+        $ApiUrl = $script:Config.Api.BaseUrl
+    } else {
+        $ApiUrl = "https://ott-jbln.onrender.com"
+    }
+}
+if ([string]::IsNullOrEmpty($Email)) {
+    if ([string]::IsNullOrEmpty($Email)) {
+        $Email = "ymora@free.fr"
+    }
+}
+
+# Sécurité : Si le mot de passe n'est pas fourni via variable d'environnement, demander
+if ([string]::IsNullOrEmpty($Password)) {
+    $securePassword = Read-Host -AsSecureString -Prompt "Entrez le mot de passe pour l'audit API"
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+    $Password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+}
+
 Write-Host ""
 Write-Host "===============================================================================" -ForegroundColor Cyan
-Write-Host "[AUDIT] AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL - OTT Dashboard" -ForegroundColor Cyan
+$projectName = if ($script:Config -and $script:Config.Project -and $script:Config.Project.Name) { $script:Config.Project.Name } else { "OTT Dashboard" }
+$projectCompany = if ($script:Config -and $script:Config.Project -and $script:Config.Project.Company) { $script:Config.Project.Company } else { "HAPPLYZ MEDICAL SAS" }
+Write-Host "[AUDIT] AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL - $projectName" -ForegroundColor Cyan
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host "Date     : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Cyan
-Write-Host "Version  : 2.3 - Analyse Exhaustive Optimisée (éléments inutiles, fichiers obsolètes)" -ForegroundColor Cyan
+Write-Host "Projet   : $projectName ($projectCompany)" -ForegroundColor Cyan
+Write-Host "Version  : 2.4 - Configuration modulaire (audit.config.ps1)" -ForegroundColor Cyan
+Write-Host "Config   : $ConfigFile" -ForegroundColor Cyan
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host ""
+
+# Nettoyer les résultats précédents
+Clear-PreviousAuditResults
 
 $auditResults = @{
     Scores = @{}
@@ -212,6 +334,57 @@ try {
     Write-Host "  PHP              : $($stats.PHP) fichiers ($($stats.PHPLines) lignes)" -ForegroundColor White
     Write-Host "  SQL              : $($stats.SQL) fichiers" -ForegroundColor White
     Write-Host "  Markdown root    : $($stats.MD) fichiers" -ForegroundColor $(if($stats.MD -gt 10){"Red"}elseif($stats.MD -gt 5){"Yellow"}else{"Green"})
+    
+    # Analyse détaillée des fichiers MD à la racine
+    if ($stats.MD -gt 5) {
+        $rootMdFiles = @($fileInventory.MD | Where-Object { $_.DirectoryName -eq (Get-Location).Path })
+        Write-Info "Fichiers MD à la racine:"
+        $rootMdFiles | ForEach-Object { 
+            $size = [math]::Round($_.Length/1KB, 1)
+            $age = ((Get-Date) - $_.LastWriteTime).Days
+            Write-Info "  - $($_.Name) ($size KB, modifié il y a $age jours)"
+        }
+    }
+    
+    # Analyse de la distribution des fichiers JS
+    Write-Info "Analyse distribution fichiers JS..."
+    $jsByDir = @{}
+    foreach ($jsFile in $fileInventory.JS) {
+        $dir = Split-Path -Parent $jsFile.FullName | Split-Path -Leaf
+        if (-not $jsByDir[$dir]) { $jsByDir[$dir] = 0 }
+        $jsByDir[$dir]++
+    }
+    $topJsDirs = $jsByDir.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 5
+    if ($topJsDirs) {
+        Write-Info "Top 5 répertoires avec fichiers JS:"
+        $topJsDirs | ForEach-Object { Write-Info "  - $($_.Key): $($_.Value) fichiers" }
+    }
+    
+    # Analyse de la distribution des fichiers MD
+    Write-Info "Analyse distribution fichiers MD..."
+    $mdByDir = @{}
+    foreach ($mdFile in $fileInventory.MD) {
+        $dir = Split-Path -Parent $mdFile.FullName | Split-Path -Leaf
+        if (-not $mdByDir[$dir]) { $mdByDir[$dir] = 0 }
+        $mdByDir[$dir]++
+    }
+    $topMdDirs = $mdByDir.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 5
+    if ($topMdDirs) {
+        Write-Info "Top 5 répertoires avec fichiers MD:"
+        $topMdDirs | ForEach-Object { Write-Info "  - $($_.Key): $($_.Value) fichiers" }
+    }
+    
+    # Analyse des fichiers YML/YAML
+    $totalYml = $fileInventory.YAML.Count + $fileInventory.YML.Count
+    if ($totalYml -gt 0) {
+        Write-Info "Fichiers YML/YAML trouvés: $totalYml"
+        $allYml = $fileInventory.YAML + $fileInventory.YML
+        $allYml | ForEach-Object { 
+            $relativePath = $_.FullName.Replace((Get-Location).Path + '\', '')
+            Write-Info "  - $relativePath"
+        }
+    }
+    
     Write-Host "  Composants       : $($stats.Components)" -ForegroundColor White
     Write-Host "  Hooks            : $($stats.Hooks)" -ForegroundColor White
     Write-Host "  Pages Dashboard  : $($stats.Pages)" -ForegroundColor White
@@ -224,9 +397,53 @@ try {
         Write-Warn "Trop de fichiers MD a la racine ($($stats.MD)) - Recommande <= 5"
         $auditResults.Issues += "Documentation: $($stats.MD) fichiers MD a la racine"
         $auditResults.Scores["Architecture"] = 8
+        Write-Host "  💡 Action: Déplacer les fichiers MD dans audit-complet/plans/ ou docs/" -ForegroundColor Cyan
     } elseif ($stats.MD -gt 5) {
         Write-Warn "Fichiers MD a rationaliser ($($stats.MD))"
         $auditResults.Scores["Architecture"] = 9
+        Write-Host "  💡 Action: Consolider les fichiers MD similaires" -ForegroundColor Cyan
+    }
+    
+    # Vérifier la cohérence des fichiers JS
+    if ($stats.JS -gt 100) {
+        Write-Info "Beaucoup de fichiers JS ($($stats.JS)) - Vérification de cohérence..."
+        $jsInComponents = @($fileInventory.JS | Where-Object { $_.FullName -match '\\components\\' }).Count
+        $jsInHooks = @($fileInventory.JS | Where-Object { $_.FullName -match '\\hooks\\' }).Count
+        $jsInApp = @($fileInventory.JS | Where-Object { $_.FullName -match '\\app\\' }).Count
+        $jsInLib = @($fileInventory.JS | Where-Object { $_.FullName -match '\\lib\\' }).Count
+        $jsOther = $stats.JS - $jsInComponents - $jsInHooks - $jsInApp - $jsInLib
+        Write-Info "  Distribution JS:"
+        Write-Info "    - components/: $jsInComponents"
+        Write-Info "    - hooks/: $jsInHooks"
+        Write-Info "    - app/: $jsInApp"
+        Write-Info "    - lib/: $jsInLib"
+        Write-Info "    - autres: $jsOther"
+        
+        if ($jsOther -gt ($stats.JS * 0.2)) {
+            Write-Warn "  Beaucoup de fichiers JS hors structure standard ($jsOther/$($stats.JS))"
+            $auditResults.Warnings += "Fichiers JS mal organisés: $jsOther fichiers hors structure"
+        }
+    }
+    
+    # Vérifier la cohérence des fichiers JS
+    if ($stats.JS -gt 100) {
+        Write-Info "Beaucoup de fichiers JS ($($stats.JS)) - Vérification de cohérence..."
+        $jsInComponents = @($fileInventory.JS | Where-Object { $_.FullName -match '\\components\\' }).Count
+        $jsInHooks = @($fileInventory.JS | Where-Object { $_.FullName -match '\\hooks\\' }).Count
+        $jsInApp = @($fileInventory.JS | Where-Object { $_.FullName -match '\\app\\' }).Count
+        $jsInLib = @($fileInventory.JS | Where-Object { $_.FullName -match '\\lib\\' }).Count
+        $jsOther = $stats.JS - $jsInComponents - $jsInHooks - $jsInApp - $jsInLib
+        Write-Info "  Distribution JS:"
+        Write-Info "    - components/: $jsInComponents"
+        Write-Info "    - hooks/: $jsInHooks"
+        Write-Info "    - app/: $jsInApp"
+        Write-Info "    - lib/: $jsInLib"
+        Write-Info "    - autres: $jsOther"
+        
+        if ($jsOther -gt ($stats.JS * 0.2)) {
+            Write-Warn "  Beaucoup de fichiers JS hors structure standard ($jsOther/$($stats.JS))"
+            $auditResults.Warnings += "Fichiers JS mal organisés: $jsOther fichiers hors structure"
+        }
     }
     
     Write-OK "Architecture analysee"
@@ -333,31 +550,35 @@ try {
         @{Pattern='try\s*\{'; Description='Try/catch'; Seuil=100}
     )
     
-    # Détecter les fonctions d'archivage/suppression dupliquées
+    # Détecter les fonctions d'archivage/suppression dupliquées (utilise la configuration)
     Write-Info "Analyse fonctions archivage/suppression..."
-    $archiveFunctions = @($searchFiles | Select-String -Pattern "const handleArchive\s*=|function handleArchive|handleArchive\s*=\s*async")
-    $deleteFunctions = @($searchFiles | Select-String -Pattern "const handlePermanentDelete\s*=|function handlePermanentDelete|handlePermanentDelete\s*=\s*async")
-    $restoreFunctions = @($searchFiles | Select-String -Pattern "const handleRestore\w+\s*=|function handleRestore\w+|handleRestore\w+\s*=\s*async")
     
-    if ($archiveFunctions.Count -gt 1) {
-        Write-Warn "handleArchive dupliquee: $($archiveFunctions.Count) occurrences (devrait utiliser useEntityArchive)"
-        $duplications += @{Pattern="handleArchive dupliquee"; Count=$archiveFunctions.Count; Files=($archiveFunctions | Group-Object Path).Count}
-        $auditResults.Recommendations += "Unifier handleArchive avec useEntityArchive hook ($($archiveFunctions.Count) occurrences)"
+    # Utiliser les patterns de la configuration ou valeurs par défaut
+    if ($script:Config.DuplicationPatterns) {
+        $duplicationPatterns = $script:Config.DuplicationPatterns
+    } else {
+        # Valeurs par défaut pour OTT
+        $duplicationPatterns = @(
+            @{ Pattern = "const handleArchive\s*=|function handleArchive|handleArchive\s*=\s*async"; Hook = "useEntityArchive"; Description = "handleArchive" }
+            @{ Pattern = "const handlePermanentDelete\s*=|function handlePermanentDelete|handlePermanentDelete\s*=\s*async"; Hook = "useEntityPermanentDelete"; Description = "handlePermanentDelete" }
+            @{ Pattern = "const handleRestore\w+\s*=|function handleRestore\w+|handleRestore\w+\s*=\s*async"; Hook = "useEntityRestore"; Description = "handleRestore*" }
+        )
     }
     
-    if ($deleteFunctions.Count -gt 1) {
-        Write-Warn "handlePermanentDelete dupliquee: $($deleteFunctions.Count) occurrences (devrait utiliser useEntityPermanentDelete)"
-        $duplications += @{Pattern="handlePermanentDelete dupliquee"; Count=$deleteFunctions.Count; Files=($deleteFunctions | Group-Object Path).Count}
-        $auditResults.Recommendations += "Unifier handlePermanentDelete avec useEntityPermanentDelete hook ($($deleteFunctions.Count) occurrences)"
+    foreach ($dupPattern in $duplicationPatterns) {
+        $matches = @($searchFiles | Select-String -Pattern $dupPattern.Pattern)
+        if ($matches.Count -gt 1) {
+            Write-Warn "$($dupPattern.Description) dupliquee: $($matches.Count) occurrences (devrait utiliser $($dupPattern.Hook))"
+            $duplications += @{Pattern="$($dupPattern.Description) dupliquee"; Count=$matches.Count; Files=($matches | Group-Object Path).Count}
+            $auditResults.Recommendations += "Unifier $($dupPattern.Description) avec $($dupPattern.Hook) hook ($($matches.Count) occurrences)"
+        }
     }
     
-    if ($restoreFunctions.Count -gt 1) {
-        Write-Warn "handleRestore* dupliquee: $($restoreFunctions.Count) occurrences (devrait utiliser useEntityRestore)"
-        $duplications += @{Pattern="handleRestore* dupliquee"; Count=$restoreFunctions.Count; Files=($restoreFunctions | Group-Object Path).Count}
-        $auditResults.Recommendations += "Unifier handleRestore* avec useEntityRestore hook ($($restoreFunctions.Count) occurrences)"
+    # Initialiser le tableau AVANT les détections (bug corrigé - ligne 360)
+    # Note: Les duplications spécifiques (handleArchive, etc.) sont déjà ajoutées ci-dessus
+    if ($null -eq $duplications) {
+        $duplications = @()
     }
-    
-    $duplications = @()
     
     foreach ($pattern in $patterns) {
         $matches = @($searchFiles | Select-String -Pattern $pattern.Pattern)
@@ -441,13 +662,18 @@ try {
     $rootPath = if (Test-Path "api.php") { "." } elseif (Test-Path "../api.php") { ".." } else { "." }
     Push-Location $rootPath
     
-    $menuPages = @(
-        @{Route="/dashboard"; File="app/dashboard/page.js"; Name="Vue Ensemble"},
-        @{Route="/dashboard/dispositifs"; File="app/dashboard/dispositifs/page.js"; Name="Dispositifs OTT"},
-        @{Route="/dashboard/patients"; File="app/dashboard/patients/page.js"; Name="Patients"},
-        @{Route="/dashboard/users"; File="app/dashboard/users/page.js"; Name="Utilisateurs"},
-        @{Route="/dashboard/documentation"; File="app/dashboard/documentation/page.js"; Name="Documentation"}
-    )
+    # Utiliser la configuration ou valeurs par défaut
+    if ($script:Config.Routes) {
+        $menuPages = $script:Config.Routes
+    } else {
+        $menuPages = @(
+            @{Route="/dashboard"; File="app/dashboard/page.js"; Name="Vue Ensemble"},
+            @{Route="/dashboard/dispositifs"; File="app/dashboard/dispositifs/page.js"; Name="Dispositifs OTT"},
+            @{Route="/dashboard/patients"; File="app/dashboard/patients/page.js"; Name="Patients"},
+            @{Route="/dashboard/users"; File="app/dashboard/users/page.js"; Name="Utilisateurs"},
+            @{Route="/dashboard/documentation"; File="app/dashboard/documentation/page.js"; Name="Documentation"}
+        )
+    }
     
     $missingPages = 0
     foreach ($page in $menuPages) {
@@ -483,27 +709,35 @@ try {
     Write-Info "Connexion API..."
     $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
     
+    $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
     try {
-        $authResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/auth/login" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
-        $token = $authResponse.token
-        $headers = @{Authorization = "Bearer $token"}
+        $authResponse = Invoke-RestMethod -Uri "$ApiUrl$authEndpoint" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
+        $script:authToken = $authResponse.token
+        $script:authHeaders = @{Authorization = "Bearer $script:authToken"}
+        $token = $script:authToken  # Pour compatibilité
+        $headers = $script:authHeaders  # Pour compatibilité
         Write-OK "Authentification reussie"
         
-        $endpoints = @(
-            @{Path="/api.php/devices"; Name="Dispositifs"},
-            @{Path="/api.php/patients"; Name="Patients"},
-            @{Path="/api.php/users"; Name="Utilisateurs"},
-            @{Path="/api.php/alerts"; Name="Alertes"},
-            @{Path="/api.php/firmwares"; Name="Firmwares"},
-            @{Path="/api.php/roles"; Name="Roles"},
-            @{Path="/api.php/permissions"; Name="Permissions"},
-            @{Path="/api.php/health"; Name="Healthcheck"}
-        )
+        # Utiliser la configuration ou valeurs par défaut
+        if ($script:Config.Api.Endpoints) {
+            $endpoints = $script:Config.Api.Endpoints
+        } else {
+            $endpoints = @(
+                @{Path="/api.php/devices"; Name="Dispositifs"},
+                @{Path="/api.php/patients"; Name="Patients"},
+                @{Path="/api.php/users"; Name="Utilisateurs"},
+                @{Path="/api.php/alerts"; Name="Alertes"},
+                @{Path="/api.php/firmwares"; Name="Firmwares"},
+                @{Path="/api.php/roles"; Name="Roles"},
+                @{Path="/api.php/permissions"; Name="Permissions"},
+                @{Path="/api.php/health"; Name="Healthcheck"}
+            )
+        }
         
         foreach ($endpoint in $endpoints) {
             $endpointsTotal++
             try {
-                $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $headers -TimeoutSec 10
+                $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 10
                 Write-OK $endpoint.Name
                 $endpointsOK++
             } catch {
@@ -533,18 +767,49 @@ $auditResults.Scores["API"] = $apiScore
 
 Write-Section "[7/18] Base de Donnees - Coherence et Integrite"
 
+# Variables pour la phase 7 (initialisées si l'authentification a réussi)
+$script:authHeaders = $null
+$script:authToken = $null
+
 try {
     if ($apiScore -gt 0 -and $endpointsOK -gt 0) {
+        # Utiliser les headers de la phase 6 si disponibles, sinon ré-authentifier
+        if (-not $script:authHeaders -or -not $script:authToken) {
+            Write-Info "Ré-authentification pour phase BDD..."
+            $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
+            $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
+            $authResponse = Invoke-RestMethod -Uri "$ApiUrl$authEndpoint" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
+            $script:authToken = $authResponse.token
+            $script:authHeaders = @{Authorization = "Bearer $script:authToken"}
+        }
+        
         try {
-            $devicesData = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices" -Headers $headers -TimeoutSec 10
-            $patientsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients" -Headers $headers -TimeoutSec 10
-            $usersData = Invoke-RestMethod -Uri "$ApiUrl/api.php/users" -Headers $headers -TimeoutSec 10
-            $alertsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/alerts" -Headers $headers -TimeoutSec 10
+            # Récupérer les données avec gestion d'erreur améliorée
+            $devicesData = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
+            $patientsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
+            $usersData = Invoke-RestMethod -Uri "$ApiUrl/api.php/users" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
+            $alertsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/alerts" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
             
-            $devices = if($devicesData.devices) { $devicesData.devices } else { @() }
-            $patients = if($patientsData.patients) { $patientsData.patients } else { @() }
-            $users = if($usersData.users) { $usersData.users } else { @() }
-            $alerts = if($alertsData.alerts) { $alertsData.alerts } else { @() }
+            # Extraire les données avec gestion robuste de la structure
+            # Structure API : {devices: [...]} ou {success: true, patients: [...]}
+            $devices = Get-ArrayFromApiResponse -data $devicesData -propertyName "devices"
+            $patients = Get-ArrayFromApiResponse -data $patientsData -propertyName "patients"
+            $users = Get-ArrayFromApiResponse -data $usersData -propertyName "users"
+            $alerts = Get-ArrayFromApiResponse -data $alertsData -propertyName "alerts"
+            
+            # Debug si verbose
+            if ($Verbose) {
+                Write-Info "Structure devicesData: $($devicesData.GetType().Name)"
+                Write-Info "Structure patientsData: $($patientsData.GetType().Name)"
+                if ($devicesData -is [PSCustomObject]) {
+                    Write-Info "Propriétés devicesData: $($devicesData.PSObject.Properties.Name -join ', ')"
+                }
+                if ($patientsData -is [PSCustomObject]) {
+                    Write-Info "Propriétés patientsData: $($patientsData.PSObject.Properties.Name -join ', ')"
+                }
+                Write-Info "Devices extraits: $($devices.Count)"
+                Write-Info "Patients extraits: $($patients.Count)"
+            }
             
             Write-Host "  Dispositifs   : $($devices.Count)" -ForegroundColor White
             Write-Host "  Patients      : $($patients.Count)" -ForegroundColor White
@@ -1639,11 +1904,14 @@ _Rapport genere automatiquement le $(Get-Date -Format 'yyyy-MM-dd HH:mm')_
 _Base sur l'analyse Git des commits de ymora_
 "@
     
-    # Sauvegarder
-    $report | Out-File -FilePath "SUIVI_TEMPS_FACTURATION.md" -Encoding UTF8
-    $report | Out-File -FilePath "public\SUIVI_TEMPS_FACTURATION.md" -Encoding UTF8 -ErrorAction SilentlyContinue
+    # Sauvegarder uniquement dans public/ (fichier principal utilisé par le dashboard et les scripts)
+    $publicDir = "public"
+    if (-not (Test-Path $publicDir)) {
+        New-Item -ItemType Directory -Path $publicDir -Force | Out-Null
+    }
+    $report | Out-File -FilePath "public\SUIVI_TEMPS_FACTURATION.md" -Encoding UTF8
     
-    Write-OK "Rapport genere: SUIVI_TEMPS_FACTURATION.md"
+    Write-OK "Rapport genere: public\SUIVI_TEMPS_FACTURATION.md"
     Write-Host "  Total estime: ~$totalHours heures sur $daysWorked jours" -ForegroundColor Green
     Write-Host "  Moyenne: ~${avgHours}h/jour" -ForegroundColor Green
     
