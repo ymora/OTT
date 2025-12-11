@@ -52,26 +52,70 @@ export default function Topbar() {
   }
 
   const handleClearCache = async () => {
-    
     try {
-      // Désinscrire tous les service workers
-      const registrations = await navigator.serviceWorker.getRegistrations()
-      for (const reg of registrations) {
-        await reg.unregister()
-        logger.debug('✅ Service worker désinscrit')
+      logger.log('🧹 Début du nettoyage complet du cache...')
+      
+      // 1. Désinscrire tous les service workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        for (const reg of registrations) {
+          await reg.unregister()
+          logger.debug('✅ Service worker désinscrit:', reg.scope)
+        }
+        logger.log(`✅ ${registrations.length} service worker(s) désinscrit(s)`)
       }
       
-      // Vider tous les caches
-      const cacheNames = await caches.keys()
-      for (const name of cacheNames) {
-        await caches.delete(name)
-        logger.debug('✅ Cache supprimé:', name)
+      // 2. Vider tous les caches (Cache API)
+      if ('caches' in window) {
+        const cacheNames = await caches.keys()
+        for (const name of cacheNames) {
+          await caches.delete(name)
+          logger.debug('✅ Cache supprimé:', name)
+        }
+        logger.log(`✅ ${cacheNames.length} cache(s) supprimé(s)`)
       }
       
-      // Recharger la page (pas besoin de cleanup car la page se recharge)
-      setTimeout(() => window.location.reload(true), 500)
+      // 3. Vider IndexedDB (si utilisé)
+      if ('indexedDB' in window) {
+        try {
+          const databases = await indexedDB.databases()
+          for (const db of databases) {
+            if (db.name) {
+              const deleteReq = indexedDB.deleteDatabase(db.name)
+              await new Promise((resolve, reject) => {
+                deleteReq.onsuccess = () => resolve()
+                deleteReq.onerror = () => reject(deleteReq.error)
+                deleteReq.onblocked = () => resolve() // Ignorer si bloqué
+              })
+              logger.debug('✅ IndexedDB supprimé:', db.name)
+            }
+          }
+          if (databases.length > 0) {
+            logger.log(`✅ ${databases.length} base(s) IndexedDB supprimée(s)`)
+          }
+        } catch (err) {
+          logger.warn('⚠️ Erreur lors de la suppression IndexedDB:', err)
+        }
+      }
+      
+      // 4. Forcer un rechargement avec bypass cache
+      // Utiliser un timestamp pour forcer le rechargement sans cache
+      const timestamp = Date.now()
+      logger.log('🔄 Rechargement de la page avec bypass cache...')
+      
+      // Attendre un peu pour que les logs soient visibles
+      setTimeout(() => {
+        // Forcer le rechargement sans cache en ajoutant un paramètre unique
+        window.location.href = window.location.href.split('?')[0] + `?nocache=${timestamp}`
+        // Si le navigateur ne recharge pas, forcer avec reload
+        setTimeout(() => {
+          window.location.reload()
+        }, 100)
+      }, 500)
     } catch (err) {
       logger.error('❌ Erreur lors du nettoyage:', err)
+      // Même en cas d'erreur, recharger la page
+      setTimeout(() => window.location.reload(), 1000)
     } finally {
       setShowClearCacheModal(false)
     }
