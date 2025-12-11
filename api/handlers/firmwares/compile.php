@@ -347,11 +347,18 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('log', 'info', 'Démarrage de la compilation...');
             sendSSE('progress', 10);
             flush();
+            echo ": keep-alive\n\n";
+            flush();
             
             // Logger immédiatement pour diagnostic
             error_log('[handleCompileFirmware] Étape: Démarrage compilation');
             error_log('[handleCompileFirmware] Firmware ID: ' . $firmware_id);
             error_log('[handleCompileFirmware] Version: ' . ($firmware['version'] ?? 'N/A'));
+            
+            sendSSE('log', 'info', 'Recherche de arduino-cli...');
+            flush();
+            echo ": keep-alive\n\n";
+            flush();
             
             // Vérifier si arduino-cli est disponible
             // ⚠️ CRITIQUE: La compilation ne doit JAMAIS être simulée - soit OK, soit ÉCHEC
