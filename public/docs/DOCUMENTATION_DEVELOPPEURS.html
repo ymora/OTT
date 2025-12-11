@@ -1944,14 +1944,54 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     </ol>
     
     <h4>2. Compilation en Direct (SSE)</h4>
+    <p>La compilation utilise <strong>Server-Sent Events (SSE)</strong> pour streamer les logs et la progression en temps réel :</p>
+    
+    <h5>🔧 Fonctionnalités de Compilation</h5>
+    <ul>
+        <li><strong>Streaming en temps réel</strong> : Tous les logs de compilation sont affichés en direct dans le dashboard</li>
+        <li><strong>Progression garantie</strong> : La barre de progression ne peut que monter (protection backend + frontend contre les retours en arrière)</li>
+        <li><strong>Gestion automatique du core ESP32</strong> : Téléchargement et installation automatique si nécessaire (~568MB, une seule fois)</li>
+        <li><strong>Progression détaillée</strong> : Suivi en temps réel du téléchargement du core (45-50% de la compilation totale)</li>
+        <li><strong>Logs détaillés</strong> : Utilisation de <code>arduino-cli --verbose</code> pour un diagnostic complet</li>
+        <li><strong>Gestion des timeouts</strong> : Timeouts adaptés pour les opérations longues (20 minutes pour le téléchargement du core)</li>
+        <li><strong>Vérification périodique</strong> : Si la connexion SSE se ferme, le système vérifie périodiquement le statut via l'API</li>
+    </ul>
+    
+    <h5>📊 Phases de Compilation</h5>
     <ol>
-        <li>Après l'upload, la compilation démarre automatiquement</li>
-        <li>Les logs de compilation sont streamés en temps réel via <strong>Server-Sent Events (SSE)</strong></li>
-        <li>L'utilisateur voit la progression en direct dans une fenêtre dédiée</li>
-        <li>Le système utilise <code>arduino-cli</code> pour compiler le <code>.ino</code> en <code>.bin</code></li>
-        <li>Le fichier <code>.bin</code> est généré dans <code>hardware/firmware/vX.X/</code> (même dossier que le .ino)</li>
-        <li>Le statut est mis à jour à <code>compiled</code> dans la base de données</li>
+        <li><strong>Démarrage (10%)</strong> : Validation du fichier .ino et préparation de l'environnement</li>
+        <li><strong>Vérification arduino-cli (20%)</strong> : Détection de l'outil de compilation</li>
+        <li><strong>Préparation environnement (30%)</strong> : Configuration des chemins et bibliothèques</li>
+        <li><strong>Vérification core ESP32 (40%)</strong> : Vérification de l'installation du core</li>
+        <li><strong>Téléchargement core (45-50%)</strong> : Si nécessaire, téléchargement et installation du core ESP32 avec progression en temps réel</li>
+        <li><strong>Compilation (60%)</strong> : Compilation du firmware avec logs détaillés</li>
+        <li><strong>Recherche .bin (80%)</strong> : Localisation du fichier .bin généré</li>
+        <li><strong>Calcul checksums (95%)</strong> : Calcul des checksums MD5 et SHA256</li>
+        <li><strong>Stockage (100%)</strong> : Stockage en base de données et mise à jour du statut</li>
     </ol>
+    
+    <h5>💾 Stockage et Cache</h5>
+    <ul>
+        <li><strong>Stockage en base</strong> : Le fichier .bin est stocké en base de données (BYTEA) pour éviter les problèmes de disque persistant</li>
+        <li><strong>Cache navigateur</strong> : Les fichiers .bin téléchargés sont mis en cache par le navigateur (ETag, Cache-Control) pour éviter les re-téléchargements</li>
+        <li><strong>Core ESP32</strong> : Le core est stocké dans <code>hardware/arduino-data/</code> pour être réutilisé entre les compilations</li>
+    </ul>
+    
+    <h5>🛡️ Gestion des Erreurs</h5>
+    <ul>
+        <li><strong>Détection automatique</strong> : Les erreurs de compilation sont détectées et affichées en temps réel</li>
+        <li><strong>Messages explicites</strong> : Messages d'erreur détaillés avec suggestions de correction</li>
+        <li><strong>Gestion des timeouts HTTP</strong> : Détection spécifique des timeouts lors du téléchargement du core avec suggestion de retry</li>
+        <li><strong>Récupération automatique</strong> : En cas de déconnexion SSE, vérification périodique du statut final</li>
+    </ul>
+    
+    <div class="alert alert-info">
+        <strong>ℹ️ Note Technique</strong><br>
+        La progression est protégée à deux niveaux :<br>
+        - <strong>Backend</strong> : Fonction <code>$sendProgress()</code> qui ne permet que d'augmenter la progression<br>
+        - <strong>Frontend</strong> : <code>Math.max(prev, newProgress)</code> pour garantir que la progression ne recule jamais<br>
+        Cela évite les problèmes de messages SSE arrivant dans le désordre.
+    </div>
     
     <h4>3. Flash du Firmware</h4>
     <p>Une fois compilé, le firmware peut être flashé de deux manières :</p>
