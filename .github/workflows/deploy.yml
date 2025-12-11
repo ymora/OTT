@@ -25,7 +25,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # DÉSACTIVÉ: cache npm pour forcer un rebuild complet et éviter les problèmes de synchronisation
+          # cache: 'npm'
       
       # Nettoyer complètement avant le build pour éviter les problèmes de cache
       - name: Clean build artifacts
@@ -36,6 +37,9 @@ jobs:
           rm -rf node_modules/.cache
           rm -rf .cache
           echo "✅ Nettoyage terminé"
+      
+      - name: Clear npm cache
+        run: npm cache clean --force
       
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -59,6 +63,9 @@ jobs:
           NEXT_TELEMETRY_DISABLED: '1'
           # S'assurer que Next.js ne cache pas
           NEXT_PRIVATE_STANDALONE: 'true'
+          # Ajouter le commit SHA pour forcer de nouveaux hash de fichiers JS
+          GITHUB_SHA: ${{ github.sha }}
+          COMMIT_SHA: ${{ github.sha }}
       
       - name: Verify build output
         run: |

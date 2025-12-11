@@ -127,18 +127,22 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Pour les fichiers _next/static (CSS, JS avec hash), utiliser "network first"
-  // Ces fichiers changent de nom à chaque build, donc on ne doit pas les mettre en cache
+  // Pour les fichiers _next/static (CSS, JS avec hash), NE JAMAIS mettre en cache
+  // Ces fichiers changent de nom à chaque build, mais le navigateur peut les mettre en cache
+  // Utiliser 'no-store' au lieu de 'no-cache' pour forcer le rechargement à chaque fois
   if (pathname.includes('/_next/static/')) {
     event.respondWith(
-      fetch(event.request, { cache: 'no-cache' })
+      fetch(event.request, { 
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0' }
+      })
         .then((response) => {
           // Ne pas mettre en cache les fichiers statiques avec hash
-          // Ils changent à chaque build
+          // Ils changent à chaque build, mais on veut toujours la dernière version
           return response
         })
         .catch(() => {
-          // En cas d'échec réseau, essayer le cache en dernier recours
+          // En cas d'échec réseau, essayer le cache en dernier recours uniquement
           return caches.match(event.request)
         })
     )

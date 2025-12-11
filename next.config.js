@@ -36,7 +36,14 @@ const nextConfig = {
     missingSuspenseWithCSRBailout: false
   },
   // Désactiver la génération de pages d'erreur statiques en dev
+  // Utiliser le commit SHA pour forcer de nouveaux hash de fichiers JS à chaque déploiement
   generateBuildId: async () => {
+    const commitSha = process.env.GITHUB_SHA || process.env.COMMIT_SHA
+    if (commitSha) {
+      // Utiliser les 7 premiers caractères du commit SHA + timestamp pour garantir l'unicité
+      return `build-${commitSha.slice(0, 7)}-${Date.now()}`
+    }
+    // Fallback pour les builds locaux
     return 'build-' + Date.now()
   },
   // Désactiver le cache lors du build pour éviter les problèmes
