@@ -145,11 +145,24 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Pour les pages HTML, toujours utiliser "network first" pour éviter les problèmes de cache
-  // Laisser Next.js gérer le routage, ne pas intervenir
-  if (event.request.destination === 'document' || (!pathname.includes('/_next') && !pathname.includes('/api.php') && !pathname.includes('/docs/'))) {
-    // Laisser passer les requêtes de pages sans intervention du service worker
-    // Next.js gère le routage correctement
+  // Pour les pages HTML et routes Next.js, NE JAMAIS mettre en cache
+  // Les pages statiques doivent toujours être à jour après un déploiement
+  if (event.request.destination === 'document' || 
+      pathname.endsWith('.html') ||
+      (!pathname.includes('/_next') && !pathname.includes('/api.php') && !pathname.includes('/docs/') && !pathname.includes('/sw.js'))) {
+    // Pour les pages statiques, toujours aller chercher la version en ligne
+    // Ne pas utiliser le cache pour éviter les problèmes de synchronisation
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+        .then((response) => {
+          // Ne pas mettre en cache les pages HTML
+          return response
+        })
+        .catch(() => {
+          // En cas d'échec réseau, essayer le cache en dernier recours uniquement
+          return caches.match(event.request)
+        })
+    )
     return
   }
 
