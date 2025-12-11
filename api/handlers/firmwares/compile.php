@@ -122,10 +122,18 @@ function handleCompileFirmware($firmware_id) {
     // Envoyer un message de connexion immédiatement pour confirmer que la connexion est établie
     sendSSE('log', 'info', 'Connexion SSE établie...');
     flush();
+    echo ": keep-alive\n\n";
+    flush();
     
     // Logger pour diagnostic
     error_log('[handleCompileFirmware] Démarrage compilation firmware ID: ' . $firmware_id);
     error_log('[handleCompileFirmware] User: ' . ($user['email'] ?? 'unknown'));
+    
+    // Envoyer un message de diagnostic immédiatement
+    sendSSE('log', 'info', 'Démarrage du processus de compilation...');
+    flush();
+    echo ": keep-alive\n\n";
+    flush();
     
     try {
         // Vérifier l'authentification APRÈS avoir envoyé les headers SSE
@@ -137,7 +145,14 @@ function handleCompileFirmware($firmware_id) {
             $user = ['id' => 0, 'email' => 'test@test.com', 'role_id' => 1];
             sendSSE('log', 'warning', '⚠️ Mode test activé - authentification désactivée');
             flush();
+            echo ": keep-alive\n\n";
+            flush();
         } else {
+            sendSSE('log', 'info', 'Vérification de l\'authentification...');
+            flush();
+            echo ": keep-alive\n\n";
+            flush();
+            
             $user = getCurrentUser();
             if (!$user) {
                 // Logger pour diagnostic
@@ -148,11 +163,18 @@ function handleCompileFirmware($firmware_id) {
                 sleep(1);
                 return;
             }
+            
+            sendSSE('log', 'info', '✅ Authentification réussie');
+            flush();
+            echo ": keep-alive\n\n";
+            flush();
         }
         
         // Vérifier que le firmware existe et est en attente de compilation
         try {
             sendSSE('log', 'info', 'Connexion établie, vérification du firmware...');
+            flush();
+            echo ": keep-alive\n\n";
             flush();
             error_log('[handleCompileFirmware] Vérification firmware ID: ' . $firmware_id);
             
