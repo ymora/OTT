@@ -940,6 +940,7 @@ function handleCompileFirmware($firmware_id) {
                             $lastKeepAliveTime = $startTime;
                             $lastLine = ''; // Dernière ligne de sortie pour détecter la phase (téléchargement vs installation)
                             $currentlyDownloading = false; // Indicateur si on est actuellement en phase de téléchargement
+                            $currentlyDownloading = false; // Indicateur si on est actuellement en phase de téléchargement
                             
                             while (true) {
                                 $currentTime = time();
