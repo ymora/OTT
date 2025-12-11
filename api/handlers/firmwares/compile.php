@@ -1062,16 +1062,16 @@ function handleCompileFirmware($firmware_id) {
                                     break;
                                 }
                                 
-                                // Timeout de sécurité : si pas de sortie depuis 5 minutes, considérer comme bloqué
-                                // (L'installation du core ESP32 peut prendre du temps, mais 5 minutes est un maximum raisonnable)
-                                if ($currentTime - $lastOutputTime > 300) {
-                                    sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 5 minutes, le processus semble bloqué');
+                                // Timeout de sécurité : si pas de sortie depuis 20 minutes, considérer comme bloqué
+                                // (L'installation du core ESP32 peut prendre du temps : téléchargement ~568MB peut prendre 10-15 minutes selon la connexion)
+                                if ($currentTime - $lastOutputTime > 1200) { // 20 minutes
+                                    sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 20 minutes, le processus semble bloqué');
                                     sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
                                     // Marquer le firmware comme erreur dans la base de données
                                     try {
                                         $pdo->prepare("
                                             UPDATE firmware_versions 
-                                            SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32'
+                                            SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32 (20 minutes)'
                                             WHERE id = :id
                                         ")->execute(['id' => $firmware_id]);
                                     } catch(PDOException $dbErr) {
@@ -1079,6 +1079,17 @@ function handleCompileFirmware($firmware_id) {
                                     }
                                     proc_terminate($process);
                                     break;
+                                }
+                                
+                                // Détecter les erreurs de timeout HTTP dans la sortie et proposer un retry
+                                if (stripos($lastLine, 'request canceled') !== false || 
+                                    stripos($lastLine, 'Client.Timeout') !== false ||
+                                    stripos($lastLine, 'context cancellation') !== false) {
+                                    sendSSE('log', 'warning', '⚠️ Timeout HTTP détecté pendant le téléchargement');
+                                    sendSSE('log', 'info', '   Le téléchargement du core ESP32 (~568MB) a été interrompu par un timeout');
+                                    sendSSE('log', 'info', '   Tentative de reprise...');
+                                    flush();
+                                    // Ne pas arrêter immédiatement, laisser arduino-cli gérer le retry si possible
                                 }
                                 
                                 // Envoyer un keep-alive SSE toutes les 1 seconde pendant l'installation pour maintenir la connexion active
