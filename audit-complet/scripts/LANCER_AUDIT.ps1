@@ -14,6 +14,12 @@ $rootDir = Split-Path -Parent $scriptDir
 # Changer vers le répertoire racine du projet
 Set-Location $rootDir
 
+# S'assurer que le répertoire de résultats existe
+$resultsDir = Join-Path $rootDir "audit-complet\resultats"
+if (-not (Test-Path $resultsDir)) {
+    New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+}
+
 # Nettoyer les résultats précédents avant de lancer l'audit
 $resultsDir = Join-Path $rootDir "audit-complet\resultats"
 if (Test-Path $resultsDir) {
@@ -26,11 +32,12 @@ if (Test-Path $resultsDir) {
 }
 
 # Lancer l'audit avec le chemin relatif correct et timeout
+# IMPORTANT: Le script doit s'exécuter depuis la racine du projet
 $job = Start-Job -ScriptBlock {
-    param($scriptPath, $configFile, $verbose, $maxFileLines)
-    Set-Location (Split-Path $scriptPath -Parent)
+    param($scriptPath, $configFile, $verbose, $maxFileLines, $rootDir)
+    Set-Location $rootDir
     & $scriptPath -ConfigFile $configFile -Verbose:$verbose -MaxFileLines $maxFileLines
-} -ArgumentList "$scriptDir\AUDIT_COMPLET_AUTOMATIQUE.ps1", "audit-complet\scripts\$ConfigFile", $Verbose, $MaxFileLines
+} -ArgumentList "$scriptDir\AUDIT_COMPLET_AUTOMATIQUE.ps1", "audit-complet\scripts\$ConfigFile", $Verbose, $MaxFileLines, $rootDir
 
 # Timeout de 10 minutes
 $timeout = 600
