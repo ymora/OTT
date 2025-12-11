@@ -850,19 +850,24 @@ function handleCompileFirmware($firmware_id) {
                     // Continuer quand même - ce n'est pas forcément une erreur fatale
                 }
                 
-                $coreListStr = implode("\n", $coreListOutput);
-                
-                // Log de diagnostic pour comprendre pourquoi le core n'est pas détecté
-                if (getenv('DEBUG_ERRORS') === 'true') {
-                    sendSSE('log', 'info', '🔍 Diagnostic core ESP32:');
-                    sendSSE('log', 'info', '   ARDUINO_DIRECTORIES_USER: ' . $arduinoDataDir);
-                    sendSSE('log', 'info', '   Dossier existe: ' . (is_dir($arduinoDataDir) ? 'OUI' : 'NON'));
-                    sendSSE('log', 'info', '   Sortie core list (premiers 500 chars): ' . substr($coreListStr, 0, 500));
-                    flush();
+                // Construire la chaîne de sortie si pas déjà fait
+                if (!isset($coreListStr)) {
+                    $coreListStr = implode("\n", $coreListOutput);
                 }
                 
+                // Log de diagnostic pour comprendre pourquoi le core n'est pas détecté
+                // Toujours afficher le diagnostic pour aider au débogage
+                sendSSE('log', 'info', '🔍 Diagnostic core ESP32:');
+                sendSSE('log', 'info', '   ARDUINO_DIRECTORIES_USER: ' . $arduinoDataDir);
+                sendSSE('log', 'info', '   Dossier existe: ' . (is_dir($arduinoDataDir) ? 'OUI' : 'NON'));
+                sendSSE('log', 'info', '   Code retour core list: ' . $coreListReturn);
+                sendSSE('log', 'info', '   Sortie core list (premiers 500 chars): ' . substr($coreListStr, 0, 500));
+                flush();
+                
                 // Vérifier si le core ESP32 apparaît dans la liste (format: esp32:esp32 ou esp-rv32)
-                $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || strpos($coreListStr, 'esp-rv32') !== false;
+                $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || 
+                                 strpos($coreListStr, 'esp-rv32') !== false ||
+                                 strpos($coreListStr, 'esp32') !== false; // Plus permissif
                 
                 if ($esp32Installed) {
                     sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
