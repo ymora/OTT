@@ -147,7 +147,7 @@ while (-not $compilationComplete -and -not $compilationError) {
                                         $lastMessageTime = Get-Date # Mettre à jour le timestamp
                                     }
                                     'progress' {
-                                        Write-Host "[$timestamp] Progression: $($data.progress)%" -ForegroundColor Cyan
+                                        Write-Host "[$timestamp] 📊 Progression: $($data.progress)%" -ForegroundColor Cyan
                                         $lastMessageTime = Get-Date # Mettre à jour le timestamp
                                     }
                                     'success' {
