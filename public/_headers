@@ -1,0 +1,39 @@
+# Headers pour GitHub Pages - Forcer no-cache sur tous les fichiers
+# GitHub Pages supporte les fichiers _headers dans le dossier public/
+
+# Pour tous les fichiers HTML
+/*.html
+  Cache-Control: no-cache, no-store, must-revalidate, max-age=0
+  Pragma: no-cache
+  Expires: 0
+
+# Pour tous les fichiers JS (chunks Next.js)
+/_next/static/**/*.js
+  Cache-Control: no-cache, no-store, must-revalidate, max-age=0
+  Pragma: no-cache
+  Expires: 0
+
+# Pour tous les fichiers CSS
+/_next/static/**/*.css
+  Cache-Control: no-cache, no-store, must-revalidate, max-age=0
+  Pragma: no-cache
+  Expires: 0
+
+# Pour le service worker (ne devrait pas être servi mais au cas où)
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate, max-age=0
+  Pragma: no-cache
+  Expires: 0
+
+# Pour le manifest
+/manifest.json
+  Cache-Control: no-cache, no-store, must-revalidate, max-age=0
+  Pragma: no-cache
+  Expires: 0
+
+# Pour tous les autres fichiers statiques
+/*
+  Cache-Control: no-cache, no-store, must-revalidate, max-age=0
+  Pragma: no-cache
+  Expires: 0
+

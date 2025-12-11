@@ -61,6 +61,9 @@ const nextConfig = {
       // On force 'natural' pour que les IDs changent à chaque build
       if (!isServer) {
         // Pour le client, forcer des hash uniques à chaque build
+        const buildId = process.env.GITHUB_SHA || process.env.COMMIT_SHA || Date.now().toString()
+        const buildTimestamp = Date.now()
+        
         config.optimization = {
           ...config.optimization,
           // Utiliser 'natural' au lieu de 'deterministic' pour forcer de nouveaux hash
@@ -73,16 +76,22 @@ const nextConfig = {
         
         // Injecter un commentaire unique dans chaque fichier pour forcer un nouveau hash
         // Cela garantit que même si le contenu est identique, le hash sera différent
-        const buildId = process.env.GITHUB_SHA || process.env.COMMIT_SHA || Date.now().toString()
-        const originalBanner = config.plugins.find(p => p.constructor.name === 'BannerPlugin')
-        if (!originalBanner) {
+        // Utiliser le buildId ET le timestamp pour garantir l'unicité
+        const bannerText = `/* Build: ${buildId.slice(0, 7)}-${buildTimestamp} */`
+        const existingBanner = config.plugins.find(p => 
+          p.constructor.name === 'BannerPlugin' && p.options && p.options.banner
+        )
+        if (!existingBanner) {
           config.plugins.push(
             new webpack.BannerPlugin({
-              banner: `/* Build ID: ${buildId.slice(0, 7)} - ${Date.now()} */`,
+              banner: bannerText,
               raw: true,
               entryOnly: false
             })
           )
+        } else {
+          // Mettre à jour le banner existant
+          existingBanner.options.banner = bannerText
         }
       }
     }

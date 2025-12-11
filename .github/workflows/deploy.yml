@@ -89,6 +89,28 @@ jobs:
       - name: Ensure .nojekyll exists
         run: touch out/.nojekyll
       
+      # Supprimer le service worker du build pour éviter tout problème de cache
+      - name: Remove service worker from build
+        run: |
+          if [ -f "out/sw.js" ]; then
+            echo "🗑️  Suppression du service worker du build..."
+            rm -f out/sw.js
+            echo "✅ Service worker supprimé"
+          else
+            echo "ℹ️  Service worker non trouvé (déjà supprimé ou absent)"
+          fi
+      
+      # Copier le fichier _headers pour GitHub Pages
+      - name: Copy _headers file for GitHub Pages
+        run: |
+          if [ -f "public/_headers" ]; then
+            echo "📋 Copie du fichier _headers..."
+            cp public/_headers out/_headers
+            echo "✅ Fichier _headers copié"
+          else
+            echo "⚠️  Fichier _headers non trouvé dans public/"
+          fi
+      
       # Vérifier et mettre à jour la version du service worker
       - name: Update service worker version
         run: |
