@@ -675,12 +675,15 @@ export default function InoEditorTab({ onUploadSuccess }) {
         // Mettre à jour le timestamp à chaque message reçu (même les keep-alive)
         lastMessageTime = Date.now()
         
+        // Ignorer les keep-alive (lignes qui commencent par :)
         if (!event.data || event.data.trim() === '' || event.data.trim().startsWith(':')) {
           return // Ignorer les keep-alive
         }
 
         try {
           const data = JSON.parse(event.data)
+          
+          // Afficher TOUS les types de messages
           if (data.type === 'log') {
             setCompileLogs(prev => [...prev, {
               timestamp: new Date().toLocaleTimeString('fr-FR'),
@@ -689,11 +692,17 @@ export default function InoEditorTab({ onUploadSuccess }) {
             }])
           } else if (data.type === 'progress') {
             setCompileProgress(data.progress || 0)
+            // Afficher aussi la progression dans les logs
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: `📊 Progression: ${data.progress}%`,
+              level: 'info'
+            }])
           } else if (data.type === 'success') {
             setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
             setCompileLogs(prev => [...prev, {
               timestamp: new Date().toLocaleTimeString('fr-FR'),
-              message: `✅ Compilation terminée avec succès !`,
+              message: `✅ Compilation terminée avec succès ! Firmware v${data.version} disponible`,
               level: 'info'
             }])
             resetCompilationState()
@@ -717,13 +726,22 @@ export default function InoEditorTab({ onUploadSuccess }) {
               statusCheckInterval = null
             }
             refetch() // Rafraîchir la liste des firmwares
+          } else {
+            // Afficher les messages de type inconnu pour diagnostic
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: `[${data.type || 'unknown'}] ${JSON.stringify(data)}`,
+              level: 'info'
+            }])
           }
         } catch (err) {
+          // Afficher le message brut si le parsing échoue (pour diagnostic)
           setCompileLogs(prev => [...prev, {
             timestamp: new Date().toLocaleTimeString('fr-FR'),
-            message: `❌ Erreur de traitement du message SSE: ${err.message}`,
-            level: 'error'
+            message: `⚠️ Message brut (parse error): ${event.data.substring(0, 200)}`,
+            level: 'warning'
           }])
+          console.error('Erreur parsing SSE:', err, 'Data:', event.data)
         }
       }
 
