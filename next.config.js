@@ -51,10 +51,40 @@ const nextConfig = {
   },
   // Désactiver le cache lors du build pour éviter les problèmes
   // En mode export statique, on veut toujours un build frais
-  webpack: (config, { dev, isServer }) => {
+  webpack: (config, { dev, isServer, webpack }) => {
     if (!dev && isStaticExport) {
-      // En export statique, désactiver certains caches pour forcer la régénération
+      // En export statique, désactiver tous les caches pour forcer la régénération
       config.cache = false
+      
+      // CRITIQUE: Forcer webpack à générer de nouveaux hash même si le contenu ne change pas
+      // Par défaut, Next.js utilise 'deterministic' qui génère les mêmes hash si le contenu est identique
+      // On force 'natural' pour que les IDs changent à chaque build
+      if (!isServer) {
+        // Pour le client, forcer des hash uniques à chaque build
+        config.optimization = {
+          ...config.optimization,
+          // Utiliser 'natural' au lieu de 'deterministic' pour forcer de nouveaux hash
+          // 'natural' génère des IDs séquentiels qui changent à chaque build
+          moduleIds: 'natural', // Force de nouveaux IDs même si le contenu est identique
+          chunkIds: 'natural',  // Force de nouveaux IDs pour les chunks
+          // Désactiver realContentHash pour permettre l'injection du buildId
+          realContentHash: false,
+        }
+        
+        // Injecter un commentaire unique dans chaque fichier pour forcer un nouveau hash
+        // Cela garantit que même si le contenu est identique, le hash sera différent
+        const buildId = process.env.GITHUB_SHA || process.env.COMMIT_SHA || Date.now().toString()
+        const originalBanner = config.plugins.find(p => p.constructor.name === 'BannerPlugin')
+        if (!originalBanner) {
+          config.plugins.push(
+            new webpack.BannerPlugin({
+              banner: `/* Build ID: ${buildId.slice(0, 7)} - ${Date.now()} */`,
+              raw: true,
+              entryOnly: false
+            })
+          )
+        }
+      }
     }
     return config
   }
