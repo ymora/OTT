@@ -1993,8 +1993,17 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         Cela évite les problèmes de messages SSE arrivant dans le désordre.
     </div>
     
-    <h4>3. Flash du Firmware</h4>
-    <p>Une fois compilé, le firmware peut être flashé de deux manières :</p>
+    <h4>3. Téléchargement du Firmware Compilé</h4>
+    <p>Une fois compilé, le firmware peut être téléchargé depuis le dashboard :</p>
+    <ul>
+        <li><strong>Cache navigateur</strong> : Les fichiers .bin sont mis en cache par le navigateur (ETag, Cache-Control: public, max-age=31536000)</li>
+        <li><strong>Évite les re-téléchargements</strong> : Si le fichier n'a pas changé, le navigateur utilise la version en cache (HTTP 304 Not Modified)</li>
+        <li><strong>Stockage en base</strong> : Le fichier .bin est stocké en base de données (BYTEA), pas sur disque</li>
+        <li><strong>Performance</strong> : Les téléchargements suivants sont instantanés grâce au cache navigateur</li>
+    </ul>
+    
+    <h4>4. Flash du Firmware</h4>
+    <p>Une fois compilé et téléchargé, le firmware peut être flashé de deux manières :</p>
     
     <h5>Via OTA (Over-The-Air)</h5>
     <ol>
