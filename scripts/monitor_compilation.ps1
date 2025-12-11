@@ -94,15 +94,15 @@ while (-not $compilationComplete -and -not $compilationError) {
     # Vérifier le statut si pas de message depuis plus de maxSilenceTime secondes
     $timeSinceLastMessage = ((Get-Date) - $lastMessageTime).TotalSeconds
     if ($timeSinceLastMessage -gt $maxSilenceTime) {
-        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ⚠️ Pas de message depuis plus de $maxSilenceTime secondes. Vérification du statut..." -ForegroundColor Yellow
+        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] WARNING: Pas de message depuis plus de $maxSilenceTime secondes. Verification du statut..." -ForegroundColor Yellow
         $firmwareStatus = CheckFirmwareStatus -Token $token -FwId $FirmwareId -ApiUrl $API_URL
         if ($firmwareStatus) {
             if ($firmwareStatus.status -eq 'compiled') {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ✅ Compilation réussie détectée via API !" -ForegroundColor Green
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] SUCCESS: Compilation reussie detectee via API !" -ForegroundColor Green
                 $compilationComplete = $true
                 break
             } elseif ($firmwareStatus.status -eq 'error') {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ❌ Erreur de compilation détectée via API !" -ForegroundColor Red
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ERROR: Erreur de compilation detectee via API !" -ForegroundColor Red
                 if ($firmwareStatus.error_message) {
                     Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Erreur: $($firmwareStatus.error_message)" -ForegroundColor Red
                 }
