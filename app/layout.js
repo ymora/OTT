@@ -30,6 +30,10 @@ export default function RootLayout({ children }) {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
         <meta name="theme-color" content="#667eea" />
+        {/* Meta tags pour forcer le rechargement et éviter le cache */}
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
         <link rel="manifest" href={manifestHref} />
         <link rel="icon" href={icon192} />
         <link rel="apple-touch-icon" href={icon192} />

@@ -1,6 +1,7 @@
 {
   "name": "OTT Dashboard",
   "short_name": "OTT",
+  "version": "3.1.0",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#f5f5f5",
