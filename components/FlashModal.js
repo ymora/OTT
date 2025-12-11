@@ -359,10 +359,9 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
       setFlashProgress(5)
       addLog('[USB] Téléchargement du firmware...')
       const firmwareBlob = await downloadFirmware(selectedFirmware)
-      // Afficher le message de cache si utilisé
-      if (cacheUsed) {
-        addLog(`[USB] ${downloadStatus}`)
-      } else {
+      // Le message de statut (cache ou téléchargement) est déjà affiché dans l'UI via downloadStatus
+      // On l'affiche aussi dans les logs pour cohérence
+      if (downloadStatus) {
         addLog(`[USB] ${downloadStatus}`)
       }
       setFlashProgress(10)
