@@ -991,9 +991,28 @@ function handleCompileFirmware($firmware_id) {
                                                                      preg_match('/Downloading/', $lineTrimmed) ||
                                                                      preg_match('/downloaded$/', $lineTrimmed);
                                                         
+                                                        // Extraire le pourcentage de téléchargement pour mettre à jour la progression
+                                                        $downloadPercent = null;
+                                                        if (preg_match('/(\d+\.?\d*)%\s*(\d+m\d+s)?$/', $lineTrimmed, $matches)) {
+                                                            // Format: "432.93 MiB / 568.67 MiB   76.13% 00m10s"
+                                                            $downloadPercent = floatval($matches[1]);
+                                                        } elseif (preg_match('/(\d+\.?\d*)%\s*(\d+m\d+s)?/', $lineTrimmed, $matches)) {
+                                                            // Format alternatif
+                                                            $downloadPercent = floatval($matches[1]);
+                                                        }
+                                                        
                                                         if ($isDownloadLine) {
                                                             // Ligne de progression de téléchargement - toujours afficher
                                                             $logLevel = 'info';
+                                                            
+                                                            // Mettre à jour la progression globale (45% à 50% pour le téléchargement du core)
+                                                            if ($downloadPercent !== null) {
+                                                                // Le téléchargement du core représente 5% de la compilation totale (45% à 50%)
+                                                                // On mappe 0-100% du téléchargement vers 45-50% de la compilation totale
+                                                                $globalProgress = 45 + ($downloadPercent / 100) * 5;
+                                                                sendSSE('progress', intval($globalProgress));
+                                                                flush();
+                                                            }
                                                         } elseif (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
                                                                   preg_match('/error:/i', $lineTrimmed) || preg_match('/fatal/i', $lineTrimmed)) {
                                                             $logLevel = 'error';
@@ -1098,10 +1117,17 @@ function handleCompileFirmware($firmware_id) {
                             fclose($pipes[2]);
                             
                             $return = proc_close($process);
+                            
+                            // Mettre à jour la progression à 50% à la fin du téléchargement/installation
+                            sendSSE('progress', 50);
+                            flush();
                         } else {
                             // Fallback sur exec si proc_open échoue
                             exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $installOutput, $return);
                             sendSSE('log', 'info', implode("\n", $installOutput));
+                            // Mettre à jour la progression à 50% même en fallback
+                            sendSSE('progress', 50);
+                            flush();
                         }
                         
                         if ($return !== 0) {
