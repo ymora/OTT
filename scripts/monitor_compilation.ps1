@@ -109,7 +109,7 @@ while (-not $compilationComplete -and -not $compilationError) {
                 $compilationError = $true
                 break
             } elseif ($firmwareStatus.status -eq 'compiling') {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ⏳ Compilation toujours en cours..." -ForegroundColor Cyan
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] INFO: Compilation toujours en cours..." -ForegroundColor Cyan
                 $lastMessageTime = Get-Date # Réinitialiser pour éviter de spammer
             }
         }
@@ -147,16 +147,16 @@ while (-not $compilationComplete -and -not $compilationError) {
                                         $lastMessageTime = Get-Date # Mettre à jour le timestamp
                                     }
                                     'progress' {
-                                        Write-Host "[$timestamp] 📊 Progression: $($data.progress)%" -ForegroundColor Cyan
+                                        Write-Host "[$timestamp] Progression: $($data.progress)%" -ForegroundColor Cyan
                                         $lastMessageTime = Get-Date # Mettre à jour le timestamp
                                     }
                                     'success' {
-                                        Write-Host "[$timestamp] ✅ SUCCESS: $($data.message)" -ForegroundColor Green
+                                        Write-Host "[$timestamp] SUCCESS: $($data.message)" -ForegroundColor Green
                                         $compilationComplete = $true
                                         $lastMessageTime = Get-Date
                                     }
                                     'error' {
-                                        Write-Host "[$timestamp] ❌ ERROR: $($data.message)" -ForegroundColor Red
+                                        Write-Host "[$timestamp] ERROR: $($data.message)" -ForegroundColor Red
                                         $compilationError = $true
                                         $lastMessageTime = Get-Date
                                     }
@@ -208,7 +208,7 @@ if ($finalStatus) {
     
     if ($finalStatus.status -eq 'compiled') {
         Write-Host ""
-        Write-Host "✅ Détails du firmware compilé:" -ForegroundColor Green
+        Write-Host "Details du firmware compile:" -ForegroundColor Green
         if ($finalStatus.file_path) {
             Write-Host "   Fichier: $($finalStatus.file_path)" -ForegroundColor Gray
         }
@@ -223,7 +223,7 @@ if ($finalStatus) {
         $compilationComplete = $true
     } elseif ($finalStatus.status -eq 'error') {
         Write-Host ""
-        Write-Host "❌ Erreur de compilation:" -ForegroundColor Red
+        Write-Host "ERROR: Erreur de compilation:" -ForegroundColor Red
         if ($finalStatus.error_message) {
             Write-Host "   $($finalStatus.error_message)" -ForegroundColor Red
         }
