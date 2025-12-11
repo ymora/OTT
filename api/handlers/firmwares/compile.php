@@ -470,12 +470,41 @@ function handleCompileFirmware($firmware_id) {
                 sendSSE('progress', 20);
                 flush();
                 
-                // Tester arduino-cli immédiatement
+                // Définir HOME temporairement pour le test (avant la définition complète de $envStr)
+                $testEnv = [];
+                if (empty(getenv('HOME'))) {
+                    $testEnv['HOME'] = sys_get_temp_dir() . '/arduino-cli-home';
+                    if (!is_dir($testEnv['HOME'])) {
+                        mkdir($testEnv['HOME'], 0755, true);
+                    }
+                }
+                $testEnvStr = '';
+                foreach ($testEnv as $key => $value) {
+                    $testEnvStr .= $key . '=' . escapeshellarg($value) . ' ';
+                }
+                
+                // Tester arduino-cli immédiatement avec HOME défini
                 try {
-                    $testCmd = $arduinoCli . ' version 2>&1';
+                    $testCmd = $testEnvStr . $arduinoCli . ' version 2>&1';
                     $testOutput = shell_exec($testCmd);
-                    error_log('[handleCompileFirmware] Test arduino-cli version: ' . trim($testOutput));
-                    sendSSE('log', 'info', '   Version: ' . trim($testOutput));
+                    // Filtrer les avertissements HOME répétés pour un affichage plus propre
+                    $testOutputLines = explode("\n", trim($testOutput));
+                    $filteredOutput = [];
+                    $homeWarningCount = 0;
+                    foreach ($testOutputLines as $line) {
+                        if (stripos($line, 'Unable to get user home dir') !== false) {
+                            $homeWarningCount++;
+                            // Ne garder qu'un seul avertissement au lieu de 3
+                            if ($homeWarningCount === 1) {
+                                $filteredOutput[] = $line;
+                            }
+                        } else {
+                            $filteredOutput[] = $line;
+                        }
+                    }
+                    $cleanOutput = implode("\n", $filteredOutput);
+                    error_log('[handleCompileFirmware] Test arduino-cli version: ' . trim($cleanOutput));
+                    sendSSE('log', 'info', '   Version: ' . trim($cleanOutput));
                     flush();
                 } catch (Exception $e) {
                     error_log('[handleCompileFirmware] ⚠️ Erreur test arduino-cli: ' . $e->getMessage());
