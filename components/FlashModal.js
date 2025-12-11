@@ -751,7 +751,7 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
               </button>
 
               {/* Barre de progression du téléchargement */}
-              {downloadProgress > 0 && downloadProgress < 100 && (
+              {downloadProgress > 0 && (
                 <div className="mt-3 space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600 dark:text-gray-400">
@@ -776,12 +776,20 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
               )}
 
               {/* Barre de progression du flash */}
-              {flashing && downloadProgress >= 100 && (
-                <div className="mt-3 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                  <div
-                    className="bg-primary-500 h-3 rounded-full transition-all duration-300"
-                    style={{ width: `${flashProgress}%` }}
-                  />
+              {flashing && downloadProgress >= 100 && flashProgress > 0 && (
+                <div className="mt-3 space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Flash en cours...
+                    </span>
+                    <span className="font-semibold">{flashProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                    <div
+                      className="bg-primary-500 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${flashProgress}%` }}
+                    />
+                  </div>
                 </div>
               )}
 
