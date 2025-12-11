@@ -1014,12 +1014,24 @@ function handleCompileFirmware($firmware_id) {
                                                                 // On mappe 0-100% du téléchargement vers 45-50% de la compilation totale
                                                                 $globalProgress = 45 + ($downloadPercent / 100) * 5;
                                                                 sendSSE('progress', intval($globalProgress));
+                                                                // Afficher aussi un message de progression pour plus de visibilité
+                                                                sendSSE('log', 'info', '📊 Progression installation core: ' . number_format($downloadPercent, 1) . '% (compilation totale: ' . intval($globalProgress) . '%)');
                                                                 flush();
+                                                            } else {
+                                                                // Même sans pourcentage, envoyer un message pour montrer qu'on est en téléchargement
+                                                                // Ne pas spammer, seulement pour les lignes importantes
+                                                                if (preg_match('/Downloading packages|Starting download/i', $lineTrimmed)) {
+                                                                    sendSSE('log', 'info', '📥 Début du téléchargement du core ESP32...');
+                                                                    flush();
+                                                                }
                                                             }
                                                             
                                                             // Si on voit "downloaded", on a fini le téléchargement
                                                             if (preg_match('/downloaded$/', $lineTrimmed)) {
                                                                 $currentlyDownloading = false;
+                                                                sendSSE('progress', 48); // Progression intermédiaire
+                                                                sendSSE('log', 'info', '✅ Téléchargement terminé, installation en cours...');
+                                                                flush();
                                                             }
                                                         } elseif (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
                                                                   preg_match('/error:/i', $lineTrimmed) || preg_match('/fatal/i', $lineTrimmed)) {
