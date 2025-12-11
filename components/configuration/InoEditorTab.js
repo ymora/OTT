@@ -1067,7 +1067,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
                   <div className="text-gray-500">En attente des logs...</div>
                 ) : (
                   compileLogs.map((log, idx) => (
-                    <div key={idx} className="mb-1">
+                    <div key={idx} className="mb-1 break-words whitespace-pre-wrap">
                       <span className="text-gray-500 pr-3">{log.timestamp}</span>
                       <span className={log.level === 'error' ? 'text-red-400' : log.level === 'warning' ? 'text-yellow-400' : 'text-green-300'}>
                         {log.message}
