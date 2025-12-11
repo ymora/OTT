@@ -213,8 +213,9 @@ if ($finalStatus) {
             Write-Host "   Fichier: $($finalStatus.file_path)" -ForegroundColor Gray
         }
         if ($finalStatus.file_size) {
-            $sizeMB = [math]::Round($finalStatus.file_size / 1MB, 2)
-            Write-Host "   Taille: $($finalStatus.file_size) bytes ($sizeMB MB)" -ForegroundColor Gray
+            $sizeInMB = [math]::Round($finalStatus.file_size / 1MB, 2)
+            $sizeText = "$sizeInMB MB"
+            Write-Host "   Taille: $($finalStatus.file_size) bytes ($sizeText)" -ForegroundColor Gray
         }
         if ($finalStatus.checksum) {
             Write-Host "   Checksum SHA256: $($finalStatus.checksum)" -ForegroundColor Gray
@@ -234,19 +235,20 @@ Write-Host ""
 Write-Host "=== FIN ===" -ForegroundColor Cyan
 $duration = (Get-Date) - $startTime
 Write-Host "Messages recus: $messageCount" -ForegroundColor Gray
-Write-Host "Duree totale: $([int]$duration.TotalSeconds) secondes ($([math]::Round($duration.TotalMinutes, 1)) minutes)" -ForegroundColor Gray
+$minutesText = "$([math]::Round($duration.TotalMinutes, 1)) minutes"
+Write-Host "Duree totale: $([int]$duration.TotalSeconds) secondes ($minutesText)" -ForegroundColor Gray
 
 if ($compilationComplete) {
     Write-Host ""
-    Write-Host "[SUCCESS] ✅ Compilation terminee avec succes !" -ForegroundColor Green
+    Write-Host "[SUCCESS] Compilation terminee avec succes !" -ForegroundColor Green
     exit 0
 } elseif ($compilationError) {
     Write-Host ""
-    Write-Host "[ERROR] ❌ Compilation echouee" -ForegroundColor Red
+    Write-Host "[ERROR] Compilation echouee" -ForegroundColor Red
     exit 1
 } else {
     Write-Host ""
-    Write-Host "[WARNING] ⚠️ Compilation interrompue ou timeout" -ForegroundColor Yellow
+    Write-Host "[WARNING] Compilation interrompue ou timeout" -ForegroundColor Yellow
     exit 1
 }
 
