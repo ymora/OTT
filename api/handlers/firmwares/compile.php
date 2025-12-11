@@ -939,6 +939,7 @@ function handleCompileFirmware($firmware_id) {
                             $lastHeartbeatTime = $startTime;
                             $lastKeepAliveTime = $startTime;
                             $lastLine = ''; // Dernière ligne de sortie pour détecter la phase (téléchargement vs installation)
+                            $currentlyDownloading = false; // Indicateur si on est actuellement en phase de téléchargement
                             
                             while (true) {
                                 $currentTime = time();
@@ -1091,7 +1092,8 @@ function handleCompileFirmware($firmware_id) {
                                 
                                 // Envoyer un heartbeat avec message toutes les 5 secondes UNIQUEMENT si on n'est PAS en phase de téléchargement
                                 // (Pendant le téléchargement, on voit déjà la progression, pas besoin du heartbeat)
-                                if (!$isDownloading && $currentTime - $lastHeartbeatTime >= 5) {
+                                // Utiliser $currentlyDownloading qui est mis à jour en temps réel, pas seulement $isDownloading basé sur $lastLine
+                                if (!$currentlyDownloading && !$isDownloading && $currentTime - $lastHeartbeatTime >= 5) {
                                     // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
                                     $lastHeartbeatTime = $currentTime;
                                     $elapsedSeconds = $currentTime - $startTime;
