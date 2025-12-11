@@ -127,7 +127,6 @@ function handleCompileFirmware($firmware_id) {
     
     // Logger pour diagnostic
     error_log('[handleCompileFirmware] Démarrage compilation firmware ID: ' . $firmware_id);
-    error_log('[handleCompileFirmware] User: ' . ($user['email'] ?? 'unknown'));
     
     // Envoyer un message de diagnostic immédiatement
     sendSSE('log', 'info', 'Démarrage du processus de compilation...');
@@ -168,6 +167,7 @@ function handleCompileFirmware($firmware_id) {
             flush();
             echo ": keep-alive\n\n";
             flush();
+            error_log('[handleCompileFirmware] User: ' . ($user['email'] ?? 'unknown'));
         }
         
         // Vérifier que le firmware existe et est en attente de compilation
