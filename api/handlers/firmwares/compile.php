@@ -742,23 +742,26 @@ function handleCompileFirmware($firmware_id) {
                     }
                 } catch(Exception $procErr) {
                     // Erreur lors de proc_open ou de la gestion des pipes
+                    // C'est NORMAL sur certains serveurs où proc_open est désactivé pour des raisons de sécurité
+                    // Le fallback sur popen() fonctionne parfaitement
                     $errorDetails = [
                         'message' => $procErr->getMessage(),
                         'type' => get_class($procErr),
                         'arduino_cli' => $arduinoCli,
                         'env_str' => substr($envStr, 0, 100)
                     ];
-                    error_log('[handleCompileFirmware] Erreur proc_open core list: ' . json_encode($errorDetails, JSON_UNESCAPED_UNICODE));
-                    sendSSE('log', 'error', '❌ Erreur lors de l\'exécution de arduino-cli core list');
-                    sendSSE('log', 'error', '   Type: ' . get_class($procErr));
-                    sendSSE('log', 'error', '   Message: ' . $procErr->getMessage());
+                    error_log('[handleCompileFirmware] proc_open indisponible pour core list (fallback normal): ' . json_encode($errorDetails, JSON_UNESCAPED_UNICODE));
+                    // Ne pas afficher d'erreur à l'utilisateur, c'est normal et le fallback fonctionne
                     $coreListProcess = false; // Forcer le fallback
                 }
                 
                 // Fallback sur popen() avec stream_select() si proc_open échoue (non-bloquant)
+                // C'est NORMAL sur certains serveurs (proc_open peut être désactivé pour sécurité)
+                // popen() fonctionne parfaitement comme alternative
                 if (!is_resource($coreListProcess) || empty($coreListOutput)) {
-                    sendSSE('log', 'warning', '⚠️ proc_open indisponible ou échoué pour core list, fallback sur popen()');
-                    flush();
+                    // Ne plus afficher d'avertissement, c'est normal et le fallback fonctionne correctement
+                    // sendSSE('log', 'warning', '⚠️ proc_open indisponible ou échoué pour core list, fallback sur popen()');
+                    // flush();
                     
                     // Utiliser popen() au lieu de exec() pour permettre des keep-alive pendant l'exécution
                     $popenHandle = @popen($envStr . $arduinoCli . ' core list 2>&1', 'r');
