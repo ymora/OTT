@@ -1172,16 +1172,29 @@ function handleCompileFirmware($firmware_id) {
                             if ($isTimeoutError) {
                                 sendSSE('log', 'error', '❌ Timeout HTTP lors du téléchargement du core ESP32');
                                 sendSSE('log', 'error', '   Le téléchargement de ~568MB a été interrompu par un timeout HTTP');
-                                sendSSE('log', 'info', '   💡 Solution: Le core sera téléchargé progressivement lors des prochaines tentatives');
-                                sendSSE('log', 'info', '   💡 Alternative: Configurez un Persistent Disk sur Render.com pour éviter les re-téléchargements');
+                                sendSSE('log', 'info', '   💡 Solution GRATUITE: Relancez simplement la compilation');
+                                sendSSE('log', 'info', '   ✅ arduino-cli reprendra automatiquement le téléchargement là où il s\'est arrêté');
+                                sendSSE('log', 'info', '   ✅ Le core partiellement téléchargé sera réutilisé (pas de re-téléchargement complet)');
                                 
                                 // Vérifier si une partie du core a été téléchargée (peut être réutilisée)
                                 $corePath = $arduinoDataDir . '/packages/esp32';
                                 if (is_dir($corePath)) {
-                                    sendSSE('log', 'info', '   ✅ Une partie du core a été téléchargée, elle sera réutilisée lors de la prochaine tentative');
+                                    // Calculer la taille du core partiellement téléchargé
+                                    $coreSize = 0;
+                                    $iterator = new RecursiveIteratorIterator(
+                                        new RecursiveDirectoryIterator($corePath, RecursiveDirectoryIterator::SKIP_DOTS),
+                                        RecursiveIteratorIterator::SELF_FIRST
+                                    );
+                                    foreach ($iterator as $file) {
+                                        if ($file->isFile()) {
+                                            $coreSize += $file->getSize();
+                                        }
+                                    }
+                                    $coreSizeMB = round($coreSize / 1024 / 1024, 1);
+                                    sendSSE('log', 'info', "   ✅ Core partiellement téléchargé: {$coreSizeMB} MB (sera réutilisé)");
                                 }
                                 
-                                $errorMessage = 'Timeout HTTP lors du téléchargement du core ESP32. Relancez la compilation pour reprendre le téléchargement.';
+                                $errorMessage = 'Timeout HTTP lors du téléchargement du core ESP32. Relancez la compilation pour reprendre automatiquement le téléchargement.';
                             } else {
                                 $errorMessage = 'Erreur lors de l\'installation du core ESP32';
                             }
