@@ -189,6 +189,10 @@ function handleCompileFirmware($firmware_id) {
             flush();
             error_log('[handleCompileFirmware] Démarrage compilation - statut précédent: ' . $previousStatus);
             
+            // Envoyer un keep-alive immédiat pour confirmer la connexion
+            echo ": keep-alive\n\n";
+            flush();
+            
             // Trouver le fichier .ino en utilisant la fonction helper simplifiée
             sendSSE('log', 'info', '🔍 Recherche du fichier .ino...');
             flush();
@@ -200,8 +204,23 @@ function handleCompileFirmware($firmware_id) {
             flush();
             error_log('[handleCompileFirmware] Recherche fichier .ino pour firmware ID: ' . $firmware_id);
             
+            // Keep-alive après chaque message important
+            echo ": keep-alive\n\n";
+            flush();
+            
+            sendSSE('log', 'info', 'Appel de findFirmwareInoFile()...');
+            flush();
+            echo ": keep-alive\n\n";
+            flush();
+            error_log('[handleCompileFirmware] Avant findFirmwareInoFile');
+            
             try {
-            $ino_path = findFirmwareInoFile($firmware_id, $firmware);
+                $ino_path = findFirmwareInoFile($firmware_id, $firmware);
+                error_log('[handleCompileFirmware] Après findFirmwareInoFile - résultat: ' . ($ino_path ?? 'NULL'));
+                sendSSE('log', 'info', 'findFirmwareInoFile() terminé');
+                flush();
+                echo ": keep-alive\n\n";
+                flush();
             } catch(Exception $e) {
                 error_log('[handleCompileFirmware] Erreur dans findFirmwareInoFile: ' . $e->getMessage());
                 sendSSE('log', 'error', '❌ Erreur lors de la recherche du fichier: ' . $e->getMessage());
