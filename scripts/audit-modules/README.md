@@ -7,19 +7,19 @@ Système d'audit automatique intelligent et réutilisable pour tous types de pro
 ### Lancement simple
 
 ```powershell
-.\audit\Audit-Intelligent.ps1
+.\scripts\audit-modules\Audit-Intelligent.ps1
 ```
 
 ### Avec options
 
 ```powershell
-.\audit\Audit-Intelligent.ps1 -ProjectPath . -UseAI -Verbose
+.\scripts\audit-modules\Audit-Intelligent.ps1 -ProjectPath . -UseAI -Verbose
 ```
 
 ## 📁 Structure
 
 ```
-audit/
+scripts/audit-modules/
 ├── Audit-Intelligent.ps1    # Point d'entrée principal
 ├── modules/                  # Tous les modules de vérification
 ├── config/                   # Configurations par défaut
@@ -28,14 +28,14 @@ audit/
 
 ## 🤖 Interaction avec l'IA
 
-1. Le script génère automatiquement `audit/audit-ai.json` avec les questions
-2. Dites-moi dans Cursor : **"Analyse audit/audit-ai.json et réponds"**
-3. Je génère `audit/audit-ai-resp.json` avec mes réponses
+1. Le script génère automatiquement `scripts/audit-modules/audit-ai.json` avec les questions
+2. Dites-moi dans Cursor : **"Analyse scripts/audit-modules/audit-ai.json et réponds"**
+3. Je génère `scripts/audit-modules/audit-ai-resp.json` avec mes réponses
 4. Relancez le script ou dites : **"Continue audit avec réponses IA"**
 
 ## 📊 Rapports
 
-Les rapports sont générés dans `audit/reports/audit-report-YYYY-MM-DD_HH-mm-ss.md`
+Les rapports sont générés dans `scripts/audit-modules/reports/audit-report-YYYY-MM-DD_HH-mm-ss.md`
 
 ## ⚙️ Configuration
 

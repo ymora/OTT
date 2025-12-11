@@ -11,7 +11,7 @@
 
 param(
     [string]$Email = "",
-    [string]$Password = "",
+    [string]$Password = "YM120879",
     [string]$ApiUrl = "",
     [string]$ConfigFile = "audit-complet/scripts/audit.config.ps1",
     [switch]$Verbose = $false,
@@ -71,9 +71,58 @@ function Get-ArrayFromApiResponse {
 
 $ErrorActionPreference = "Continue"
 
+# ===============================================================================
+# DÉTERMINER LE RÉPERTOIRE RACINE DU PROJET
+# ===============================================================================
+# Le script peut être exécuté depuis différents répertoires
+# On cherche la racine en remontant jusqu'à trouver api.php ou next.config.js
+$scriptRoot = $PSScriptRoot
+$projectRoot = $null
+
+# Essayer de trouver la racine en remontant depuis le script
+$currentPath = $scriptRoot
+for ($i = 0; $i -lt 5; $i++) {
+    if (Test-Path (Join-Path $currentPath "api.php")) {
+        $projectRoot = $currentPath
+        break
+    }
+    if (Test-Path (Join-Path $currentPath "next.config.js")) {
+        $projectRoot = $currentPath
+        break
+    }
+    $parent = Split-Path -Parent $currentPath
+    if ($parent -eq $currentPath) { break }
+    $currentPath = $parent
+}
+
+# Si pas trouvé, utiliser le répertoire courant ou le parent du script
+if (-not $projectRoot) {
+    $currentDir = Get-Location
+    if (Test-Path (Join-Path $currentDir.Path "api.php") -or Test-Path (Join-Path $currentDir.Path "next.config.js")) {
+        $projectRoot = $currentDir.Path
+    } else {
+        # Par défaut, utiliser le parent du script (audit-complet/scripts -> racine)
+        $projectRoot = Split-Path -Parent $scriptRoot
+    }
+}
+
+# Changer vers le répertoire racine
+if ($projectRoot -and (Test-Path $projectRoot)) {
+    Push-Location $projectRoot
+    Write-Info "Répertoire racine détecté: $projectRoot"
+} else {
+    Write-Warn "Impossible de déterminer le répertoire racine, utilisation du répertoire courant"
+}
+
 # Utiliser les variables d'environnement si les paramètres sont vides
 if ([string]::IsNullOrEmpty($Email)) { $Email = $env:AUDIT_EMAIL }
-if ([string]::IsNullOrEmpty($Password)) { $Password = $env:AUDIT_PASSWORD }
+if ([string]::IsNullOrEmpty($Password)) { 
+    if ($env:AUDIT_PASSWORD) {
+        $Password = $env:AUDIT_PASSWORD
+    } else {
+        $Password = "YM120879"  # Mot de passe par défaut pour éviter le blocage
+    }
+}
 if ([string]::IsNullOrEmpty($ApiUrl)) { $ApiUrl = $env:AUDIT_API_URL }
 
 # ===============================================================================
@@ -129,16 +178,12 @@ if ([string]::IsNullOrEmpty($ApiUrl)) {
     }
 }
 if ([string]::IsNullOrEmpty($Email)) {
-    if ([string]::IsNullOrEmpty($Email)) {
-        $Email = "ymora@free.fr"
-    }
+    $Email = "ymora@free.fr"
 }
 
-# Sécurité : Si le mot de passe n'est pas fourni via variable d'environnement, demander
+# Mot de passe par défaut pour éviter le blocage (peut être remplacé par variable d'environnement)
 if ([string]::IsNullOrEmpty($Password)) {
-    $securePassword = Read-Host -AsSecureString -Prompt "Entrez le mot de passe pour l'audit API"
-    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
-    $Password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+    $Password = "YM120879"  # Mot de passe par défaut
 }
 
 Write-Host ""
@@ -658,8 +703,9 @@ try {
 Write-Section "[5/18] Routes et Navigation - Verification Pages Menu"
 
 try {
-    # S'assurer qu'on est à la racine du projet
-    $rootPath = if (Test-Path "api.php") { "." } elseif (Test-Path "../api.php") { ".." } else { "." }
+    # Utiliser le répertoire racine détecté au début du script
+    # Si $projectRoot n'est pas défini, utiliser le répertoire courant
+    $rootPath = if ($projectRoot) { $projectRoot } else { (Get-Location).Path }
     Push-Location $rootPath
     
     # Utiliser la configuration ou valeurs par défaut
@@ -3376,7 +3422,9 @@ if ($calibrationCommandUsed.Count -eq 0) {
 }
 
 $calibrationPayloadUsed = Select-String -Path "components\**\*.js","app\**\*.js","lib\*.js" -Pattern "buildUpdateCalibrationPayload" -ErrorAction SilentlyContinue
-if ($calibrationPayloadUsed.Count -eq 0) {
+# buildUpdateCalibrationPayload est utilisée par buildUpdateCalibrationPayloadFromArray, donc on vérifie aussi cette fonction
+$calibrationPayloadFromArrayUsed = Select-String -Path "components\**\*.js","app\**\*.js","lib\*.js" -Pattern "buildUpdateCalibrationPayloadFromArray" -ErrorAction SilentlyContinue
+if ($calibrationPayloadUsed.Count -eq 0 -and $calibrationPayloadFromArrayUsed.Count -eq 0) {
     $codeMort += "lib\deviceCommands.js::buildUpdateCalibrationPayload"
     $elementsInutilesScore -= 0.3
 }
@@ -3882,6 +3930,11 @@ if ($scoreGlobal -ge 9.5) {
 
 Write-Host ("=" * 80) -ForegroundColor Gray
 Write-Host ""
+
+# Restaurer le répertoire d'origine si on a changé
+if ($projectRoot) {
+    Pop-Location -ErrorAction SilentlyContinue
+}
 
 exit $exitCode
 

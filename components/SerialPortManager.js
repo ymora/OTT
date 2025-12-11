@@ -42,18 +42,14 @@ export function useSerialPort() {
             if (readerRef.current) {
               try {
                 await readerRef.current.cancel()
-                await readerRef.current.release()
+                // Note: reader n'a pas de méthode release() dans Web Serial API
               } catch (e) {
                 // Ignorer les erreurs
               }
               readerRef.current = null
             }
             if (writerRef.current) {
-              try {
-                await writerRef.current.release()
-              } catch (e) {
-                // Ignorer les erreurs
-              }
+              // Note: writer n'a pas de méthode release() dans Web Serial API
               writerRef.current = null
             }
             if (port) {
@@ -161,20 +157,16 @@ export function useSerialPort() {
       
       // Libérer les anciens writers/readers s'ils existent
       if (writerRef.current) {
-        try {
-          await writerRef.current.release()
-        } catch (e) {
-          // Ignorer les erreurs de release (déjà libéré)
-        }
+        // Note: writer n'a pas de méthode release() dans Web Serial API
         writerRef.current = null
       }
       
       if (readerRef.current) {
         try {
           await readerRef.current.cancel()
-          await readerRef.current.release()
+          // Note: reader n'a pas de méthode release() dans Web Serial API
         } catch (e) {
-          // Ignorer les erreurs de release (déjà libéré)
+          // Ignorer les erreurs
         }
         readerRef.current = null
       }
@@ -213,20 +205,16 @@ export function useSerialPort() {
           try {
             // Libérer les refs d'abord
             if (writerRef.current) {
-              try {
-                await writerRef.current.release()
-              } catch (e) {
-                logger.warn('[SerialPortManager] connect: erreur release writer:', e)
-              }
+              // Note: writer n'a pas de méthode release() dans Web Serial API
               writerRef.current = null
             }
             
             if (readerRef.current) {
               try {
                 await readerRef.current.cancel()
-                await readerRef.current.release()
+                // Note: reader n'a pas de méthode release() dans Web Serial API
               } catch (e) {
-                logger.warn('[SerialPortManager] connect: erreur release reader:', e)
+                logger.warn('[SerialPortManager] connect: erreur cancel reader:', e)
               }
               readerRef.current = null
             }
@@ -365,25 +353,17 @@ export function useSerialPort() {
         } catch (cancelErr) {
           logger.warn('[SerialPortManager] disconnect: erreur cancel reader:', cancelErr)
         }
-        try {
-          await readerRef.current.release()
-        } catch (releaseErr) {
-          logger.warn('[SerialPortManager] disconnect: erreur release reader:', releaseErr)
-        }
+        // Note: reader n'a pas de méthode release() dans Web Serial API
+        // Il est automatiquement libéré quand on ferme le port
         readerRef.current = null
         logger.debug('[SerialPortManager] disconnect: reader libéré')
       }
 
-      // Libérer le writer
+      // Note: writer n'a pas de méthode release() dans Web Serial API
+      // Il est automatiquement libéré quand on ferme le port
       if (writerRef.current) {
-        logger.debug('[SerialPortManager] disconnect: libération du writer...')
-        try {
-          await writerRef.current.release()
-        } catch (releaseErr) {
-          logger.warn('[SerialPortManager] disconnect: erreur release writer:', releaseErr)
-        }
+        logger.debug('[SerialPortManager] disconnect: writer sera libéré avec le port')
         writerRef.current = null
-        logger.debug('[SerialPortManager] disconnect: writer libéré')
       }
 
       // Fermer le port
@@ -636,7 +616,7 @@ export function useSerialPort() {
       if (err.name === 'NetworkError' || err.message.includes('writer')) {
         logger.warn('[SerialPortManager] write: réinitialisation du writer après erreur')
         try {
-          await writerRef.current.release()
+          // Note: writer n'a pas de méthode release() dans Web Serial API
         } catch (releaseErr) {
           logger.warn('[SerialPortManager] write: erreur release writer:', releaseErr)
         }

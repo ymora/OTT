@@ -657,7 +657,13 @@ export default function InoEditorTab({ onUploadSuccess }) {
       const eventSource = new EventSource(sseUrl)
       eventSourceRef.current = eventSource
 
+      // Variables pour le monitoring de la connexion SSE
+      let lastMessageTime = Date.now()
+      let statusCheckInterval = null
+      const maxSilenceTime = 60000 // 60 secondes sans message = problème
+
       eventSource.onopen = () => {
+        lastMessageTime = Date.now() // Réinitialiser le timestamp à l'ouverture
         setCompileLogs(prev => [...prev, {
           timestamp: new Date().toLocaleTimeString('fr-FR'),
           message: '✅ Connexion SSE établie, démarrage de la compilation...',
@@ -666,6 +672,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
       }
 
       eventSource.onmessage = (event) => {
+        // Mettre à jour le timestamp à chaque message reçu (même les keep-alive)
+        lastMessageTime = Date.now()
+        
         if (!event.data || event.data.trim() === '' || event.data.trim().startsWith(':')) {
           return // Ignorer les keep-alive
         }
@@ -689,6 +698,10 @@ export default function InoEditorTab({ onUploadSuccess }) {
             }])
             resetCompilationState()
             eventSource.close()
+            if (statusCheckInterval) {
+              clearInterval(statusCheckInterval)
+              statusCheckInterval = null
+            }
             refetch() // Rafraîchir la liste des firmwares
           } else if (data.type === 'error') {
             setError(data.message || 'Erreur lors de la compilation')
@@ -699,6 +712,10 @@ export default function InoEditorTab({ onUploadSuccess }) {
             }])
             resetCompilationState()
             eventSource.close()
+            if (statusCheckInterval) {
+              clearInterval(statusCheckInterval)
+              statusCheckInterval = null
+            }
             refetch() // Rafraîchir la liste des firmwares
           }
         } catch (err) {
@@ -709,6 +726,51 @@ export default function InoEditorTab({ onUploadSuccess }) {
           }])
         }
       }
+
+      // Ajouter un timeout de sécurité pour détecter les connexions qui se ferment silencieusement
+      statusCheckInterval = setInterval(() => {
+        const timeSinceLastMessage = Date.now() - lastMessageTime
+        if (timeSinceLastMessage > maxSilenceTime && compiling) {
+          setCompileLogs(prev => [...prev, {
+            timestamp: new Date().toLocaleTimeString('fr-FR'),
+            message: '⚠️ Pas de message depuis plus de 60 secondes. Vérification du statut...',
+            level: 'warning'
+          }])
+          // Vérifier le statut du firmware
+          fetchWithAuth(`${API_URL}/api.php/firmwares`)
+            .then(response => response.json())
+            .then(data => {
+              if (data.success && data.firmwares) {
+                const firmware = data.firmwares.find(f => f.id === firmwareId)
+                if (firmware) {
+                  if (firmware.status === 'compiled') {
+                    setSuccess(`✅ Compilation réussie ! Firmware v${firmware.version} disponible`)
+                    setCompileLogs(prev => [...prev, {
+                      timestamp: new Date().toLocaleTimeString('fr-FR'),
+                      message: '✅ Compilation terminée avec succès (détectée par vérification périodique)',
+                      level: 'info'
+                    }])
+                    resetCompilationState()
+                    refetch()
+                    clearInterval(statusCheckInterval)
+                  } else if (firmware.status === 'error') {
+                    setError(`Erreur de compilation: ${firmware.error_message || 'Erreur inconnue'}`)
+                    resetCompilationState()
+                    refetch()
+                    clearInterval(statusCheckInterval)
+                  }
+                }
+              }
+            })
+            .catch(err => {
+              setCompileLogs(prev => [...prev, {
+                timestamp: new Date().toLocaleTimeString('fr-FR'),
+                message: '⚠️ Impossible de vérifier le statut. La compilation peut continuer en arrière-plan.',
+                level: 'warning'
+              }])
+            })
+        }
+      }, 10000) // Vérifier toutes les 10 secondes
 
       eventSource.onerror = (err) => {
         // Ne pas fermer immédiatement - la connexion peut se rétablir
@@ -730,10 +792,10 @@ export default function InoEditorTab({ onUploadSuccess }) {
         setTimeout(() => {
           // Si la connexion est fermée (readyState === 2), vérifier le statut du firmware
           if (eventSource.readyState === EventSource.CLOSED) {
-            // Vérifier le statut du firmware après 5 secondes
+            // Vérifier le statut du firmware après 3 secondes (plus rapide)
             createTimeoutWithCleanup(async () => {
               try {
-                const response = await fetchWithAuth(`/api.php/firmwares`)
+                const response = await fetchWithAuth(`${API_URL}/api.php/firmwares`)
                 const data = await response.json()
                 if (data.success && data.firmwares) {
                   const firmware = data.firmwares.find(f => f.id === firmwareId)
@@ -747,16 +809,18 @@ export default function InoEditorTab({ onUploadSuccess }) {
                       }])
                       resetCompilationState()
                       refetch()
+                      clearInterval(statusCheckInterval)
                     } else if (firmware.status === 'compiling') {
                       setCompileLogs(prev => [...prev, {
                         timestamp: new Date().toLocaleTimeString('fr-FR'),
-                        message: '⏳ La compilation est toujours en cours. Réessayez dans quelques instants.',
+                        message: '⏳ La compilation est toujours en cours. Vérification périodique activée...',
                         level: 'info'
                       }])
                     } else if (firmware.status === 'error') {
                       setError(`Erreur de compilation: ${firmware.error_message || 'Erreur inconnue'}`)
                       resetCompilationState()
                       refetch()
+                      clearInterval(statusCheckInterval)
                     }
                   }
                 }
@@ -767,10 +831,11 @@ export default function InoEditorTab({ onUploadSuccess }) {
                   level: 'warning'
                 }])
               }
-            }, 5000)
+            }, 3000)
           }
-        }, 3000)
+        }, 2000)
       }
+      
 
     } catch (err) {
       setError(err.message || 'Erreur lors du démarrage de la compilation.')
@@ -778,11 +843,16 @@ export default function InoEditorTab({ onUploadSuccess }) {
     }
   }, [API_URL, token, compiling, compilingFirmwareId, closeEventSource, resetCompilationState, refetch])
 
-  // Fermer EventSource au démontage
+  // Fermer EventSource au démontage et nettoyer les intervalles
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
         closeEventSource()
+      }
+      // Nettoyer tous les intervalles potentiels
+      const highestIntervalId = setInterval(() => {}, 9999)
+      for (let i = 0; i < highestIntervalId; i++) {
+        clearInterval(i)
       }
     }
   }, [closeEventSource])

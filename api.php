@@ -811,128 +811,98 @@ function handleClearFirmwares() {
     }
 }
 
-function handleDatabaseView() {
-    global $pdo;
-    
-    // Nettoyer tout output précédent (comme les autres handlers)
-    // Utiliser ob_clean() au lieu de ob_end_clean() pour ne pas fermer le buffer
-    if (ob_get_level() > 0) {
-        ob_clean();
+/**
+ * Nettoie récursivement les données pour les rendre compatibles avec json_encode
+ * Convertit les ressources, objets et types non supportés en types JSON-compatibles
+ * 
+ * @param mixed $data Les données à nettoyer
+ * @param int $depth Profondeur de récursion (pour éviter les boucles infinies)
+ * @return mixed Les données nettoyées
+ */
+function sanitizeForJson($data, $depth = 0) {
+    // Protection contre les boucles infinies
+    if ($depth > 50) {
+        return null;
     }
     
-    // Définir le Content-Type JSON AVANT tout output
-    header('Content-Type: application/json; charset=utf-8');
+    if ($data === null) {
+        return null;
+    }
     
-    // Vérifier l'authentification et les droits admin
-    // requireAuth et requireAdmin font leur propre exit si échec
-    requireAuth();
-    requireAdmin();
+    // Ressources (ne peuvent pas être encodées en JSON)
+    if (is_resource($data)) {
+        return null;
+    }
     
-    try {
-        // Récupérer la liste des tables
-        $tablesQuery = "
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_type = 'BASE TABLE'
-            ORDER BY table_name
-        ";
-        $tablesStmt = $pdo->query($tablesQuery);
-        $tables = $tablesStmt->fetchAll(PDO::FETCH_COLUMN);
-        
-        $databaseInfo = [
-            'database_name' => $pdo->query("SELECT current_database()")->fetchColumn(),
-            'tables' => []
-        ];
-        
-        // Pour chaque table, récupérer le nombre de lignes et les colonnes
-        foreach ($tables as $table) {
+    // Objets
+    if (is_object($data)) {
+        // Si c'est un objet DateTime ou similaire, convertir en chaîne
+        if ($data instanceof DateTime || $data instanceof DateTimeInterface) {
+            return $data->format('Y-m-d H:i:s');
+        }
+        // Si c'est un objet PDOStatement ou autre ressource d'objet, ignorer
+        if ($data instanceof PDOStatement) {
+            return null;
+        }
+        // Si c'est un objet stdClass ou autre, convertir en tableau
+        if (method_exists($data, '__toString')) {
             try {
-                // SÉCURITÉ: Les noms de tables viennent de information_schema (sécurisés)
-                // Mais on valide quand même pour éviter toute injection
-                // Validation: le nom de table ne doit contenir que des caractères alphanumériques et underscores
-                if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table)) {
-                    // Nom de table invalide, ignorer cette table
-                    continue;
-                }
-                
-                // Utiliser des requêtes préparées avec des identifiants échappés
-                // Note: PDO ne supporte pas les identifiants (noms de tables) dans les requêtes préparées
-                // On doit donc échapper manuellement, mais on a validé le nom de table ci-dessus
-                $escapedTable = '"' . str_replace('"', '""', $table) . '"';
-                $countStmt = $pdo->query("SELECT COUNT(*) FROM $escapedTable");
-                $rowCount = intval($countStmt->fetchColumn());
-                
-                // Récupérer les colonnes
-                $columnsQuery = "
-                    SELECT column_name, data_type, is_nullable, column_default
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public' AND table_name = ?
-                    ORDER BY ordinal_position
-                ";
-                $columnsStmt = $pdo->prepare($columnsQuery);
-                $columnsStmt->execute([$table]);
-                $columns = $columnsStmt->fetchAll(PDO::FETCH_ASSOC);
-                
-                // Récupérer un échantillon de données (max 10 lignes)
-                // SÉCURITÉ: Le nom de table a été validé ci-dessus
-                $sampleStmt = $pdo->query("SELECT * FROM $escapedTable LIMIT 10");
-                $sample = $sampleStmt->fetchAll(PDO::FETCH_ASSOC);
-                
-                $databaseInfo['tables'][] = [
-                    'name' => $table,
-                    'row_count' => $rowCount,
-                    'columns' => $columns,
-                    'sample' => $sample
-                ];
-            } catch (PDOException $e) {
-                // Ignorer les erreurs pour certaines tables (vues, etc.)
-                if (getenv('DEBUG_ERRORS') === 'true') {
-                    error_log("[handleDatabaseView] Erreur pour table $table: " . $e->getMessage());
-                }
+                return (string) $data;
+            } catch (Exception $e) {
+                // Si __toString() échoue, convertir en tableau
+                $data = (array) $data;
+            }
+        } else {
+            // Sinon, convertir en tableau
+            $data = (array) $data;
+        }
+    }
+    
+    // Tableaux
+    if (is_array($data)) {
+        $result = [];
+        foreach ($data as $key => $value) {
+            // Nettoyer récursivement chaque valeur
+            $cleanKey = is_string($key) ? $key : (string) $key;
+            try {
+                $cleanedValue = sanitizeForJson($value, $depth + 1);
+                $result[$cleanKey] = $cleanedValue;
+            } catch (Exception $e) {
+                // Si le nettoyage échoue, ignorer cette clé ou mettre null
+                $result[$cleanKey] = null;
             }
         }
-        
-        $response = [
-            'success' => true,
-            'data' => $databaseInfo
-        ];
-        
-        // S'assurer que le JSON est bien encodé et envoyé
-        $json = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($json === false) {
-            throw new Exception('Erreur encodage JSON: ' . json_last_error_msg());
+        return $result;
+    }
+    
+    // Chaînes de caractères - s'assurer qu'elles sont en UTF-8 valide
+    if (is_string($data)) {
+        // Vérifier et nettoyer l'encodage UTF-8
+        if (!mb_check_encoding($data, 'UTF-8')) {
+            $data = mb_convert_encoding($data, 'UTF-8', 'UTF-8');
         }
-        
-        echo $json;
-        exit;
-        
-    } catch (PDOException $e) {
-        http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        error_log('[handleDatabaseView] ' . $e->getMessage());
-        $errorResponse = json_encode([
-            'success' => false,
-            'error' => $errorMsg
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($errorResponse !== false) {
-            echo $errorResponse;
-        }
-        exit;
+        // Nettoyer les caractères de contrôle (sauf les caractères valides comme \n, \r, \t)
+        $data = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $data);
+        return $data;
+    }
+    
+    // Types scalaires (int, float, bool) - déjà compatibles JSON
+    if (is_int($data) || is_float($data) || is_bool($data)) {
+        return $data;
+    }
+    
+    // Fallback: convertir en chaîne
+    try {
+        return (string) $data;
     } catch (Exception $e) {
-        http_response_code(500);
-        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Server error';
-        error_log('[handleDatabaseView] ' . $e->getMessage());
-        $errorResponse = json_encode([
-            'success' => false,
-            'error' => $errorMsg
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($errorResponse !== false) {
-            echo $errorResponse;
-        }
-        exit;
+        // Si la conversion échoue, retourner null
+        return null;
+    } catch (Throwable $e) {
+        // Gérer aussi les Throwable (PHP 7+)
+        return null;
     }
 }
+
 
        function handleHealthCheck() {
            global $pdo;
@@ -1043,9 +1013,6 @@ $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 // Debug conditionnel pour certaines routes (seulement si DEBUG_ERRORS est activé)
 if (getenv('DEBUG_ERRORS') === 'true') {
-    if (strpos($path, 'database-view') !== false) {
-        error_log('[DEBUG] Path: ' . $path . ' | Method: ' . $method);
-    }
     if (strpos($path, 'test/create') !== false) {
         error_log('[DEBUG] Path: ' . $path . ' | Method: ' . $method);
     }
@@ -1341,6 +1308,9 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleUploadFirmwareIno();
 } elseif($method === 'GET' && preg_match('#^/firmwares/check-version/([^/]+)$#', $path, $matches)) {
     handleCheckFirmwareVersion($matches[1]);
+} elseif($method === 'GET' && preg_match('#^/firmwares/debug-logs/(\d+)$#', $path, $matches)) {
+    require_once __DIR__ . '/api/handlers/firmwares/debug_logs.php';
+    handleGetCompileDebugLogs($matches[1]);
 } elseif($method === 'GET' && preg_match('#^/firmwares/compile/(\d+)$#', $path, $matches)) {
     error_log('[ROUTER] Route GET /firmwares/compile/' . $matches[1] . ' matchée - Path: ' . $path);
     // Nettoyer le buffer AVANT d'appeler handleCompileFirmware pour les routes SSE
@@ -1417,11 +1387,6 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     exit;
 
 // Admin tools - IMPORTANT: Routes spécifiques avant routes génériques
-// Route database-view - doit être très tôt pour éviter les conflits
-} elseif($method === 'GET' && ($path === '/admin/database-view' || preg_match('#^/admin/database-view/?$#', $path))) {
-    // Route pour la visualisation de la base de données
-    error_log('[ROUTER] ✅ Route /admin/database-view matchée - Path: ' . $path . ' Method: ' . $method);
-    handleDatabaseView();
 } elseif($method === 'GET' && ($path === '/admin/diagnostic/measurements' || preg_match('#^/admin/diagnostic/measurements/?$#', $path))) {
     // Route pour le diagnostic des mesures
     error_log('[ROUTER] ✅ Route /admin/diagnostic/measurements matchée - Path: ' . $path . ' Method: ' . $method);

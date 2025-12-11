@@ -42,8 +42,7 @@ const DOCUMENTATION_FILES = {
   presentation: 'DOCUMENTATION_PRESENTATION.html',
   developpeurs: 'DOCUMENTATION_DEVELOPPEURS.html',
   commerciale: 'DOCUMENTATION_COMMERCIALE.html',
-  'suivi-temps': 'SUIVI_TEMPS_FACTURATION.md',
-  database: null // Géré par un composant spécial
+  'suivi-temps': 'SUIVI_TEMPS_FACTURATION.md'
 }
 
 export default function DocumentationPage() {
@@ -71,10 +70,10 @@ export default function DocumentationPage() {
   }, [docType])
 
   const isMarkdownDoc = docType === 'suivi-temps'
-  const isDatabaseDoc = docType === 'database'
 
   // Référence à l'iframe pour envoyer le thème
   const iframeRef = useRef(null)
+  const timeoutRefs = useRef([])
 
   // Fonction pour envoyer le thème à l'iframe
   const sendThemeToIframe = useCallback(() => {
@@ -116,17 +115,15 @@ export default function DocumentationPage() {
     return () => {
       observer.disconnect()
       window.removeEventListener('message', handleMessage)
+      // Cleanup des timeouts de l'iframe
+      timeoutRefs.current.forEach(timeout => clearTimeout(timeout))
+      timeoutRefs.current = []
     }
   }, [sendThemeToIframe, isMarkdownDoc])
 
   // Si c'est un fichier markdown, on affiche un composant spécial
   if (isMarkdownDoc) {
     return <MarkdownViewer key={docType} fileName="SUIVI_TEMPS_FACTURATION.md" />
-  }
-
-  // Si c'est la base de données, on affiche un composant spécial
-  if (isDatabaseDoc) {
-    return <DatabaseViewer />
   }
 
   return (
@@ -143,14 +140,12 @@ export default function DocumentationPage() {
             sendThemeToIframe()
           }
           sendWithRetry() // Immédiatement
-          // Utiliser des timeouts avec cleanup via useEffect
+          // Utiliser des timeouts avec cleanup approprié
           const timeout1 = setTimeout(sendWithRetry, 100) // Après 100ms
           const timeout2 = setTimeout(sendWithRetry, 500) // Après 500ms
           
           // Stocker les timeouts pour cleanup
-          if (iframeRef.current) {
-            iframeRef.current._timeouts = [timeout1, timeout2]
-          }
+          timeoutRefs.current = [timeout1, timeout2]
         }}
       />
     </div>
@@ -252,6 +247,17 @@ function MarkdownViewer({ fileName }) {
         return process.env.NEXT_PUBLIC_BASE_PATH || ''
       }
       
+      // Fonction pour construire l'URL correcte avec basePath
+      const buildUrl = (path) => {
+        const bp = detectBasePath()
+        if (bp && !path.startsWith(bp)) {
+          // Enlever le slash initial si présent
+          const cleanPath = path.startsWith('/') ? path.slice(1) : path
+          return `${bp}/${cleanPath}`
+        }
+        return path
+      }
+      
       const basePath = detectBasePath()
       
       // Logger pour debug (uniquement si on est sur GitHub Pages)
@@ -263,7 +269,16 @@ function MarkdownViewer({ fileName }) {
       
       // Essayer plusieurs méthodes de chargement avec différents chemins
       const methods = [
-        // 1. Essayer depuis la racine avec basePath (pour GitHub Pages) - Format: /OTT/SUIVI_TEMPS_FACTURATION.md
+        // 1. Essayer avec buildUrl (détection automatique du basePath)
+        async () => {
+          const url = buildUrl(`/${fileName}`)
+          const response = await fetch(url + '?t=' + Date.now())
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
+        },
+        // 2. Essayer depuis la racine avec basePath (pour GitHub Pages) - Format: /OTT/SUIVI_TEMPS_FACTURATION.md
         async () => {
           const url = basePath ? `${basePath}/${fileName}` : `/${fileName}`
           const response = await fetch(url + '?t=' + Date.now())
@@ -272,7 +287,7 @@ function MarkdownViewer({ fileName }) {
           if (!content || content.trim().length === 0) throw new Error('Fichier vide')
           return content
         },
-        // 2. Essayer avec withBasePath (utilise process.env.NEXT_PUBLIC_BASE_PATH)
+        // 3. Essayer avec withBasePath (utilise process.env.NEXT_PUBLIC_BASE_PATH)
         async () => {
           const url = withBasePath(`/${fileName}`)
           const response = await fetch(url + '?t=' + Date.now())
@@ -281,7 +296,7 @@ function MarkdownViewer({ fileName }) {
           if (!content || content.trim().length === 0) throw new Error('Fichier vide')
           return content
         },
-        // 3. Essayer depuis la racine sans basePath (fallback local)
+        // 4. Essayer depuis la racine sans basePath (fallback local)
         async () => {
           const url = `/${fileName}`
           const response = await fetch(url + '?t=' + Date.now())
@@ -290,7 +305,7 @@ function MarkdownViewer({ fileName }) {
           if (!content || content.trim().length === 0) throw new Error('Fichier vide')
           return content
         },
-        // 4. Essayer avec basePath mais sans slash initial (format alternatif)
+        // 5. Essayer avec basePath mais sans slash initial (format alternatif)
         async () => {
           if (!basePath) throw new Error('Pas de basePath')
           const url = `${basePath}${fileName.startsWith('/') ? fileName : '/' + fileName}`
@@ -300,7 +315,7 @@ function MarkdownViewer({ fileName }) {
           if (!content || content.trim().length === 0) throw new Error('Fichier vide')
           return content
         },
-        // 5. Essayer depuis l'API (uniquement si pas en mode statique)
+        // 6. Essayer depuis l'API (uniquement si pas en mode statique)
         async () => {
           // En mode statique (GitHub Pages), l'API n'est pas accessible
           if (typeof window !== 'undefined' && window.location.origin.includes('github.io')) {
@@ -319,15 +334,26 @@ function MarkdownViewer({ fileName }) {
       const attemptedUrls = []
       for (let i = 0; i < methods.length; i++) {
         try {
+          // Logger l'URL qu'on va essayer (pour debug)
+          const methodUrl = i === 0 ? buildUrl(`/${fileName}`) : 
+                           i === 1 ? (basePath ? `${basePath}/${fileName}` : `/${fileName}`) :
+                           i === 2 ? withBasePath(`/${fileName}`) :
+                           i === 3 ? `/${fileName}` :
+                           i === 4 ? (basePath ? `${basePath}/${fileName.startsWith('/') ? fileName : '/' + fileName}` : 'N/A') :
+                           'API'
+          logger.debug(`[SUIVI_TEMPS] Tentative ${i + 1}: ${methodUrl}`)
+          
           text = await methods[i]()
           if (text && text.trim().length > 0) {
+            logger.debug(`[SUIVI_TEMPS] ✅ Succès avec la méthode ${i + 1}`)
             break // Succès, sortir de la boucle
           }
         } catch (err) {
           lastError = err
           // Logger l'URL tentée pour debug (même en production pour diagnostiquer)
-          if (err.message.includes('HTTP') || err.message.includes('API')) {
+          if (err.message.includes('HTTP') || err.message.includes('API') || err.message.includes('vide')) {
             attemptedUrls.push(`Méthode ${i + 1}: ${err.message}`)
+            logger.debug(`[SUIVI_TEMPS] ❌ Échec méthode ${i + 1}: ${err.message}`)
           }
           continue // Essayer la méthode suivante
         }
@@ -887,21 +913,7 @@ function MarkdownViewer({ fileName }) {
   }, [chartData])
 
   // Préparer les données pour les graphiques (avec vue jour/semaine/mois)
-  const commitsChartData = displayData ? {
-    labels: displayData.map(d => d.label || (() => {
-      const date = new Date(d.date)
-      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
-    })()),
-    datasets: [{
-      label: timeView === 'day' ? 'Commits par jour' : timeView === 'week' ? 'Commits par semaine' : 'Commits par mois',
-      data: displayData.map(d => d.commits),
-      backgroundColor: 'rgba(102, 126, 234, 0.8)',
-      borderColor: 'rgb(102, 126, 234)',
-      borderWidth: 2,
-      borderRadius: 4
-    }]
-  } : null
-
+  // Note: commitsChartData supprimé - non utilisé (seul hoursChartData est affiché)
   const hoursChartData = displayData ? {
     labels: displayData.map(d => d.label || (() => {
       const date = new Date(d.date)
@@ -1391,243 +1403,6 @@ function MarkdownViewer({ fileName }) {
           isOpen={isModalOpen}
           onClose={closeDayDetails}
         />
-      </div>
-    </div>
-  )
-}
-
-// Composant pour visualiser la base de données
-function DatabaseViewer() {
-  const [databaseInfo, setDatabaseInfo] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [selectedTable, setSelectedTable] = useState(null)
-  const { fetchWithAuth, API_URL } = useAuth()
-  
-  useEffect(() => {
-    const loadDatabaseInfo = async () => {
-      try {
-        setLoading(true)
-        const response = await fetchWithAuth(
-          `${API_URL}/api.php/admin/database-view`,
-          { method: 'GET' },
-          { requiresAuth: true }
-        )
-        
-        if (!response.ok) {
-          const text = await response.text()
-          throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`)
-        }
-        
-        // Vérifier le Content-Type avant de parser
-        const contentType = response.headers.get('content-type') || ''
-        if (!contentType.includes('application/json')) {
-          const text = await response.text()
-          throw new Error(`Réponse non-JSON: ${text.substring(0, 200)}`)
-        }
-        
-        // Lire le texte d'abord pour vérifier qu'il n'est pas vide
-        const text = await response.text()
-        if (!text || !text.trim()) {
-          throw new Error('Réponse vide du serveur')
-        }
-        
-        // Parser le JSON
-        let data
-        try {
-          data = JSON.parse(text)
-        } catch (parseError) {
-          logger.error('Erreur parsing JSON:', parseError)
-          logger.error('Texte reçu:', text.substring(0, 500))
-          throw new Error(`Erreur parsing JSON: ${parseError.message}`)
-        }
-        
-        if (data.success) {
-          setDatabaseInfo(data.data)
-        } else {
-          throw new Error(data.error || 'Erreur lors du chargement')
-        }
-      } catch (err) {
-        logger.error('Erreur chargement base de données:', err)
-        setError(err.message || 'Impossible de charger les informations de la base de données')
-      } finally {
-        setLoading(false)
-      }
-    }
-    
-    loadDatabaseInfo()
-  }, [fetchWithAuth, API_URL])
-  
-  if (loading) {
-    return (
-      <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Chargement de la base de données...</p>
-        </div>
-      </div>
-    )
-  }
-  
-  if (error) {
-    return (
-      <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="text-red-500 text-4xl mb-4">❌</div>
-          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-2">Erreur</h2>
-          <p className="text-gray-600 dark:text-gray-400">{error}</p>
-        </div>
-      </div>
-    )
-  }
-  
-  if (!databaseInfo) {
-    return null
-  }
-  
-  const table = selectedTable ? databaseInfo.tables.find(t => t.name === selectedTable) : null
-  
-  return (
-    <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 overflow-y-auto bg-gradient-to-b from-gray-50 to-white dark:from-[rgb(var(--night-bg-start))] dark:to-[rgb(var(--night-bg-mid))] docs-scrollbar">
-      <div className="max-w-7xl mx-auto p-6">
-        {/* En-tête */}
-        <div className="bg-gradient-to-r from-primary-500 to-secondary-500 rounded-lg shadow-lg p-6 mb-6 text-white">
-          <h1 className="text-3xl font-bold mb-2">🗄️ Base de Données</h1>
-          <p className="text-white/90">Base de données: <strong>{databaseInfo.database_name}</strong></p>
-          <p className="text-white/80 text-sm mt-2">
-            {databaseInfo.tables.length} table{databaseInfo.tables.length > 1 ? 's' : ''} disponible{databaseInfo.tables.length > 1 ? 's' : ''}
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Liste des tables */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-4">
-              <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Tables</h2>
-              <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
-                {databaseInfo.tables.map((table) => (
-                  <button
-                    key={table.name}
-                    onClick={() => setSelectedTable(table.name)}
-                    className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
-                      selectedTable === table.name
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{table.name}</span>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        selectedTable === table.name
-                          ? 'bg-white/20 text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                      }`}>
-                        {table.row_count}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          
-          {/* Détails de la table sélectionnée */}
-          <div className="lg:col-span-2">
-            {table ? (
-              <div className="space-y-6">
-                {/* Informations de la table */}
-                <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6">
-                  <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-200">
-                    Table: {table.name}
-                  </h2>
-                  <p className="text-gray-600 dark:text-gray-400 mb-4">
-                    <strong>{table.row_count}</strong> ligne{table.row_count > 1 ? 's' : ''}
-                  </p>
-                  
-                  {/* Colonnes */}
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">Colonnes</h3>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full border-collapse">
-                        <thead>
-                          <tr className="bg-gray-100 dark:bg-gray-800">
-                            <th className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left">Nom</th>
-                            <th className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left">Type</th>
-                            <th className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left">Nullable</th>
-                            <th className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left">Défaut</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {table.columns.map((col, idx) => (
-                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-[rgb(var(--night-surface))]' : 'bg-gray-50 dark:bg-gray-900/50'}>
-                              <td className="px-4 py-2 border border-gray-300 dark:border-gray-600 font-mono text-sm">
-                                {col.column_name}
-                              </td>
-                              <td className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm">
-                                {col.data_type}
-                              </td>
-                              <td className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm">
-                                {col.is_nullable === 'YES' ? '✅' : '❌'}
-                              </td>
-                              <td className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-mono">
-                                {col.column_default || '-'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  
-                  {/* Échantillon de données */}
-                  {table.sample && table.sample.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">
-                        Échantillon (10 premières lignes)
-                      </h3>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full border-collapse">
-                          <thead>
-                            <tr className="bg-gray-100 dark:bg-gray-800">
-                              {Object.keys(table.sample[0]).map((key) => (
-                                <th key={key} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-left text-xs">
-                                  {key}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {table.sample.map((row, idx) => (
-                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white dark:bg-[rgb(var(--night-surface))]' : 'bg-gray-50 dark:bg-gray-900/50'}>
-                                {Object.values(row).map((value, colIdx) => (
-                                  <td key={colIdx} className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-xs">
-                                    {value === null ? (
-                                      <span className="text-gray-400 italic">NULL</span>
-                                    ) : typeof value === 'string' && value.length > 50 ? (
-                                      <span title={value}>{value.substring(0, 50)}...</span>
-                                    ) : (
-                                      String(value)
-                                    )}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6">
-                <p className="text-gray-600 dark:text-gray-400 text-center">
-                  Sélectionnez une table pour voir ses détails
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   )

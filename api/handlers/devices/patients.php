@@ -300,28 +300,35 @@ function handleDeletePatient($patient_id) {
                 ->execute(['patient_id' => $patient_id]);
             $wasAssigned = true;
             
-            // 2. Réinitialiser la configuration de tous les dispositifs désassignés
+            // 2. Réinitialiser la configuration de tous les dispositifs désassignés (optimisé : une seule requête au lieu de N)
             $hasGpsColumn = columnExists('device_configurations', 'gps_enabled');
             $resetFields = ['sleep_minutes = NULL', 'measurement_duration_ms = NULL', 'send_every_n_wakeups = NULL', 'calibration_coefficients = NULL'];
             if ($hasGpsColumn) {
                 $resetFields[] = 'gps_enabled = false';
             }
             
-            foreach ($assignedDevices as $device) {
+            // Optimisation N+1 : utiliser une seule requête UPDATE avec WHERE IN au lieu d'une boucle
+            if (!empty($assignedDevices)) {
+                $deviceIds = array_column($assignedDevices, 'id');
+                $placeholders = implode(',', array_fill(0, count($deviceIds), '?'));
+                
                 try {
                     $pdo->prepare("
                         UPDATE device_configurations 
                         SET " . implode(', ', $resetFields) . "
-                        WHERE device_id = :device_id
-                    ")->execute(['device_id' => $device['id']]);
+                        WHERE device_id IN ($placeholders)
+                    ")->execute($deviceIds);
                     
-                    error_log("[handleDeletePatient] Configuration réinitialisée pour dispositif {$device['id']} après désassignation automatique");
+                    error_log("[handleDeletePatient] Configuration réinitialisée pour " . count($deviceIds) . " dispositif(s) après désassignation automatique");
                 } catch(PDOException $e) {
                     // Ne pas bloquer l'archivage si la réinitialisation de la config échoue
-                    error_log("[handleDeletePatient] ⚠️ Erreur réinitialisation config dispositif {$device['id']} (non bloquant): " . $e->getMessage());
+                    error_log("[handleDeletePatient] ⚠️ Erreur réinitialisation config (non bloquant): " . $e->getMessage());
                 }
                 
-                auditLog('device.unassigned_before_patient_delete', 'device', $device['id'], ['old_patient_id' => $patient_id], null);
+                // Audit log pour chaque dispositif (nécessaire pour l'historique)
+                foreach ($assignedDevices as $device) {
+                    auditLog('device.unassigned_before_patient_delete', 'device', $device['id'], ['old_patient_id' => $patient_id], null);
+                }
             }
         }
 

@@ -209,6 +209,12 @@ export function AuthProvider({ children }) {
     setUser(null)
     localStorage.removeItem('ott_token')
     localStorage.removeItem('ott_user')
+    
+    // Rediriger vers la page de connexion si on est dans le dashboard
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard')) {
+      logger.debug('[AuthContext] Redirection vers / après logout')
+      window.location.href = '/'
+    }
   }
 
   const fetchWithAuth = async (url, options = {}, config = {}) => {

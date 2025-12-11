@@ -25,6 +25,34 @@ if (Test-Path $resultsDir) {
     }
 }
 
-# Lancer l'audit avec le chemin relatif correct
-& "$scriptDir\AUDIT_COMPLET_AUTOMATIQUE.ps1" -ConfigFile "audit-complet\scripts\$ConfigFile" -Verbose:$Verbose -MaxFileLines $MaxFileLines
+# Lancer l'audit avec le chemin relatif correct et timeout
+$job = Start-Job -ScriptBlock {
+    param($scriptPath, $configFile, $verbose, $maxFileLines)
+    Set-Location (Split-Path $scriptPath -Parent)
+    & $scriptPath -ConfigFile $configFile -Verbose:$verbose -MaxFileLines $maxFileLines
+} -ArgumentList "$scriptDir\AUDIT_COMPLET_AUTOMATIQUE.ps1", "audit-complet\scripts\$ConfigFile", $Verbose, $MaxFileLines
+
+# Timeout de 10 minutes
+$timeout = 600
+$elapsed = 0
+$interval = 5
+
+while ($job.State -eq 'Running' -and $elapsed -lt $timeout) {
+    Start-Sleep -Seconds $interval
+    $elapsed += $interval
+    Write-Host "." -NoNewline -ForegroundColor Gray
+}
+
+if ($job.State -eq 'Running') {
+    Write-Host "`n⚠️ Timeout atteint (10 min), arrêt de l'audit..." -ForegroundColor Yellow
+    Stop-Job $job
+    Remove-Job $job
+} else {
+    Write-Host "`n✅ Audit terminé" -ForegroundColor Green
+    $result = Receive-Job $job
+    $resultFile = Join-Path $resultsDir "audit_resultat_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+    $result | Out-File -FilePath $resultFile
+    $result
+    Remove-Job $job
+}
 

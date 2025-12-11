@@ -7,19 +7,71 @@
 - **Hardware**: Firmware Arduino/ESP32
 - **Scripts**: PowerShell pour audit et déploiement
 
+## ⚠️ RÈGLE CRITIQUE - VÉRIFICATION AVANT TOUTE CRÉATION/MODIFICATION
+
+**OBLIGATOIRE : Avant TOUTE création, modification ou correction, TOUJOURS :**
+
+1. **Chercher d'abord dans le codebase existant** :
+   - Utiliser `codebase_search` ou `grep` pour trouver les fonctions/composants/fichiers similaires
+   - Vérifier si la fonctionnalité existe déjà avant de créer quelque chose de nouveau
+   - Examiner les fichiers listés dans "Fichiers à consulter avant modifications" ci-dessous
+
+2. **Vérifier les doublons potentiels** :
+   - **Fichiers** : Vérifier qu'un fichier similaire n'existe pas déjà (même nom ou fonctionnalité similaire)
+   - **Fonctions** : Chercher si une fonction similaire existe déjà (dans helpers, utils, etc.)
+   - **Composants** : Vérifier si un composant React similaire existe déjà
+   - **Scripts** : Vérifier si un script PowerShell/shell similaire existe déjà
+   - **Endpoints API** : Vérifier si un endpoint similaire existe déjà dans `api.php` ou `api/handlers/`
+
+3. **Éviter le code mort et les doublons** :
+   - **NE PAS créer** de fonction/composant/fichier si une version similaire existe déjà
+   - **Réutiliser** le code existant au lieu de créer une nouvelle version
+   - **Refactorer** le code existant plutôt que créer un doublon
+   - **Supprimer** les doublons identifiés au lieu d'en créer de nouveaux
+
+4. **Avant toute modification de correction** :
+   - Vérifier que la modification ne va pas créer de doublon
+   - Vérifier que la modification ne va pas générer du code mort
+   - Analyser l'impact : qui utilise cette fonction/composant ?
+   - Consulter les fichiers liés pour comprendre le contexte complet
+
+5. **Outils de vérification recommandés** :
+   - `codebase_search` : Recherche sémantique pour trouver du code similaire
+   - `grep` : Recherche textuelle exacte pour trouver les noms/fonctions
+   - `glob_file_search` : Rechercher les fichiers par pattern
+   - Scripts d'audit : Exécuter les scripts d'audit avant commit pour détecter les doublons
+
+**Cette règle est CRITIQUE car les corrections qui génèrent des doublons ou du code mort aggravent les problèmes au lieu de les résoudre.**
+
 ## Principes de refactoring et maintenance
 
-### Éviter la duplication de code
-1. **Toujours vérifier l'existence de fonctions utilitaires avant d'en créer de nouvelles**
-   - PHP: Vérifier `api/helpers.php`, `api/helpers_sql.php`, `api/validators.php`
-   - JavaScript: Vérifier `lib/`, `hooks/`, `components/`
-   
-2. **Réutiliser les patterns existants**
+### Éviter la duplication de code - Application de la règle critique
+
+**PROCESSUS OBLIGATOIRE avant toute création :**
+
+1. **Recherche systématique** :
+   - ✅ Utiliser `codebase_search` avec des mots-clés pertinents
+   - ✅ Utiliser `grep` pour chercher les noms de fonctions/composants
+   - ✅ Parcourir les dossiers concernés (`api/`, `components/`, `hooks/`, `lib/`, `scripts/`)
+   - ✅ Vérifier les fichiers listés dans "Fichiers à consulter avant modifications"
+
+2. **Vérification d'existence** :
+   - **PHP**: TOUJOURS vérifier `api/helpers.php`, `api/helpers_sql.php`, `api/validators.php` AVANT de créer une fonction
+   - **JavaScript**: TOUJOURS vérifier `lib/`, `hooks/`, `components/` AVANT de créer un composant/hook/utilitaire
+   - **Scripts**: TOUJOURS vérifier `scripts/` et `scripts/audit/` AVANT de créer un script
+   - **Fichiers**: TOUJOURS vérifier qu'un fichier similaire n'existe pas déjà (même dans d'autres dossiers)
+
+3. **Réutiliser au lieu de créer** :
+   - ✅ Si quelque chose existe déjà : **UTILISER** le code existant
+   - ✅ Si le code existant ne fait pas exactement ce qu'il faut : **REFACTORER** plutôt que créer un doublon
+   - ✅ Si plusieurs versions similaires existent : **UNIFIER** en une seule version
+
+4. **Réutiliser les patterns existants** :
    - API handlers: Suivre la structure dans `api/handlers/`
    - Composants React: Réutiliser les patterns de `components/`
    - Hooks: Vérifier `hooks/` avant de créer de nouveaux hooks
 
-3. **Centraliser la logique commune**
+5. **Centraliser la logique commune** :
    - Validation: Utiliser `api/validators.php` pour PHP
    - Appels API: Utiliser `lib/api.js` et `lib/apiHelpers.js` pour le frontend
    - Gestion d'erreurs: Utiliser `lib/errorHandler.js`
@@ -123,8 +175,18 @@
 - **Connection Pooling**: Utiliser le pooling de connexions pour améliorer les performances
 
 ### Refactoring
-- **Avant de refactorer**: Analyser l'impact sur tous les fichiers qui utilisent la fonction/classe
-- **Après refactoring**: Vérifier que tous les tests passent
+- **Avant de refactorer**: 
+  1. ✅ **Chercher les doublons** : Utiliser `codebase_search` et `grep` pour trouver toutes les occurrences similaires
+  2. ✅ **Analyser l'impact** : Identifier TOUS les fichiers qui utilisent la fonction/classe
+  3. ✅ **Vérifier les dépendances** : Comprendre qui dépend de quoi
+  4. ✅ **Planifier la consolidation** : Si plusieurs versions existent, prévoir leur unification
+- **Pendant le refactoring**:
+  - ✅ **Ne pas créer de doublons** : Réutiliser le code existant au lieu de créer de nouvelles versions
+  - ✅ **Supprimer les anciennes versions** : Après consolidation, supprimer les versions obsolètes
+- **Après refactoring**: 
+  - ✅ Vérifier que tous les tests passent
+  - ✅ Vérifier qu'aucun doublon n'a été créé (utiliser les scripts d'audit)
+  - ✅ Vérifier qu'aucun code mort n'a été généré
 - **Documentation**: Mettre à jour les commentaires et la documentation si nécessaire
 
 ### Maintenance et Architecture
@@ -188,6 +250,64 @@
 - Le firmware est dans `hardware/firmware/`
 - Les scripts d'audit sont dans `scripts/audit/`
 
+## ⚠️ RÈGLES CRITIQUES - TIMEOUTS ET COMMANDES LONGUES
+
+**OBLIGATOIRE : Pour toutes les commandes qui peuvent prendre du temps ou se bloquer :**
+
+1. **Timeouts pour les commandes terminales** :
+   - **Tests de compilation firmware** : Utiliser des timeouts adaptés (minimum 10-15 minutes)
+   - **Requêtes API longues** : Timeout de 30 secondes minimum, 2-5 minutes pour les opérations longues
+   - **Connexions SSE** : Pas de timeout (utiliser `-1` ou `0` pour désactiver) car la compilation peut prendre 10-30 minutes
+   - **Scripts PowerShell** : Utiliser `-TimeoutSec` approprié ou désactiver avec `-1` pour les opérations longues
+
+2. **Gestion des timeouts dans les scripts** :
+   - **PowerShell** : 
+     - `Invoke-RestMethod -TimeoutSec 30` pour les requêtes normales
+     - `Invoke-RestMethod -TimeoutSec 600` (10 min) pour les opérations longues
+     - `$request.Timeout = -1` pour désactiver le timeout (SSE, compilation)
+   - **PHP** :
+     - `set_time_limit(0)` pour les scripts longs (compilation firmware)
+     - `ignore_user_abort(true)` pour continuer même si le client se déconnecte
+   - **JavaScript/Node.js** :
+     - `fetch()` avec `signal: AbortSignal.timeout(30000)` pour les requêtes normales
+     - Pas de timeout pour EventSource (SSE) - la connexion reste ouverte
+
+3. **Tests et surveillance en continu** :
+   - **Ne jamais planter** : Les scripts de test doivent continuer même en cas d'erreur
+   - **Vérification périodique** : Vérifier le statut toutes les 30-60 secondes en arrière-plan
+   - **Heartbeat** : Afficher un message toutes les 60 secondes pour montrer que le script est actif
+   - **Timeout de sécurité** : Maximum 30 minutes pour éviter les boucles infinies
+
+4. **Compilation firmware - Timeouts spécifiques** :
+   - **SSE Connection** : Pas de timeout (`-1` ou `0`)
+   - **Keep-alive** : Toutes les 1 seconde (éviter les timeouts de connexion)
+   - **Vérification statut** : Toutes les 30 secondes en arrière-plan
+   - **Timeout global** : 30 minutes maximum (sécurité)
+   - **Gestion erreurs** : Continuer même si la connexion SSE se ferme (vérifier le statut en DB)
+
+5. **Commandes à exécuter en arrière-plan** :
+   - Utiliser `is_background: true` pour les commandes longues qui doivent continuer
+   - Pour les tests interactifs : Utiliser `is_background: false` mais avec timeouts adaptés
+
+6. **Exemples de timeouts recommandés** :
+   ```powershell
+   # Requête API normale
+   Invoke-RestMethod -Uri $url -TimeoutSec 30
+   
+   # Opération longue (upload, compilation)
+   Invoke-RestMethod -Uri $url -TimeoutSec 600
+   
+   # SSE/Streaming (pas de timeout)
+   $request.Timeout = -1
+   $request.ReadWriteTimeout = -1
+   
+   # PHP script long
+   set_time_limit(0);
+   ignore_user_abort(true);
+   ```
+
+**Cette règle est CRITIQUE pour éviter que les tests et scripts se bloquent indéfiniment.**
+
 ## Relation avec le script d'audit automatique
 
 Le script `scripts/AUDIT_COMPLET_AUTOMATIQUE.ps1` vérifie automatiquement :
@@ -203,13 +323,27 @@ Le script `scripts/AUDIT_COMPLET_AUTOMATIQUE.ps1` vérifie automatiquement :
 **Ces règles `.cursorrules` visent à éviter ces problèmes AVANT qu'ils ne soient détectés par l'audit.**
 
 ### Workflow recommandé
-1. **Développement** : Suivre les règles `.cursorrules` pour éviter les problèmes
-2. **Avant commit** : 
+1. **AVANT TOUT DÉVELOPPEMENT** : 
+   - ✅ **OBLIGATOIRE** : Utiliser `codebase_search` et `grep` pour chercher le code existant
+   - ✅ **OBLIGATOIRE** : Vérifier qu'aucun doublon n'existe avant de créer quoi que ce soit
+   - ✅ **OBLIGATOIRE** : Réutiliser le code existant au lieu de créer du nouveau code
+
+2. **Développement** : Suivre les règles `.cursorrules` pour éviter les problèmes
+
+3. **Avant commit** : 
+   - ✅ Vérifier manuellement qu'aucun doublon n'a été créé
    - Exécuter `npm run lint` pour vérifier le code
    - Exécuter `npm test` pour vérifier les tests
-   - Exécuter `scripts/AUDIT_COMPLET_AUTOMATIQUE.ps1` pour audit complet
-3. **Correction** : Utiliser les recommandations de l'audit pour corriger les problèmes détectés
-4. **Code Review** : Vérifier l'accessibilité, la sécurité, et les performances
+   - Exécuter `scripts/AUDIT_COMPLET_AUTOMATIQUE.ps1` pour audit complet (détecte les doublons et code mort)
+
+4. **Correction** : 
+   - ✅ **CRITIQUE** : Vérifier que la correction ne génère pas de doublons ou de code mort
+   - ✅ Utiliser les recommandations de l'audit pour corriger les problèmes détectés
+   - ✅ Préférer la consolidation à la multiplication (unifier plutôt que dupliquer)
+
+5. **Code Review** : 
+   - ✅ Vérifier qu'aucun doublon n'a été introduit
+   - Vérifier l'accessibilité, la sécurité, et les performances
 
 ## Bonnes pratiques spécifiques 2025
 
@@ -303,7 +437,28 @@ Le script `scripts/AUDIT_COMPLET_AUTOMATIQUE.ps1` vérifie automatiquement :
 - ❌ Ne pas oublier de valider les types de données
 
 ### Général
+- ❌ **CRITIQUE**: Ne jamais créer de code sans avoir d'abord cherché dans le codebase existant
+- ❌ **CRITIQUE**: Ne pas créer de doublons (fonctions, composants, fichiers similaires)
+- ❌ **CRITIQUE**: Ne pas générer de code mort en créant de nouvelles versions au lieu de réutiliser l'existant
 - ❌ Ne pas hardcoder les URLs ou chemins (utiliser des constantes/config)
 - ❌ Ne pas ignorer les warnings du linter
 - ❌ Ne pas commiter les secrets ou tokens (utiliser des variables d'environnement)
 - ❌ Ne pas créer de dépendances circulaires
+- ❌ Ne pas créer plusieurs fichiers/composants qui font la même chose (unifier au lieu de multiplier)
+
+### Documentation (Fichiers MD/TXT)
+- ❌ **INTERDIT**: Créer de nouveaux fichiers `.md` ou `.txt` à chaque chat pour éviter de polluer le projet
+- ✅ **OBLIGATOIRE**: Consolider et réorganiser les MD existants au lieu d'en créer de nouveaux
+- ✅ **LIMITE STRICTE**: Maximum 4-5 fichiers MD dans `public/` pour la documentation accessible depuis le menu
+- ✅ **Documents existants à utiliser** :
+  - `README.md` (racine) - Documentation principale du projet
+  - `public/SUIVI_TEMPS_FACTURATION.md` - Suivi du temps (accessible depuis le menu)
+  - `docs/SYNCHRONISATION_DEPLOIEMENT.md` - Guide de synchronisation GitHub Pages
+  - `public/docs/DOCUMENTATION_*.html` - Documents HTML accessibles depuis le menu (3 documents)
+- ✅ **Avant de créer un nouveau MD** :
+  1. Vérifier si l'information peut être ajoutée à un MD existant
+  2. Vérifier si l'information peut être ajoutée aux documents HTML dans `public/docs/`
+  3. Vérifier si l'information peut être ajoutée au README.md
+  4. Seulement si vraiment nécessaire : créer un nouveau MD spécifique (maximum 2-3 MD supplémentaires autorisés)
+- ❌ **À SUPPRIMER**: Les MD temporaires d'audit à la racine (AUDIT_EN_COURS.md, SUPPRESSION_DOUBLON_AUDIT.md, etc.) doivent être supprimés après utilisation
+- ✅ **Principe**: Mettre à jour les MD existants plutôt que d'en créer de nouveaux

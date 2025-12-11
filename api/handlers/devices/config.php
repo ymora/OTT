@@ -94,10 +94,19 @@ function handleUpdateDeviceConfig($device_id) {
         foreach ($columnsToAdd as $column => $type) {
             if (!columnExists('device_configurations', $column)) {
                 try {
-                    $pdo->exec("ALTER TABLE device_configurations ADD COLUMN IF NOT EXISTS $column $type");
+                    // Sécuriser le nom de colonne et le type (validation)
+                    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $column)) {
+                        throw new InvalidArgumentException("Invalid column name: $column");
+                    }
+                    // Utiliser un placeholder pour le nom de colonne (échappement PostgreSQL)
+                    $escapedColumn = '"' . str_replace('"', '""', $column) . '"';
+                    $escapedType = preg_match('/^(VARCHAR|TEXT|INTEGER|BIGINT|BOOLEAN|REAL|DOUBLE|NUMERIC|TIMESTAMP|DATE|TIME|JSONB|JSON)(\([0-9]+\))?$/i', $type) ? $type : 'TEXT';
+                    $pdo->exec("ALTER TABLE device_configurations ADD COLUMN IF NOT EXISTS $escapedColumn $escapedType");
                     error_log("[Config] Colonne $column ajoutée automatiquement");
                 } catch (PDOException $e) {
                     error_log("[Config] Erreur ajout colonne $column: " . $e->getMessage());
+                } catch (InvalidArgumentException $e) {
+                    error_log("[Config] Erreur validation colonne $column: " . $e->getMessage());
                 }
             }
         }

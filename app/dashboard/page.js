@@ -155,6 +155,16 @@ export default function DashboardPage() {
     }
   }, [devices, alerts, isConnected, usbDeviceInfo, usbStreamLastMeasurement])
 
+  // Mémoriser les dispositifs actifs (doit être avant mapComponent)
+  const activeDevices = useMemo(() => {
+    return devices.filter(d => !d.deleted_at)
+  }, [devices])
+
+  // Mémoriser les dispositifs géolocalisés
+  const geolocatedDevices = useMemo(() => {
+    return activeDevices.filter(d => d.latitude && d.longitude)
+  }, [activeDevices])
+
   const unassignedDevices = useMemo(() => 
     devices.filter(d => !d.deleted_at && !d.first_name && !d.last_name),
     [devices]
@@ -177,8 +187,6 @@ export default function DashboardPage() {
 
   // Mémoriser la carte des dispositifs (doit être avant le return conditionnel)
   const mapComponent = useMemo(() => {
-    const activeDevices = devices.filter(d => !d.deleted_at)
-    const geolocatedDevices = activeDevices.filter(d => d.latitude && d.longitude)
     if (loading || activeDevices.length === 0) return null
     return (
       <div id="map-container" className="card p-0 overflow-hidden">
@@ -197,7 +205,7 @@ export default function DashboardPage() {
         </div>
       </div>
     )
-  }, [devices, loading, focusDeviceId])
+  }, [activeDevices, geolocatedDevices, loading, focusDeviceId])
 
   // Mémoriser les dispositifs en ligne
   const onlineDevicesList = useMemo(() => {
@@ -221,10 +229,18 @@ export default function DashboardPage() {
   }, [devices])
 
   // Mémoriser les alertes critiques
+  const criticalAlerts = useMemo(() => {
+    return alerts.filter(a => a.severity === 'critical')
+  }, [alerts])
+
+  // Mémoriser la map des dispositifs actifs
+  const activeDevicesMap = useMemo(() => {
+    return new Map(activeDevices.map(d => [d.id, d]))
+  }, [activeDevices])
+
   const criticalAlertsList = useMemo(() => {
-    const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
-    return alerts.filter(a => a.severity === 'critical').map(alert => {
-      const device = devicesMap.get(alert.device_id)
+    return criticalAlerts.map(alert => {
+      const device = activeDevicesMap.get(alert.device_id)
       return device ? (
         <button
           key={alert.id}
@@ -235,17 +251,22 @@ export default function DashboardPage() {
         </button>
       ) : null
     })
-  }, [devices, alerts])
+  }, [criticalAlerts, activeDevicesMap])
+
+  // Mémoriser les dispositifs avec batterie OK (>= 30%)
+  const okBatteryDevicesList = useMemo(() => {
+    return devices.filter(d => {
+      if (d.deleted_at) return false
+      const battery = d.last_battery
+      return battery !== null && battery !== undefined && battery >= 30
+    })
+  }, [devices])
 
   // Mémoriser la liste des batteries
   const batteryListDisplay = useMemo(() => {
     const batteryList = stats.lowBatteryDevices > 0 
       ? lowBatteryList 
-      : devices.filter(d => {
-          if (d.deleted_at) return false
-          const battery = d.last_battery
-          return battery !== null && battery !== undefined && battery >= 30
-        })
+      : okBatteryDevicesList
     return batteryList.map(device => {
       const battery = typeof device.last_battery === 'number' ? device.last_battery : parseFloat(device.last_battery) || 0
       const isLow = battery < 30
@@ -263,13 +284,12 @@ export default function DashboardPage() {
         </button>
       )
     })
-  }, [stats.lowBatteryDevices, lowBatteryList, devices])
+  }, [stats.lowBatteryDevices, lowBatteryList, okBatteryDevicesList])
 
   // Mémoriser les alertes actives
   const activeAlertsList = useMemo(() => {
-    const devicesMap = new Map(devices.filter(d => !d.deleted_at).map(d => [d.id, d]))
     return alerts.slice(0, 10).map(alert => {
-      const device = devicesMap.get(alert.device_id)
+      const device = activeDevicesMap.get(alert.device_id)
       return device ? (
         <button
           key={alert.id}
@@ -280,7 +300,7 @@ export default function DashboardPage() {
         </button>
       ) : null
     })
-  }, [devices, alerts])
+  }, [alerts, activeDevicesMap])
 
   if (loading) {
     return (

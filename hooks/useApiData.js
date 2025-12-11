@@ -24,7 +24,7 @@ const CACHE_TTL = 30000 // 30 secondes par défaut
  * @returns {Object} { data, loading, error, refetch, setData, invalidateCache }
  */
 export function useApiData(endpoints, options = {}) {
-  const { fetchWithAuth, API_URL } = useAuth()
+  const { fetchWithAuth, API_URL, user } = useAuth()
   const { autoLoad = true, requiresAuth = false, fetchOptions = {}, cacheTTL = CACHE_TTL } = options
   const cacheKeyRef = useRef(null)
 
@@ -44,6 +44,13 @@ export function useApiData(endpoints, options = {}) {
   const memoizedFetchOptions = useMemo(() => fetchOptions, [])
 
   const loadData = useCallback(async (forceRefresh = false) => {
+    // Ne pas charger si l'utilisateur n'est pas authentifié et que l'auth est requise
+    if (requiresAuth && !user) {
+      logger.debug('[useApiData] Utilisateur non authentifié, arrêt du chargement')
+      setLoading(false)
+      return
+    }
+
     try {
       setError(null)
       
@@ -71,6 +78,17 @@ export function useApiData(endpoints, options = {}) {
         const promises = endpointsToUse.map(endpoint =>
           fetchJson(fetchWithAuth, API_URL, endpoint, memoizedFetchOptions, { requiresAuth })
             .catch(err => {
+              // Si la session est expirée, ne pas logger l'erreur (déjà géré par AuthContext)
+              if (err.message === 'Session expirée' || err.message === 'Non authentifié') {
+                logger.debug(`[useApiData] Session expirée pour ${endpoint}, arrêt du chargement`)
+                // Retourner un objet vide pour éviter les erreurs dans l'UI
+                return { 
+                  success: false, 
+                  error: 'Session expirée',
+                  data: null 
+                }
+              }
+              
               // Logger l'erreur avec tous les détails disponibles
               logger.error(`Erreur chargement ${endpoint}:`, err)
               if (err.details) {
@@ -129,29 +147,36 @@ export function useApiData(endpoints, options = {}) {
         setData(result)
       }
     } catch (err) {
-      logger.error('Erreur chargement données:', err)
-      if (err.details) {
-        logger.error('Détails erreur:', err.details)
+      // Si la session est expirée, ne pas logger l'erreur (déjà géré par AuthContext)
+      if (err.message === 'Session expirée' || err.message === 'Non authentifié') {
+        logger.debug('[useApiData] Session expirée, arrêt du chargement')
+        setError(null) // Ne pas afficher d'erreur, la redirection est en cours
+        setData(isMultiple ? {} : null)
+      } else {
+        logger.error('Erreur chargement données:', err)
+        if (err.details) {
+          logger.error('Détails erreur:', err.details)
+        }
+        if (err.code) {
+          logger.error('Code erreur:', err.code)
+        }
+        // Construire un message d'erreur détaillé
+        let errorMessage = err.message || 'Erreur lors du chargement des données'
+        if (err.details && Array.isArray(err.details)) {
+          errorMessage += ` (${err.details.join(', ')})`
+        } else if (err.details) {
+          errorMessage += ` (${JSON.stringify(err.details)})`
+        }
+        if (err.file && err.line) {
+          errorMessage += ` [${err.file}:${err.line}]`
+        }
+        setError(errorMessage)
+        setData(isMultiple ? {} : null)
       }
-      if (err.code) {
-        logger.error('Code erreur:', err.code)
-      }
-      // Construire un message d'erreur détaillé
-      let errorMessage = err.message || 'Erreur lors du chargement des données'
-      if (err.details && Array.isArray(err.details)) {
-        errorMessage += ` (${err.details.join(', ')})`
-      } else if (err.details) {
-        errorMessage += ` (${JSON.stringify(err.details)})`
-      }
-      if (err.file && err.line) {
-        errorMessage += ` [${err.file}:${err.line}]`
-      }
-      setError(errorMessage)
-      setData(isMultiple ? {} : null)
     } finally {
       setLoading(false)
     }
-  }, [endpoints, fetchWithAuth, API_URL, requiresAuth, isMultiple, memoizedFetchOptions, cacheTTL])
+  }, [endpoints, fetchWithAuth, API_URL, requiresAuth, isMultiple, memoizedFetchOptions, cacheTTL, user])
 
   useEffect(() => {
     if (autoLoad) {

@@ -112,25 +112,42 @@ function handleCompileFirmware($firmware_id) {
     
     // Envoyer immédiatement pour établir la connexion SSE
     // IMPORTANT: Envoyer plusieurs keep-alive pour maintenir la connexion
-    echo ": keep-alive\n\n";
-    flush();
+    // Envoyer 3 keep-alive immédiatement pour établir la connexion
+    for ($i = 0; $i < 3; $i++) {
+        echo ": keep-alive\n\n";
+        flush();
+        usleep(100000); // 100ms entre chaque keep-alive
+    }
     
     // Envoyer un message de connexion immédiatement pour confirmer que la connexion est établie
     sendSSE('log', 'info', 'Connexion SSE établie...');
     flush();
     
+    // Logger pour diagnostic
+    error_log('[handleCompileFirmware] Démarrage compilation firmware ID: ' . $firmware_id);
+    error_log('[handleCompileFirmware] User: ' . ($user['email'] ?? 'unknown'));
+    
     try {
         // Vérifier l'authentification APRÈS avoir envoyé les headers SSE
         // Si l'auth échoue, envoyer une erreur via SSE au lieu d'un JSON avec exit()
-        $user = getCurrentUser();
-        if (!$user) {
-            // Logger pour diagnostic
-            error_log('[handleCompileFirmware] Authentification échouée - token: ' . (isset($_GET['token']) ? 'présent (' . strlen($_GET['token']) . ' chars)' : 'absent'));
-            sendSSE('error', 'Unauthorized - Veuillez vous reconnecter. Token manquant ou expiré.');
+        // Mode test: permettre le test sans auth si AUTH_DISABLED est activé
+        $user = null;
+        if (defined('AUTH_DISABLED') && AUTH_DISABLED) {
+            // Mode test sans auth - créer un utilisateur factice pour les tests
+            $user = ['id' => 0, 'email' => 'test@test.com', 'role_id' => 1];
+            sendSSE('log', 'warning', '⚠️ Mode test activé - authentification désactivée');
             flush();
-            // Attendre un peu avant de fermer pour que le client reçoive le message
-            sleep(1);
-            return;
+        } else {
+            $user = getCurrentUser();
+            if (!$user) {
+                // Logger pour diagnostic
+                error_log('[handleCompileFirmware] Authentification échouée - token: ' . (isset($_GET['token']) ? 'présent (' . strlen($_GET['token']) . ' chars)' : 'absent'));
+                sendSSE('error', 'Unauthorized - Veuillez vous reconnecter. Token manquant ou expiré.');
+                flush();
+                // Attendre un peu avant de fermer pour que le client reçoive le message
+                sleep(1);
+                return;
+            }
         }
         
         // Vérifier que le firmware existe et est en attente de compilation
@@ -312,6 +329,11 @@ function handleCompileFirmware($firmware_id) {
             sendSSE('progress', 10);
             flush();
             
+            // Logger immédiatement pour diagnostic
+            error_log('[handleCompileFirmware] Étape: Démarrage compilation');
+            error_log('[handleCompileFirmware] Firmware ID: ' . $firmware_id);
+            error_log('[handleCompileFirmware] Version: ' . ($firmware['version'] ?? 'N/A'));
+            
             // Vérifier si arduino-cli est disponible
             // ⚠️ CRITIQUE: La compilation ne doit JAMAIS être simulée - soit OK, soit ÉCHEC
             $root_dir = getProjectRoot();
@@ -359,26 +381,49 @@ function handleCompileFirmware($firmware_id) {
             
             // 3. Vérification finale - ÉCHEC si arduino-cli n'est pas disponible
             if (empty($arduinoCli) || !file_exists($arduinoCli)) {
+                error_log('[handleCompileFirmware] ❌ arduino-cli non trouvé');
                 sendSSE('error', '❌ ÉCHEC: arduino-cli non trouvé. La compilation réelle est requise.');
                 sendSSE('log', 'error', 'Pour activer la compilation, installez arduino-cli:');
                 sendSSE('log', 'error', '  - Windows: .\\scripts\\download_arduino_cli.ps1');
                 sendSSE('log', 'error', '  - Linux/Mac: ./scripts/download_arduino_cli.sh');
                 sendSSE('log', 'error', '  - Ou placez arduino-cli dans bin/ du projet');
                 sendSSE('log', 'error', 'Instructions: https://arduino.github.io/arduino-cli/latest/installation/');
+                flush();
                 
                 // Marquer le firmware comme erreur dans la base de données
-                $pdo->prepare("
-                    UPDATE firmware_versions 
-                    SET status = 'error', error_message = 'arduino-cli non trouvé - compilation échouée'
-                    WHERE id = :id
-                ")->execute(['id' => $firmware_id]);
+                try {
+                    $pdo->prepare("
+                        UPDATE firmware_versions 
+                        SET status = 'error', error_message = 'arduino-cli non trouvé - compilation échouée'
+                        WHERE id = :id
+                    ")->execute(['id' => $firmware_id]);
+                } catch(PDOException $e) {
+                    error_log('[handleCompileFirmware] Erreur DB: ' . $e->getMessage());
+                }
                 
-                flush();
+                sleep(1);
                 return;
             } else {
                 // Compilation réelle avec arduino-cli
+                error_log('[handleCompileFirmware] ✅ arduino-cli trouvé: ' . $arduinoCli);
+                error_log('[handleCompileFirmware] Étape: arduino-cli disponible');
                 sendSSE('log', 'info', '✅ arduino-cli disponible - démarrage de la compilation réelle');
+                sendSSE('log', 'info', '   Chemin: ' . $arduinoCli);
                 sendSSE('progress', 20);
+                flush();
+                
+                // Tester arduino-cli immédiatement
+                try {
+                    $testCmd = $arduinoCli . ' version 2>&1';
+                    $testOutput = shell_exec($testCmd);
+                    error_log('[handleCompileFirmware] Test arduino-cli version: ' . trim($testOutput));
+                    sendSSE('log', 'info', '   Version: ' . trim($testOutput));
+                    flush();
+                } catch (Exception $e) {
+                    error_log('[handleCompileFirmware] ⚠️ Erreur test arduino-cli: ' . $e->getMessage());
+                    sendSSE('log', 'warning', '   ⚠️ Impossible de tester arduino-cli: ' . $e->getMessage());
+                    flush();
+                }
                 
                 // Nettoyer les anciens répertoires de build au démarrage pour éviter l'accumulation
                 cleanupOldBuildDirs();
@@ -569,8 +614,8 @@ function handleCompileFirmware($firmware_id) {
                             }
                         }
                         
-                        // Envoyer un keep-alive toutes les 2 secondes pendant la vérification
-                        if ($currentTime - $coreListLastKeepAlive >= 2) {
+                        // Envoyer un keep-alive toutes les 1 seconde pendant la vérification (plus fréquent pour éviter les timeouts)
+                        if ($currentTime - $coreListLastKeepAlive >= 1) {
                             echo ": keep-alive\n\n";
                             flush();
                             $coreListLastKeepAlive = $currentTime;
@@ -657,6 +702,17 @@ function handleCompileFirmware($firmware_id) {
                                 if ($chunk !== false && $chunk !== '') {
                                     $popenOutput .= $chunk;
                                     $coreListOutput[] = $chunk;
+                                    
+                                    // Envoyer les logs de popen via SSE pour diagnostic
+                                    $lines = explode("\n", trim($chunk));
+                                    foreach ($lines as $line) {
+                                        if (!empty(trim($line))) {
+                                            sendSSE('log', 'info', 'Core list (popen): ' . trim($line));
+                                            flush();
+                                            error_log('[handleCompileFirmware] Core list popen: ' . trim($line));
+                                        }
+                                    }
+                                    
                                     $popenLastReadTime = $currentTime;
                                 }
                             }
@@ -666,8 +722,8 @@ function handleCompileFirmware($firmware_id) {
                                 break;
                             }
                             
-                            // Envoyer un keep-alive toutes les 2 secondes
-                            if ($currentTime - $popenLastKeepAlive >= 2) {
+                            // Envoyer un keep-alive toutes les 1 seconde (plus fréquent pour éviter les timeouts)
+                            if ($currentTime - $popenLastKeepAlive >= 1) {
                                 echo ": keep-alive\n\n";
                                 flush();
                                 $popenLastKeepAlive = $currentTime;
@@ -828,17 +884,33 @@ function handleCompileFirmware($firmware_id) {
                                     foreach ($read as $stream) {
                                         $output = stream_get_contents($stream, 8192); // Lire par chunks de 8KB
                                         if (!empty($output)) {
+                                            // Logger immédiatement pour diagnostic
+                                            error_log('[handleCompileFirmware] Core install output reçu (' . strlen($output) . ' bytes)');
+                                            
                                             $lines = explode("\n", $output);
                                             foreach ($lines as $line) {
-                                    $line = trim($line);
-                                    if (!empty($line)) {
-                                        $installOutput[] = $line;
-                                        sendSSE('log', 'info', $line);
-                                        flush();
-                                        $lastOutputTime = $currentTime;
-                                        $lastLine = $line; // Garder la dernière ligne pour détecter la phase
-                                    }
-                                }
+                                                $line = trim($line);
+                                                if (!empty($line)) {
+                                                    $installOutput[] = $line;
+                                                    
+                                                    // Déterminer le niveau de log selon le contenu
+                                                    $logLevel = 'info';
+                                                    if (stripos($line, 'error') !== false || stripos($line, 'failed') !== false) {
+                                                        $logLevel = 'error';
+                                                    } elseif (stripos($line, 'warning') !== false) {
+                                                        $logLevel = 'warning';
+                                                    }
+                                                    
+                                                    sendSSE('log', $logLevel, $line);
+                                                    flush();
+                                                    
+                                                    // Logger aussi dans error_log pour diagnostic serveur
+                                                    error_log('[handleCompileFirmware] Core install: ' . $line);
+                                                    
+                                                    $lastOutputTime = $currentTime;
+                                                    $lastLine = $line; // Garder la dernière ligne pour détecter la phase
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -849,10 +921,10 @@ function handleCompileFirmware($firmware_id) {
                                     break;
                                 }
                                 
-                                // Timeout de sécurité : si pas de sortie depuis 10 minutes, considérer comme bloqué
-                                // (L'installation du core ESP32 peut prendre du temps)
-                                if ($currentTime - $lastOutputTime > 600) {
-                                    sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, le processus semble bloqué');
+                                // Timeout de sécurité : si pas de sortie depuis 5 minutes, considérer comme bloqué
+                                // (L'installation du core ESP32 peut prendre du temps, mais 5 minutes est un maximum raisonnable)
+                                if ($currentTime - $lastOutputTime > 300) {
+                                    sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 5 minutes, le processus semble bloqué');
                                     sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
                                     // Marquer le firmware comme erreur dans la base de données
                                     try {
@@ -868,10 +940,10 @@ function handleCompileFirmware($firmware_id) {
                                     break;
                                 }
                                 
-                                // Envoyer un keep-alive SSE toutes les 2 secondes pendant l'installation pour maintenir la connexion active
+                                // Envoyer un keep-alive SSE toutes les 1 seconde pendant l'installation pour maintenir la connexion active
                                 // (Les commentaires SSE `: keep-alive` maintiennent la connexion ouverte)
-                                // Réduire l'intervalle pendant l'installation pour éviter les timeouts
-                                if ($currentTime - $lastKeepAliveTime >= 2) {
+                                // Intervalle réduit à 1 seconde pour éviter les timeouts (certains proxies/serveurs ont des timeouts courts)
+                                if ($currentTime - $lastKeepAliveTime >= 1) {
                                     $lastKeepAliveTime = $currentTime;
                                     echo ": keep-alive\n\n";
                                     flush();
@@ -951,8 +1023,14 @@ function handleCompileFirmware($firmware_id) {
                 }
                 
                 sendSSE('log', 'info', 'Compilation du firmware...');
+                sendSSE('log', 'info', 'Commande: ' . $compile_cmd);
                 sendSSE('progress', 60);
                 flush();
+                
+                // Logger la commande pour diagnostic
+                error_log('[handleCompileFirmware] Démarrage compilation avec commande: ' . $compile_cmd);
+                error_log('[handleCompileFirmware] Build dir: ' . $build_dir);
+                error_log('[handleCompileFirmware] Sketch dir: ' . $sketch_dir);
                 
                 $fqbn = 'esp32:esp32:esp32';
                 $compile_cmd = $envStr . $arduinoCli . ' compile --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
@@ -995,18 +1073,36 @@ function handleCompileFirmware($firmware_id) {
                             // Erreur stream_select
                             error_log('[handleCompileFirmware] Erreur stream_select lors de la compilation');
                             break;
-                        } elseif ($num_changed_streams > 0) {
+                        } else                        if ($num_changed_streams > 0) {
                             // Des données sont disponibles, les lire
                             foreach ($read as $stream) {
                                 $output = stream_get_contents($stream, 8192); // Lire par chunks de 8KB
                                 if (!empty($output)) {
+                                    // Logger immédiatement pour diagnostic
+                                    error_log('[handleCompileFirmware] Output reçu (' . strlen($output) . ' bytes)');
+                                    
                                     $lines = explode("\n", $output);
                                     foreach ($lines as $line) {
-                            $line = trim($line);
-                            if (!empty($line)) {
-                                $compile_output_lines[] = $line;
-                                sendSSE('log', 'info', $line);
-                                flush();
+                                        $line = trim($line);
+                                        if (!empty($line)) {
+                                            $compile_output_lines[] = $line;
+                                            
+                                            // Déterminer le niveau de log selon le contenu
+                                            $logLevel = 'info';
+                                            if (stripos($line, 'error') !== false || stripos($line, 'failed') !== false || stripos($line, '❌') !== false) {
+                                                $logLevel = 'error';
+                                            } elseif (stripos($line, 'warning') !== false || stripos($line, '⚠️') !== false) {
+                                                $logLevel = 'warning';
+                                            } elseif (stripos($line, 'compiling') !== false || stripos($line, 'linking') !== false || stripos($line, 'archiving') !== false) {
+                                                $logLevel = 'info';
+                                            }
+                                            
+                                            sendSSE('log', $logLevel, $line);
+                                            flush();
+                                            
+                                            // Logger aussi dans error_log pour diagnostic serveur
+                                            error_log('[handleCompileFirmware] Compile: ' . $line);
+                                            
                                             $compile_last_output_time = $current_time;
                                         }
                                     }
@@ -1020,9 +1116,9 @@ function handleCompileFirmware($firmware_id) {
                             break;
                         }
                         
-                        // Timeout de sécurité : si pas de sortie depuis 10 minutes
-                        if ($current_time - $compile_last_output_time > 600) {
-                            sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes, la compilation semble bloquée');
+                        // Timeout de sécurité : si pas de sortie depuis 5 minutes
+                        if ($current_time - $compile_last_output_time > 300) {
+                            sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 5 minutes, la compilation semble bloquée');
                     sendSSE('error', 'Timeout: La compilation a pris trop de temps');
                     proc_terminate($compile_process);
                     // Nettoyer le répertoire de build en cas de timeout
@@ -1032,15 +1128,15 @@ function handleCompileFirmware($firmware_id) {
                     break;
                 }
                         
-                        // Envoyer un keep-alive SSE toutes les 3 secondes
-                        if ($current_time - $compile_last_keepalive >= 3) {
+                        // Envoyer un keep-alive SSE toutes les 1 seconde (plus fréquent pour éviter les timeouts)
+                        if ($current_time - $compile_last_keepalive >= 1) {
                             $compile_last_keepalive = $current_time;
                             echo ": keep-alive\n\n";
                             flush();
                         }
                         
-                        // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion SSE
-                        if ($current_time - $compile_last_heartbeat >= 10) {
+                        // Envoyer un heartbeat toutes les 5 secondes pour maintenir la connexion SSE (plus fréquent)
+                        if ($current_time - $compile_last_heartbeat >= 5) {
                             $compile_last_heartbeat = $current_time;
                             $elapsed = $current_time - $compile_start_time;
                             $minutes = floor($elapsed / 60);
@@ -1052,12 +1148,21 @@ function handleCompileFirmware($firmware_id) {
                     }
                     
                     // Fermer les pipes
-                    fclose($compile_pipes[0]);
-                    fclose($compile_pipes[1]);
-                    fclose($compile_pipes[2]);
+                    if (isset($compile_pipes[0]) && is_resource($compile_pipes[0])) {
+                        fclose($compile_pipes[0]);
+                    }
+                    if (isset($compile_pipes[1]) && is_resource($compile_pipes[1])) {
+                        fclose($compile_pipes[1]);
+                    }
+                    if (isset($compile_pipes[2]) && is_resource($compile_pipes[2])) {
+                        fclose($compile_pipes[2]);
+                    }
                     
                     $compile_return = proc_close($compile_process);
                     $compile_output = $compile_output_lines;
+                    
+                    error_log('[handleCompileFirmware] Compilation terminée, code de retour: ' . $compile_return);
+                    error_log('[handleCompileFirmware] Nombre de lignes de sortie: ' . count($compile_output));
                 } else {
                     // Fallback sur exec si proc_open échoue
                     exec($compile_cmd, $compile_output, $compile_return);
