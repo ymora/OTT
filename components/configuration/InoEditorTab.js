@@ -652,15 +652,26 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
     try {
       const tokenEncoded = encodeURIComponent(token)
-      const sseUrl = `${API_URL}/api.php/firmwares/compile/${firmwareId}?token=${tokenEncoded}`
+      
+      // IMPORTANT: Pour les SSE, utiliser l'URL directe de l'API (pas le proxy Next.js)
+      // Le proxy Next.js ne fonctionne pas correctement pour EventSource/SSE
+      // Utiliser l'URL distante directement pour les SSE
+      const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      const sseApiUrl = isLocalhost 
+        ? 'https://ott-jbln.onrender.com'  // URL directe pour SSE en local
+        : API_URL  // En production, utiliser API_URL normal
+      
+      const sseUrl = `${sseApiUrl}/api.php/firmwares/compile/${firmwareId}?token=${tokenEncoded}`
 
       // Logger pour diagnostic
       console.log('[InoEditorTab] Connexion SSE vers:', sseUrl)
       console.log('[InoEditorTab] API_URL:', API_URL)
+      console.log('[InoEditorTab] isLocalhost:', isLocalhost)
+      console.log('[InoEditorTab] sseApiUrl:', sseApiUrl)
       
       setCompileLogs(prev => [...prev, {
         timestamp: new Date().toLocaleTimeString('fr-FR'),
-        message: `🔗 Connexion SSE vers: ${sseUrl.substring(0, 100)}...`,
+        message: `🔗 Connexion SSE vers: ${sseApiUrl}/api.php/firmwares/compile/${firmwareId}...`,
         level: 'info'
       }])
 
