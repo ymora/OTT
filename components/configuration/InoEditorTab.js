@@ -724,12 +724,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
             }])
           } else if (data.type === 'progress') {
             setCompileProgress(data.progress || 0)
-            // Afficher aussi la progression dans les logs
-            setCompileLogs(prev => [...prev, {
-              timestamp: new Date().toLocaleTimeString('fr-FR'),
-              message: `📊 Progression: ${data.progress}%`,
-              level: 'info'
-            }])
+            // Ne plus afficher la progression dans les logs, seulement dans la barre
           } else if (data.type === 'success') {
             setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
             setCompileLogs(prev => [...prev, {
@@ -1044,7 +1039,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
       {(compiling || compileLogs.length > 0) && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">🔨 Compilation en cours</h2>
+            <h2 className="text-xl font-semibold">📊 Progression</h2>
             <div className="flex items-center gap-2">
               {compileProgress > 0 && (
                 <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">

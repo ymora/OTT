@@ -1045,9 +1045,8 @@ function handleCompileFirmware($firmware_id) {
                                                                 // On mappe 0-100% du téléchargement vers 45-50% de la compilation totale
                                                                 $globalProgress = 45 + ($downloadPercent / 100) * 5;
                                                                 sendSSE('progress', intval($globalProgress));
-                                                                // Afficher un message de progression formaté (on n'affichera PAS la ligne brute pour éviter les doublons)
-                                                                sendSSE('log', 'info', '📊 Téléchargement: ' . number_format($downloadPercent, 1) . '% (compilation totale: ' . intval($globalProgress) . '%)');
-                                                                $skipRawLine = true; // Ne pas afficher la ligne brute car on a déjà un message formaté
+                                                                // Ne pas afficher de message de progression dans les logs, seulement le % dans la barre
+                                                                $skipRawLine = true; // Ne pas afficher la ligne brute
                                                                 flush();
                                                             } else {
                                                                 // Même sans pourcentage, envoyer un message pour montrer qu'on est en téléchargement
@@ -1399,7 +1398,7 @@ function handleCompileFirmware($firmware_id) {
                             $minutes = floor($elapsed / 60);
                             $seconds = $elapsed % 60;
                             $timeStr = $minutes > 0 ? sprintf('%dm %ds', $minutes, $seconds) : sprintf('%ds', $seconds);
-                            sendSSE('log', 'info', '⏳ Compilation en cours... (temps écoulé: ' . $timeStr . ')');
+                            // Ne plus afficher de message de progression dans les logs, seulement le % dans la barre
                             flush();
                         }
                     }
