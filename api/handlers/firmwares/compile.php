@@ -846,7 +846,8 @@ function handleCompileFirmware($firmware_id) {
                             2 => ["pipe", "w"]   // stderr
                         ];
                         
-                        $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $descriptorspec, $pipes);
+                        // Utiliser --verbose pour obtenir tous les logs d'installation
+                        $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 --verbose 2>&1', $descriptorspec, $pipes);
                         
                         if (is_resource($process)) {
                             // Lire la sortie ligne par ligne pour afficher la progression
@@ -882,33 +883,59 @@ function handleCompileFirmware($firmware_id) {
                                 } elseif ($num_changed_streams > 0) {
                                     // Des données sont disponibles, les lire
                                     foreach ($read as $stream) {
-                                        $output = stream_get_contents($stream, 8192); // Lire par chunks de 8KB
-                                        if (!empty($output)) {
+                                        $isStderr = ($stream === $stderr);
+                                        
+                                        // Utiliser stream_get_contents pour lire TOUT ce qui est disponible
+                                        // stream_get_contents lit jusqu'à la fin du stream ou jusqu'à la limite
+                                        // Sur un stream non-bloquant, cela lit tout ce qui est disponible maintenant
+                                        $chunk = stream_get_contents($stream, 65536); // 64KB max par lecture
+                                        
+                                        if ($chunk !== false && $chunk !== '') {
                                             // Logger immédiatement pour diagnostic
-                                            error_log('[handleCompileFirmware] Core install output reçu (' . strlen($output) . ' bytes)');
+                                            error_log('[handleCompileFirmware] Core install output reçu (' . strlen($chunk) . ' bytes) depuis ' . ($isStderr ? 'stderr' : 'stdout'));
                                             
-                                            $lines = explode("\n", $output);
-                                            foreach ($lines as $line) {
-                                                $line = trim($line);
-                                                if (!empty($line)) {
-                                                    $installOutput[] = $line;
-                                                    
-                                                    // Déterminer le niveau de log selon le contenu
-                                                    $logLevel = 'info';
-                                                    if (stripos($line, 'error') !== false || stripos($line, 'failed') !== false) {
-                                                        $logLevel = 'error';
-                                                    } elseif (stripos($line, 'warning') !== false) {
-                                                        $logLevel = 'warning';
+                                            // Traiter ligne par ligne - IMPORTANT: ne pas trim avant de split pour garder les lignes vides intermédiaires
+                                            $lines = explode("\n", $chunk);
+                                            
+                                            // Traiter chaque ligne
+                                            foreach ($lines as $lineIndex => $line) {
+                                                // Ne pas trim avant de vérifier, car certaines lignes peuvent être importantes même si vides
+                                                $lineTrimmed = rtrim($line, "\r\n");
+                                                
+                                                // Envoyer toutes les lignes, même celles qui semblent vides (peuvent contenir des retours chariot)
+                                                // Mais ignorer les lignes vraiment vides après trim
+                                                if (!empty($lineTrimmed) || ($lineIndex === 0 && !empty($chunk))) {
+                                                    if (!empty($lineTrimmed)) {
+                                                        $installOutput[] = $lineTrimmed;
+                                                        
+                                                        // Déterminer le niveau de log selon le contenu
+                                                        $logLevel = $isStderr ? 'error' : 'info';
+                                                        
+                                                        // Détecter les lignes de téléchargement (contiennent "MiB" et "%")
+                                                        $isDownloadLine = preg_match('/\d+\.?\d*\s*(B|MiB|KiB)\s*\/\s*\d+\.?\d*\s*(B|MiB|KiB)\s*\d+\.?\d*%/', $lineTrimmed) ||
+                                                                     preg_match('/Downloading/', $lineTrimmed, PREG_OFFSET_CAPTURE) ||
+                                                                     preg_match('/downloaded$/', $lineTrimmed);
+                                                        
+                                                        if ($isDownloadLine) {
+                                                            // Ligne de progression de téléchargement - toujours afficher
+                                                            $logLevel = 'info';
+                                                        } elseif (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
+                                                                  preg_match('/error:/i', $lineTrimmed) || preg_match('/fatal/i', $lineTrimmed)) {
+                                                            $logLevel = 'error';
+                                                        } elseif (stripos($lineTrimmed, 'warning') !== false || preg_match('/warning:/i', $lineTrimmed)) {
+                                                            $logLevel = 'warning';
+                                                        }
+                                                        
+                                                        // Envoyer immédiatement via SSE
+                                                        sendSSE('log', $logLevel, $lineTrimmed);
+                                                        flush();
+                                                        
+                                                        // Logger aussi dans error_log pour diagnostic serveur
+                                                        error_log('[handleCompileFirmware] Core install ' . ($isStderr ? 'stderr' : 'stdout') . ': ' . $lineTrimmed);
+                                                        
+                                                        $lastOutputTime = $currentTime;
+                                                        $lastLine = $lineTrimmed; // Garder la dernière ligne pour détecter la phase
                                                     }
-                                                    
-                                                    sendSSE('log', $logLevel, $line);
-                                                    flush();
-                                                    
-                                                    // Logger aussi dans error_log pour diagnostic serveur
-                                                    error_log('[handleCompileFirmware] Core install: ' . $line);
-                                                    
-                                                    $lastOutputTime = $currentTime;
-                                                    $lastLine = $line; // Garder la dernière ligne pour détecter la phase
                                                 }
                                             }
                                         }
@@ -1033,7 +1060,8 @@ function handleCompileFirmware($firmware_id) {
                 error_log('[handleCompileFirmware] Sketch dir: ' . $sketch_dir);
                 
                 $fqbn = 'esp32:esp32:esp32';
-                $compile_cmd = $envStr . $arduinoCli . ' compile --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
+                // Utiliser --verbose pour obtenir tous les logs de compilation
+                $compile_cmd = $envStr . $arduinoCli . ' compile --verbose --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
                 
                 // Exécuter avec output en temps réel pour voir la progression et maintenir la connexion SSE
                 $descriptorspec = [
@@ -1073,37 +1101,54 @@ function handleCompileFirmware($firmware_id) {
                             // Erreur stream_select
                             error_log('[handleCompileFirmware] Erreur stream_select lors de la compilation');
                             break;
-                        } else                        if ($num_changed_streams > 0) {
+                        } elseif ($num_changed_streams > 0) {
                             // Des données sont disponibles, les lire
                             foreach ($read as $stream) {
-                                $output = stream_get_contents($stream, 8192); // Lire par chunks de 8KB
-                                if (!empty($output)) {
+                                $isStderr = ($stream === $compile_stderr);
+                                
+                                // Utiliser stream_get_contents pour lire TOUT ce qui est disponible
+                                $chunk = stream_get_contents($stream, 65536); // 64KB max par lecture
+                                
+                                if ($chunk !== false && $chunk !== '') {
                                     // Logger immédiatement pour diagnostic
-                                    error_log('[handleCompileFirmware] Output reçu (' . strlen($output) . ' bytes)');
+                                    error_log('[handleCompileFirmware] Compile output reçu (' . strlen($chunk) . ' bytes) depuis ' . ($isStderr ? 'stderr' : 'stdout'));
                                     
-                                    $lines = explode("\n", $output);
-                                    foreach ($lines as $line) {
-                                        $line = trim($line);
-                                        if (!empty($line)) {
-                                            $compile_output_lines[] = $line;
-                                            
-                                            // Déterminer le niveau de log selon le contenu
-                                            $logLevel = 'info';
-                                            if (stripos($line, 'error') !== false || stripos($line, 'failed') !== false || stripos($line, '❌') !== false) {
-                                                $logLevel = 'error';
-                                            } elseif (stripos($line, 'warning') !== false || stripos($line, '⚠️') !== false) {
-                                                $logLevel = 'warning';
-                                            } elseif (stripos($line, 'compiling') !== false || stripos($line, 'linking') !== false || stripos($line, 'archiving') !== false) {
-                                                $logLevel = 'info';
+                                    // Traiter ligne par ligne
+                                    $lines = explode("\n", $chunk);
+                                    foreach ($lines as $lineIndex => $line) {
+                                        $lineTrimmed = rtrim($line, "\r\n");
+                                        
+                                        // Envoyer toutes les lignes non vides
+                                        if (!empty($lineTrimmed) || ($lineIndex === 0 && !empty($chunk))) {
+                                            if (!empty($lineTrimmed)) {
+                                                $compile_output_lines[] = $lineTrimmed;
+                                                
+                                                // Déterminer le niveau de log selon le contenu
+                                                $logLevel = $isStderr ? 'error' : 'info';
+                                                
+                                                // Détecter les erreurs et warnings
+                                                if (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
+                                                    stripos($lineTrimmed, '❌') !== false || preg_match('/error:/i', $lineTrimmed) ||
+                                                    preg_match('/fatal/i', $lineTrimmed)) {
+                                                    $logLevel = 'error';
+                                                } elseif (stripos($lineTrimmed, 'warning') !== false || stripos($lineTrimmed, '⚠️') !== false || 
+                                                          preg_match('/warning:/i', $lineTrimmed)) {
+                                                    $logLevel = 'warning';
+                                                } elseif (stripos($lineTrimmed, 'compiling') !== false || stripos($lineTrimmed, 'linking') !== false || 
+                                                          stripos($lineTrimmed, 'archiving') !== false || stripos($lineTrimmed, 'sketch') !== false ||
+                                                          stripos($lineTrimmed, 'building') !== false) {
+                                                    $logLevel = 'info';
+                                                }
+                                                
+                                                // Envoyer immédiatement via SSE
+                                                sendSSE('log', $logLevel, $lineTrimmed);
+                                                flush();
+                                                
+                                                // Logger aussi dans error_log pour diagnostic serveur
+                                                error_log('[handleCompileFirmware] Compile ' . ($isStderr ? 'stderr' : 'stdout') . ': ' . $lineTrimmed);
+                                                
+                                                $compile_last_output_time = $current_time;
                                             }
-                                            
-                                            sendSSE('log', $logLevel, $line);
-                                            flush();
-                                            
-                                            // Logger aussi dans error_log pour diagnostic serveur
-                                            error_log('[handleCompileFirmware] Compile: ' . $line);
-                                            
-                                            $compile_last_output_time = $current_time;
                                         }
                                     }
                                 }
