@@ -46,8 +46,18 @@ function handleDownloadFirmware($firmware_id) {
             header('Content-Type: application/octet-stream');
             header('Content-Disposition: attachment; filename="fw_ott_v' . $firmware['version'] . '.bin"');
             header('Content-Length: ' . $file_size);
-            header('Cache-Control: no-cache, must-revalidate');
-            header('Pragma: no-cache');
+            
+            // Cache du navigateur : permettre la mise en cache avec ETag basé sur version + checksum
+            // Le fichier ne change pas si la version et le checksum sont identiques
+            $etag = md5($firmware['version'] . '_' . ($firmware['checksum'] ?? ''));
+            header('ETag: "' . $etag . '"');
+            header('Cache-Control: public, max-age=31536000'); // 1 an (les firmwares ne changent pas)
+            
+            // Vérifier si le client a déjà la version en cache
+            if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && $_SERVER['HTTP_IF_NONE_MATCH'] === '"' . $etag . '"') {
+                http_response_code(304); // Not Modified
+                exit;
+            }
             
             echo $bin_content;
             exit;
@@ -69,8 +79,17 @@ function handleDownloadFirmware($firmware_id) {
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="fw_ott_v' . $firmware['version'] . '.bin"');
         header('Content-Length: ' . filesize($file_path));
-        header('Cache-Control: no-cache, must-revalidate');
-        header('Pragma: no-cache');
+        
+        // Cache du navigateur : permettre la mise en cache avec ETag basé sur version + checksum
+        $etag = md5($firmware['version'] . '_' . ($firmware['checksum'] ?? '') . '_' . filemtime($file_path));
+        header('ETag: "' . $etag . '"');
+        header('Cache-Control: public, max-age=31536000'); // 1 an (les firmwares ne changent pas)
+        
+        // Vérifier si le client a déjà la version en cache
+        if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && $_SERVER['HTTP_IF_NONE_MATCH'] === '"' . $etag . '"') {
+            http_response_code(304); // Not Modified
+            exit;
+        }
         
         readfile($file_path);
         exit;
