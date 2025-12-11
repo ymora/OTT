@@ -354,6 +354,10 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
     setError(null)
     setFlashProgress(0)
     setFlashComplete(false)
+    // Réinitialiser les états de téléchargement
+    setDownloadProgress(0)
+    setCacheUsed(false)
+    setDownloadStatus(null)
 
     try {
       setFlashProgress(5)
