@@ -119,6 +119,11 @@ function handleCompileFirmware($firmware_id) {
         usleep(100000); // 100ms entre chaque keep-alive
     }
     
+    // TEST: Envoyer un message DIRECTEMENT sans passer par sendSSE() pour voir si ça fonctionne
+    echo "data: " . json_encode(['type' => 'log', 'level' => 'info', 'message' => 'TEST DIRECT - Connexion SSE etablie']) . "\n\n";
+    flush();
+    error_log('[handleCompileFirmware] Message TEST DIRECT envoye');
+    
     // Envoyer un message de connexion immédiatement pour confirmer que la connexion est établie
     sendSSE('log', 'info', 'Connexion SSE établie...');
     flush();
@@ -127,6 +132,11 @@ function handleCompileFirmware($firmware_id) {
     
     // Logger pour diagnostic
     error_log('[handleCompileFirmware] Démarrage compilation firmware ID: ' . $firmware_id);
+    
+    // TEST: Envoyer un autre message DIRECTEMENT
+    echo "data: " . json_encode(['type' => 'log', 'level' => 'info', 'message' => 'TEST DIRECT 2 - Demarrage processus']) . "\n\n";
+    flush();
+    error_log('[handleCompileFirmware] Message TEST DIRECT 2 envoye');
     
     // Envoyer un message de diagnostic immédiatement
     sendSSE('log', 'info', 'Démarrage du processus de compilation...');
