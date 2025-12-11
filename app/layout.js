@@ -65,8 +65,9 @@ export default function RootLayout({ children }) {
           />
         )}
 
-        {/* Production (version en ligne) : Activer le service worker */}
-        {isProduction && (
+        {/* Production (version en ligne) : Service worker TEMPORAIREMENT DÉSACTIVÉ pour reset GitHub Pages */}
+        {/* TODO: Réactiver après vérification que le cache est bien vidé */}
+        {false && isProduction && (
           <Script
             id="register-service-worker"
             strategy="afterInteractive"
@@ -74,6 +75,13 @@ export default function RootLayout({ children }) {
               __html: `
                 (function() {
                   if ('serviceWorker' in navigator) {
+                    // DÉSINSCRIRE TOUS LES SERVICE WORKERS EXISTANTS
+                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                      for(let registration of registrations) {
+                        registration.unregister();
+                      }
+                    });
+                    
                     const swPath = ${JSON.stringify(swPath || '/sw.js')};
                     
                     // Enregistrer le service worker uniquement en production (version en ligne)

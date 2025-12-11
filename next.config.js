@@ -36,15 +36,18 @@ const nextConfig = {
     missingSuspenseWithCSRBailout: false
   },
   // Désactiver la génération de pages d'erreur statiques en dev
-  // Utiliser le commit SHA pour forcer de nouveaux hash de fichiers JS à chaque déploiement
+  // Utiliser le commit SHA + timestamp pour forcer de nouveaux hash de fichiers JS à chaque déploiement
+  // FORCER un buildId unique à chaque fois pour bypasser complètement le cache
   generateBuildId: async () => {
     const commitSha = process.env.GITHUB_SHA || process.env.COMMIT_SHA
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substring(2, 9)
     if (commitSha) {
-      // Utiliser les 7 premiers caractères du commit SHA + timestamp pour garantir l'unicité
-      return `build-${commitSha.slice(0, 7)}-${Date.now()}`
+      // Utiliser commit SHA + timestamp + random pour garantir l'unicité absolue
+      return `build-${commitSha.slice(0, 7)}-${timestamp}-${random}`
     }
     // Fallback pour les builds locaux
-    return 'build-' + Date.now()
+    return `build-${timestamp}-${random}`
   },
   // Désactiver le cache lors du build pour éviter les problèmes
   // En mode export statique, on veut toujours un build frais
