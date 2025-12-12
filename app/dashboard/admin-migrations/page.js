@@ -118,9 +118,15 @@ export default function AdminMigrationsPage() {
 
   const migrations = [
     {
+      id: 'migration_fix_users_with_roles_view.sql',
+      name: '🔥 URGENT: Corriger VIEW users (ERREURS 500)',
+      description: '❌ CRITIQUE: Corrige la VIEW users_with_roles qui manque de colonnes (deleted_at, timezone, phone). Ceci résout les erreurs 500 sur TOUTES les pages.',
+      variant: 'danger'
+    },
+    {
       id: 'migration_repair_database.sql',
-      name: '🔧 Réparer la base de données (RECOMMANDÉ)',
-      description: '✅ Crée toutes les tables manquantes (notifications, index, etc.) SANS PERTE DE DONNÉES. Utilisez ceci pour corriger les erreurs "table not found" ou après une réinitialisation.',
+      name: '🔧 Réparer la base de données',
+      description: '✅ Crée toutes les tables manquantes (notifications, index, etc.) SANS PERTE DE DONNÉES. Utilisez ceci pour corriger les erreurs "table not found".',
       variant: 'success'
     }
   ]
