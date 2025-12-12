@@ -269,36 +269,36 @@ function MarkdownViewer({ fileName }) {
       
       // Essayer plusieurs méthodes de chargement avec différents chemins
       const methods = [
-        // 1. Essayer avec buildUrl (détection automatique du basePath)
+        // 1. Essayer depuis /docs/ (cohérent avec les autres documents)
+        async () => {
+          const url = buildUrl(`/docs/${fileName}`)
+          const response = await fetch(url + '?t=' + Date.now())
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
+        },
+        // 2. Essayer depuis /docs/ avec basePath (pour GitHub Pages) - Format: /OTT/docs/SUIVI_TEMPS_FACTURATION.md
+        async () => {
+          const url = basePath ? `${basePath}/docs/${fileName}` : `/docs/${fileName}`
+          const response = await fetch(url + '?t=' + Date.now())
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
+        },
+        // 3. Essayer avec withBasePath dans /docs/
+        async () => {
+          const url = withBasePath(`/docs/${fileName}`)
+          const response = await fetch(url + '?t=' + Date.now())
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const content = await response.text()
+          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
+          return content
+        },
+        // 4. Fallback: essayer depuis la racine (backup ancien emplacement)
         async () => {
           const url = buildUrl(`/${fileName}`)
-          const response = await fetch(url + '?t=' + Date.now())
-          if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          const content = await response.text()
-          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
-          return content
-        },
-        // 2. Essayer depuis la racine avec basePath (pour GitHub Pages) - Format: /OTT/SUIVI_TEMPS_FACTURATION.md
-        async () => {
-          const url = basePath ? `${basePath}/${fileName}` : `/${fileName}`
-          const response = await fetch(url + '?t=' + Date.now())
-          if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          const content = await response.text()
-          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
-          return content
-        },
-        // 3. Essayer avec withBasePath (utilise process.env.NEXT_PUBLIC_BASE_PATH)
-        async () => {
-          const url = withBasePath(`/${fileName}`)
-          const response = await fetch(url + '?t=' + Date.now())
-          if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          const content = await response.text()
-          if (!content || content.trim().length === 0) throw new Error('Fichier vide')
-          return content
-        },
-        // 4. Essayer depuis la racine sans basePath (fallback local)
-        async () => {
-          const url = `/${fileName}`
           const response = await fetch(url + '?t=' + Date.now())
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const content = await response.text()
@@ -335,10 +335,10 @@ function MarkdownViewer({ fileName }) {
       for (let i = 0; i < methods.length; i++) {
         try {
           // Logger l'URL qu'on va essayer (pour debug)
-          const methodUrl = i === 0 ? buildUrl(`/${fileName}`) : 
-                           i === 1 ? (basePath ? `${basePath}/${fileName}` : `/${fileName}`) :
-                           i === 2 ? withBasePath(`/${fileName}`) :
-                           i === 3 ? `/${fileName}` :
+          const methodUrl = i === 0 ? buildUrl(`/docs/${fileName}`) : 
+                           i === 1 ? (basePath ? `${basePath}/docs/${fileName}` : `/docs/${fileName}`) :
+                           i === 2 ? withBasePath(`/docs/${fileName}`) :
+                           i === 3 ? buildUrl(`/${fileName}`) :
                            i === 4 ? (basePath ? `${basePath}/${fileName.startsWith('/') ? fileName : '/' + fileName}` : 'N/A') :
                            'API'
           logger.debug(`[SUIVI_TEMPS] Tentative ${i + 1}: ${methodUrl}`)
