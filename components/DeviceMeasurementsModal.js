@@ -225,7 +225,7 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
         isAdmin: isAdmin
       })
       // Log dans la console pour debug
-      console.log('[DeviceMeasurementsModal] User:', user, 'isAdmin:', isAdmin)
+      logger.debug('[DeviceMeasurementsModal] User:', user, 'isAdmin:', isAdmin)
     }
   }, [isOpen, user, isAdmin])
   

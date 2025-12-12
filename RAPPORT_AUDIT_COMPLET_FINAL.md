@@ -256,13 +256,16 @@ Le projet OTT est dans un très bon état global. L'architecture est solide, la 
 
 ---
 
-### 8. ⚠️ Structure API : 3 handlers non appelés
+### 8. ✅ Structure API : Handlers bien organisés
 
-**Impact**: Faible - À vérifier
+**Impact**: Aucun - ✅ FAUX POSITIF
+
+**Analyse** : Tous les handlers sont utilisés via le système de routage dynamique.
+Les handlers détectés comme "non utilisés" sont en fait appelés via `preg_match` dans `api.php`.
 
 **Recommandations** :
-- 🔍 Identifier les 3 handlers non utilisés
-- 🗑️ Supprimer ou documenter pourquoi ils existent
+- ✅ Aucune action nécessaire
+- 📋 Documenter le système de routage pour éviter confusion future
 
 ---
 
@@ -352,9 +355,9 @@ Le script d'audit a généré **15 questions** pour analyse IA concernant les fi
    - [ ] Créer `useApiMutation` hook
    - [ ] Migrer appels API vers hooks personnalisés
 
-8. **Identifier handlers non utilisés** (3) :
-   - [ ] Vérifier quels handlers ne sont pas appelés
-   - [ ] Supprimer ou documenter
+8. ~~**Identifier handlers non utilisés** (3)~~ :
+   - [x] ✅ RÉSOLU - FAUX POSITIF
+   - [x] Tous les handlers sont utilisés (routage dynamique)
 
 9. **Nettoyer TODO/FIXME** (10 fichiers) :
    - [ ] Créer tickets pour les TODO
