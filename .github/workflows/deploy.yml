@@ -67,6 +67,16 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           COMMIT_SHA: ${{ github.sha }}
       
+      - name: Copy SUIVI_TEMPS to out root
+        run: |
+          echo "📋 Copie de SUIVI_TEMPS_FACTURATION.md à la racine de out/..."
+          if [ -f "public/docs/SUIVI_TEMPS_FACTURATION.md" ]; then
+            cp public/docs/SUIVI_TEMPS_FACTURATION.md out/SUIVI_TEMPS_FACTURATION.md
+            echo "✅ SUIVI_TEMPS_FACTURATION.md copié à la racine de out/"
+          else
+            echo "⚠️  SUIVI_TEMPS_FACTURATION.md non trouvé dans public/docs/"
+          fi
+      
       - name: Verify build output
         run: |
           echo "📋 Contenu du dossier out/:"

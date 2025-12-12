@@ -6,10 +6,10 @@ set +e
 
 echo "📄 Génération du fichier SUIVI_TEMPS_FACTURATION.md..."
 
-OUTPUT_FILE="public/SUIVI_TEMPS_FACTURATION.md"
+OUTPUT_FILE="public/docs/SUIVI_TEMPS_FACTURATION.md"
 
-# Créer le dossier public/ s'il n'existe pas
-mkdir -p public
+# Créer le dossier public/docs/ s'il n'existe pas
+mkdir -p public/docs
 
 # Vérifier que Git est disponible
 if ! command -v git &> /dev/null; then
