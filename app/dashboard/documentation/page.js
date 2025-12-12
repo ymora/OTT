@@ -48,6 +48,10 @@ const DOCUMENTATION_FILES = {
 export default function DocumentationPage() {
   const searchParams = useSearchParams()
   const docType = searchParams.get('doc') || 'presentation'
+  const { user } = useAuth()
+  
+  // 🔒 SÉCURITÉ : Accès réservé aux administrateurs
+  const isAdmin = user?.role_name === 'admin'
   
   const docUrl = useMemo(() => {
     const fileName = DOCUMENTATION_FILES[docType] || DOCUMENTATION_FILES.presentation
@@ -70,6 +74,34 @@ export default function DocumentationPage() {
   }, [docType])
 
   const isMarkdownDoc = docType === 'suivi-temps'
+  
+  // 🔒 Protection : Si non admin, afficher un message d'erreur
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-8">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 text-center">
+            <div className="text-6xl mb-4">🔒</div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+              Accès Réservé
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Cette section est réservée aux <strong>administrateurs</strong>.
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-500 mb-8">
+              Vous devez disposer des privilèges administrateur pour accéder à la documentation technique, commerciale et au suivi de temps.
+            </p>
+            <a
+              href="/dashboard"
+              className="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold rounded-lg hover:scale-105 transition-transform shadow-lg"
+            >
+              ← Retour au Dashboard
+            </a>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // Référence à l'iframe pour envoyer le thème
   const iframeRef = useRef(null)
