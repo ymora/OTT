@@ -25,7 +25,7 @@ require_once __DIR__ . '/api/handlers/devices/logs.php';
 require_once __DIR__ . '/api/handlers/devices/config.php';
 require_once __DIR__ . '/api/handlers/devices/ota.php';
 require_once __DIR__ . '/api/handlers/devices/reports.php';
-require_once __DIR__ . '/api/handlers/devices/demo.php';
+// require_once __DIR__ . '/api/handlers/devices/demo.php'; // SUPPRIMÉ: Fonctionnalité Reset Demo retirée (dangereuse)
 require_once __DIR__ . '/api/handlers/firmwares.php';
 require_once __DIR__ . '/api/handlers/notifications.php';
 require_once __DIR__ . '/api/handlers/usb_logs.php';
@@ -248,7 +248,7 @@ define('TWILIO_ACCOUNT_SID', getenv('TWILIO_ACCOUNT_SID') ?: '');
 define('TWILIO_AUTH_TOKEN', getenv('TWILIO_AUTH_TOKEN') ?: '');
 define('TWILIO_FROM_NUMBER', getenv('TWILIO_FROM_NUMBER') ?: '');
 
-define('ENABLE_DEMO_RESET', getenv('ENABLE_DEMO_RESET') === 'true');
+// define('ENABLE_DEMO_RESET', getenv('ENABLE_DEMO_RESET') === 'true'); // SUPPRIMÉ: Fonctionnalité Reset Demo retirée
 define('SQL_BASE_DIR', __DIR__ . '/sql');
 
 // ============================================================================
