@@ -50,37 +50,56 @@ export default function AdminMigrationsPage() {
       }
     } catch (err) {
       logger.error('Erreur migration:', err)
-      // Afficher des détails plus précis
-      let errorMessage = err.message || 'Erreur lors de l\'exécution de la migration'
       
-      // Si on a des logs, les utiliser pour un message plus détaillé
+      // Construire un message d'erreur détaillé
+      let errorMessage = err.message || 'Erreur lors de l\'exécution de la migration'
+      const errorParts = []
+      
+      // Ajouter le message principal
+      errorParts.push(`❌ ${errorMessage}`)
+      
+      // Ajouter les logs si disponibles (priorité)
       if (err.logs && Array.isArray(err.logs) && err.logs.length > 0) {
-        errorMessage = err.logs.join('\n')
-      } else {
-        // Sinon, construire le message avec les détails disponibles
-        if (err.details) {
-          if (Array.isArray(err.details)) {
-            errorMessage += '\n' + err.details.join('\n')
-          } else if (typeof err.details === 'object') {
-            errorMessage += '\nDétails: ' + JSON.stringify(err.details, null, 2)
-          } else {
-            errorMessage += '\nDétails: ' + err.details
-          }
-        }
-        if (err.code) {
-          errorMessage += `\nCode erreur: ${err.code}`
+        errorParts.push('')
+        errorParts.push('📋 Détails:')
+        err.logs.forEach(log => {
+          errorParts.push(`  ${log}`)
+        })
+      }
+      
+      // Ajouter les détails si disponibles
+      if (err.details) {
+        errorParts.push('')
+        errorParts.push('🔍 Informations techniques:')
+        if (Array.isArray(err.details)) {
+          err.details.forEach(detail => {
+            errorParts.push(`  ${detail}`)
+          })
+        } else if (typeof err.details === 'object') {
+          errorParts.push(`  ${JSON.stringify(err.details, null, 2)}`)
+        } else {
+          errorParts.push(`  ${err.details}`)
         }
       }
       
-      setError(errorMessage)
+      // Ajouter le code d'erreur
+      if (err.code) {
+        errorParts.push('')
+        errorParts.push(`Code erreur: ${err.code}`)
+      }
       
-      // Afficher aussi dans la console pour debug
+      const fullErrorMessage = errorParts.join('\n')
+      setError(fullErrorMessage)
+      
+      // Afficher aussi dans la console pour debug avec tous les détails
       console.error('Erreur migration complète:', {
         message: err.message,
+        error: err.error,
         details: err.details,
         code: err.code,
         logs: err.logs,
-        stack: err.stack
+        stack: err.stack,
+        fullError: err
       })
     } finally {
       setLoading(false)
@@ -123,8 +142,10 @@ export default function AdminMigrationsPage() {
 
         {error && (
           <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-red-800 dark:text-red-200 font-semibold">❌ Erreur</p>
-            <p className="text-red-700 dark:text-red-300 text-sm mt-1">{error}</p>
+            <p className="text-red-800 dark:text-red-200 font-semibold mb-2">❌ Erreur</p>
+            <pre className="text-red-700 dark:text-red-300 text-sm mt-1 whitespace-pre-wrap font-mono bg-red-100 dark:bg-red-900/30 p-3 rounded overflow-x-auto">
+              {error}
+            </pre>
           </div>
         )}
 

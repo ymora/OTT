@@ -15,7 +15,11 @@ param(
     [string]$ApiUrl = "",
     [string]$ConfigFile = "audit-complet/scripts/audit.config.ps1",
     [switch]$Verbose = $false,
-    [int]$MaxFileLines = 500
+    [int]$MaxFileLines = 500,
+    [array]$SelectedPhases = @(),
+    [string]$StateFile = "",
+    [string]$ResultFile = "",
+    [string]$CorrectionPlansFile = ""
 )
 
 # ===============================================================================
@@ -580,6 +584,16 @@ function Invoke-PSScriptAnalyzerAnalysis {
 $ErrorActionPreference = "Continue"
 
 # ===============================================================================
+# CHARGEMENT DES FONCTIONS DE GESTION DES PHASES
+# ===============================================================================
+$phasesScriptPath = Join-Path $PSScriptRoot "AUDIT_PHASES.ps1"
+if (Test-Path $phasesScriptPath) {
+    . $phasesScriptPath
+} else {
+    Write-Warn "Fichier AUDIT_PHASES.ps1 non trouvé, certaines fonctionnalités seront limitées"
+}
+
+# ===============================================================================
 # DÉTERMINER LE RÉPERTOIRE RACINE DU PROJET
 # ===============================================================================
 # Le script peut être exécuté depuis différents répertoires
@@ -724,9 +738,25 @@ $auditResults = @{
     Warnings = @()
     Recommendations = @()
     Stats = @{}
+    CorrectionPlans = @()  # Nouveau: plans de correction structurés
 }
 
 $startTime = Get-Date
+
+# Initialiser les phases sélectionnées (toutes si non spécifiées)
+if ($SelectedPhases.Count -eq 0) {
+    $SelectedPhases = $script:AuditPhases | ForEach-Object { $_.Number }
+}
+
+# Charger l'état précédent si disponible
+$completedPhases = @()
+$partialResults = @{}
+if (-not [string]::IsNullOrEmpty($StateFile) -and (Test-Path $StateFile)) {
+    $previousState = Load-AuditState -StateFile $StateFile
+    $completedPhases = $previousState.CompletedPhases
+    $partialResults = $previousState.PartialResults
+    Write-Info "État précédent chargé: $($completedPhases.Count) phase(s) complétée(s)"
+}
 
 # ===============================================================================
 # CONFIGURATION : RÉPERTOIRES ET FICHIERS À EXCLURE (uniquement build/cache)
@@ -747,10 +777,83 @@ function Test-ExcludedFile {
 }
 
 # ===============================================================================
+# FONCTION WRAPPER POUR EXÉCUTER LES PHASES AVEC GESTION D'ÉTAT
+# ===============================================================================
+function Invoke-AuditPhase {
+    param(
+        [int]$PhaseNumber,
+        [scriptblock]$PhaseScript,
+        [string]$PhaseName
+    )
+    
+    # Vérifier si la phase doit être exécutée
+    if ($SelectedPhases -notcontains $PhaseNumber) {
+        Write-Info "Phase $PhaseNumber ($PhaseName) ignorée (non sélectionnée)"
+        return
+    }
+    
+    # Vérifier si la phase est déjà complète
+    if ($completedPhases -contains $PhaseNumber) {
+        Write-Info "Phase $PhaseNumber ($PhaseName) déjà complétée, reprise des résultats partiels..."
+        if ($partialResults.ContainsKey("Phase$PhaseNumber")) {
+            # Restaurer les résultats partiels si disponibles
+            $phaseResults = $partialResults["Phase$PhaseNumber"]
+            if ($phaseResults.Scores) {
+                foreach ($key in $phaseResults.Scores.Keys) {
+                    $auditResults.Scores[$key] = $phaseResults.Scores[$key]
+                }
+            }
+            if ($phaseResults.Issues) {
+                $auditResults.Issues += $phaseResults.Issues
+            }
+            if ($phaseResults.Warnings) {
+                $auditResults.Warnings += $phaseResults.Warnings
+            }
+            if ($phaseResults.Recommendations) {
+                $auditResults.Recommendations += $phaseResults.Recommendations
+            }
+            if ($phaseResults.CorrectionPlans) {
+                $auditResults.CorrectionPlans += $phaseResults.CorrectionPlans
+            }
+        }
+        return
+    }
+    
+    # Exécuter la phase
+    try {
+        Write-Section "[$PhaseNumber] $PhaseName"
+        & $PhaseScript
+        
+        # Marquer la phase comme complète
+        $completedPhases += $PhaseNumber
+        
+        # Sauvegarder l'état
+        if (-not [string]::IsNullOrEmpty($StateFile)) {
+            $partialResults["Phase$PhaseNumber"] = @{
+                Scores = $auditResults.Scores
+                Issues = $auditResults.Issues
+                Warnings = $auditResults.Warnings
+                Recommendations = $auditResults.Recommendations
+                CorrectionPlans = $auditResults.CorrectionPlans
+            }
+            Save-AuditState -StateFile $StateFile -CompletedPhases $completedPhases -PartialResults $partialResults
+        }
+        
+        Write-OK "Phase $PhaseNumber ($PhaseName) terminée"
+    } catch {
+        Write-Err "Erreur lors de l'exécution de la phase $PhaseNumber ($PhaseName): $($_.Exception.Message)"
+        # Ne pas marquer comme complète en cas d'erreur
+    }
+}
+
+# ===============================================================================
 # PHASE 0 : INVENTAIRE EXHAUSTIF DE TOUS LES FICHIERS
 # ===============================================================================
 
-Write-Section "[0/18] Inventaire Exhaustif - Tous les Fichiers et Répertoires"
+# Vérifier si la phase doit être exécutée
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 0) {
+    if ($completedPhases -notcontains 0) {
+        Write-Section "[0/18] Inventaire Exhaustif - Tous les Fichiers et Répertoires"
 
 # INTÉGRATION PSScriptAnalyzer - Analyse des scripts PowerShell
 Write-Host "`n  Analyse avec PSScriptAnalyzer (scripts PowerShell)..." -ForegroundColor Yellow
@@ -870,170 +973,202 @@ try {
     Write-Warn "Erreur inventaire: $($_.Exception.Message)"
 }
 
+        # Marquer la phase comme complète et sauvegarder l'état
+        $completedPhases += 0
+        if (-not [string]::IsNullOrEmpty($StateFile)) {
+            $partialResults["Phase0"] = @{
+                Scores = $auditResults.Scores
+                Issues = $auditResults.Issues
+                Warnings = $auditResults.Warnings
+                Recommendations = $auditResults.Recommendations
+                CorrectionPlans = $auditResults.CorrectionPlans
+            }
+            Save-AuditState -StateFile $StateFile -CompletedPhases $completedPhases -PartialResults $partialResults
+        }
+    } else {
+        Write-Info "Phase 0 déjà complétée, reprise des résultats partiels..."
+        if ($partialResults.ContainsKey("Phase0")) {
+            $phase0Results = $partialResults["Phase0"]
+            if ($phase0Results.Scores) {
+                foreach ($key in $phase0Results.Scores.Keys) {
+                    $auditResults.Scores[$key] = $phase0Results.Scores[$key]
+                }
+            }
+        }
+    }
+}  # Fin if SelectedPhases -contains 0
+
 # ===============================================================================
 # PHASE 1 : ARCHITECTURE ET STATISTIQUES
 # ===============================================================================
 
-Write-Section "[1/18] Architecture et Statistiques Code"
+# Vérifier si la phase doit être exécutée
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 1) {
+    if ($completedPhases -notcontains 1) {
+        Write-Section "[1/18] Architecture et Statistiques Code"
 
-try {
-    Write-Info "Comptage des fichiers..."
+        try {
+            Write-Info "Comptage des fichiers..."
     
-    # Utiliser l'inventaire exhaustif
-    $jsFiles = $fileInventory.JS + $fileInventory.JSX
-    $phpFiles = $fileInventory.PHP
-    $sqlFiles = $fileInventory.SQL
-    $mdFilesRoot = @($fileInventory.MD | Where-Object { $_.DirectoryName -eq (Get-Location).Path })
-    $components = @($fileInventory.JS | Where-Object { $_.FullName -match '\\components\\' })
-    $hooks = @($fileInventory.JS | Where-Object { $_.FullName -match '\\hooks\\' -and $_.Name -ne 'index.js' })
-    $pages = @($fileInventory.JS | Where-Object { $_.FullName -match '\\app\\dashboard\\' -and $_.Name -eq 'page.js' })
-    $scripts = $fileInventory.PS1 + $fileInventory.SH + @($fileInventory.JS | Where-Object { $_.FullName -match '\\scripts\\' })
-    
-    # Compter lignes
-    $jsLines = 0
-    foreach ($file in $jsFiles) {
-        try { $jsLines += (Get-Content $file.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines } catch {}
-    }
-    
-    $phpLines = 0
-    foreach ($file in $phpFiles) {
-        try { $phpLines += (Get-Content $file.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines } catch {}
-    }
-    
-    $stats = @{
-        JS = $jsFiles.Count
-        JSLines = $jsLines
-        PHP = $phpFiles.Count
-        PHPLines = $phpLines
-        SQL = $sqlFiles.Count
-        MD = $mdFilesRoot.Count
-        Components = $components.Count
-        Hooks = $hooks.Count
-        Pages = $pages.Count
-        Scripts = $scripts.Count
-    }
-    
-    Write-Host "  JavaScript/React : $($stats.JS) fichiers ($($stats.JSLines) lignes)" -ForegroundColor White
-    Write-Host "  PHP              : $($stats.PHP) fichiers ($($stats.PHPLines) lignes)" -ForegroundColor White
-    Write-Host "  SQL              : $($stats.SQL) fichiers" -ForegroundColor White
-    Write-Host "  Markdown root    : $($stats.MD) fichiers" -ForegroundColor $(if($stats.MD -gt 10){"Red"}elseif($stats.MD -gt 5){"Yellow"}else{"Green"})
-    
-    # Analyse détaillée des fichiers MD à la racine
-    if ($stats.MD -gt 5) {
-        $rootMdFiles = @($fileInventory.MD | Where-Object { $_.DirectoryName -eq (Get-Location).Path })
-        Write-Info "Fichiers MD à la racine:"
-        $rootMdFiles | ForEach-Object { 
-            $size = [math]::Round($_.Length/1KB, 1)
-            $age = ((Get-Date) - $_.LastWriteTime).Days
-            Write-Info "  - $($_.Name) ($size KB, modifié il y a $age jours)"
+            # Utiliser l'inventaire exhaustif
+            $jsFiles = $fileInventory.JS + $fileInventory.JSX
+            $phpFiles = $fileInventory.PHP
+            $sqlFiles = $fileInventory.SQL
+            $mdFilesRoot = @($fileInventory.MD | Where-Object { $_.DirectoryName -eq (Get-Location).Path })
+            $components = @($fileInventory.JS | Where-Object { $_.FullName -match '\\components\\' })
+            $hooks = @($fileInventory.JS | Where-Object { $_.FullName -match '\\hooks\\' -and $_.Name -ne 'index.js' })
+            $pages = @($fileInventory.JS | Where-Object { $_.FullName -match '\\app\\dashboard\\' -and $_.Name -eq 'page.js' })
+            $scripts = $fileInventory.PS1 + $fileInventory.SH + @($fileInventory.JS | Where-Object { $_.FullName -match '\\scripts\\' })
+            
+            # Compter lignes
+            $jsLines = 0
+            foreach ($file in $jsFiles) {
+                try { $jsLines += (Get-Content $file.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines } catch {}
+            }
+            
+            $phpLines = 0
+            foreach ($file in $phpFiles) {
+                try { $phpLines += (Get-Content $file.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines } catch {}
+            }
+            
+            $stats = @{
+                JS = $jsFiles.Count
+                JSLines = $jsLines
+                PHP = $phpFiles.Count
+                PHPLines = $phpLines
+                SQL = $sqlFiles.Count
+                MD = $mdFilesRoot.Count
+                Components = $components.Count
+                Hooks = $hooks.Count
+                Pages = $pages.Count
+                Scripts = $scripts.Count
+            }
+            
+            Write-Host "  JavaScript/React : $($stats.JS) fichiers ($($stats.JSLines) lignes)" -ForegroundColor White
+            Write-Host "  PHP              : $($stats.PHP) fichiers ($($stats.PHPLines) lignes)" -ForegroundColor White
+            Write-Host "  SQL              : $($stats.SQL) fichiers" -ForegroundColor White
+            Write-Host "  Markdown root    : $($stats.MD) fichiers" -ForegroundColor $(if($stats.MD -gt 10){"Red"}elseif($stats.MD -gt 5){"Yellow"}else{"Green"})
+            
+            # Analyse détaillée des fichiers MD à la racine
+            if ($stats.MD -gt 5) {
+                $rootMdFiles = @($fileInventory.MD | Where-Object { $_.DirectoryName -eq (Get-Location).Path })
+                Write-Info "Fichiers MD à la racine:"
+                $rootMdFiles | ForEach-Object { 
+                    $size = [math]::Round($_.Length/1KB, 1)
+                    $age = ((Get-Date) - $_.LastWriteTime).Days
+                    Write-Info "  - $($_.Name) ($size KB, modifié il y a $age jours)"
+                }
+            }
+            
+            # Analyse de la distribution des fichiers JS
+            Write-Info "Analyse distribution fichiers JS..."
+            $jsByDir = @{}
+            foreach ($jsFile in $fileInventory.JS) {
+                $dir = Split-Path -Parent $jsFile.FullName | Split-Path -Leaf
+                if (-not $jsByDir[$dir]) { $jsByDir[$dir] = 0 }
+                $jsByDir[$dir]++
+            }
+            $topJsDirs = $jsByDir.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 5
+            if ($topJsDirs) {
+                Write-Info "Top 5 répertoires avec fichiers JS:"
+                $topJsDirs | ForEach-Object { Write-Info "  - $($_.Key): $($_.Value) fichiers" }
+            }
+            
+            # Analyse de la distribution des fichiers MD
+            Write-Info "Analyse distribution fichiers MD..."
+            $mdByDir = @{}
+            foreach ($mdFile in $fileInventory.MD) {
+                $dir = Split-Path -Parent $mdFile.FullName | Split-Path -Leaf
+                if (-not $mdByDir[$dir]) { $mdByDir[$dir] = 0 }
+                $mdByDir[$dir]++
+            }
+            $topMdDirs = $mdByDir.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 5
+            if ($topMdDirs) {
+                Write-Info "Top 5 répertoires avec fichiers MD:"
+                $topMdDirs | ForEach-Object { Write-Info "  - $($_.Key): $($_.Value) fichiers" }
+            }
+            
+            # Analyse des fichiers YML/YAML
+            $totalYml = $fileInventory.YAML.Count + $fileInventory.YML.Count
+            if ($totalYml -gt 0) {
+                Write-Info "Fichiers YML/YAML trouvés: $totalYml"
+                $allYml = $fileInventory.YAML + $fileInventory.YML
+                $allYml | ForEach-Object { 
+                    $relativePath = $_.FullName.Replace((Get-Location).Path + '\', '')
+                    Write-Info "  - $relativePath"
+                }
+            }
+            
+            Write-Host "  Composants       : $($stats.Components)" -ForegroundColor White
+            Write-Host "  Hooks            : $($stats.Hooks)" -ForegroundColor White
+            Write-Host "  Pages Dashboard  : $($stats.Pages)" -ForegroundColor White
+            Write-Host "  Scripts          : $($stats.Scripts)" -ForegroundColor White
+            
+            $auditResults.Stats = $stats
+            $auditResults.Scores["Architecture"] = 10
+            
+            if ($stats.MD -gt 10) {
+                Write-Warn "Trop de fichiers MD a la racine ($($stats.MD)) - Recommande <= 5"
+                $auditResults.Issues += "Documentation: $($stats.MD) fichiers MD a la racine"
+                $auditResults.Scores["Architecture"] = 8
+                Write-Host "  💡 Action: Déplacer les fichiers MD dans audit-complet/plans/ ou docs/" -ForegroundColor Cyan
+            } elseif ($stats.MD -gt 5) {
+                Write-Warn "Fichiers MD a rationaliser ($($stats.MD))"
+                $auditResults.Scores["Architecture"] = 9
+                Write-Host "  💡 Action: Consolider les fichiers MD similaires" -ForegroundColor Cyan
+            }
+            
+            # Vérifier la cohérence des fichiers JS
+            if ($stats.JS -gt 100) {
+                Write-Info "Beaucoup de fichiers JS ($($stats.JS)) - Vérification de cohérence..."
+                $jsInComponents = @($fileInventory.JS | Where-Object { $_.FullName -match '\\components\\' }).Count
+                $jsInHooks = @($fileInventory.JS | Where-Object { $_.FullName -match '\\hooks\\' }).Count
+                $jsInApp = @($fileInventory.JS | Where-Object { $_.FullName -match '\\app\\' }).Count
+                $jsInLib = @($fileInventory.JS | Where-Object { $_.FullName -match '\\lib\\' }).Count
+                $jsOther = $stats.JS - $jsInComponents - $jsInHooks - $jsInApp - $jsInLib
+                Write-Info "  Distribution JS:"
+                Write-Info "    - components/: $jsInComponents"
+                Write-Info "    - hooks/: $jsInHooks"
+                Write-Info "    - app/: $jsInApp"
+                Write-Info "    - lib/: $jsInLib"
+                Write-Info "    - autres: $jsOther"
+                
+                if ($jsOther -gt ($stats.JS * 0.2)) {
+                    Write-Warn "  Beaucoup de fichiers JS hors structure standard ($jsOther/$($stats.JS))"
+                    $auditResults.Warnings += "Fichiers JS mal organisés: $jsOther fichiers hors structure"
+                }
+            }
+            
+            Write-OK "Architecture analysee"
+            
+            # Marquer la phase comme complète et sauvegarder l'état
+            $completedPhases += 1
+            if (-not [string]::IsNullOrEmpty($StateFile)) {
+                $partialResults["Phase1"] = @{
+                    Scores = $auditResults.Scores
+                    Issues = $auditResults.Issues
+                    Warnings = $auditResults.Warnings
+                    Recommendations = $auditResults.Recommendations
+                    CorrectionPlans = $auditResults.CorrectionPlans
+                }
+                Save-AuditState -StateFile $StateFile -CompletedPhases $completedPhases -PartialResults $partialResults
+            }
+        } catch {
+            Write-Err "Erreur analyse architecture: $($_.Exception.Message)"
+            $auditResults.Scores["Architecture"] = 5
+        }
+    } else {
+        Write-Info "Phase 1 déjà complétée, reprise des résultats partiels..."
+        if ($partialResults.ContainsKey("Phase1")) {
+            $phase1Results = $partialResults["Phase1"]
+            if ($phase1Results.Scores) {
+                foreach ($key in $phase1Results.Scores.Keys) {
+                    $auditResults.Scores[$key] = $phase1Results.Scores[$key]
+                }
+            }
         }
     }
-    
-    # Analyse de la distribution des fichiers JS
-    Write-Info "Analyse distribution fichiers JS..."
-    $jsByDir = @{}
-    foreach ($jsFile in $fileInventory.JS) {
-        $dir = Split-Path -Parent $jsFile.FullName | Split-Path -Leaf
-        if (-not $jsByDir[$dir]) { $jsByDir[$dir] = 0 }
-        $jsByDir[$dir]++
-    }
-    $topJsDirs = $jsByDir.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 5
-    if ($topJsDirs) {
-        Write-Info "Top 5 répertoires avec fichiers JS:"
-        $topJsDirs | ForEach-Object { Write-Info "  - $($_.Key): $($_.Value) fichiers" }
-    }
-    
-    # Analyse de la distribution des fichiers MD
-    Write-Info "Analyse distribution fichiers MD..."
-    $mdByDir = @{}
-    foreach ($mdFile in $fileInventory.MD) {
-        $dir = Split-Path -Parent $mdFile.FullName | Split-Path -Leaf
-        if (-not $mdByDir[$dir]) { $mdByDir[$dir] = 0 }
-        $mdByDir[$dir]++
-    }
-    $topMdDirs = $mdByDir.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 5
-    if ($topMdDirs) {
-        Write-Info "Top 5 répertoires avec fichiers MD:"
-        $topMdDirs | ForEach-Object { Write-Info "  - $($_.Key): $($_.Value) fichiers" }
-    }
-    
-    # Analyse des fichiers YML/YAML
-    $totalYml = $fileInventory.YAML.Count + $fileInventory.YML.Count
-    if ($totalYml -gt 0) {
-        Write-Info "Fichiers YML/YAML trouvés: $totalYml"
-        $allYml = $fileInventory.YAML + $fileInventory.YML
-        $allYml | ForEach-Object { 
-            $relativePath = $_.FullName.Replace((Get-Location).Path + '\', '')
-            Write-Info "  - $relativePath"
-        }
-    }
-    
-    Write-Host "  Composants       : $($stats.Components)" -ForegroundColor White
-    Write-Host "  Hooks            : $($stats.Hooks)" -ForegroundColor White
-    Write-Host "  Pages Dashboard  : $($stats.Pages)" -ForegroundColor White
-    Write-Host "  Scripts          : $($stats.Scripts)" -ForegroundColor White
-    
-    $auditResults.Stats = $stats
-    $auditResults.Scores["Architecture"] = 10
-    
-    if ($stats.MD -gt 10) {
-        Write-Warn "Trop de fichiers MD a la racine ($($stats.MD)) - Recommande <= 5"
-        $auditResults.Issues += "Documentation: $($stats.MD) fichiers MD a la racine"
-        $auditResults.Scores["Architecture"] = 8
-        Write-Host "  💡 Action: Déplacer les fichiers MD dans audit-complet/plans/ ou docs/" -ForegroundColor Cyan
-    } elseif ($stats.MD -gt 5) {
-        Write-Warn "Fichiers MD a rationaliser ($($stats.MD))"
-        $auditResults.Scores["Architecture"] = 9
-        Write-Host "  💡 Action: Consolider les fichiers MD similaires" -ForegroundColor Cyan
-    }
-    
-    # Vérifier la cohérence des fichiers JS
-    if ($stats.JS -gt 100) {
-        Write-Info "Beaucoup de fichiers JS ($($stats.JS)) - Vérification de cohérence..."
-        $jsInComponents = @($fileInventory.JS | Where-Object { $_.FullName -match '\\components\\' }).Count
-        $jsInHooks = @($fileInventory.JS | Where-Object { $_.FullName -match '\\hooks\\' }).Count
-        $jsInApp = @($fileInventory.JS | Where-Object { $_.FullName -match '\\app\\' }).Count
-        $jsInLib = @($fileInventory.JS | Where-Object { $_.FullName -match '\\lib\\' }).Count
-        $jsOther = $stats.JS - $jsInComponents - $jsInHooks - $jsInApp - $jsInLib
-        Write-Info "  Distribution JS:"
-        Write-Info "    - components/: $jsInComponents"
-        Write-Info "    - hooks/: $jsInHooks"
-        Write-Info "    - app/: $jsInApp"
-        Write-Info "    - lib/: $jsInLib"
-        Write-Info "    - autres: $jsOther"
-        
-        if ($jsOther -gt ($stats.JS * 0.2)) {
-            Write-Warn "  Beaucoup de fichiers JS hors structure standard ($jsOther/$($stats.JS))"
-            $auditResults.Warnings += "Fichiers JS mal organisés: $jsOther fichiers hors structure"
-        }
-    }
-    
-    # Vérifier la cohérence des fichiers JS
-    if ($stats.JS -gt 100) {
-        Write-Info "Beaucoup de fichiers JS ($($stats.JS)) - Vérification de cohérence..."
-        $jsInComponents = @($fileInventory.JS | Where-Object { $_.FullName -match '\\components\\' }).Count
-        $jsInHooks = @($fileInventory.JS | Where-Object { $_.FullName -match '\\hooks\\' }).Count
-        $jsInApp = @($fileInventory.JS | Where-Object { $_.FullName -match '\\app\\' }).Count
-        $jsInLib = @($fileInventory.JS | Where-Object { $_.FullName -match '\\lib\\' }).Count
-        $jsOther = $stats.JS - $jsInComponents - $jsInHooks - $jsInApp - $jsInLib
-        Write-Info "  Distribution JS:"
-        Write-Info "    - components/: $jsInComponents"
-        Write-Info "    - hooks/: $jsInHooks"
-        Write-Info "    - app/: $jsInApp"
-        Write-Info "    - lib/: $jsInLib"
-        Write-Info "    - autres: $jsOther"
-        
-        if ($jsOther -gt ($stats.JS * 0.2)) {
-            Write-Warn "  Beaucoup de fichiers JS hors structure standard ($jsOther/$($stats.JS))"
-            $auditResults.Warnings += "Fichiers JS mal organisés: $jsOther fichiers hors structure"
-        }
-    }
-    
-    Write-OK "Architecture analysee"
-} catch {
-    Write-Err "Erreur analyse architecture: $($_.Exception.Message)"
-    $auditResults.Scores["Architecture"] = 5
-}
+}  # Fin if SelectedPhases -contains 1
 
 # ===============================================================================
 # PHASE 2 : CODE MORT
@@ -1511,6 +1646,25 @@ try {
         } else {
             Write-OK "  npm audit: Aucune vulnérabilité détectée"
         }
+        # NOUVEAU: Afficher les dépendances obsolètes
+        if ($npmAuditResult.Outdated -and $npmAuditResult.Outdated.Count -gt 0) {
+            Write-Warn "  $($npmAuditResult.Outdated.Count) dependance(s) obsolete(s) detectee(s)"
+            $outdatedList = $npmAuditResult.Outdated | Select-Object -First 5 | ForEach-Object {
+                "$($_.Package): $($_.Current) -> $($_.Latest)"
+            }
+            foreach ($item in $outdatedList) {
+                Write-Info "    $item"
+            }
+            if ($npmAuditResult.Outdated.Count -gt 5) {
+                Write-Info "    ... et $($npmAuditResult.Outdated.Count - 5) autre(s)"
+            }
+            $auditResults.Recommendations += "Mettre a jour $($npmAuditResult.Outdated.Count) dependance(s) obsolete(s) (npm update)"
+            if (-not $auditResults.OutdatedPackages) { $auditResults.OutdatedPackages = @() }
+            $auditResults.OutdatedPackages = $npmAuditResult.Outdated
+        } else {
+            Write-OK "  Toutes les dependances sont a jour"
+        }
+        
         # Utiliser le score npm audit pour améliorer le score de sécurité
         $securityScore = [Math]::Min(10, ($securityScore + $npmAuditResult.Score) / 2)
     }
@@ -1520,17 +1674,63 @@ try {
     $windowConfirms = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
         $_.FullName -notmatch 'node_modules' -and
         $_.FullName -notmatch '\\\.next\\' -and
-        $_.FullName -notmatch '\\docs\\'
-    } | Select-String -Pattern 'window\.confirm\s*\(|confirm\s*\(' | Where-Object {
-        # Exclure les commentaires et les chaînes de caractères
+        $_.FullName -notmatch '\\out\\' -and
+        $_.FullName -notmatch '\\docs\\' -and
+        $_.FullName -notmatch '\\chunks\\' -and
+        $_.FullName -notmatch '\\static\\'
+    } | Select-String -Pattern '\bwindow\.confirm\s*\(|\bconfirm\s*\(\s*["'']' | Where-Object {
+        # Exclure les commentaires, les chaînes de caractères, et les faux positifs
         $_.Line -notmatch '^\s*//' -and
-        $_.Line -notmatch "['\`"].*confirm.*['\`"]"
+        $_.Line -notmatch '^\s*#' -and
+        $_.Line -notmatch "['\`"].*confirm.*['\`"]" -and
+        $_.Line -notmatch '(?:set|show|hide|toggle|get|has|is).*[Cc]onfirm' -and  # Exclure setPasswordConfirm, showConfirm, etc.
+        $_.Line -match 'window\.confirm\s*\(|confirm\s*\(\s*["'']'  # S'assurer que c'est bien un appel de fonction
     })
     
     if ($windowConfirms.Count -gt 0) {
         Write-Warn "  $($windowConfirms.Count) utilisation(s) de window.confirm() detectee(s) - utiliser ConfirmModal unifie"
         foreach ($confirm in $windowConfirms) {
             $auditResults.Warnings += "window.confirm() dans $($confirm.Path):$($confirm.LineNumber) - remplacer par ConfirmModal"
+            
+            # Générer un plan de correction pour chaque window.confirm()
+            $fileContent = Get-Content $confirm.Path -ErrorAction SilentlyContinue
+            $currentLine = if ($fileContent -and $fileContent.Count -ge $confirm.LineNumber) { $fileContent[$confirm.LineNumber - 1] } else { "" }
+            
+            $correctionPlan = New-CorrectionPlan `
+                -IssueType "window.confirm() au lieu de ConfirmModal" `
+                -Severity "medium" `
+                -Description "Utilisation de window.confirm() détectée dans $($confirm.Path) à la ligne $($confirm.LineNumber). Pour une UX unifiée, utiliser le composant ConfirmModal." `
+                -File $confirm.Path `
+                -Line $confirm.LineNumber `
+                -CurrentCode $currentLine `
+                -RecommendedFix @"
+1. Importer ConfirmModal depuis '@/components/ConfirmModal'
+2. Ajouter un état pour gérer l'ouverture/fermeture du modal
+3. Remplacer window.confirm() par l'ouverture du ConfirmModal
+4. Gérer la confirmation dans le callback onConfirm du modal
+
+Exemple de correction:
+  AVANT: if (window.confirm('Êtes-vous sûr ?')) { ... }
+  APRÈS: 
+    const [showConfirm, setShowConfirm] = useState(false)
+    ...
+    <ConfirmModal
+      isOpen={showConfirm}
+      onClose={() => setShowConfirm(false)}
+      onConfirm={() => { ... }}
+      title="Confirmation"
+      message="Êtes-vous sûr ?"
+    />
+"@ `
+                -VerificationSteps @(
+                    "Vérifier que ConfirmModal est importé",
+                    "Vérifier que le modal s'ouvre correctement",
+                    "Vérifier que la confirmation fonctionne",
+                    "Tester l'annulation du modal"
+                ) `
+                -Dependencies @("Fichier: $($confirm.Path)", "Ligne: $($confirm.LineNumber)", "Composant: ConfirmModal")
+            
+            $auditResults.CorrectionPlans += $correctionPlan
         }
         $securityScore -= 0.5
         $auditResults.Recommendations += "Remplacer $($windowConfirms.Count) window.confirm() par ConfirmModal pour une UX unifiee"
@@ -1548,6 +1748,115 @@ try {
     
     if ($confirmModalImports -gt 0) {
         Write-OK "  ConfirmModal importe dans $confirmModalImports fichier(s)"
+    }
+    
+    # NOUVEAU: Détection des secrets hardcodés (améliorée pour éviter les faux positifs)
+    Write-Info "Detection des secrets hardcodes (passwords, tokens, API keys)..."
+    $secretPatterns = @(
+        @{Pattern = 'password\s*[:=]\s*["'']([^"'']+)["'']'; Description = "Password hardcode"; ExcludePattern = 'password.*(?:doit|obligatoire|contenir|minimum|caractère|error|message|validation|confirm|show|hide|set)' }
+        @{Pattern = 'api[_-]?key\s*[:=]\s*["'']([^"'']+)["'']'; Description = "API key hardcode"; ExcludePattern = '' }
+        @{Pattern = 'token\s*[:=]\s*["'']([^"'']{20,})["'']'; Description = "Token hardcode"; ExcludePattern = '' }
+        @{Pattern = 'secret\s*[:=]\s*["'']([^"'']+)["'']'; Description = "Secret hardcode"; ExcludePattern = 'CHANGEZ|TODO|FIXME|example|exemple' }
+        @{Pattern = 'private[_-]?key\s*[:=]\s*["'']([^"'']+)["'']'; Description = "Private key hardcode"; ExcludePattern = '' }
+    )
+    
+    $secretsFound = @()
+    # Exclure les fichiers de build, tests (sauf si vraiment problématique), et fichiers générés
+    $codeFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx,*.php,*.env,*.config.js | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\' -and
+        $_.FullName -notmatch '\\out\\' -and  # Exclure les fichiers de build
+        $_.FullName -notmatch '\\docs\\' -and
+        $_.FullName -notmatch 'audit-complet\\resultats' -and
+        $_.FullName -notmatch 'package-lock.json' -and
+        $_.FullName -notmatch '\\chunks\\' -and  # Exclure les chunks de build
+        $_.FullName -notmatch '\\static\\'  # Exclure les fichiers statiques de build
+    }
+    
+    foreach ($file in $codeFiles) {
+        $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+        if ($content) {
+            foreach ($pattern in $secretPatterns) {
+                $matches = [regex]::Matches($content, $pattern.Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                foreach ($match in $matches) {
+                    # Exclure les commentaires et les exemples
+                    $lineNum = ($content.Substring(0, $match.Index) -split "`n").Count
+                    $line = (Get-Content $file.FullName -ErrorAction SilentlyContinue)[$lineNum - 1]
+                    
+                    # Vérifier les exclusions
+                    $shouldExclude = $false
+                    if ($line -and ($line -match '^\s*//' -or $line -match '^\s*#')) {
+                        $shouldExclude = $true
+                    }
+                    if ($line -and $pattern.ExcludePattern -and $line -match $pattern.ExcludePattern) {
+                        $shouldExclude = $true
+                    }
+                    # Exclure les messages d'erreur de validation
+                    if ($line -and $line -match '(?:doit|obligatoire|contenir|minimum|caractère|error|message|validation|format|invalide)') {
+                        $shouldExclude = $true
+                    }
+                    # Exclure les fichiers de test avec des mots de passe de test simples
+                    if ($file.FullName -match '__tests__|\.test\.|\.spec\.' -and $match.Groups[1].Value -match '^(admin|user|test|123|password)\d*$') {
+                        $shouldExclude = $true  # Acceptable pour les tests
+                    }
+                    
+                    if (-not $shouldExclude) {
+                        $secretInfo = @{
+                            File = $file.FullName
+                            Line = $lineNum
+                            Pattern = $pattern.Description
+                            Match = $match.Groups[1].Value.Substring(0, [Math]::Min(20, $match.Groups[1].Value.Length)) + "..."
+                        }
+                        $secretsFound += $secretInfo
+                        if (-not $auditResults.Secrets) { $auditResults.Secrets = @() }
+                        $auditResults.Secrets += $secretInfo
+                    }
+                }
+            }
+        }
+    }
+    
+    if ($secretsFound.Count -gt 0) {
+        Write-Warn "  $($secretsFound.Count) secret(s) potentiel(le)(s) detecte(s) - VERIFIER IMMEDIATEMENT"
+        foreach ($secret in $secretsFound) {
+            $auditResults.Warnings += "SECURITE: $($secret.Pattern) dans $($secret.File):$($secret.Line) - valeur: $($secret.Match)"
+            
+            # Générer un plan de correction pour chaque secret détecté
+            $fileContent = Get-Content $secret.File -ErrorAction SilentlyContinue
+            $currentLine = if ($fileContent -and $fileContent.Count -ge $secret.Line) { $fileContent[$secret.Line - 1] } else { "" }
+            
+            $correctionPlan = New-CorrectionPlan `
+                -IssueType "Secret Hardcodé" `
+                -Severity "critical" `
+                -Description "$($secret.Pattern) détecté dans $($secret.File) à la ligne $($secret.Line). Les secrets ne doivent jamais être hardcodés dans le code source." `
+                -File $secret.File `
+                -Line $secret.Line `
+                -CurrentCode $currentLine `
+                -RecommendedFix @"
+1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)
+2. Remplacer le code hardcodé par une référence à la variable d'environnement
+3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait
+4. Documenter la variable dans env.example
+5. Vérifier que le secret n'a pas été commité dans l'historique Git
+
+Exemple de correction:
+  AVANT: const apiKey = 'sk-1234567890abcdef'
+  APRÈS: const apiKey = process.env.API_KEY || ''
+"@ `
+                -VerificationSteps @(
+                    "Vérifier que la variable d'environnement est définie",
+                    "Vérifier que .env.local est dans .gitignore",
+                    "Vérifier que le secret n'est plus dans le code source",
+                    "Tester que l'application fonctionne avec la variable d'environnement"
+                ) `
+                -Dependencies @("Fichier: $($secret.File)", "Ligne: $($secret.Line)")
+            
+            $auditResults.CorrectionPlans += $correctionPlan
+        }
+        $securityScore -= 2.0
+        $auditResults.Recommendations += "URGENT: Remplacer $($secretsFound.Count) secret(s) hardcode(s) par des variables d'environnement"
+    } else {
+        Write-OK "  Aucun secret hardcode detecte"
     }
     
     Write-OK "Verification securite terminee"
@@ -4768,6 +5077,63 @@ if ($script:apiAuthFailed) {
     } catch {
         Write-Warn "Erreur export JSON: $($_.Exception.Message)"
     }
+    
+    # Export des plans de correction
+    if ($auditResults.CorrectionPlans.Count -gt 0) {
+        Write-Host ""
+        Write-Section "Export Plans de Correction"
+        try {
+            $correctionPlansPath = if (-not [string]::IsNullOrEmpty($CorrectionPlansFile)) {
+                $CorrectionPlansFile
+            } else {
+                Join-Path (Get-Location) "audit-complet\resultats\correction_plans_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
+            }
+            
+            Export-CorrectionPlans -Plans $auditResults.CorrectionPlans -OutputFile $correctionPlansPath
+            Write-OK "Plans de correction exportes: $correctionPlansPath ($($auditResults.CorrectionPlans.Count) plan(s))"
+            
+            # Générer aussi un rapport texte lisible
+            $textReportPath = $correctionPlansPath -replace '\.json$', '.txt'
+            $textReport = @"
+═══════════════════════════════════════════════════════════════════════════════
+PLANS DE CORRECTION - RAPPORT DÉTAILLÉ
+═══════════════════════════════════════════════════════════════════════════════
+Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+Total de problèmes: $($auditResults.CorrectionPlans.Count)
+
+Résumé par sévérité:
+  - Critique: $(($auditResults.CorrectionPlans | Where-Object { $_.Severity -eq 'critical' }).Count)
+  - Élevée: $(($auditResults.CorrectionPlans | Where-Object { $_.Severity -eq 'high' }).Count)
+  - Moyenne: $(($auditResults.CorrectionPlans | Where-Object { $_.Severity -eq 'medium' }).Count)
+  - Faible: $(($auditResults.CorrectionPlans | Where-Object { $_.Severity -eq 'low' }).Count)
+  - Info: $(($auditResults.CorrectionPlans | Where-Object { $_.Severity -eq 'info' }).Count)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+"@
+            
+            foreach ($plan in $auditResults.CorrectionPlans | Sort-Object { 
+                $severityOrder = @{ 'critical' = 0; 'high' = 1; 'medium' = 2; 'low' = 3; 'info' = 4 }
+                $severityOrder[$_.Severity]
+            }) {
+                $textReport += Format-CorrectionPlan -Plan $plan
+                $textReport += "`n"
+            }
+            
+            $textReport | Out-File -FilePath $textReportPath -Encoding UTF8
+            Write-OK "Rapport texte genere: $textReportPath"
+        } catch {
+            Write-Warn "Erreur export plans de correction: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Info "Aucun plan de correction genere (aucun probleme detecte ou plans non implementes)"
+    }
+}
+
+# Sauvegarder l'état final
+if (-not [string]::IsNullOrEmpty($StateFile)) {
+    Save-AuditState -StateFile $StateFile -CompletedPhases $completedPhases -PartialResults $partialResults
+    Write-Info "État final sauvegardé: $StateFile"
 }
 
 # Verdict final

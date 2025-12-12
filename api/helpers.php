@@ -518,6 +518,224 @@ function auditLog($action, $entity_type = null, $entity_id = null, $old_value = 
     } catch(PDOException $e) {}
 }
 
+/**
+ * Parse SQL en tenant compte des blocs dollar-quoted ($$ ... $$ ou $tag$ ... $tag$)
+ * Utilise une approche simple : remplace temporairement les blocs dollar-quoted par des placeholders
+ * @param string $sql SQL à parser
+ * @return array Tableau d'instructions SQL
+ */
+function parseSqlStatements($sql) {
+    // Approche simple : utiliser une boucle pour trouver et remplacer TOUS les blocs $$ ... $$
+    // de manière itérative jusqu'à ce qu'il n'y en ait plus
+    
+    $placeholders = [];
+    $placeholderIndex = 0;
+    $protectedSql = $sql;
+    $maxIterations = 100;
+    $iteration = 0;
+    
+    // Boucle pour trouver tous les blocs $$ ... $$
+    while ($iteration < $maxIterations) {
+        // Chercher le premier bloc $$ ... $$
+        $startPos = strpos($protectedSql, '$$');
+        if ($startPos === false) {
+            // Plus de blocs à trouver
+            break;
+        }
+        
+        // Trouver le $$ de fermeture correspondant (le prochain $$ après celui-ci)
+        $endPos = strpos($protectedSql, '$$', $startPos + 2);
+        if ($endPos === false) {
+            // Bloc non fermé, sortir
+            error_log("[parseSqlStatements] ⚠️ Bloc $$ non fermé à la position {$startPos}");
+            break;
+        }
+        
+        // Extraire le bloc complet (incluant les $$ de début et fin)
+        $block = substr($protectedSql, $startPos, $endPos - $startPos + 2);
+        
+        // Créer un placeholder unique
+        $placeholder = "___DOLLAR_QUOTE_{$placeholderIndex}___";
+        $placeholders[$placeholder] = $block;
+        
+        // Remplacer le bloc par le placeholder
+        $protectedSql = substr_replace($protectedSql, $placeholder, $startPos, $endPos - $startPos + 2);
+        
+        error_log("[parseSqlStatements] Bloc trouvé à la position {$startPos}, longueur: " . strlen($block) . " chars");
+        error_log("[parseSqlStatements] Bloc preview: " . substr($block, 0, 150) . "...");
+        error_log("[parseSqlStatements] Placeholder: {$placeholder}");
+        
+        $placeholderIndex++;
+        $iteration++;
+    }
+    
+    error_log("[parseSqlStatements] Nombre de blocs dollar-quoted trouvés: " . count($placeholders));
+    
+    // Vérifier qu'il ne reste plus de $$
+    if (strpos($protectedSql, '$$') !== false) {
+        error_log("[parseSqlStatements] ⚠️ ATTENTION: Des $$ sont encore présents dans le SQL protégé !");
+        error_log("[parseSqlStatements] SQL protégé (preview): " . substr($protectedSql, 0, 500));
+    }
+    
+    $result = $protectedSql;
+    
+    // Log pour debug
+    error_log("[parseSqlStatements] Nombre de blocs dollar-quoted trouvés: " . count($placeholders));
+    if (count($placeholders) > 0) {
+        foreach ($placeholders as $ph => $block) {
+            error_log("[parseSqlStatements] Placeholder {$ph} -> bloc de " . strlen($block) . " chars");
+            error_log("[parseSqlStatements] Bloc preview: " . substr($block, 0, 100) . "...");
+        }
+    }
+    
+    // Étape 2: Diviser par point-virgule maintenant que les blocs sont protégés
+    error_log("[parseSqlStatements] SQL protégé (preview): " . substr($result, 0, 300));
+    $rawStatements = explode(';', $result);
+    error_log("[parseSqlStatements] Nombre d'instructions après division: " . count($rawStatements));
+    
+    // Étape 3: Réassembler les parties qui contiennent des placeholders
+    // Une instruction qui contient un placeholder peut être divisée en plusieurs parties
+    $statements = [];
+    $currentParts = [];
+    
+    foreach ($rawStatements as $index => $rawStmt) {
+        $stmt = trim($rawStmt);
+        
+        if (empty($stmt)) {
+            // Partie vide, finaliser l'instruction en cours si elle existe
+            if (!empty($currentParts)) {
+                $finalStmt = implode('; ', $currentParts) . ';';
+                // Restaurer les placeholders
+                foreach (array_reverse($placeholders, true) as $placeholder => $original) {
+                    $finalStmt = str_replace($placeholder, $original, $finalStmt);
+                }
+                if (!preg_match('/^\s*--/', $finalStmt)) {
+                    $statements[] = $finalStmt;
+                }
+                $currentParts = [];
+            }
+            continue;
+        }
+        
+        // Vérifier si cette partie contient un placeholder
+        $hasPlaceholder = false;
+        foreach ($placeholders as $placeholder => $original) {
+            if (strpos($stmt, $placeholder) !== false) {
+                $hasPlaceholder = true;
+                break;
+            }
+        }
+        
+        // Vérifier si cette partie contient un placeholder
+        $hasPlaceholder = false;
+        $placeholderInStmt = null;
+        foreach ($placeholders as $placeholder => $original) {
+            if (strpos($stmt, $placeholder) !== false) {
+                $hasPlaceholder = true;
+                $placeholderInStmt = $placeholder;
+                break;
+            }
+        }
+        
+        if ($hasPlaceholder) {
+            // Cette partie contient un placeholder, l'ajouter à l'instruction en cours
+            $currentParts[] = $stmt;
+            
+            // Vérifier si cette partie termine l'instruction (contient "LANGUAGE" après le placeholder)
+            // Le placeholder peut être suivi de retours à la ligne, espaces, puis LANGUAGE
+            $isComplete = false;
+            if ($placeholderInStmt) {
+                // Chercher le placeholder suivi éventuellement de whitespace puis LANGUAGE
+                // Utiliser [\s\S] pour matcher tous les caractères y compris les retours à la ligne
+                if (preg_match('/' . preg_quote($placeholderInStmt, '/') . '[\s\S]*?LANGUAGE\s+\w+/i', $stmt)) {
+                    $isComplete = true;
+                }
+            }
+            
+            if ($isComplete) {
+                // L'instruction est complète, la finaliser
+                $finalStmt = implode('; ', $currentParts) . ';';
+                // Restaurer les placeholders
+                foreach (array_reverse($placeholders, true) as $placeholder => $original) {
+                    $finalStmt = str_replace($placeholder, $original, $finalStmt);
+                }
+                if (!preg_match('/^\s*--/', $finalStmt)) {
+                    $statements[] = $finalStmt;
+                }
+                $currentParts = [];
+            }
+        } else {
+            // Pas de placeholder dans cette partie
+            // MAIS: Si on a une instruction en cours avec placeholder, vérifier si cette partie
+            // complète l'instruction (commence par "LANGUAGE")
+            if (!empty($currentParts)) {
+                // Vérifier si cette partie commence par "LANGUAGE" (suite de l'instruction avec placeholder)
+                // Peut commencer par des whitespace (retours à la ligne, espaces)
+                if (preg_match('/^[\s\n\r]*LANGUAGE\s+\w+/i', $stmt)) {
+                    // Cette partie complète l'instruction en cours, l'ajouter
+                    $currentParts[] = $stmt;
+                    $finalStmt = implode('; ', $currentParts) . ';';
+                    // Restaurer les placeholders
+                    foreach (array_reverse($placeholders, true) as $placeholder => $original) {
+                        $finalStmt = str_replace($placeholder, $original, $finalStmt);
+                    }
+                    if (!preg_match('/^\s*--/', $finalStmt)) {
+                        $statements[] = $finalStmt;
+                    }
+                    $currentParts = [];
+                    continue;
+                } else {
+                    // Cette partie ne complète pas l'instruction, finaliser l'instruction en cours d'abord
+                    $finalStmt = implode('; ', $currentParts) . ';';
+                    // Restaurer les placeholders
+                    foreach (array_reverse($placeholders, true) as $placeholder => $original) {
+                        $finalStmt = str_replace($placeholder, $original, $finalStmt);
+                    }
+                    if (!preg_match('/^\s*--/', $finalStmt)) {
+                        $statements[] = $finalStmt;
+                    }
+                    $currentParts = [];
+                }
+            }
+            
+            // Ajouter cette instruction normale (si elle n'est pas vide et n'est pas un commentaire)
+            if (!preg_match('/^\s*--/', $stmt)) {
+                $statements[] = $stmt . ';';
+            }
+        }
+    }
+    
+    // Finaliser l'instruction en cours si elle existe
+    if (!empty($currentParts)) {
+        $finalStmt = implode('; ', $currentParts) . ';';
+        // Restaurer les placeholders
+        foreach (array_reverse($placeholders, true) as $placeholder => $original) {
+            $finalStmt = str_replace($placeholder, $original, $finalStmt);
+        }
+        if (!preg_match('/^\s*--/', $finalStmt)) {
+            $statements[] = $finalStmt;
+        }
+    }
+    
+    // Log pour debug (premières instructions seulement)
+    foreach ($statements as $index => $stmt) {
+        if ($index < 3) {
+            $preview = substr($stmt, 0, 200);
+            error_log("[parseSqlStatements] Instruction " . ($index + 1) . " (preview): {$preview}...");
+            error_log("[parseSqlStatements] Instruction " . ($index + 1) . " longueur: " . strlen($stmt) . " chars");
+            // Vérifier si l'instruction contient les éléments attendus
+            if (strpos($stmt, 'CREATE OR REPLACE FUNCTION') !== false) {
+                error_log("[parseSqlStatements] Instruction " . ($index + 1) . " contient 'RETURN NEW': " . (strpos($stmt, 'RETURN NEW') !== false ? 'OUI' : 'NON'));
+                error_log("[parseSqlStatements] Instruction " . ($index + 1) . " contient 'END;': " . (strpos($stmt, 'END;') !== false ? 'OUI' : 'NON'));
+                error_log("[parseSqlStatements] Instruction " . ($index + 1) . " contient 'LANGUAGE plpgsql': " . (strpos($stmt, 'LANGUAGE plpgsql') !== false ? 'OUI' : 'NON'));
+            }
+        }
+    }
+    
+    error_log("[parseSqlStatements] Nombre d'instructions finales: " . count($statements));
+    return $statements;
+}
+
 function runSqlFile(PDO $pdo, $filename) {
     $path = SQL_BASE_DIR . '/' . ltrim($filename, '/');
     
@@ -540,11 +758,8 @@ function runSqlFile(PDO $pdo, $filename) {
     $sqlSize = strlen($sql);
     error_log("[runSqlFile] Fichier lu: {$sqlSize} octets");
     
-    // Diviser le SQL en instructions individuelles pour un meilleur logging
-    $statements = array_filter(
-        array_map('trim', explode(';', $sql)),
-        function($stmt) { return !empty($stmt) && !preg_match('/^\s*--/', $stmt); }
-    );
+    // Parser le SQL en tenant compte des blocs dollar-quoted, commentaires et chaînes
+    $statements = parseSqlStatements($sql);
     
     error_log("[runSqlFile] Nombre d'instructions SQL: " . count($statements));
     
@@ -553,8 +768,16 @@ function runSqlFile(PDO $pdo, $filename) {
         foreach ($statements as $index => $statement) {
             if (empty(trim($statement))) continue;
             
-            $stmtPreview = substr($statement, 0, 100);
-            error_log("[runSqlFile] Exécution instruction " . ($index + 1) . "/" . count($statements) . ": {$stmtPreview}...");
+            $stmtPreview = substr($statement, 0, 200);
+            error_log("[runSqlFile] Exécution instruction " . ($index + 1) . "/" . count($statements));
+            error_log("[runSqlFile] Longueur instruction: " . strlen($statement) . " caractères");
+            error_log("[runSqlFile] Preview (200 premiers chars): {$stmtPreview}...");
+            
+            // Vérifier si l'instruction contient un placeholder non restauré
+            if (strpos($statement, '___DOLLAR_QUOTE_') !== false) {
+                error_log("[runSqlFile] ⚠️ ATTENTION: L'instruction contient un placeholder non restauré !");
+                error_log("[runSqlFile] Instruction complète: " . substr($statement, 0, 1000));
+            }
             
             try {
                 $pdo->exec($statement);
@@ -568,13 +791,25 @@ function runSqlFile(PDO $pdo, $filename) {
                 error_log("[runSqlFile]   Code: {$errorCode}");
                 error_log("[runSqlFile]   Message: {$errorMessage}");
                 error_log("[runSqlFile]   PDO ErrorInfo: " . json_encode($errorInfo));
-                error_log("[runSqlFile]   Instruction complète: " . substr($statement, 0, 500));
+                error_log("[runSqlFile]   Instruction complète: " . substr($statement, 0, 1000));
+                
+                // Construire un message d'erreur détaillé avec l'instruction SQL complète
+                $stmtPreview = strlen($statement) > 1000 ? substr($statement, 0, 1000) . "\n... (tronqué, " . strlen($statement) . " caractères au total)" : $statement;
+                
+                $detailedMessage = "SQL error at statement " . ($index + 1) . "/" . count($statements) . 
+                    " in file {$filename}\n\n" .
+                    "Error Code: {$errorCode}\n" .
+                    "Error Message: {$errorMessage}\n";
+                
+                if (isset($errorInfo[2])) {
+                    $detailedMessage .= "PDO Error: {$errorInfo[2]}\n";
+                }
+                
+                $detailedMessage .= "\nStatement SQL:\n" . $stmtPreview;
                 
                 // Relancer avec plus de détails
                 throw new RuntimeException(
-                    "SQL error at statement " . ($index + 1) . "/" . count($statements) . 
-                    " in file {$filename}: [{$errorCode}] {$errorMessage}. " .
-                    "Statement: " . substr($statement, 0, 200),
+                    $detailedMessage,
                     $errorCode,
                     $e
                 );

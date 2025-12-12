@@ -772,6 +772,38 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li>Démarre automatiquement le streaming USB si un dispositif est détecté</li>
     </ul>
     
+    <h4>📡 Vérification Périodique des Commandes OTA en Mode USB</h4>
+    <div class="alert alert-info">
+        <strong>ℹ️ Fonctionnement Automatique</strong><br>
+        Même lorsque le dispositif est connecté en USB, le firmware vérifie automatiquement les commandes OTA depuis la base de données toutes les <strong>30 secondes</strong>, dès que le réseau est connecté.
+    </div>
+    <p>Le firmware effectue une vérification périodique des commandes OTA dans deux modes :</p>
+    <ul>
+        <li><strong>Mode USB</strong> : Vérification toutes les 30 secondes même sans envoi de mesure, dès que le modem est prêt et le réseau connecté</li>
+        <li><strong>Mode Normal</strong> : Vérification toutes les 30 secondes après chaque envoi de mesure OTA</li>
+    </ul>
+    <p>Les messages suivants sont affichés dans la console USB pour le débogage :</p>
+    <pre><code>[OTA] 🔍 Vérification commandes OTA depuis la base de données...
+[API] ✅ 1 commande(s) récupérée(s) depuis la base de données
+[OTA] 📡 1 commande(s) reçue(s) depuis la base de données
+[CMD] 📥 Commande reçue: OTA_REQUEST (ID: 123)
+═══════════════════════════════════════════════════════════
+[OTA] 📨 COMMANDE OTA_REQUEST REÇUE DEPUIS LA BASE DE DONNÉES
+═══════════════════════════════════════════════════════════
+[OTA]   URL: https://...
+[OTA]   Version attendue: 1.1
+[OTA] 🚀 Démarrage de la mise à jour OTA...
+[OTA] ✅ MISE À JOUR OTA RÉUSSIE !
+[OTA] ✅ Commande correctement reçue et traitée par la base de données
+[OTA] ✅ ACK envoyé à la base de données: SUCCÈS
+[CMD] ✅ ACK envoyé avec succès à la base de données (ID=123, Status=executed)</code></pre>
+    <p>En cas d'erreur, des messages clairs indiquent le problème :</p>
+    <pre><code>[OTA] ❌ MISE À JOUR OTA ÉCHOUÉE !
+[OTA] ❌ Erreur lors du téléchargement ou de l'installation
+[OTA] ❌ ACK d'erreur envoyé à la base de données
+[OTA] ⚠️  Le dispositif continue avec la version actuelle</code></pre>
+    <p><strong>Important</strong> : Tous les messages incluent des timestamps et des indicateurs visuels (✅, ❌, ⚠️, 📡) pour faciliter le débogage dans la console USB.</p>
+    
     <h3>⚙️ Valeurs par Défaut du Firmware</h3>
     
     <div class="alert alert-info">

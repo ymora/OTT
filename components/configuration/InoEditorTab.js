@@ -45,7 +45,6 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const eventSourceRef = useRef(null)
   const compileLogsRef = useRef(null)
   const statusCheckIntervalRef = useRef(null)
-  const timeoutRef = useRef(null)
 
   const { data, loading, refetch, invalidateCache } = useApiData(
     ['/api.php/firmwares'],
@@ -907,18 +906,28 @@ export default function InoEditorTab({ onUploadSuccess }) {
   }, [API_URL, token, compiling, compilingFirmwareId, closeEventSource, resetCompilationState, refetch])
 
   // Fermer EventSource au démontage et nettoyer les intervalles
+  // IMPORTANT: Ce useEffect s'exécute uniquement au démontage (pas de dépendances)
+  // pour garantir que le cleanup se fait toujours, même si closeEventSource change
   useEffect(() => {
     return () => {
+      // Nettoyer l'EventSource
       if (eventSourceRef.current) {
-        closeEventSource()
+        try {
+          eventSourceRef.current.close()
+        } catch (err) {
+          // Ignorer les erreurs si l'EventSource est déjà fermé
+          console.debug('[InoEditorTab] EventSource déjà fermé ou erreur lors de la fermeture:', err)
+        }
+        eventSourceRef.current = null
       }
-      // Nettoyer tous les intervalles potentiels
-      const highestIntervalId = setInterval(() => {}, 9999)
-      for (let i = 0; i < highestIntervalId; i++) {
-        clearInterval(i)
+      // Nettoyer explicitement l'intervalle de vérification de statut
+      // CRITIQUE: Ce cleanup doit toujours s'exécuter au démontage pour éviter les fuites mémoire
+      if (statusCheckIntervalRef.current) {
+        clearInterval(statusCheckIntervalRef.current)
+        statusCheckIntervalRef.current = null
       }
     }
-  }, [closeEventSource])
+  }, []) // Pas de dépendances = s'exécute uniquement au montage/démontage
 
   // Auto-scroll des logs de compilation
   useEffect(() => {

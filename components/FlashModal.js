@@ -146,7 +146,7 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
       if (isStreamingActive && pauseUsbStreaming) {
         logger.log('⏸️ Mise en pause du streaming USB avant connexion pour flash')
         pauseUsbStreaming()
-        await new Promise(resolve => setTimeout(resolve, 500))
+        await new Promise(resolve => createTimeoutWithCleanup(resolve, 500))
       }
 
       const selectedPort = await requestPort()
@@ -514,7 +514,7 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
 
       // Vérifier si le dispositif est vivant
       addLog('[TEST] Attente redémarrage (3 secondes)...')
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      await new Promise(resolve => createTimeoutWithCleanup(resolve, 3000))
 
       try {
         addLog('[TEST] Envoi commande AT pour vérifier...')

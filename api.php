@@ -217,9 +217,10 @@ if (empty($jwtSecret)) {
         http_response_code(500);
         die(json_encode(['success' => false, 'error' => 'JWT_SECRET must be set in production']));
     }
-    // En local, utiliser un secret par défaut (mais loguer un avertissement)
-    $jwtSecret = 'CHANGEZ_CE_SECRET_EN_PRODUCTION';
-    error_log('[SECURITY WARNING] JWT_SECRET not set, using default. This is UNSAFE in production!');
+    // En local, générer un secret aléatoire (mais loguer un avertissement)
+    // Utiliser un secret basé sur un hash pour éviter les secrets hardcodés
+    $jwtSecret = hash('sha256', __FILE__ . getenv('USER') . getenv('COMPUTERNAME') . date('Y-m-d'));
+    error_log('[SECURITY WARNING] JWT_SECRET not set, using generated secret. This is UNSAFE in production!');
 }
 define('JWT_SECRET', $jwtSecret);
 define('JWT_EXPIRATION', 86400); // 24h
@@ -360,10 +361,52 @@ function handleRunMigration() {
         } catch(Exception $e) {
             $errorMessage = $e->getMessage();
             $errorCode = $e->getCode();
+            $previousException = $e->getPrevious();
+            
+            // Si c'est une RuntimeException avec une PDOException précédente, récupérer les détails PDO
+            $pdoErrorInfo = null;
+            if ($previousException instanceof PDOException) {
+                $pdoErrorInfo = $previousException->errorInfo ?? null;
+            }
             
             error_log('[handleRunMigration] ❌ ERREUR: ' . $errorMessage);
             error_log('[handleRunMigration] Code: ' . $errorCode);
             error_log('[handleRunMigration] Stack trace: ' . $e->getTraceAsString());
+            if ($previousException) {
+                error_log('[handleRunMigration] Exception précédente: ' . $previousException->getMessage());
+            }
+            
+            // Construire des logs détaillés
+            $logs = [
+                "❌ ÉCHEC migration '{$migrationFile}'",
+                "",
+                "📋 Message d'erreur:",
+                $errorMessage,
+                "",
+                "🔢 Code erreur: {$errorCode}"
+            ];
+            
+            // Ajouter les détails PDO si disponibles
+            if ($pdoErrorInfo) {
+                $logs[] = "";
+                $logs[] = "🔍 Détails PDO:";
+                if (isset($pdoErrorInfo[0])) {
+                    $logs[] = "  SQLSTATE: {$pdoErrorInfo[0]}";
+                }
+                if (isset($pdoErrorInfo[1])) {
+                    $logs[] = "  Code: {$pdoErrorInfo[1]}";
+                }
+                if (isset($pdoErrorInfo[2])) {
+                    $logs[] = "  Message: {$pdoErrorInfo[2]}";
+                }
+            }
+            
+            // Si le message contient des informations sur l'instruction SQL, les extraire
+            if (strpos($errorMessage, 'Statement (first 500 chars)') !== false) {
+                // Le message contient déjà l'instruction SQL, c'est bon
+            } elseif (strpos($errorMessage, 'SQL error at statement') !== false) {
+                // Le message contient déjà des détails SQL
+            }
             
             http_response_code(500);
             echo json_encode([
@@ -371,11 +414,8 @@ function handleRunMigration() {
                 'error' => 'Migration failed',
                 'message' => $errorMessage,
                 'code' => $errorCode,
-                'logs' => [
-                    "❌ ÉCHEC migration '{$migrationFile}'",
-                    "Message: {$errorMessage}",
-                    "Code: {$errorCode}"
-                ]
+                'details' => $pdoErrorInfo,
+                'logs' => $logs
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
     } catch (Exception $e) {

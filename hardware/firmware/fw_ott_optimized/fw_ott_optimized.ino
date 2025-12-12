@@ -609,7 +609,8 @@ void loop()
       Command cmds[MAX_COMMANDS];
       int count = fetchCommands(cmds, MAX_COMMANDS);
       if (count > 0) {
-        Serial.printf("[OTA] 📡 %d commande(s) reçue(s)\n", count);
+        String timeStrCmd = formatTimeFromMillis(millis());
+        Serial.printf("%s[OTA] 📡 %d commande(s) reçue(s) depuis la base de données\n", timeStrCmd.c_str(), count);
         uint32_t dummySleep = configuredSleepMinutes;
         for (int i = 0; i < count; ++i) {
           handleCommand(cmds[i], dummySleep);
@@ -626,16 +627,25 @@ void loop()
     if (now - lastOtaCheckUsb >= OTA_CHECK_INTERVAL_MS) {
       lastOtaCheckUsb = now;
       if (modemReady && modem.isNetworkConnected()) {
+        String timeStr = formatTimeFromMillis(millis());
+        Serial.printf("%s[OTA] 🔍 Vérification commandes OTA depuis la base de données...\n", timeStr.c_str());
         Command cmds[MAX_COMMANDS];
         int count = fetchCommands(cmds, MAX_COMMANDS);
         if (count > 0) {
-          String timeStr = formatTimeFromMillis(millis());
-          Serial.printf("%s[OTA] 📡 %d commande(s) en attente\n", timeStr.c_str(), count);
+          Serial.printf("%s[OTA] 📡 %d commande(s) reçue(s) depuis la base de données\n", timeStr.c_str(), count);
           uint32_t dummySleep = configuredSleepMinutes;
           for (int i = 0; i < count; ++i) {
             handleCommand(cmds[i], dummySleep);
           }
+        } else {
+          Serial.printf("%s[OTA] ✓ Aucune commande en attente\n", timeStr.c_str());
         }
+      } else if (!modemReady) {
+        String timeStr = formatTimeFromMillis(millis());
+        Serial.printf("%s[OTA] ⚠️ Modem non prêt - Vérification commandes reportée\n", timeStr.c_str());
+      } else if (!modem.isNetworkConnected()) {
+        String timeStr = formatTimeFromMillis(millis());
+        Serial.printf("%s[OTA] ⚠️ Réseau non connecté - Vérification commandes reportée\n", timeStr.c_str());
       }
     }
     
@@ -755,14 +765,18 @@ void loop()
     if (now - lastOtaCheck >= OTA_CHECK_INTERVAL_MS) {
       lastOtaCheck = now;
       if (modemReady && modem.isNetworkConnected()) {
+        String timeStr = formatTimeFromMillis(millis());
+        Serial.printf("%s[OTA] 🔍 Vérification commandes OTA depuis la base de données...\n", timeStr.c_str());
         Command cmds[MAX_COMMANDS];
         int count = fetchCommands(cmds, MAX_COMMANDS);
         if (count > 0) {
-          Serial.printf("[COMMANDS] %d commande(s) OTA reçue(s)\n", count);
+          Serial.printf("%s[OTA] 📡 %d commande(s) reçue(s) depuis la base de données\n", timeStr.c_str(), count);
           uint32_t dummySleep = configuredSleepMinutes;
           for (int i = 0; i < count; ++i) {
             handleCommand(cmds[i], dummySleep);
           }
+        } else {
+          Serial.printf("%s[OTA] ✓ Aucune commande en attente\n", timeStr.c_str());
         }
       }
     }
@@ -2164,19 +2178,23 @@ int fetchCommands(Command* out, size_t maxCount)
   String response;
   String path = String("/devices/") + DEVICE_ICCID + "/commands/pending?limit=" + String(maxCount);
   if (!httpGet(path.c_str(), &response)) {
-    Serial.println(F("[API] GET commandes KO"));
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[API] ❌ Échec récupération commandes depuis la base de données\n", timeStr.c_str());
     sendLog("WARN", "GET commandes échoué", "commands");
     return 0;
   }
 
   DynamicJsonDocument doc(2048);
   if (deserializeJson(doc, response)) {
-    Serial.println(F("[API] JSON commandes invalide"));
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[API] ❌ Réponse JSON invalide depuis la base de données\n", timeStr.c_str());
     sendLog("WARN", "JSON commandes invalide", "commands");
     return 0;
   }
 
   if (!doc["success"]) {
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[API] ⚠️ Réponse API sans succès\n", timeStr.c_str());
     sendLog("WARN", "Réponse commandes sans succès", "commands");
     return 0;
   }
@@ -2200,13 +2218,19 @@ int fetchCommands(Command* out, size_t maxCount)
       cmd.payloadRaw = "";
     }
   }
+  
+  if (count > 0) {
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[API] ✅ %d commande(s) récupérée(s) depuis la base de données\n", timeStr.c_str(), count);
+  }
+  
   return count;
 }
 
 bool acknowledgeCommand(const Command& cmd, bool success, const char* message)
 {
   String timeStr = formatTimeFromMillis(millis());
-  Serial.printf("%s[CMD] 📤 Envoi ACK: ID=%d | Status=%s | Message=%s\n", 
+  Serial.printf("%s[CMD] 📤 Envoi ACK à la base de données: ID=%d | Status=%s | Message=%s\n", 
                 timeStr.c_str(), cmd.id, success ? "executed" : "error", message);
   
   DynamicJsonDocument doc(256);
@@ -2219,9 +2243,11 @@ bool acknowledgeCommand(const Command& cmd, bool success, const char* message)
   
   bool result = httpPost(PATH_ACK, body);
   if (result) {
-    Serial.printf("%s[CMD] ✅ ACK envoyé avec succès à l'API\n", timeStr.c_str());
+    Serial.printf("%s[CMD] ✅ ACK envoyé avec succès à la base de données (ID=%d, Status=%s)\n", 
+                  timeStr.c_str(), cmd.id, success ? "executed" : "error");
   } else {
-    Serial.printf("%s[CMD] ❌ Échec envoi ACK à l'API\n", timeStr.c_str());
+    Serial.printf("%s[CMD] ❌ Échec envoi ACK à la base de données (ID=%d) - Réessai au prochain cycle\n", 
+                  timeStr.c_str(), cmd.id);
   }
   return result;
 }
@@ -2530,22 +2556,30 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     saveConfig();
     
     String timeStr = formatTimeFromMillis(millis());
-    Serial.printf("%s[OTA] 📨 Commande OTA_REQUEST reçue\n", timeStr.c_str());
+    Serial.println(F("═══════════════════════════════════════════════════════════"));
+    Serial.printf("%s[OTA] 📨 COMMANDE OTA_REQUEST REÇUE DEPUIS LA BASE DE DONNÉES\n", timeStr.c_str());
+    Serial.println(F("═══════════════════════════════════════════════════════════"));
     Serial.printf("%s[OTA]   URL: %s\n", timeStr.c_str(), url.c_str());
     if (expectedVersion.length() > 0) {
-      Serial.printf("%s[OTA]   Version: %s\n", timeStr.c_str(), expectedVersion.c_str());
+      Serial.printf("%s[OTA]   Version attendue: %s\n", timeStr.c_str(), expectedVersion.c_str());
     }
     if (md5.length() == 32) {
       Serial.printf("%s[OTA]   MD5: %s\n", timeStr.c_str(), md5.c_str());
     }
+    Serial.printf("%s[OTA] 🚀 Démarrage de la mise à jour OTA...\n", timeStr.c_str());
     
     sendLog("INFO", "OTA request: " + url + (expectedVersion.length() ? " (v" + expectedVersion + ")" : ""), "ota");
     bool otaOk = performOtaUpdate(url, md5, expectedVersion);
     bool ackOk = acknowledgeCommand(cmd, otaOk, otaOk ? "ota applied" : "ota failed");
     if (otaOk) {
-      Serial.printf("%s[CMD] ✅ OTA appliqué avec succès\n", timeStr.c_str());
+      String finalTimeStr = formatTimeFromMillis(millis());
+      Serial.println(F("═══════════════════════════════════════════════════════════"));
+      Serial.printf("%s[OTA] ✅ MISE À JOUR OTA RÉUSSIE !\n", finalTimeStr.c_str());
+      Serial.printf("%s[OTA] ✅ Commande correctement reçue et traitée par la base de données\n", finalTimeStr.c_str());
+      Serial.printf("%s[OTA] ✅ ACK envoyé à la base de données: %s\n", finalTimeStr.c_str(), ackOk ? "SUCCÈS" : "ÉCHEC");
+      Serial.printf("%s[OTA] 🔄 Redémarrage du dispositif...\n", finalTimeStr.c_str());
+      Serial.println(F("═══════════════════════════════════════════════════════════"));
       sendLog("INFO", "OTA appliquée, reboot", "ota");
-      Serial.printf("%s[OTA] ✅ Mise à jour réussie, redémarrage...\n", timeStr.c_str());
       stopModem();
       delay(250);
       esp_restart();
@@ -2555,7 +2589,13 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       saveConfig();
       acknowledgeCommand(cmd, false, "ota failed");
       sendLog("ERROR", "OTA échouée", "ota");
-      Serial.printf("%s[OTA] ❌ Mise à jour échouée\n", formatTimeFromMillis(millis()).c_str());
+      String errorTimeStr = formatTimeFromMillis(millis());
+      Serial.println(F("═══════════════════════════════════════════════════════════"));
+      Serial.printf("%s[OTA] ❌ MISE À JOUR OTA ÉCHOUÉE !\n", errorTimeStr.c_str());
+      Serial.printf("%s[OTA] ❌ Erreur lors du téléchargement ou de l'installation\n", errorTimeStr.c_str());
+      Serial.printf("%s[OTA] ❌ ACK d'erreur envoyé à la base de données\n", errorTimeStr.c_str());
+      Serial.printf("%s[OTA] ⚠️  Le dispositif continue avec la version actuelle\n", errorTimeStr.c_str());
+      Serial.println(F("═══════════════════════════════════════════════════════════"));
     }
   } else {
     acknowledgeCommand(cmd, false, "verb not supported");
