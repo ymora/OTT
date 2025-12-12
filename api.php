@@ -444,6 +444,107 @@ function handleRunMigration() {
     }
 }
 
+function handleRepairDatabase() {
+    global $pdo;
+    
+    // Vérifier les permissions : admin requis
+    requireAdmin();
+    
+    $migrationFile = 'migration_repair_database.sql';
+    
+    error_log("[handleRepairDatabase] Début réparation base de données");
+    
+    try {
+        // Vérifier que le fichier existe
+        $filePath = SQL_BASE_DIR . '/' . $migrationFile;
+        if (!file_exists($filePath) || !is_readable($filePath)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Migration file not found: ' . $migrationFile]);
+            return;
+        }
+        
+        $startTime = microtime(true);
+        
+        // Exécuter le script
+        runSqlFile($pdo, $migrationFile);
+        
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
+        error_log("[handleRepairDatabase] ✅ Réparation réussie en {$duration}ms");
+        
+        // Vérifier le résultat
+        $checkStmt = $pdo->query("
+            SELECT 
+                (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) as users_actifs,
+                (SELECT COUNT(*) FROM patients WHERE deleted_at IS NULL) as patients_actifs,
+                (SELECT COUNT(*) FROM devices WHERE deleted_at IS NULL) as devices_actifs,
+                (SELECT COUNT(*) FROM measurements) as total_mesures,
+                (SELECT COUNT(*) FROM user_notifications_preferences) as prefs_users,
+                (SELECT COUNT(*) FROM patient_notifications_preferences) as prefs_patients
+        ");
+        $result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Base de données réparée avec succès',
+            'duration' => $duration,
+            'verification' => $result,
+            'logs' => [
+                "✅ Réparation de la base de données terminée",
+                "⏱️ Durée: {$duration}ms",
+                "",
+                "📊 Vérification:",
+                "  - Utilisateurs actifs: {$result['users_actifs']}",
+                "  - Patients actifs: {$result['patients_actifs']}",
+                "  - Dispositifs actifs: {$result['devices_actifs']}",
+                "  - Mesures totales: {$result['total_mesures']}",
+                "  - Préférences notifications utilisateurs: {$result['prefs_users']}",
+                "  - Préférences notifications patients: {$result['prefs_patients']}"
+            ]
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
+    } catch (PDOException $e) {
+        $errorCode = $e->getCode();
+        $errorMessage = $e->getMessage();
+        $errorInfo = $pdo->errorInfo();
+        
+        error_log("[handleRepairDatabase] ❌ ERREUR PDO: " . $errorMessage);
+        error_log("[handleRepairDatabase] Code: " . $errorCode);
+        error_log("[handleRepairDatabase] PDO ErrorInfo: " . json_encode($errorInfo));
+        
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'SQL Error',
+            'message' => $errorMessage,
+            'code' => $errorCode,
+            'details' => $errorInfo,
+            'logs' => [
+                "❌ ERREUR lors de la réparation de la base de données",
+                "Code erreur: {$errorCode}",
+                "Message: {$errorMessage}"
+            ]
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch(Exception $e) {
+        $errorMessage = $e->getMessage();
+        $errorCode = $e->getCode();
+        
+        error_log('[handleRepairDatabase] ❌ ERREUR: ' . $errorMessage);
+        error_log('[handleRepairDatabase] Code: ' . $errorCode);
+        
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Database repair failed',
+            'message' => $errorMessage,
+            'code' => $errorCode,
+            'logs' => [
+                "❌ ÉCHEC de la réparation",
+                "Message: {$errorMessage}"
+            ]
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+}
+
 function handleRunCompleteMigration() {
     global $pdo;
     
@@ -1514,6 +1615,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 // Migration & Admin (endpoints de maintenance - admin uniquement)
 } elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {
     handleRunMigration();
+} elseif(preg_match('#/admin/repair-database$#', $path) && $method === 'POST') {
+    handleRepairDatabase();
 } elseif(preg_match('#/migrate/firmware-status$#', $path) && $method === 'POST') {
     handleMigrateFirmwareStatus();
 } elseif(preg_match('#/admin/clear-firmwares$#', $path) && $method === 'POST') {
