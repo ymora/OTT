@@ -611,7 +611,9 @@ function parseSqlStatements($sql) {
         
         // Nettoyer les commentaires ligne par ligne si la partie contient des retours à la ligne
         // Les commentaires peuvent être au début d'une partie après explode(';')
-        if (strpos($stmt, "\n") !== false) {
+        if (strpos($stmt, "\n") !== false || strpos($stmt, "\r") !== false) {
+            // Normaliser les retours à la ligne
+            $stmt = str_replace(["\r\n", "\r"], "\n", $stmt);
             $lines = explode("\n", $stmt);
             $cleanedLines = [];
             foreach ($lines as $line) {
@@ -623,6 +625,17 @@ function parseSqlStatements($sql) {
             }
             // Rejoindre les lignes nettoyées et trimmer à nouveau
             $stmt = trim(implode("\n", $cleanedLines));
+            
+            // Log pour debug
+            if ($index < 3) {
+                error_log("[parseSqlStatements] Partie $index après nettoyage: " . substr($stmt, 0, 150) . (strlen($stmt) > 150 ? '...' : ''));
+            }
+        } else {
+            // Même pour une ligne simple, vérifier si c'est un commentaire
+            if (preg_match('/^\s*--/', $stmt)) {
+                // C'est un commentaire sur une seule ligne, l'ignorer
+                continue;
+            }
         }
         
         if (empty($stmt)) {
