@@ -35,6 +35,13 @@ const menuStructure = [
     permission: 'users.view',
     description: 'Gestion des utilisateurs'
   },
+  {
+    name: 'Migrations',
+    icon: '🛠️',
+    path: '/dashboard/admin-migrations',
+    permission: 'admin.only',
+    description: 'Migrations base de données (admin uniquement)'
+  },
 ]
 
 export default function Sidebar() {
@@ -55,6 +62,10 @@ export default function Sidebar() {
   
   const hasPermission = (permission) => {
     if (!permission) return true
+    if (permission === 'admin.only') {
+      // Permission spéciale : admin uniquement
+      return user?.role_name === 'admin'
+    }
     if (user?.role_name === 'admin') return true
     return user?.permissions?.includes(permission)
   }

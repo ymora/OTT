@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
+import ConfirmModal from '@/components/ConfirmModal'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 
@@ -12,13 +13,23 @@ import Modal from '@/components/Modal'
  * Modal pour afficher l'historique des mesures d'un dispositif
  */
 export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
-  const { fetchWithAuth, API_URL, currentUser } = useAuth()
+  const { fetchWithAuth, API_URL, user } = useAuth()
   const [measurements, setMeasurements] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [showArchived, setShowArchived] = useState(false)
   const [deletingMeasurement, setDeletingMeasurement] = useState(null)
+  const [archivingMeasurement, setArchivingMeasurement] = useState(null)
+  const [restoringMeasurement, setRestoringMeasurement] = useState(null)
   const [selectedMeasurements, setSelectedMeasurements] = useState(new Set())
   const [deletingMultiple, setDeletingMultiple] = useState(false)
+  const [archivingMultiple, setArchivingMultiple] = useState(false)
+  
+  // États pour les modals de confirmation
+  const [confirmArchiveModal, setConfirmArchiveModal] = useState({ isOpen: false, measurementId: null })
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState({ isOpen: false, measurementId: null })
+  const [confirmRestoreModal, setConfirmRestoreModal] = useState({ isOpen: false, measurementId: null })
+  const [confirmDeleteMultipleModal, setConfirmDeleteMultipleModal] = useState(false)
 
   const loadMeasurements = useCallback(async () => {
     if (!device?.id) return
@@ -27,10 +38,11 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     setError(null)
     
     try {
+      const url = `/api.php/devices/${device.id}/history${showArchived ? '?show_archived=true' : ''}`
       const data = await fetchJson(
         fetchWithAuth,
         API_URL,
-        `/api.php/devices/${device.id}/history`,
+        url,
         { method: 'GET' },
         { requiresAuth: true }
       )
@@ -53,7 +65,7 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     } finally {
       setLoading(false)
     }
-  }, [device?.id, fetchWithAuth, API_URL])
+  }, [device?.id, fetchWithAuth, API_URL, showArchived])
 
   useEffect(() => {
     if (isOpen && device?.id) {
@@ -82,19 +94,23 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     }
   }
 
-  const handleDeleteMeasurement = async (measurementId) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer définitivement cette mesure ? Cette action est irréversible.')) {
-      return
-    }
+  const handleArchiveMeasurement = async (measurementId) => {
+    setConfirmArchiveModal({ isOpen: true, measurementId })
+  }
 
-    setDeletingMeasurement(measurementId)
+  const confirmArchiveMeasurement = async () => {
+    const { measurementId } = confirmArchiveModal
+    if (!measurementId) return
+    
+    setConfirmArchiveModal({ isOpen: false, measurementId: null })
+    setArchivingMeasurement(measurementId)
     setError(null)
 
     try {
       const data = await fetchJson(
         fetchWithAuth,
         API_URL,
-        `/api.php/measurements/${measurementId}`,
+        `/api.php/measurements/${measurementId}?archive=true`,
         { method: 'DELETE' },
         { requiresAuth: true }
       )
@@ -102,7 +118,45 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
       if (data.success) {
         // Retirer la mesure de la liste
         setMeasurements(prev => prev.filter(m => m.id !== measurementId))
-        logger.info(`✅ Mesure ${measurementId} supprimée définitivement`)
+        logger.log(`✅ Mesure ${measurementId} archivée`)
+      } else {
+        const errorMsg = data.error || 'Erreur lors de l\'archivage'
+        logger.error(`❌ Erreur archivage mesure: ${errorMsg}`)
+        setError(errorMsg)
+      }
+    } catch (err) {
+      logger.error('Erreur archivage mesure:', err)
+      setError(err.message || 'Erreur lors de l\'archivage de la mesure')
+    } finally {
+      setArchivingMeasurement(null)
+    }
+  }
+
+  const handleDeleteMeasurement = async (measurementId) => {
+    setConfirmDeleteModal({ isOpen: true, measurementId })
+  }
+
+  const confirmDeleteMeasurement = async () => {
+    const { measurementId } = confirmDeleteModal
+    if (!measurementId) return
+    
+    setConfirmDeleteModal({ isOpen: false, measurementId: null })
+    setDeletingMeasurement(measurementId)
+    setError(null)
+
+    try {
+      const data = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/measurements/${measurementId}?permanent=true`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+
+      if (data.success) {
+        // Retirer la mesure de la liste
+        setMeasurements(prev => prev.filter(m => m.id !== measurementId))
+        logger.log(`✅ Mesure ${measurementId} supprimée définitivement`)
       } else {
         const errorMsg = data.error || 'Erreur lors de la suppression'
         logger.error(`❌ Erreur suppression mesure: ${errorMsg}`)
@@ -116,20 +170,64 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     }
   }
 
+  const handleRestoreMeasurement = async (measurementId) => {
+    setConfirmRestoreModal({ isOpen: true, measurementId })
+  }
+
+  const confirmRestoreMeasurement = async () => {
+    const { measurementId } = confirmRestoreModal
+    if (!measurementId) return
+    
+    setConfirmRestoreModal({ isOpen: false, measurementId: null })
+    setRestoringMeasurement(measurementId)
+    setError(null)
+
+    try {
+      const data = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/measurements/${measurementId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ deleted_at: null })
+        },
+        { requiresAuth: true }
+      )
+
+      if (data.success) {
+        // Recharger les mesures
+        await loadMeasurements()
+        logger.log(`✅ Mesure ${measurementId} restaurée`)
+      } else {
+        const errorMsg = data.error || 'Erreur lors de la restauration'
+        logger.error(`❌ Erreur restauration mesure: ${errorMsg}`)
+        setError(errorMsg)
+      }
+    } catch (err) {
+      logger.error('Erreur restauration mesure:', err)
+      setError(err.message || 'Erreur lors de la restauration de la mesure')
+    } finally {
+      setRestoringMeasurement(null)
+    }
+  }
+
   // Vérifier si l'utilisateur est admin (support de plusieurs formats de rôle)
-  const isAdmin = currentUser?.role_name === 'admin' || currentUser?.role === 'admin' || currentUser?.roles?.includes('admin')
+  const isAdmin = user?.role_name === 'admin' || user?.role === 'admin' || user?.roles?.includes('admin')
   
   // Debug: logger le rôle pour diagnostiquer
   useEffect(() => {
-    if (isOpen && currentUser) {
+    if (isOpen) {
       logger.debug(`[DeviceMeasurementsModal] User role check:`, {
-        role_name: currentUser.role_name,
-        role: currentUser.role,
-        roles: currentUser.roles,
+        user: user,
+        role_name: user?.role_name,
+        role: user?.role,
+        roles: user?.roles,
         isAdmin: isAdmin
       })
+      // Log dans la console pour debug
+      console.log('[DeviceMeasurementsModal] User:', user, 'isAdmin:', isAdmin)
     }
-  }, [isOpen, currentUser, isAdmin])
+  }, [isOpen, user, isAdmin])
   
   // Fonction pour gérer la sélection/désélection d'une mesure
   const toggleMeasurementSelection = (measurementId) => {
@@ -156,12 +254,11 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
   // Fonction pour supprimer plusieurs mesures
   const handleDeleteMultiple = async () => {
     if (selectedMeasurements.size === 0) return
-    
-    const count = selectedMeasurements.size
-    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer définitivement ${count} mesure${count > 1 ? 's' : ''} ? Cette action est irréversible.`)) {
-      return
-    }
+    setConfirmDeleteMultipleModal(true)
+  }
 
+  const confirmDeleteMultiple = async () => {
+    setConfirmDeleteMultipleModal(false)
     setDeletingMultiple(true)
     setError(null)
 
@@ -196,7 +293,7 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
         // Retirer les mesures supprimées de la liste
         setMeasurements(prev => prev.filter(m => !selectedMeasurements.has(m.id)))
         setSelectedMeasurements(new Set())
-        logger.info(`✅ ${successCount} mesure${successCount > 1 ? 's' : ''} supprimée${successCount > 1 ? 's' : ''} définitivement`)
+        logger.log(`✅ ${successCount} mesure${successCount > 1 ? 's' : ''} supprimée${successCount > 1 ? 's' : ''} définitivement`)
         
         if (errorCount > 0) {
           setError(`${successCount} mesure${successCount > 1 ? 's' : ''} supprimée${successCount > 1 ? 's' : ''}, ${errorCount} erreur${errorCount > 1 ? 's' : ''}`)
@@ -311,14 +408,29 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
                     <> (dernière mesure le {formatDate(measurements[0]?.timestamp)})</>
                   )}
                 </p>
-                <button
-                  onClick={handleExportCSV}
-                  className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
-                  title="Exporter les mesures en CSV"
-                >
-                  <span>📥</span>
-                  <span>Exporter CSV</span>
-                </button>
+                <div className="flex items-center gap-3">
+                  {isAdmin && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showArchived}
+                        onChange={(e) => setShowArchived(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                      />
+                      <span className="text-sm text-blue-800 dark:text-blue-200">
+                        🗄️ Afficher les archives
+                      </span>
+                    </label>
+                  )}
+                  <button
+                    onClick={handleExportCSV}
+                    className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                    title="Exporter les mesures en CSV"
+                  >
+                    <span>📥</span>
+                    <span>Exporter CSV</span>
+                  </button>
+                </div>
               </div>
 
               {stats && (
@@ -359,19 +471,30 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
             </div>
 
             {isAdmin && selectedMeasurements.size > 0 && (
-              <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg flex items-center justify-between">
-                <p className="text-sm text-red-800 dark:text-red-200">
+              <div className="mb-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg flex items-center justify-between gap-3">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
                   <strong>{selectedMeasurements.size}</strong> mesure{selectedMeasurements.size > 1 ? 's' : ''} sélectionnée{selectedMeasurements.size > 1 ? 's' : ''}
                 </p>
-                <button
-                  onClick={handleDeleteMultiple}
-                  disabled={deletingMultiple}
-                  className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Supprimer les mesures sélectionnées"
-                >
-                  <span>{deletingMultiple ? '⏳' : '🗑️'}</span>
-                  <span>{deletingMultiple ? 'Suppression...' : `Supprimer ${selectedMeasurements.size} mesure${selectedMeasurements.size > 1 ? 's' : ''}`}</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleArchiveMultiple}
+                    disabled={archivingMultiple || deletingMultiple}
+                    className="px-4 py-2 text-sm bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Archiver les mesures sélectionnées"
+                  >
+                    <span>{archivingMultiple ? '⏳' : '📦'}</span>
+                    <span>{archivingMultiple ? 'Archivage...' : `Archiver ${selectedMeasurements.size} mesure${selectedMeasurements.size > 1 ? 's' : ''}`}</span>
+                  </button>
+                  <button
+                    onClick={handleDeleteMultiple}
+                    disabled={deletingMultiple || archivingMultiple}
+                    className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Supprimer définitivement les mesures sélectionnées"
+                  >
+                    <span>{deletingMultiple ? '⏳' : '🗑️'}</span>
+                    <span>{deletingMultiple ? 'Suppression...' : `Supprimer ${selectedMeasurements.size} mesure${selectedMeasurements.size > 1 ? 's' : ''}`}</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -495,16 +618,45 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
                       </td>
                       {isAdmin && (
                         <td className="px-4 py-2">
-                          <button
-                            className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={() => handleDeleteMeasurement(measurement.id)}
-                            disabled={deletingMeasurement === measurement.id || deletingMultiple}
-                            title="Supprimer définitivement cette mesure"
-                          >
-                            <span className="text-lg">
-                              {deletingMeasurement === measurement.id ? '⏳' : '🗑️'}
-                            </span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {measurement.deleted_at ? (
+                              // Mesure archivée : bouton restaurer
+                              <button
+                                className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => handleRestoreMeasurement(measurement.id)}
+                                disabled={restoringMeasurement === measurement.id || archivingMeasurement === measurement.id || deletingMeasurement === measurement.id || deletingMultiple || archivingMultiple}
+                                title="Restaurer cette mesure"
+                              >
+                                <span className="text-lg">
+                                  {restoringMeasurement === measurement.id ? '⏳' : '♻️'}
+                                </span>
+                              </button>
+                            ) : (
+                              // Mesure active : boutons archiver et supprimer
+                              <>
+                                <button
+                                  className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleArchiveMeasurement(measurement.id)}
+                                  disabled={archivingMeasurement === measurement.id || archivingMultiple || deletingMeasurement === measurement.id || deletingMultiple || restoringMeasurement === measurement.id}
+                                  title="Archiver cette mesure"
+                                >
+                                  <span className="text-lg">
+                                    {archivingMeasurement === measurement.id ? '⏳' : '📦'}
+                                  </span>
+                                </button>
+                                <button
+                                  className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  onClick={() => handleDeleteMeasurement(measurement.id)}
+                                  disabled={deletingMeasurement === measurement.id || deletingMultiple || archivingMeasurement === measurement.id || archivingMultiple || restoringMeasurement === measurement.id}
+                                  title="Supprimer définitivement cette mesure"
+                                >
+                                  <span className="text-lg">
+                                    {deletingMeasurement === measurement.id ? '⏳' : '🗑️'}
+                                  </span>
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -515,6 +667,55 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
           </>
         )}
       </div>
+      
+      {/* Modals de confirmation */}
+      <ConfirmModal
+        isOpen={confirmArchiveModal.isOpen}
+        onClose={() => setConfirmArchiveModal({ isOpen: false, measurementId: null })}
+        onConfirm={confirmArchiveMeasurement}
+        title="Archiver une mesure"
+        message="Êtes-vous sûr de vouloir archiver cette mesure ? Elle ne sera plus visible dans l'historique."
+        confirmText="Archiver"
+        cancelText="Annuler"
+        variant="warning"
+        loading={archivingMeasurement === confirmArchiveModal.measurementId}
+      />
+      
+      <ConfirmModal
+        isOpen={confirmDeleteModal.isOpen}
+        onClose={() => setConfirmDeleteModal({ isOpen: false, measurementId: null })}
+        onConfirm={confirmDeleteMeasurement}
+        title="Supprimer définitivement une mesure"
+        message="Êtes-vous sûr de vouloir supprimer définitivement cette mesure ? Cette action est irréversible."
+        confirmText="Supprimer définitivement"
+        cancelText="Annuler"
+        variant="danger"
+        loading={deletingMeasurement === confirmDeleteModal.measurementId}
+      />
+      
+      <ConfirmModal
+        isOpen={confirmRestoreModal.isOpen}
+        onClose={() => setConfirmRestoreModal({ isOpen: false, measurementId: null })}
+        onConfirm={confirmRestoreMeasurement}
+        title="Restaurer une mesure"
+        message="Êtes-vous sûr de vouloir restaurer cette mesure ? Elle sera à nouveau visible dans l'historique."
+        confirmText="Restaurer"
+        cancelText="Annuler"
+        variant="info"
+        loading={restoringMeasurement === confirmRestoreModal.measurementId}
+      />
+      
+      <ConfirmModal
+        isOpen={confirmDeleteMultipleModal}
+        onClose={() => setConfirmDeleteMultipleModal(false)}
+        onConfirm={confirmDeleteMultiple}
+        title="Supprimer définitivement des mesures"
+        message={`Êtes-vous sûr de vouloir supprimer définitivement ${selectedMeasurements.size} mesure${selectedMeasurements.size > 1 ? 's' : ''} ? Cette action est irréversible.`}
+        confirmText="Supprimer définitivement"
+        cancelText="Annuler"
+        variant="danger"
+        loading={deletingMultiple}
+      />
     </Modal>
   )
 }
