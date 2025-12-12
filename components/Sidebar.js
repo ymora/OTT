@@ -140,10 +140,10 @@ export default function Sidebar() {
       
       {/* Footer Sidebar - Menu déroulant Documentation (Admin uniquement) */}
       {user?.role_name === 'admin' && (
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white/90 via-primary-50/30 to-transparent dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-transparent backdrop-blur-sm">
-          <div className="relative flex flex-col-reverse">
-            {/* Menu déroulant - se déploie vers le haut (au-dessus du bouton) */}
-            {isDocsOpen && (
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white/90 via-primary-50/30 to-transparent dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-transparent backdrop-blur-sm">
+        <div className="relative flex flex-col-reverse">
+          {/* Menu déroulant - se déploie vers le haut (au-dessus du bouton) */}
+          {isDocsOpen && (
             <div className="mt-2 space-y-1 animate-fade-in">
               {documentationLinks.map((doc) => {
                 // Vérifier si ce doc est actif (seul celui-ci passe en violet)
@@ -202,6 +202,7 @@ export default function Sidebar() {
             </button>
           </div>
         </div>
+      </div>
       )}
     </aside>
   )
