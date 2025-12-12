@@ -1,0 +1,35 @@
+# Code Owners - Projet OTT / HAPPLYZ MEDICAL
+# Ces personnes seront automatiquement demandées pour review des Pull Requests
+
+# Par défaut, vous êtes le propriétaire de tout le code
+* @ymora
+
+# Backend PHP - API et handlers
+/api/** @ymora
+/sql/** @ymora
+
+# Frontend - Next.js / React
+/app/** @ymora
+/components/** @ymora
+/contexts/** @ymora
+/hooks/** @ymora
+/lib/** @ymora
+
+# Firmware Arduino/ESP32
+/hardware/** @ymora
+
+# Scripts et configuration
+/scripts/** @ymora
+/.cursorrules @ymora
+/next.config.js @ymora
+/package.json @ymora
+
+# Documentation critique
+/README.md @ymora
+/WORKFLOW_COLLABORATION.md @ymora
+
+# Pour ajouter Maxime Berriot comme co-reviewer sur certains fichiers :
+# Décommenter et ajuster après qu'il ait accepté l'invitation
+# /api/** @ymora @maximeberriot
+# /app/** @ymora @maximeberriot
+
