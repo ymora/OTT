@@ -1,0 +1,71 @@
+{
+  "CompletedPhases": [
+    0,
+    1
+  ],
+  "Timestamp": "2025-12-12 08:08:49",
+  "PartialResults": {
+    "Phase1": {
+      "Issues": [],
+      "Scores": {
+        "CodeMort": 10,
+        "Structure API": 9.5,
+        "Imports": 10,
+        "Routes": 10,
+        "BestPractices": 9,
+        "Logs": 8,
+        "Éléments Inutiles": 8,
+        "Duplication": 8,
+        "Synchronisation GitHub Pages": 2,
+        "Configuration": 9.5,
+        "Database": 5,
+        "Securite": 4.5,
+        "Complexite": 9,
+        "Uniformisation UI/UX": 10,
+        "Optimisation": 7.299999999999999,
+        "API": 5,
+        "Vérification Exhaustive": 9,
+        "Architecture": 10,
+        "Documentation": 10,
+        "GestionErreurs": 9,
+        "Performance": 7,
+        "Tests": 6
+      },
+      "CorrectionPlans": [],
+      "Recommendations": [],
+      "Warnings": [
+        "Fichiers JS mal organisés: 60 fichiers hors structure"
+      ]
+    },
+    "Phase0": {
+      "Issues": [],
+      "Scores": {
+        "CodeMort": 10,
+        "Structure API": 9.5,
+        "Imports": 10,
+        "Routes": 10,
+        "BestPractices": 9,
+        "Logs": 8,
+        "Éléments Inutiles": 8,
+        "Duplication": 8,
+        "Synchronisation GitHub Pages": 2,
+        "Configuration": 9.5,
+        "Database": 5,
+        "Securite": 4.5,
+        "Complexite": 9,
+        "Uniformisation UI/UX": 10,
+        "Optimisation": 7.299999999999999,
+        "API": 5,
+        "Vérification Exhaustive": 9,
+        "Architecture": 10,
+        "Documentation": 10,
+        "GestionErreurs": 9,
+        "Performance": 7,
+        "Tests": 6
+      },
+      "CorrectionPlans": [],
+      "Recommendations": [],
+      "Warnings": []
+    }
+  }
+}

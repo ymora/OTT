@@ -1,0 +1,156 @@
+{
+  "recommendations": [
+    "Envisager refactoring: useState tres utilise (189 fois)",
+    "Envisager refactoring: useEffect tres utilise (85 fois)",
+    "Envisager refactoring: Appels API tres utilise (75 fois)",
+    "Envisager refactoring: Try/catch tres utilise (195 fois)",
+    "Remplacer 6 window.confirm() par ConfirmModal pour une UX unifiee",
+    "URGENT: Remplacer 10 secret(s) hardcode(s) par des variables d'environnement",
+    "Refactorisation: 3 fichier(s) volumineux/complexe(s) à considérer",
+    "Nettoyer 15 élément(s) inutile(s) (scripts obsolètes, fichiers de test, duplications)",
+    "Supprimer 7 fichier(s) dupliqué(s)",
+    "Supprimer 2 fichier(s) temporaire(s)",
+    "Vérifier manuellement les éléments inutiles détectés (scripts archivés disponibles dans scripts/archive/)",
+    "Synchroniser GitHub Pages avec le code local (exécuter: git push origin main)",
+    "Vérifier les Actions GitHub: https://github.com/ymora/OTT/actions",
+    "Vérifier que le workflow GitHub Actions s'est bien exécuté",
+    "Utiliser le script: .\\scripts\\verifier-synchronisation-deploiement.ps1"
+  ],
+  "scoreGlobal": 7.3,
+  "project": "OTT Dashboard",
+  "secrets": [
+    {
+      "Pattern": "Password hardcode",
+      "Line": 19,
+      "Match": "admin123...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js"
+    },
+    {
+      "Pattern": "Password hardcode",
+      "Line": 182,
+      "Match": "user123...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js"
+    },
+    {
+      "Pattern": "Password hardcode",
+      "Line": 300,
+      "Match": "Le mot de passe doit...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js"
+    },
+    {
+      "Pattern": "Password hardcode",
+      "Line": 319,
+      "Match": "Le mot de passe est ...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js"
+    },
+    {
+      "Pattern": "Password hardcode",
+      "Line": 403,
+      "Match": "Le mot de passe doit...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js"
+    },
+    {
+      "Pattern": "Token hardcode",
+      "Line": 1,
+      "Match": ").concat(t),r=new Ev...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\app\\dashboard\\dispositifs\\page-b62e6a2d8e8f8f18.js"
+    },
+    {
+      "Pattern": "Password hardcode",
+      "Line": 1,
+      "Match": "Le mot de passe doit...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js"
+    },
+    {
+      "Pattern": "Password hardcode",
+      "Line": 1,
+      "Match": "Le mot de passe est ...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js"
+    },
+    {
+      "Pattern": "Password hardcode",
+      "Line": 1,
+      "Match": "Le mot de passe doit...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js"
+    },
+    {
+      "Pattern": "Secret hardcode",
+      "Line": 221,
+      "Match": "CHANGEZ_CE_SECRET_EN...",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\api.php"
+    }
+  ],
+  "scores": {
+    "CodeMort": 10,
+    "Structure API": 9.5,
+    "Imports": 10,
+    "Routes": 10,
+    "BestPractices": 9,
+    "Logs": 8,
+    "Éléments Inutiles": 8,
+    "Duplication": 8,
+    "Synchronisation GitHub Pages": 2,
+    "Configuration": 9.5,
+    "Database": 5,
+    "Securite": 4.5,
+    "Complexite": 9,
+    "Uniformisation UI/UX": 10,
+    "Optimisation": 7.299999999999999,
+    "API": 5,
+    "Vérification Exhaustive": 9,
+    "Architecture": 10,
+    "Documentation": 10,
+    "GestionErreurs": 9,
+    "Performance": 7,
+    "Tests": 6
+  },
+  "warnings": [
+    "Fichiers JS mal organisés: 60 fichiers hors structure",
+    "window.confirm() dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:106 - remplacer par ConfirmModal",
+    "window.confirm() dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:160 - remplacer par ConfirmModal",
+    "window.confirm() dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:195 - remplacer par ConfirmModal",
+    "window.confirm() dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:196 - remplacer par ConfirmModal",
+    "window.confirm() dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:776 - remplacer par ConfirmModal",
+    "window.confirm() dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:802 - remplacer par ConfirmModal",
+    "SECURITE: Password hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js:19 - valeur: admin123...",
+    "SECURITE: Password hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js:182 - valeur: user123...",
+    "SECURITE: Password hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:300 - valeur: Le mot de passe doit...",
+    "SECURITE: Password hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:319 - valeur: Le mot de passe est ...",
+    "SECURITE: Password hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js:403 - valeur: Le mot de passe doit...",
+    "SECURITE: Token hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\app\\dashboard\\dispositifs\\page-b62e6a2d8e8f8f18.js:1 - valeur: ).concat(t),r=new Ev...",
+    "SECURITE: Password hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js:1 - valeur: Le mot de passe doit...",
+    "SECURITE: Password hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js:1 - valeur: Le mot de passe est ...",
+    "SECURITE: Password hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js:1 - valeur: Le mot de passe doit...",
+    "SECURITE: Secret hardcode dans C:\\Users\\ymora\\Desktop\\maxime\\api.php:221 - valeur: CHANGEZ_CE_SECRET_EN...",
+    "Code dupliqué: 50 fonction(s) dupliquée(s)",
+    "Performance: 6 requetes dans loops",
+    "Code mort: 117 import(s) potentiellement inutilisé(s)",
+    "Backend: 1 requêtes SQL SELECT dans loops",
+    "Frontend: 18 setInterval/setTimeout sans cleanup",
+    "API_URL incohérente entre configs",
+    "153 liens brisés",
+    "95 fichiers potentiellement orphelins",
+    "5 répertoires vides",
+    "Fichier documentation obsolète: DOCUMENTATION_DEVELOPPEURS.html",
+    "DOCUMENTATION_DEVELOPPEURS.html : Historique detecte (2 mot(s)-cle(s))",
+    "Fichiers MD suspects: POURQUOI_COMPLIQUE.md, PROBLEMES_SYNCHRONISATION.md",
+    "7 fichier(s) dupliqué(s)",
+    "2 fichier(s) temporaire(s)",
+    "Commit local non poussé sur origin/main",
+    "Fichier de version GitHub Pages inaccessible"
+  ],
+  "statistics": {
+    "totalLines": null,
+    "totalFiles": null,
+    "phpFiles": null,
+    "jsFiles": null
+  },
+  "issues": [
+    "1 fonction(s) non utilisée(s) (code mort)",
+    "5 fichier(s) .ps1 obsolète(s)",
+    "Site GitHub Pages non accessible",
+    "API: Échec définitif après 3 tentatives d'authentification"
+  ],
+  "outdatedPackages": null,
+  "timestamp": "2025-12-12 08:08:49"
+}

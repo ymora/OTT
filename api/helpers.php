@@ -593,6 +593,14 @@ function parseSqlStatements($sql) {
     $rawStatements = explode(';', $result);
     error_log("[parseSqlStatements] Nombre d'instructions après division: " . count($rawStatements));
     
+    // Log des premières parties pour debug
+    foreach ($rawStatements as $idx => $raw) {
+        if ($idx < 5) {
+            $trimmed = trim($raw);
+            error_log("[parseSqlStatements] Partie $idx (après trim): " . substr($trimmed, 0, 100) . (strlen($trimmed) > 100 ? '...' : ''));
+        }
+    }
+    
     // Étape 3: Réassembler les parties qui contiennent des placeholders
     // Une instruction qui contient un placeholder peut être divisée en plusieurs parties
     $statements = [];
@@ -601,10 +609,31 @@ function parseSqlStatements($sql) {
     foreach ($rawStatements as $index => $rawStmt) {
         $stmt = trim($rawStmt);
         
+        // Nettoyer les commentaires ligne par ligne si la partie contient des retours à la ligne
+        // Les commentaires peuvent être au début d'une partie après explode(';')
+        if (strpos($stmt, "\n") !== false) {
+            $lines = explode("\n", $stmt);
+            $cleanedLines = [];
+            foreach ($lines as $line) {
+                $trimmedLine = trim($line);
+                // Ignorer les lignes vides et les commentaires (lignes qui commencent par --)
+                if (!empty($trimmedLine) && !preg_match('/^\s*--/', $trimmedLine)) {
+                    $cleanedLines[] = $line;
+                }
+            }
+            // Rejoindre les lignes nettoyées et trimmer à nouveau
+            $stmt = trim(implode("\n", $cleanedLines));
+        }
+        
         if (empty($stmt)) {
             // Partie vide, finaliser l'instruction en cours si elle existe
             if (!empty($currentParts)) {
-                $finalStmt = implode('; ', $currentParts) . ';';
+                // Si on a plusieurs parties, les joindre avec '; ', sinon utiliser directement
+                if (count($currentParts) > 1) {
+                    $finalStmt = implode('; ', $currentParts) . ';';
+                } else {
+                    $finalStmt = $currentParts[0] . ';';
+                }
                 // Restaurer les placeholders
                 foreach (array_reverse($placeholders, true) as $placeholder => $original) {
                     $finalStmt = str_replace($placeholder, $original, $finalStmt);
@@ -615,15 +644,6 @@ function parseSqlStatements($sql) {
                 $currentParts = [];
             }
             continue;
-        }
-        
-        // Vérifier si cette partie contient un placeholder
-        $hasPlaceholder = false;
-        foreach ($placeholders as $placeholder => $original) {
-            if (strpos($stmt, $placeholder) !== false) {
-                $hasPlaceholder = true;
-                break;
-            }
         }
         
         // Vérifier si cette partie contient un placeholder
@@ -654,7 +674,13 @@ function parseSqlStatements($sql) {
             
             if ($isComplete) {
                 // L'instruction est complète, la finaliser
-                $finalStmt = implode('; ', $currentParts) . ';';
+                // Si on a plusieurs parties, les joindre avec '; ', sinon utiliser directement
+                if (count($currentParts) > 1) {
+                    $finalStmt = implode('; ', $currentParts) . ';';
+                } else {
+                    // Une seule partie, ajouter juste le point-virgule final
+                    $finalStmt = $currentParts[0] . ';';
+                }
                 // Restaurer les placeholders
                 foreach (array_reverse($placeholders, true) as $placeholder => $original) {
                     $finalStmt = str_replace($placeholder, $original, $finalStmt);
@@ -674,7 +700,12 @@ function parseSqlStatements($sql) {
                 if (preg_match('/^[\s\n\r]*LANGUAGE\s+\w+/i', $stmt)) {
                     // Cette partie complète l'instruction en cours, l'ajouter
                     $currentParts[] = $stmt;
-                    $finalStmt = implode('; ', $currentParts) . ';';
+                    // Si on a plusieurs parties, les joindre avec '; ', sinon utiliser directement
+                    if (count($currentParts) > 1) {
+                        $finalStmt = implode('; ', $currentParts) . ';';
+                    } else {
+                        $finalStmt = $currentParts[0] . ';';
+                    }
                     // Restaurer les placeholders
                     foreach (array_reverse($placeholders, true) as $placeholder => $original) {
                         $finalStmt = str_replace($placeholder, $original, $finalStmt);
@@ -686,7 +717,12 @@ function parseSqlStatements($sql) {
                     continue;
                 } else {
                     // Cette partie ne complète pas l'instruction, finaliser l'instruction en cours d'abord
-                    $finalStmt = implode('; ', $currentParts) . ';';
+                    // Si on a plusieurs parties, les joindre avec '; ', sinon utiliser directement
+                    if (count($currentParts) > 1) {
+                        $finalStmt = implode('; ', $currentParts) . ';';
+                    } else {
+                        $finalStmt = $currentParts[0] . ';';
+                    }
                     // Restaurer les placeholders
                     foreach (array_reverse($placeholders, true) as $placeholder => $original) {
                         $finalStmt = str_replace($placeholder, $original, $finalStmt);
@@ -707,7 +743,13 @@ function parseSqlStatements($sql) {
     
     // Finaliser l'instruction en cours si elle existe
     if (!empty($currentParts)) {
-        $finalStmt = implode('; ', $currentParts) . ';';
+        // Si on a plusieurs parties, les joindre avec '; ', sinon utiliser directement
+        if (count($currentParts) > 1) {
+            $finalStmt = implode('; ', $currentParts) . ';';
+        } else {
+            // Une seule partie, ajouter juste le point-virgule final
+            $finalStmt = $currentParts[0] . ';';
+        }
         // Restaurer les placeholders
         foreach (array_reverse($placeholders, true) as $placeholder => $original) {
             $finalStmt = str_replace($placeholder, $original, $finalStmt);

@@ -1,0 +1,336 @@
+{
+  "Medium": 6,
+  "TotalIssues": 16,
+  "Plans": [
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 106",
+        "Composant: ConfirmModal"
+      ],
+      "CurrentCode": "        setPasswordConfirm('')",
+      "RecommendedFix": "1. Importer ConfirmModal depuis '@/components/ConfirmModal'\r\n2. Ajouter un état pour gérer l'ouverture/fermeture du modal\r\n3. Remplacer window.confirm() par l'ouverture du ConfirmModal\r\n4. Gérer la confirmation dans le callback onConfirm du modal\r\n\r\nExemple de correction:\r\n  AVANT: if (window.confirm('Êtes-vous sûr ?')) { ... }\r\n  APRÈS: \r\n    const [showConfirm, setShowConfirm] = useState(false)\r\n    ...\r\n    <ConfirmModal\r\n      isOpen={showConfirm}\r\n      onClose={() => setShowConfirm(false)}\r\n      onConfirm={() => { ... }}\r\n      title=\"Confirmation\"\r\n      message=\"Êtes-vous sûr ?\"\r\n    />",
+      "Description": "Utilisation de window.confirm() détectée dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 106. Pour une UX unifiée, utiliser le composant ConfirmModal.",
+      "Line": 106,
+      "Severity": "medium",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "window.confirm() au lieu de ConfirmModal",
+      "VerificationSteps": [
+        "Vérifier que ConfirmModal est importé",
+        "Vérifier que le modal s'ouvre correctement",
+        "Vérifier que la confirmation fonctionne",
+        "Tester l'annulation du modal"
+      ],
+      "Timestamp": "2025-12-12 08:02:00"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 160",
+        "Composant: ConfirmModal"
+      ],
+      "CurrentCode": "        setPasswordConfirm('')",
+      "RecommendedFix": "1. Importer ConfirmModal depuis '@/components/ConfirmModal'\r\n2. Ajouter un état pour gérer l'ouverture/fermeture du modal\r\n3. Remplacer window.confirm() par l'ouverture du ConfirmModal\r\n4. Gérer la confirmation dans le callback onConfirm du modal\r\n\r\nExemple de correction:\r\n  AVANT: if (window.confirm('Êtes-vous sûr ?')) { ... }\r\n  APRÈS: \r\n    const [showConfirm, setShowConfirm] = useState(false)\r\n    ...\r\n    <ConfirmModal\r\n      isOpen={showConfirm}\r\n      onClose={() => setShowConfirm(false)}\r\n      onConfirm={() => { ... }}\r\n      title=\"Confirmation\"\r\n      message=\"Êtes-vous sûr ?\"\r\n    />",
+      "Description": "Utilisation de window.confirm() détectée dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 160. Pour une UX unifiée, utiliser le composant ConfirmModal.",
+      "Line": 160,
+      "Severity": "medium",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "window.confirm() au lieu de ConfirmModal",
+      "VerificationSteps": [
+        "Vérifier que ConfirmModal est importé",
+        "Vérifier que le modal s'ouvre correctement",
+        "Vérifier que la confirmation fonctionne",
+        "Tester l'annulation du modal"
+      ],
+      "Timestamp": "2025-12-12 08:02:00"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 195",
+        "Composant: ConfirmModal"
+      ],
+      "CurrentCode": "    setShowPasswordConfirm(false)",
+      "RecommendedFix": "1. Importer ConfirmModal depuis '@/components/ConfirmModal'\r\n2. Ajouter un état pour gérer l'ouverture/fermeture du modal\r\n3. Remplacer window.confirm() par l'ouverture du ConfirmModal\r\n4. Gérer la confirmation dans le callback onConfirm du modal\r\n\r\nExemple de correction:\r\n  AVANT: if (window.confirm('Êtes-vous sûr ?')) { ... }\r\n  APRÈS: \r\n    const [showConfirm, setShowConfirm] = useState(false)\r\n    ...\r\n    <ConfirmModal\r\n      isOpen={showConfirm}\r\n      onClose={() => setShowConfirm(false)}\r\n      onConfirm={() => { ... }}\r\n      title=\"Confirmation\"\r\n      message=\"Êtes-vous sûr ?\"\r\n    />",
+      "Description": "Utilisation de window.confirm() détectée dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 195. Pour une UX unifiée, utiliser le composant ConfirmModal.",
+      "Line": 195,
+      "Severity": "medium",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "window.confirm() au lieu de ConfirmModal",
+      "VerificationSteps": [
+        "Vérifier que ConfirmModal est importé",
+        "Vérifier que le modal s'ouvre correctement",
+        "Vérifier que la confirmation fonctionne",
+        "Tester l'annulation du modal"
+      ],
+      "Timestamp": "2025-12-12 08:02:00"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 196",
+        "Composant: ConfirmModal"
+      ],
+      "CurrentCode": "    setPasswordConfirm('')",
+      "RecommendedFix": "1. Importer ConfirmModal depuis '@/components/ConfirmModal'\r\n2. Ajouter un état pour gérer l'ouverture/fermeture du modal\r\n3. Remplacer window.confirm() par l'ouverture du ConfirmModal\r\n4. Gérer la confirmation dans le callback onConfirm du modal\r\n\r\nExemple de correction:\r\n  AVANT: if (window.confirm('Êtes-vous sûr ?')) { ... }\r\n  APRÈS: \r\n    const [showConfirm, setShowConfirm] = useState(false)\r\n    ...\r\n    <ConfirmModal\r\n      isOpen={showConfirm}\r\n      onClose={() => setShowConfirm(false)}\r\n      onConfirm={() => { ... }}\r\n      title=\"Confirmation\"\r\n      message=\"Êtes-vous sûr ?\"\r\n    />",
+      "Description": "Utilisation de window.confirm() détectée dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 196. Pour une UX unifiée, utiliser le composant ConfirmModal.",
+      "Line": 196,
+      "Severity": "medium",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "window.confirm() au lieu de ConfirmModal",
+      "VerificationSteps": [
+        "Vérifier que ConfirmModal est importé",
+        "Vérifier que le modal s'ouvre correctement",
+        "Vérifier que la confirmation fonctionne",
+        "Tester l'annulation du modal"
+      ],
+      "Timestamp": "2025-12-12 08:02:00"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 776",
+        "Composant: ConfirmModal"
+      ],
+      "CurrentCode": "                          setPasswordConfirm(value)",
+      "RecommendedFix": "1. Importer ConfirmModal depuis '@/components/ConfirmModal'\r\n2. Ajouter un état pour gérer l'ouverture/fermeture du modal\r\n3. Remplacer window.confirm() par l'ouverture du ConfirmModal\r\n4. Gérer la confirmation dans le callback onConfirm du modal\r\n\r\nExemple de correction:\r\n  AVANT: if (window.confirm('Êtes-vous sûr ?')) { ... }\r\n  APRÈS: \r\n    const [showConfirm, setShowConfirm] = useState(false)\r\n    ...\r\n    <ConfirmModal\r\n      isOpen={showConfirm}\r\n      onClose={() => setShowConfirm(false)}\r\n      onConfirm={() => { ... }}\r\n      title=\"Confirmation\"\r\n      message=\"Êtes-vous sûr ?\"\r\n    />",
+      "Description": "Utilisation de window.confirm() détectée dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 776. Pour une UX unifiée, utiliser le composant ConfirmModal.",
+      "Line": 776,
+      "Severity": "medium",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "window.confirm() au lieu de ConfirmModal",
+      "VerificationSteps": [
+        "Vérifier que ConfirmModal est importé",
+        "Vérifier que le modal s'ouvre correctement",
+        "Vérifier que la confirmation fonctionne",
+        "Tester l'annulation du modal"
+      ],
+      "Timestamp": "2025-12-12 08:02:00"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 802",
+        "Composant: ConfirmModal"
+      ],
+      "CurrentCode": "                        onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}",
+      "RecommendedFix": "1. Importer ConfirmModal depuis '@/components/ConfirmModal'\r\n2. Ajouter un état pour gérer l'ouverture/fermeture du modal\r\n3. Remplacer window.confirm() par l'ouverture du ConfirmModal\r\n4. Gérer la confirmation dans le callback onConfirm du modal\r\n\r\nExemple de correction:\r\n  AVANT: if (window.confirm('Êtes-vous sûr ?')) { ... }\r\n  APRÈS: \r\n    const [showConfirm, setShowConfirm] = useState(false)\r\n    ...\r\n    <ConfirmModal\r\n      isOpen={showConfirm}\r\n      onClose={() => setShowConfirm(false)}\r\n      onConfirm={() => { ... }}\r\n      title=\"Confirmation\"\r\n      message=\"Êtes-vous sûr ?\"\r\n    />",
+      "Description": "Utilisation de window.confirm() détectée dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 802. Pour une UX unifiée, utiliser le composant ConfirmModal.",
+      "Line": 802,
+      "Severity": "medium",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "window.confirm() au lieu de ConfirmModal",
+      "VerificationSteps": [
+        "Vérifier que ConfirmModal est importé",
+        "Vérifier que le modal s'ouvre correctement",
+        "Vérifier que la confirmation fonctionne",
+        "Tester l'annulation du modal"
+      ],
+      "Timestamp": "2025-12-12 08:02:00"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js",
+        "Ligne: 19"
+      ],
+      "CurrentCode": "        password: 'admin123'",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Password hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js à la ligne 19. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 19,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js",
+        "Ligne: 182"
+      ],
+      "CurrentCode": "          password: 'user123'",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Password hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js à la ligne 182. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 182,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\__tests__\\api\\usb_logs.test.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 300"
+      ],
+      "CurrentCode": "          password: 'Le mot de passe doit contenir au moins 6 caractères'",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Password hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 300. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 300,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 319"
+      ],
+      "CurrentCode": "          password: 'Le mot de passe est obligatoire'",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Password hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 319. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 319,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+        "Ligne: 403"
+      ],
+      "CurrentCode": "        errors.password = 'Le mot de passe doit contenir au moins 6 caractères'",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Password hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js à la ligne 403. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 403,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\components\\UserPatientModal.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\app\\dashboard\\dispositifs\\page-b62e6a2d8e8f8f18.js",
+        "Ligne: 1"
+      ],
+      "CurrentCode": "(",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Token hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\app\\dashboard\\dispositifs\\page-b62e6a2d8e8f8f18.js à la ligne 1. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 1,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\app\\dashboard\\dispositifs\\page-b62e6a2d8e8f8f18.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js",
+        "Ligne: 1"
+      ],
+      "CurrentCode": "(",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Password hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js à la ligne 1. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 1,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js",
+        "Ligne: 1"
+      ],
+      "CurrentCode": "(",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Password hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js à la ligne 1. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 1,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js",
+        "Ligne: 1"
+      ],
+      "CurrentCode": "(",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Password hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js à la ligne 1. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 1,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\out\\_next\\static\\chunks\\5223-07b029f9b973ca92.js",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    },
+    {
+      "Dependencies": [
+        "Fichier: C:\\Users\\ymora\\Desktop\\maxime\\api.php",
+        "Ligne: 221"
+      ],
+      "CurrentCode": "    $jwtSecret = 'CHANGEZ_CE_SECRET_EN_PRODUCTION';",
+      "RecommendedFix": "1. Créer une variable d'environnement pour ce secret (ex: dans .env.local)\r\n2. Remplacer le code hardcodé par une référence à la variable d'environnement\r\n3. Ajouter .env.local au .gitignore si ce n'est pas déjà fait\r\n4. Documenter la variable dans env.example\r\n5. Vérifier que le secret n'a pas été commité dans l'historique Git\r\n\r\nExemple de correction:\r\n  AVANT: const apiKey = 'sk-1234567890abcdef'\r\n  APRÈS: const apiKey = process.env.API_KEY || ''",
+      "Description": "Secret hardcode détecté dans C:\\Users\\ymora\\Desktop\\maxime\\api.php à la ligne 221. Les secrets ne doivent jamais être hardcodés dans le code source.",
+      "Line": 221,
+      "Severity": "critical",
+      "File": "C:\\Users\\ymora\\Desktop\\maxime\\api.php",
+      "IssueType": "Secret Hardcodé",
+      "VerificationSteps": [
+        "Vérifier que la variable d'environnement est définie",
+        "Vérifier que .env.local est dans .gitignore",
+        "Vérifier que le secret n'est plus dans le code source",
+        "Tester que l'application fonctionne avec la variable d'environnement"
+      ],
+      "Timestamp": "2025-12-12 08:03:24"
+    }
+  ],
+  "Timestamp": "2025-12-12 08:08:49",
+  "Critical": 10,
+  "High": 0,
+  "Low": 0
+}
