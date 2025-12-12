@@ -62,27 +62,45 @@ function handleResetDemo() {
     try {
         // TRUNCATE sécurisé : tables validées via whitelist
         $pdo->exec('TRUNCATE TABLE ' . implode(', ', $tables) . ' RESTART IDENTITY CASCADE');
-        runSqlFile($pdo, 'base_seed.sql');
-        runSqlFile($pdo, 'demo_seed.sql');
+        
+        // Recréer les tables de notifications si elles ont été supprimées
+        // Ceci garantit que les tables existent même après un TRUNCATE
+        if (!tableExists('user_notifications_preferences') || !tableExists('patient_notifications_preferences')) {
+            error_log('[handleResetDemo] Recréation des tables de notifications...');
+            if (!ensureNotificationsTablesExist()) {
+                throw new Exception('Failed to recreate notifications tables');
+            }
+            error_log('[handleResetDemo] Tables de notifications recréées avec succès');
+        }
+        
+        // Exécuter les scripts seed s'ils existent
+        if (file_exists(__DIR__ . '/../../../sql/base_seed.sql')) {
+            runSqlFile($pdo, 'base_seed.sql');
+        }
+        if (file_exists(__DIR__ . '/../../../sql/demo_seed.sql')) {
+            runSqlFile($pdo, 'demo_seed.sql');
+        }
 
         $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
         auditLog('admin.reset_demo', 'system', null, null, ['duration_ms' => $durationMs]);
 
         echo json_encode([
             'success' => true,
-            'message' => 'Base de démo réinitialisée',
+            'message' => 'Base de démo réinitialisée avec tables de notifications recréées',
             'meta' => [
                 'duration_ms' => $durationMs,
                 'tables_reset' => count($tables),
+                'notifications_tables_recreated' => true,
                 'actor' => $user['email'] ?? null
             ]
         ]);
     } catch(Throwable $e) {
+        error_log('[handleResetDemo] Erreur: ' . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             'success' => false,
             'error' => 'Demo reset failed',
-            'details' => $e->getMessage()
+            'details' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal error'
         ]);
     }
 }

@@ -242,37 +242,14 @@ function handleGetUserNotifications($user_id) {
     requirePermission('users.view');
     
     try {
-        // Vérifier si la table user_notifications_preferences existe
-        $hasNotificationsTable = false;
-        try {
-            // Utiliser helper pour vérifier la table
-            $hasNotificationsTable = tableExists('user_notifications_preferences');
-        } catch(PDOException $e) {
-            $hasNotificationsTable = false;
-            if (getenv('DEBUG_ERRORS') === 'true') {
-                error_log('[handleGetUserNotifications] Table check failed: ' . $e->getMessage());
+        // Vérifier si la table existe, sinon la créer automatiquement
+        if (!tableExists('user_notifications_preferences')) {
+            // Créer automatiquement les tables de notifications si elles n'existent pas
+            if (!ensureNotificationsTablesExist()) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to create notifications tables']);
+                return;
             }
-        }
-        
-        if (!$hasNotificationsTable) {
-            // Table n'existe pas encore, retourner des valeurs par défaut
-            $defaultPrefs = [
-                'user_id' => $user_id,
-                'email_enabled' => false,
-                'sms_enabled' => false,
-                'push_enabled' => false,
-                'phone_number' => null,
-                'notify_battery_low' => false,
-                'notify_device_offline' => false,
-                'notify_abnormal_flow' => false,
-                'notify_new_patient' => false,
-                'quiet_hours_start' => null,
-                'quiet_hours_end' => null,
-                'created_at' => null,
-                'updated_at' => null
-            ];
-            echo json_encode(['success' => true, 'preferences' => $defaultPrefs]);
-            return;
         }
         
         $stmt = $pdo->prepare("SELECT * FROM user_notifications_preferences WHERE user_id = :user_id");
@@ -331,8 +308,8 @@ function handleUpdateUserNotifications($user_id) {
     $input = json_decode(file_get_contents('php://input'), true);
     
     try {
-        // Vérifier que l'utilisateur existe
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :user_id");
+        // Vérifier que l'utilisateur existe et n'est pas supprimé
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :user_id AND deleted_at IS NULL");
         $stmt->execute(['user_id' => $user_id]);
         if (!$stmt->fetch()) {
             http_response_code(404);
@@ -340,31 +317,14 @@ function handleUpdateUserNotifications($user_id) {
             return;
         }
         
-        // Vérifier si la table existe (unifié avec handleUpdatePatientNotifications)
-        $hasNotificationsTable = false;
-        try {
-            // Utiliser prepare() au lieu de query() pour la sécurité
-            // Note: Cette requête est statique (pas de paramètres utilisateur), mais on utilise prepare() par précaution
-            $checkStmt = $pdo->prepare("
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                    AND table_name = 'user_notifications_preferences'
-                )
-            ");
-            $result = $checkStmt->fetchColumn();
-            $hasNotificationsTable = ($result === true || $result === 't' || $result === 1 || $result === '1');
-        } catch(PDOException $e) {
-            $hasNotificationsTable = false;
-            if (getenv('DEBUG_ERRORS') === 'true') {
-                error_log('[handleUpdateUserNotifications] Table check failed: ' . $e->getMessage());
+        // Vérifier si la table existe, sinon la créer automatiquement
+        if (!tableExists('user_notifications_preferences')) {
+            // Créer automatiquement les tables de notifications si elles n'existent pas
+            if (!ensureNotificationsTablesExist()) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to create notifications tables']);
+                return;
             }
-        }
-        
-        if (!$hasNotificationsTable) {
-            http_response_code(503);
-            echo json_encode(['success' => false, 'error' => 'Notifications table not available']);
-            return;
         }
         
         // Vérifier/créer les préférences avec toutes les valeurs par défaut (unifié)
@@ -452,25 +412,14 @@ function handleGetPatientNotifications($patient_id) {
     requirePermission('patients.view');
     
     try {
-        // Vérifier si la table existe (utilise helper)
+        // Vérifier si la table existe, sinon la créer automatiquement
         if (!tableExists('patient_notifications_preferences')) {
-            // Table n'existe pas encore, retourner des valeurs par défaut
-            $defaultPrefs = [
-                'patient_id' => $patient_id,
-                'email_enabled' => false,
-                'sms_enabled' => false,
-                'push_enabled' => false,
-                'notify_battery_low' => false,
-                'notify_device_offline' => false,
-                'notify_abnormal_flow' => false,
-                'notify_alert_critical' => false,
-                'quiet_hours_start' => null,
-                'quiet_hours_end' => null,
-                'created_at' => null,
-                'updated_at' => null
-            ];
-            echo json_encode(['success' => true, 'preferences' => $defaultPrefs]);
-            return;
+            // Créer automatiquement les tables de notifications si elles n'existent pas
+            if (!ensureNotificationsTablesExist()) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to create notifications tables']);
+                return;
+            }
         }
         
         $stmt = $pdo->prepare("SELECT * FROM patient_notifications_preferences WHERE patient_id = :patient_id");
@@ -537,11 +486,14 @@ function handleUpdatePatientNotifications($patient_id) {
             return;
         }
         
-        // Vérifier si la table existe (utilise helper)
+        // Vérifier si la table existe, sinon la créer automatiquement
         if (!tableExists('patient_notifications_preferences')) {
-            http_response_code(503);
-            echo json_encode(['success' => false, 'error' => 'Notifications table not available']);
-            return;
+            // Créer automatiquement les tables de notifications si elles n'existent pas
+            if (!ensureNotificationsTablesExist()) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Failed to create notifications tables']);
+                return;
+            }
         }
         
         // Vérifier/créer les préférences avec toutes les valeurs par défaut (unifié)

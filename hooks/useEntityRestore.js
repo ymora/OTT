@@ -38,12 +38,18 @@ export function useEntityRestore(entityType, { onSuccess, onError, invalidateCac
       setRestoring(entity.id)
       setError(null)
 
+      // Pour les devices, utiliser la route spécifique /devices/{id}/restore
+      // Pour les autres entités (users, patients), utiliser PATCH /entity/{id} avec deleted_at: null
+      const endpoint = entityType === 'devices'
+        ? `${API_URL}/api.php/${entityType}/${entity.id}/restore`
+        : `${API_URL}/api.php/${entityType}/${entity.id}`
+
       const response = await fetchWithAuth(
-        `${API_URL}/api.php/${entityType}/${entity.id}`,
+        endpoint,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deleted_at: null })
+          body: entityType === 'devices' ? undefined : JSON.stringify({ deleted_at: null })
         },
         { requiresAuth: true }
       )

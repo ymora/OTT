@@ -99,6 +99,7 @@ export default function DeviceModal({
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [loadingConfig, setLoadingConfig] = useState(false)
+  const [configTab, setConfigTab] = useState('basic') // basic, advanced, expert
 
   // Initialiser le formulaire UNIQUEMENT lors de l'ouverture du modal
   // Utiliser un ref pour éviter les réinitialisations lors de changements
@@ -1101,10 +1102,50 @@ export default function DeviceModal({
             </div>
           </div>
 
-          {/* Configuration - Accordéons par catégorie */}
-          <div className="space-y-2">
-            {/* Mesure - Accordéon principal (ouvert par défaut) */}
-            <Accordion title="📊 Mesure" defaultOpen={true}>
+          {/* Configuration - Onglets par niveau */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+            <div className="mb-4">
+              <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setConfigTab('basic')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    configTab === 'basic'
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  📊 Basique
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfigTab('advanced')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    configTab === 'advanced'
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  ⚙️ Avancé
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfigTab('expert')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    configTab === 'expert'
+                      ? 'border-yellow-500 text-yellow-600 dark:text-yellow-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  ⚠️ Expert
+                </button>
+              </div>
+            </div>
+
+            {/* Onglet Basique */}
+            {configTab === 'basic' && (
+              <div className="space-y-2">
+                <Accordion title="📊 Mesure" defaultOpen={true}>
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   <div>
@@ -1207,9 +1248,14 @@ export default function DeviceModal({
                 </div>
               </div>
             </Accordion>
+              </div>
+            )}
 
-            {/* Airflow - Accordéon fermé */}
-            <Accordion title="💨 Airflow" defaultOpen={false}>
+            {/* Onglet Avancé */}
+            {configTab === 'advanced' && (
+              <div className="space-y-2">
+                {/* Airflow - Accordéon fermé */}
+                <Accordion title="💨 Airflow" defaultOpen={true}>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Tooltip content="Nombre de fois que la mesure de débit est répétée.\n\nChaque passe prend plusieurs échantillons.\n\nPlus de passes = mesure plus précise mais plus longue.\n\nRecommandé: 2-5 passes">
@@ -1266,8 +1312,8 @@ export default function DeviceModal({
               </div>
             </Accordion>
 
-            {/* Modem - Accordéon fermé */}
-            <Accordion title="📡 Modem" defaultOpen={false}>
+            {/* Réseau - Accordéon */}
+            <Accordion title="🌐 Réseau" defaultOpen={false}>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Tooltip content="Timeout du watchdog en minutes.\n\nSi le système ne répond pas pendant ce délai, le dispositif redémarre automatiquement pour éviter les blocages.\n\nRecommandé: 3-10 minutes">
@@ -1366,9 +1412,9 @@ export default function DeviceModal({
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Tooltip content="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile.\n\nChaque opérateur a son propre APN.\n\n⚠️ Sans APN, le dispositif ne peut pas se connecter au réseau (oper, eps, gprs restent KO).\n\nExemples:\n• Free: 'free'\n• Orange: 'orange'\n• SFR: 'sl2sfr'\n• Bouygues: 'mmsbouygtel'">
+                    <Tooltip content="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile.\n\n✅ DÉTECTION AUTOMATIQUE : Le firmware détecte automatiquement l'opérateur (Orange, Free, SFR, Bouygues) et configure l'APN correct.\n\n💡 CONFIGURATION MANUELLE : Nécessaire uniquement pour :\n• Opérateurs étrangers non reconnus\n• MVNO (opérateurs virtuels)\n• APN personnalisés (entreprise)\n• Tests et débogage\n\nExemples:\n• Free: 'free'\n• Orange: 'orange'\n• SFR: 'sl2sfr'\n• Bouygues: 'mmsbouygtel'">
                       <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        APN <span className="text-red-500">*</span>
+                        APN <span className="text-gray-400 dark:text-gray-500">(optionnel)</span>
                       </label>
                     </Tooltip>
                     <input
@@ -1377,15 +1423,20 @@ export default function DeviceModal({
                       value={formData.apn || ''}
                       onChange={handleInputChange}
                       className="input w-full text-sm py-1.5"
-                      placeholder="free, orange, sl2sfr, internet..."
-                      title="APN de votre opérateur. Free: 'free', Orange: 'orange', SFR: 'sl2sfr', Bouygues: 'mmsbouygtel'. Obligatoire pour la connexion réseau."
+                      placeholder="Détection automatique (Orange, Free, SFR, Bouygues)..."
+                      title="APN optionnel. Le firmware détecte automatiquement l'opérateur et configure l'APN. À configurer manuellement uniquement pour opérateurs étrangers, MVNO ou APN personnalisés."
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Free: <code className="text-xs">free</code> | Orange: <code className="text-xs">orange</code> | SFR: <code className="text-xs">sl2sfr</code> | Bouygues: <code className="text-xs">mmsbouygtel</code>
+                      <span className="text-green-600 dark:text-green-400">✅ Détection automatique</span> pour Orange, Free, SFR, Bouygues
                     </p>
+                    {formData.apn && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                        💡 APN manuel configuré : sera utilisé si l&apos;opérateur n&apos;est pas reconnu automatiquement
+                      </p>
+                    )}
                     {!formData.apn && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                        ⚠️ APN requis pour la connexion réseau (oper, eps, gprs)
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        💡 L&apos;APN sera détecté automatiquement selon l&apos;opérateur détecté
                       </p>
                     )}
                   </div>
@@ -1489,6 +1540,106 @@ export default function DeviceModal({
                 </div>
               </div>
             </Accordion>
+              </div>
+            )}
+
+            {/* Onglet Expert */}
+            {configTab === 'expert' && (
+              <div className="space-y-2">
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 mb-3">
+                  <div className="flex items-start">
+                    <span className="text-yellow-600 dark:text-yellow-400 text-xl mr-2">⚠️</span>
+                    <div>
+                      <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-300">Configuration Expert</p>
+                      <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+                        Ces paramètres avancés affectent le comportement bas-niveau du dispositif.
+                        <br/>Ne modifier que si vous comprenez leur impact. Des valeurs incorrectes peuvent bloquer le dispositif.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modem - Accordéon principal dans Expert */}
+                <Accordion title="📡 Modem (Timeouts & Watchdog)" defaultOpen={true}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        Watchdog (min)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        name="watchdog_seconds"
+                        value={formData.watchdog_seconds || ''}
+                        onChange={handleInputChangeWithConversion}
+                        className="input w-full text-sm py-1.5"
+                        placeholder="0.5 (30s)"
+                        min="0.1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        Boot modem timeout (sec)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        name="modem_boot_timeout_ms"
+                        value={formData.modem_boot_timeout_ms || ''}
+                        onChange={handleInputChangeWithConversion}
+                        className="input w-full text-sm py-1.5"
+                        placeholder="20"
+                        min="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        SIM ready timeout (sec)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        name="sim_ready_timeout_ms"
+                        value={formData.sim_ready_timeout_ms || ''}
+                        onChange={handleInputChangeWithConversion}
+                        className="input w-full text-sm py-1.5"
+                        placeholder="45"
+                        min="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        Network attach timeout (sec)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        name="network_attach_timeout_ms"
+                        value={formData.network_attach_timeout_ms || ''}
+                        onChange={handleInputChangeWithConversion}
+                        className="input w-full text-sm py-1.5"
+                        placeholder="120"
+                        min="10"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        Max reboots modem
+                      </label>
+                      <input
+                        type="number"
+                        name="modem_max_reboots"
+                        value={formData.modem_max_reboots || ''}
+                        onChange={handleInputChange}
+                        className="input w-full text-sm py-1.5"
+                        placeholder="3"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+                </Accordion>
+              </div>
+            )}
           </div>
 
           {/* Boutons */}

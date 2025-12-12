@@ -118,16 +118,10 @@ export default function AdminMigrationsPage() {
 
   const migrations = [
     {
-      id: 'migration_add_measurements_deleted_at.sql',
-      name: 'Ajouter deleted_at à measurements',
-      description: 'Ajoute la colonne deleted_at pour permettre l\'archivage des mesures historiques',
-      variant: 'info'
-    },
-    {
-      id: 'migration_cleanup_device_names.sql',
-      name: 'Nettoyer les noms de dispositifs',
-      description: 'Enlève le nom du patient des device_name pour éviter la redondance (OTT-25-Jacques Bernard → OTT-25)',
-      variant: 'warning'
+      id: 'migration_repair_database.sql',
+      name: '🔧 Réparer la base de données (RECOMMANDÉ)',
+      description: '✅ Crée toutes les tables manquantes (notifications, index, etc.) SANS PERTE DE DONNÉES. Utilisez ceci pour corriger les erreurs "table not found" ou après une réinitialisation.',
+      variant: 'success'
     }
   ]
 
@@ -191,12 +185,14 @@ export default function AdminMigrationsPage() {
                   onClick={() => runMigration(migration.id)}
                   disabled={loading}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    migration.variant === 'warning'
+                    migration.variant === 'success'
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : migration.variant === 'warning'
                       ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
                       : 'bg-blue-600 hover:bg-blue-700 text-white'
                   }`}
                 >
-                  {loading ? '⏳ Exécution...' : '🚀 Exécuter'}
+                  {loading ? '⏳ Exécution...' : migration.variant === 'success' ? '🔧 Réparer' : '🚀 Exécuter'}
                 </button>
               </div>
             </div>
