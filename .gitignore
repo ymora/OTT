@@ -43,8 +43,8 @@ hardware/firmware/**/*.bin
 hardware/firmware/**/*.ino
 
 # Artefacts volumineux conservés hors du dépôt principal
-# docs/  # Documentation technique - doit être versionnée
-docs/_next/  # Fichiers de build Next.js (ne doivent pas être versionnés)
+# Build Next.js pour GitHub Pages (généré automatiquement par GitHub Actions)
+docs/  # Tout le dossier docs/ est généré automatiquement
 external/
 
 # Backup
