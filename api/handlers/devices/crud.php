@@ -601,6 +601,18 @@ function handleUpdateDevice($device_id) {
         $updates = [];
         $params = ['id' => $device_id];
         
+        // Gérer la restauration (deleted_at = null)
+        if (array_key_exists('deleted_at', $input)) {
+            if ($input['deleted_at'] === null) {
+                // Restauration : mettre deleted_at à NULL
+                $updates[] = "deleted_at = NULL";
+            } else {
+                // Archivage : mettre deleted_at à la valeur fournie (ou NOW())
+                $updates[] = "deleted_at = :deleted_at";
+                $params['deleted_at'] = $input['deleted_at'] ?: date('Y-m-d H:i:s');
+            }
+        }
+        
         if (array_key_exists('last_seen', $input) && $input['last_seen']) {
             $updates[] = "last_seen = :last_seen";
             $params['last_seen'] = $input['last_seen'];
@@ -689,11 +701,12 @@ function handleUpdateDevice($device_id) {
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
 
+        // Récupérer le dispositif mis à jour (inclure même s'il est archivé pour la restauration)
         $stmt = $pdo->prepare("
             SELECT d.*, p.first_name, p.last_name
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
-            WHERE d.id = :id AND d.deleted_at IS NULL
+            WHERE d.id = :id
         ");
         $stmt->execute(['id' => $device_id]);
         $updated = $stmt->fetch();
@@ -865,6 +878,9 @@ function handleRestoreDevice($device_id) {
         $stmt->execute(['id' => $device_id]);
 
         auditLog('device.restored', 'device', $device_id, $device, ['deleted_at' => null]);
+
+        // Invalider le cache des devices après restauration (important pour que le dispositif apparaisse dans la bonne liste)
+        SimpleCache::clear();
 
         echo json_encode([
             'success' => true,

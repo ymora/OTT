@@ -492,6 +492,132 @@ function columnExists($tableName, $columnName) {
     }
 }
 
+/**
+ * Crée automatiquement les tables de notifications si elles n'existent pas
+ * Cette fonction est idempotente et peut être appelée plusieurs fois sans erreur
+ */
+function ensureNotificationsTablesExist() {
+    global $pdo;
+    
+    try {
+        // S'assurer que la fonction set_updated_at existe
+        $pdo->exec("
+            CREATE OR REPLACE FUNCTION set_updated_at()
+            RETURNS TRIGGER AS \$\$
+            BEGIN
+              NEW.updated_at = NOW();
+              RETURN NEW;
+            END;
+            \$\$ LANGUAGE plpgsql;
+        ");
+        
+        // Créer la table user_notifications_preferences si elle n'existe pas
+        if (!tableExists('user_notifications_preferences')) {
+            $pdo->exec("
+                CREATE TABLE user_notifications_preferences (
+                  user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                  email_enabled BOOLEAN DEFAULT FALSE,
+                  sms_enabled BOOLEAN DEFAULT FALSE,
+                  push_enabled BOOLEAN DEFAULT FALSE,
+                  phone_number VARCHAR(20),
+                  notify_battery_low BOOLEAN DEFAULT FALSE,
+                  notify_device_offline BOOLEAN DEFAULT FALSE,
+                  notify_abnormal_flow BOOLEAN DEFAULT FALSE,
+                  notify_new_patient BOOLEAN DEFAULT FALSE,
+                  quiet_hours_start TIME,
+                  quiet_hours_end TIME,
+                  created_at TIMESTAMPTZ DEFAULT NOW(),
+                  updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ");
+            
+            // Créer le trigger
+            $pdo->exec("
+                DROP TRIGGER IF EXISTS trg_user_notifications_preferences_updated ON user_notifications_preferences;
+                CREATE TRIGGER trg_user_notifications_preferences_updated 
+                BEFORE UPDATE ON user_notifications_preferences
+                FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+            ");
+            
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[ensureNotificationsTablesExist] Table user_notifications_preferences créée');
+            }
+        }
+        
+        // Créer la table patient_notifications_preferences si elle n'existe pas
+        if (!tableExists('patient_notifications_preferences')) {
+            $pdo->exec("
+                CREATE TABLE patient_notifications_preferences (
+                  patient_id INT PRIMARY KEY REFERENCES patients(id) ON DELETE CASCADE,
+                  email_enabled BOOLEAN DEFAULT FALSE,
+                  sms_enabled BOOLEAN DEFAULT FALSE,
+                  push_enabled BOOLEAN DEFAULT FALSE,
+                  phone_number VARCHAR(20),
+                  notify_battery_low BOOLEAN DEFAULT FALSE,
+                  notify_device_offline BOOLEAN DEFAULT FALSE,
+                  notify_abnormal_flow BOOLEAN DEFAULT FALSE,
+                  notify_alert_critical BOOLEAN DEFAULT FALSE,
+                  quiet_hours_start TIME,
+                  quiet_hours_end TIME,
+                  created_at TIMESTAMPTZ DEFAULT NOW(),
+                  updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ");
+            
+            // Créer le trigger
+            $pdo->exec("
+                DROP TRIGGER IF EXISTS trg_patient_notifications_preferences_updated ON patient_notifications_preferences;
+                CREATE TRIGGER trg_patient_notifications_preferences_updated 
+                BEFORE UPDATE ON patient_notifications_preferences
+                FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+            ");
+            
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[ensureNotificationsTablesExist] Table patient_notifications_preferences créée');
+            }
+        }
+        
+        // Créer la table notifications_queue si elle n'existe pas
+        if (!tableExists('notifications_queue')) {
+            $pdo->exec("
+                CREATE TABLE notifications_queue (
+                  id BIGSERIAL PRIMARY KEY,
+                  user_id INT REFERENCES users(id) ON DELETE CASCADE,
+                  patient_id INT REFERENCES patients(id) ON DELETE CASCADE,
+                  type TEXT CHECK (type IN ('email', 'sms', 'push')) NOT NULL,
+                  priority TEXT CHECK (priority IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
+                  subject TEXT NOT NULL,
+                  message TEXT NOT NULL,
+                  data JSONB,
+                  send_after TIMESTAMPTZ DEFAULT NOW(),
+                  status TEXT CHECK (status IN ('pending', 'sent', 'failed')) DEFAULT 'pending',
+                  attempts INT DEFAULT 0,
+                  max_attempts INT DEFAULT 3,
+                  sent_at TIMESTAMPTZ,
+                  error_message TEXT,
+                  created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ");
+            
+            // Créer les index
+            $pdo->exec("
+                CREATE INDEX IF NOT EXISTS idx_notifications_queue_status ON notifications_queue(status, send_after);
+                CREATE INDEX IF NOT EXISTS idx_notifications_queue_user ON notifications_queue(user_id);
+                CREATE INDEX IF NOT EXISTS idx_notifications_queue_patient ON notifications_queue(patient_id);
+            ");
+            
+            if (getenv('DEBUG_ERRORS') === 'true') {
+                error_log('[ensureNotificationsTablesExist] Table notifications_queue créée');
+            }
+        }
+        
+        return true;
+    } catch(PDOException $e) {
+        error_log('[ensureNotificationsTablesExist] Erreur lors de la création des tables: ' . $e->getMessage());
+        return false;
+    }
+}
+
 // ============================================================================
 // HELPERS - Audit
 // ============================================================================

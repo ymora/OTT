@@ -138,3 +138,4 @@ Write-Host "  2. Vérifiez la date du dernier déploiement" -ForegroundColor Gra
 Write-Host "  3. Si le déploiement est récent, les fonctionnalités devraient être présentes" -ForegroundColor Gray
 Write-Host ""
 
+

@@ -62,6 +62,10 @@ export function useEntityPage(config) {
   const restore = useEntityRestore(entityType, {
     onSuccess: () => {
       setSuccess(`✅ ${entityType === 'patients' ? 'Patient' : entityType === 'users' ? 'Utilisateur' : 'Dispositif'} restauré avec succès`)
+      // Si on était en mode archivé, basculer vers la vue normale pour voir l'élément restauré
+      if (showArchived) {
+        toggleShowArchived()
+      }
     },
     onError: (errorMessage) => {
       setActionError(errorMessage)

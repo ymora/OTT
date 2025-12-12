@@ -804,6 +804,51 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
 [OTA] ⚠️  Le dispositif continue avec la version actuelle</code></pre>
     <p><strong>Important</strong> : Tous les messages incluent des timestamps et des indicateurs visuels (✅, ❌, ⚠️, 📡) pour faciliter le débogage dans la console USB.</p>
     
+    <h3>🔄 Fonctionnement Global du Firmware v2.0</h3>
+    
+    <div class="alert alert-success">
+        <strong>⚡ Mode Hybride Intelligent</strong><br>
+        Le firmware fonctionne <strong>toujours en mode hybride</strong>, avec deux processus parallèles si USB est connecté :
+        <ul style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li><strong>Processus 1 (USB Debug)</strong> : Affichage mesures toutes les secondes sur USB (affichage uniquement, pas d'envoi à la base)</li>
+            <li><strong>Processus 2 (Normal OTA)</strong> : Envoi périodique à la base de données selon <code>configuredSleepMinutes</code> (comme en mode normal)</li>
+        </ul>
+    </div>
+    
+    <h4>📡 Communication avec la Base de Données</h4>
+    <p>Le firmware communique de manière bidirectionnelle avec la base de données :</p>
+    <ul>
+        <li><strong>Envoi des mesures</strong> : <code>POST /api.php/devices/measurements</code> - Format JSON unifié avec identifiants, mesures, GPS, configuration</li>
+        <li><strong>Récupération des commandes</strong> : <code>GET /api.php/devices/{ICCID}/commands/pending</code> - Toutes les 30 secondes en mode USB, après chaque envoi en mode normal</li>
+        <li><strong>Envoi des ACK</strong> : <code>POST /api.php/devices/commands/ack</code> - Accusés de réception après traitement de chaque commande</li>
+        <li><strong>Envoi des logs</strong> : <code>POST /api.php/devices/logs</code> - Logs INFO/WARN/ERROR avec tampon offline si réseau indisponible</li>
+    </ul>
+    
+    <h4>📺 Logs USB Complets</h4>
+    <p>En mode USB, tous les événements sont loggés sur la console Serial :</p>
+    <ul>
+        <li><strong>Succès/échecs d'envoi</strong> : Messages détaillés avec statut de la base de données</li>
+        <li><strong>Commandes OTA</strong> : Réception, traitement et ACK avec statut (executed/error)</li>
+        <li><strong>État du modem</strong> : Initialisation, connexion réseau, détection opérateur, APN</li>
+        <li><strong>Erreurs et avertissements</strong> : Messages clairs pour le débogage</li>
+    </ul>
+    <p>Exemple de logs d'envoi réussi :</p>
+    <pre><code>[OTA] 📤 Envoi mesure périodique (processus normal)...
+[API] 📤 URL: https://ott-jbln.onrender.com:443/api.php/devices/measurements
+[API] ✅ Mesure reçue par la base de données avec succès
+[API] 📊 Données enregistrées: Débit=2.5 L/min | Batterie=62% | RSSI=-80 dBm
+[MODEM] ✅ Envoi des données effectué !
+[OTA] ✅ Mesure envoyée à la base de données avec succès</code></pre>
+    
+    <h4>✅ Prêt par Défaut</h4>
+    <p>Le firmware est <strong>prêt à envoyer</strong> dès que :</p>
+    <ul>
+        <li>Modem initialisé (en arrière-plan en mode USB, immédiatement en mode normal)</li>
+        <li>Réseau attaché (détection automatique opérateur et APN)</li>
+        <li>GPRS connecté</li>
+    </ul>
+    <p>Les paramètres réseau (opérateur, APN) sont <strong>détectés automatiquement</strong> et <strong>sauvegardés</strong> pour réutilisation au prochain réveil, ce qui accélère les connexions ultérieures.</p>
+    
     <h3>⚙️ Valeurs par Défaut du Firmware</h3>
     
     <div class="alert alert-info">

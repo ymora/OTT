@@ -251,6 +251,60 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     }
   }
   
+  // Fonction pour archiver plusieurs mesures
+  const handleArchiveMultiple = async () => {
+    if (selectedMeasurements.size === 0) return
+    
+    setArchivingMultiple(true)
+    setError(null)
+
+    try {
+      const measurementIds = Array.from(selectedMeasurements)
+      let successCount = 0
+      let errorCount = 0
+
+      // Archiver les mesures une par une
+      for (const measurementId of measurementIds) {
+        try {
+          const data = await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            `/api.php/measurements/${measurementId}?archive=true`,
+            { method: 'DELETE' },
+            { requiresAuth: true }
+          )
+
+          if (data.success) {
+            successCount++
+          } else {
+            errorCount++
+          }
+        } catch (err) {
+          logger.error(`Erreur archivage mesure ${measurementId}:`, err)
+          errorCount++
+        }
+      }
+
+      if (successCount > 0) {
+        // Retirer les mesures archivées de la liste
+        setMeasurements(prev => prev.filter(m => !selectedMeasurements.has(m.id)))
+        setSelectedMeasurements(new Set())
+        logger.log(`✅ ${successCount} mesure${successCount > 1 ? 's' : ''} archivée${successCount > 1 ? 's' : ''}`)
+        
+        if (errorCount > 0) {
+          setError(`${successCount} mesure${successCount > 1 ? 's' : ''} archivée${successCount > 1 ? 's' : ''}, ${errorCount} erreur${errorCount > 1 ? 's' : ''}`)
+        }
+      } else {
+        setError(`Aucune mesure archivée. ${errorCount} erreur${errorCount > 1 ? 's' : ''}`)
+      }
+    } catch (err) {
+      logger.error('Erreur archivage multiple:', err)
+      setError(err.message || 'Erreur lors de l\'archivage des mesures')
+    } finally {
+      setArchivingMultiple(false)
+    }
+  }
+
   // Fonction pour supprimer plusieurs mesures
   const handleDeleteMultiple = async () => {
     if (selectedMeasurements.size === 0) return
@@ -273,7 +327,7 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
           const data = await fetchJson(
             fetchWithAuth,
             API_URL,
-            `/api.php/measurements/${measurementId}`,
+            `/api.php/measurements/${measurementId}?permanent=true`,
             { method: 'DELETE' },
             { requiresAuth: true }
           )

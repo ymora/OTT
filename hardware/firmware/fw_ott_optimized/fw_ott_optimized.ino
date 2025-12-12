@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v2.0 - Version refactorisée et simplifiée
+ *  OTT Firmware v2.0
  * ================================================================
  * 
  * MATÉRIEL : LILYGO TTGO T-A7670G ESP32 Dev Board
@@ -18,27 +18,22 @@
  * - Mode hybride : envoi au boot + envoi sur changement de flux d'air
  * - Configuration via USB (prioritaire) ou OTA
  * - TinyGSM A7670G : GPRS, HTTPS, GPS
+ * - Détection automatique opérateur : IMSI (prioritaire) + ICCID (fallback)
+ * - Support automatique opérateurs français : Orange, SFR, Free, Bouygues
+ * - Gestion intelligente roaming : APN de la carte SIM (pas du réseau)
+ * - Détection spéciale Free Pro : via IMSI + APN par défaut (résout préfixes ICCID partagés)
  * - Persistence : APN/ICCID/PIN/Serial/calibration en NVS
+ * - Logs clairs et informatifs : messages compréhensibles (plus de codes techniques)
  * - Logs : POST /devices/logs + tampon NVS si réseau coupé
  * - Commandes OTA : SET_SLEEP_SECONDS, UPDATE_CONFIG, UPDATE_CALIBRATION, OTA_REQUEST
  * - Deep sleep : économie d'énergie quand inactif
  * - Numérotation automatique : OTT-XX-XXX → OTT-25-001 (généré par backend)
- * 
- * AMÉLIORATIONS v2.0 :
- * ====================
- * - Code simplifié et mieux structuré
- * - Réduction de la duplication de code
- * - Logs optimisés (moins verbeux)
- * - Gestion modem améliorée (retry simplifié)
- * - Meilleure gestion des erreurs
- * - Commentaires mis à jour et clarifiés
  */
 
 // Configuration du modem SIMCOM A7670G (LTE Cat-1)
-// TEMPORAIRE : Utilisation du driver SIM7600 (compatible avec A7670G)
-// Note : Le A7670G et SIM7600 sont de la même famille SIMCOM et partagent
-//        la plupart des commandes AT. Le driver SIM7600 fonctionne correctement.
-// TODO : Mettre à jour TinyGSM vers v0.12.0+ pour utiliser TINY_GSM_MODEM_A7672X
+// Utilisation du driver SIM7600 (compatible avec A7670G)
+// Le A7670G et SIM7600 sont de la même famille SIMCOM et partagent
+// la plupart des commandes AT. Le driver SIM7600 fonctionne correctement.
 #define TINY_GSM_MODEM_SIM7600   // Compatible avec A7670G (même famille SIMCOM)
 #define TINY_GSM_RX_BUFFER 1024  // Buffer AT -> augmente la stabilité HTTPS
 
@@ -119,6 +114,7 @@ String SIM_PIN        = OTT_DEFAULT_SIM_PIN;
 String NETWORK_APN    = OTT_DEFAULT_APN;
 String DEVICE_ICCID   = OTT_DEFAULT_ICCID;
 String DEVICE_SERIAL  = OTT_DEFAULT_SERIAL;
+String DETECTED_OPERATOR = "";  // Opérateur détecté (MCC+MNC) - sauvegardé pour réutilisation
 
 const char* API_HOST       = "ott-jbln.onrender.com";
 const uint16_t API_PORT    = 443;
@@ -137,6 +133,18 @@ const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 __attribute__((section(".version"))) const char firmware_version_section[] = "OTT_FW_VERSION=" FIRMWARE_VERSION_STR "\0";
 
 const size_t MAX_OFFLINE_LOGS = 10;           // Taille max du tampon de logs NVS
+
+// ============================================================================
+// SYSTÈME DE LOGS AVEC NIVEAUX
+// ============================================================================
+enum LogLevel {
+  LOG_ERROR = 0,   // Erreurs critiques uniquement
+  LOG_WARN = 1,    // Avertissements importants
+  LOG_INFO = 2,    // Informations normales (default)
+  LOG_DEBUG = 3    // Debug verbeux
+};
+
+LogLevel currentLogLevel = LOG_INFO; // Niveau par défaut
 
 struct Measurement {
   float flow;      // Débit en L/min (après calibration)
@@ -212,7 +220,13 @@ void stopModem();
 bool waitForSimReady(uint32_t timeoutMs);
 bool attachNetwork(uint32_t timeoutMs);
 bool connectData(uint32_t timeoutMs);
+String detectSimOperatorFromIccid(const String& iccid);  // Détecte l'opérateur de la carte SIM via ICCID
+String detectSimOperatorFromImsi();  // Détecte l'opérateur de la carte SIM via IMSI (plus fiable)
 String getRecommendedApnForOperator(const String& operatorCode);
+String getOperatorName(const String& operatorCode);
+void saveNetworkParams(const String& oper, const String& apn);  // Helper pour sauvegarder opérateur et APN
+bool checkEpsStatus(bool& epsOk, String& epsStatus);  // Helper pour vérifier l'état EPS (LTE)
+bool setApn(const String& apn);  // Helper pour configurer l'APN (évite la duplication de code)
 bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries = 3);
 void goToSleep(uint32_t minutes);
 void configureWatchdog(uint32_t timeoutSeconds);
@@ -232,6 +246,22 @@ String formatTimeFromMillis(unsigned long ms) {
   snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", hours, minutes, secs);
   return String(buffer);
 }
+
+// ============================================================================
+// FONCTIONS DE LOG AVEC NIVEAUX
+// ============================================================================
+void logMsg(LogLevel level, const char* tag, const String& message) {
+  if (level <= currentLogLevel) {
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[%s] %s\n", timeStr.c_str(), tag, message.c_str());
+  }
+}
+
+// Raccourcis pour faciliter l'utilisation
+#define LOG_E(tag, msg) logMsg(LOG_ERROR, tag, msg)
+#define LOG_W(tag, msg) logMsg(LOG_WARN, tag, msg)
+#define LOG_I(tag, msg) logMsg(LOG_INFO, tag, msg)
+#define LOG_D(tag, msg) logMsg(LOG_DEBUG, tag, msg)
 
 // Fonction utilitaire pour construire le nom du dispositif (évite duplication)
 String buildDeviceName() {
@@ -271,6 +301,7 @@ bool httpGet(const char* path, String* response);
 bool sendLog(const char* level, const String& message, const char* type = "firmware");
 
 bool sendMeasurement(const Measurement& m, float* latitude = nullptr, float* longitude = nullptr, const char* status = "TIMER");
+bool sendMeasurementWithContext(const char* context);  // Fonction factorisée pour éviter duplication
 int  fetchCommands(Command* out, size_t maxCount);
 bool acknowledgeCommand(const Command& cmd, bool success, const char* message);
 void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes);
@@ -343,26 +374,20 @@ void setup()
   // DÉMARRAGE MODEM (optionnel en mode USB, requis en mode hybride)
   // =========================================================================
   if (usbModeActive) {
-    // Mode USB : Démarrage modem EN ARRIÈRE-PLAN (non bloquant)
-    Serial.println(F("⚡ Streaming démarré | Modem: arrière-plan\n"));
-    Serial.println(F("📡 Deux processus parallèles :"));
-    Serial.println(F("   1. Debug USB : Affichage mesures toutes les secondes"));
-    Serial.println(F("   2. Normal OTA : Envoi périodique selon configuration"));
+    // Mode USB : Streaming + OTA périodique
+    Serial.println(F("⚡ Mode USB: Streaming 1s + OTA périodique"));
     modemReady = false;
-    // Initialiser lastMeasurementTime pour le processus normal
     lastMeasurementTime = millis();
-    // Continuer vers loop() IMMÉDIATEMENT sans attendre le modem
-    // Le modem sera initialisé dans loop(), puis envoi de la mesure initiale
-    return;  // ← IMPORTANT: Sortir de setup() et aller dans loop() !
+    return;  // Continuer vers loop() sans attendre le modem
   } else {
-    // Mode hybride : Modem REQUIS
-    Serial.println(F("📡 Démarrage modem..."));
+    // Mode hybride : OTA uniquement
+    LOG_I("BOOT", "Mode hybride - Démarrage modem...");
     if (!startModem()) {
-      Serial.println(F("❌ Modem échec → Sleep 1min"));
+      LOG_E("BOOT", "Modem échec → Sleep 1min");
       goToSleep(1);
       return;
     }
-    Serial.println(F("✅ Modem prêt\n"));
+    LOG_I("BOOT", "Modem prêt");
   }
   
   // Mode hybride activé (pas d'USB au boot)
@@ -437,10 +462,7 @@ void loop()
   }
   
   // =========================================================================
-  // MODE USB ACTIF : Deux processus parallèles
-  // =========================================================================
-  // Processus 1 (USB Debug) : Affichage des mesures en temps réel sur USB (toutes les secondes)
-  // Processus 2 (Normal OTA) : Envoi périodique des mesures via OTA (selon configuredSleepMinutes)
+  // MODE USB ACTIF : Streaming 1s + OTA périodique
   // =========================================================================
   if (usbModeActive) {
     // Initialiser le modem pour permettre l'envoi OTA (processus normal)
@@ -456,17 +478,19 @@ void loop()
       firstInitAttempt = false;
       modemInitInProgress = true;
       
-      Serial.println(F("[MODEM] Initialisation modem pour processus OTA normal (mode USB)..."));
+      LOG_I("MODEM", "Initialisation modem (mode USB)...");
       if (startModem()) {
-        Serial.println(F("[MODEM] ✅ Modem initialisé - Processus OTA activé"));
+        LOG_I("MODEM", "Modem initialisé - OTA activé");
         if (gpsEnabled) {
-          Serial.println(F("[GPS] ⏱️  Le GPS sera activé automatiquement"));
+          LOG_D("GPS", "GPS activé automatiquement");
         }
+        
+        // Envoi automatique après connexion réseau
+        sendMeasurementWithContext("NETWORK_READY");
       } else {
-        Serial.println(F("[MODEM] ⚠️ Échec initialisation modem (réessai dans 30s)"));
-        Serial.println(F("[MODEM] ⚠️ Les mesures OTA ne seront pas envoyées tant que le modem n'est pas connecté"));
+        LOG_W("MODEM", "Échec init modem (réessai 30s) - OTA désactivé");
         if (gpsEnabled) {
-          Serial.println(F("[GPS] ⚠️  GPS ne pourra pas fonctionner sans modem"));
+          LOG_D("GPS", "GPS non dispo sans modem");
         }
       }
       modemInitInProgress = false;
@@ -474,10 +498,18 @@ void loop()
     
     // Si le modem est prêt mais pas connecté, essayer de se connecter périodiquement
     if (modemReady && !modem.isNetworkConnected() && (now - lastModemInitAttempt >= 60000)) {
-      Serial.println(F("[MODEM] Tentative reconnexion réseau..."));
+      LOG_I("MODEM", "Tentative reconnexion...");
       if (attachNetwork(60000)) {
-        Serial.println(F("[MODEM] ✅ Réseau reconnecté - Processus OTA activé"));
+        LOG_I("MODEM", "Réseau reconnecté");
+        if (connectData(30000)) {
+          LOG_I("MODEM", "Données mobiles OK - OTA activé");
+        } else {
+          LOG_W("MODEM", "Réseau OK mais données KO");
+        }
         lastModemInitAttempt = now;
+        
+        // Envoi automatique après reconnexion
+        sendMeasurementWithContext("NETWORK_RECONNECT");
       }
     }
     
@@ -495,15 +527,7 @@ void loop()
       // Message de démarrage au premier affichage
       if (firstUsbDisplay) {
         firstUsbDisplay = false;
-        String timeStr = formatTimeFromMillis(millis());
-        Serial.printf("%s[USB] 🚀 Processus 1 démarré - Affichage mesures toutes les secondes\n", timeStr.c_str());
-        Serial.printf("%s[USB] 📡 État modem: %s\n", timeStr.c_str(), modemReady ? "✅ Prêt" : "❌ Non initialisé");
-        if (modemReady) {
-          Serial.printf("%s[USB] 📡 Réseau: %s | GPRS: %s\n", 
-                        timeStr.c_str(),
-                        modem.isNetworkConnected() ? "✅ Connecté" : "❌ Déconnecté",
-                        modem.isGprsConnected() ? "✅ Connecté" : "❌ Déconnecté");
-        }
+        LOG_I("USB", String("Streaming démarré | Modem: ") + (modemReady ? "OK" : "KO"));
       }
       
       // Capturer mesure pour affichage USB
@@ -513,23 +537,17 @@ void loop()
       if (modemReady) {
         int8_t csq = modem.getSignalQuality();
         m.rssi = csqToRssi(csq);
-        // Afficher l'état du réseau toutes les 10 mesures (toutes les 10 secondes)
-        if (usbSequence % 10 == 0) {
-          String timeStr = formatTimeFromMillis(millis());
-          bool networkConnected = modem.isNetworkConnected();
-          bool gprsConnected = modem.isGprsConnected();
-          Serial.printf("%s[USB] 📶 Réseau: %s | GPRS: %s | RSSI: %d dBm (CSQ=%d)\n",
-                        timeStr.c_str(),
-                        networkConnected ? "✅ Connecté" : "❌ Déconnecté",
-                        gprsConnected ? "✅ Connecté" : "❌ Déconnecté",
-                        m.rssi, csq);
+        // Afficher l'état du réseau toutes les 30 secondes (réduit de 10s)
+        if (usbSequence % 30 == 0) {
+          bool networkOk = modem.isNetworkConnected();
+          bool gprsOk = modem.isGprsConnected();
+          LOG_D("USB", String("Signal: ") + m.rssi + " dBm | Net: " + (networkOk ? "OK" : "KO") + " | GPRS: " + (gprsOk ? "OK" : "KO"));
         }
       } else {
         m.rssi = 0;
-        // Afficher que le modem n'est pas prêt toutes les 10 mesures
-        if (usbSequence % 10 == 0) {
-          String timeStr = formatTimeFromMillis(millis());
-          Serial.printf("%s[USB] ⚠️ Modem non initialisé - En attente d'initialisation...\n", timeStr.c_str());
+        // Afficher que le modem n'est pas prêt toutes les 30 secondes (réduit de 10s)
+        if (usbSequence % 30 == 0) {
+          LOG_W("USB", "Modem non init - En attente...");
         }
       }
       
@@ -538,9 +556,9 @@ void loop()
       bool hasLocation = false;
       if (modemReady && gpsEnabled) {
         hasLocation = getDeviceLocationFast(&latitude, &longitude);
-        if (hasLocation) {
-          String timeStr = formatTimeFromMillis(millis());
-          Serial.printf("%s[USB] 📍 GPS: %.4f,%.4f\n", timeStr.c_str(), latitude, longitude);
+        // Afficher uniquement si GPS valide et toutes les 30 secondes (réduit spam)
+        if (hasLocation && usbSequence % 30 == 0) {
+          LOG_D("USB", String("GPS: ") + latitude + "," + longitude);
         }
       }
       
@@ -563,46 +581,33 @@ void loop()
     bool shouldSendOtaMeasurement = timeElapsed;  // En mode USB, ignorer wakeupCounter
     
     if (shouldSendOtaMeasurement && modemReady && modem.isNetworkConnected()) {
-      Serial.println(F("[OTA] 📤 Envoi mesure périodique (processus normal)..."));
+      LOG_I("OTA", "Envoi mesure périodique...");
       
-      // Capturer mesure pour envoi OTA
+      // Utiliser la fonction factorisée pour l'envoi
       Measurement mOta = captureSensorSnapshot();
-      
-      // RSSI
       int8_t csq = modem.getSignalQuality();
       mOta.rssi = csqToRssi(csq);
-      String timeStr = formatTimeFromMillis(millis());
-      Serial.printf("%s[OTA] 📶 RSSI: %d dBm (CSQ=%d)\n", timeStr.c_str(), mOta.rssi, csq);
       
-      // GPS (si activé)
+      // GPS (si activé) - utiliser getDeviceLocation pour plus de précision en OTA
       float latOta = 0.0, lonOta = 0.0;
       bool hasLocationOta = false;
       if (gpsEnabled) {
-        Serial.printf("%s[OTA] 📍 Acquisition GPS en cours...\n", timeStr.c_str());
         hasLocationOta = getDeviceLocation(&latOta, &lonOta);
         if (hasLocationOta) {
-          Serial.printf("%s[OTA] 📍 GPS: %.6f, %.6f\n", timeStr.c_str(), latOta, lonOta);
-        } else {
-          Serial.printf("%s[OTA] ⚠️ GPS non disponible\n", timeStr.c_str());
+          LOG_D("OTA", String("GPS: ") + latOta + "," + lonOta);
         }
       }
       
-      // Envoyer via OTA (processus normal)
-      Serial.printf("%s[OTA] 📤 Envoi à la base de données...\n", timeStr.c_str());
+      // Envoyer via OTA
       bool sent = sendMeasurement(mOta, hasLocationOta ? &latOta : nullptr, hasLocationOta ? &lonOta : nullptr, "TIMER");
       if (sent) {
         lastOtaMeasurementTime = now;
-        // Note: wakeupCounter sera réinitialisé après deep sleep en mode normal
-        // En mode USB, on ne l'utilise pas
         lastFlowValue = mOta.flow;
         lastMeasurementTime = now;
-        timeStr = formatTimeFromMillis(millis());
-        Serial.printf("%s[OTA] ✅ Mesure envoyée à la base de données avec succès (débit: %.2f L/min, batterie: %.0f%%, RSSI: %d dBm)\n",
-                      timeStr.c_str(), mOta.flow, mOta.battery, mOta.rssi);
-        Serial.printf("%s[OTA] ⏰ Prochaine mesure dans %lu minutes (ou après %d wakeup(s))\n", 
-                      timeStr.c_str(), static_cast<unsigned long>(configuredSleepMinutes), sendEveryNWakeups);
+        LOG_I("OTA", String("Mesure OK (") + mOta.flow + " L/min, " + (int)mOta.battery + "%, " + mOta.rssi + " dBm)");
+        LOG_D("OTA", String("Prochaine dans ") + configuredSleepMinutes + " min");
       } else {
-        Serial.printf("%s[OTA] ❌ Échec envoi mesure - réessai au prochain cycle\n", timeStr.c_str());
+        LOG_W("OTA", "Échec envoi - réessai prochain cycle");
       }
       
       // Traiter les commandes OTA après envoi
@@ -730,7 +735,7 @@ void loop()
     if (modemReady && modem.isNetworkConnected()) {
       int8_t csq = modem.getSignalQuality();
       m.rssi = csqToRssi(csq);
-      Serial.printf("%s[API] 📶 RSSI: %d dBm (CSQ=%d)\n", timeStr.c_str(), m.rssi, csq);
+      Serial.printf("%s[API] 📶 Signal: %d dBm\n", timeStr.c_str(), m.rssi);
     } else {
       m.rssi = -999;
       Serial.printf("%s[API] ⚠️ RSSI non disponible\n", timeStr.c_str());
@@ -966,31 +971,193 @@ bool startModem()
   }
 
   // Configuration APN pour internet (type IP, pas MMS)
-  // Détecter l'opérateur et utiliser l'APN recommandé si disponible
-  String oper = modem.getOperator();
+  // OPTIMISATION: Utiliser l'opérateur sauvegardé au boot pour pré-configurer l'APN correct dès le début
+  // Si un opérateur a été sauvegardé lors d'une connexion précédente, l'utiliser immédiatement
   String apnToUse = NETWORK_APN;
-  if (oper.length() > 0) {
+  String oper = "";
+  
+  if (DETECTED_OPERATOR.length() > 0) {
+    // Opérateur sauvegardé disponible - l'utiliser pour pré-configurer l'APN
+    oper = DETECTED_OPERATOR;
+    String operatorName = getOperatorName(oper);
     String recommendedApn = getRecommendedApnForOperator(oper);
-    if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
-      Serial.printf("[MODEM] ✅ Opérateur détecté: %s → Utilisation APN recommandé: %s (au lieu de %s)\n", 
-                    oper.c_str(), recommendedApn.c_str(), NETWORK_APN.c_str());
+    if (recommendedApn.length() > 0) {
       apnToUse = recommendedApn;
+      Serial.printf("[MODEM] 💾 Opérateur sauvegardé: %s (code: %s) → APN pré-configuré: %s\n", 
+                    operatorName.c_str(), oper.c_str(), apnToUse.c_str());
       NETWORK_APN = apnToUse; // Mettre à jour pour cette session
     } else {
-      Serial.printf("[MODEM] ℹ️  Opérateur détecté: %s → Utilisation APN configuré: %s\n", 
-                    oper.c_str(), NETWORK_APN.c_str());
+      Serial.printf("[MODEM] ⚠️  Opérateur sauvegardé: %s (code: %s) mais APN non reconnu → Utilisation APN configuré: %s\n", 
+                    operatorName.c_str(), oper.c_str(), NETWORK_APN.c_str());
     }
-  } else {
-    Serial.printf("[MODEM] ⚠️  Opérateur non détecté → Utilisation APN configuré: %s\n", NETWORK_APN.c_str());
   }
   
-  // Pour Free Mobile: APN="free" (internet), pas "mmsfree" (MMS uniquement)
-  // Format: +CGDCONT=1,"IP","free" (1=context ID, IP=type internet, free=APN)
-  modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), apnToUse.c_str(), "\"");
-  modem.waitResponse(2000);
-  if (!isUsbMode) {
-    Serial.printf("[MODEM] APN=%s (type: IP pour internet)\n", apnToUse.c_str());
+  // CRITIQUE: Vérifier que l'opérateur actuel correspond à celui sauvegardé
+  // Si différent ou si aucun opérateur sauvegardé, détecter l'opérateur actuel
+  Serial.println(F("[MODEM] 🔍 Vérification opérateur actuel..."));
+  String currentOper = "";
+  unsigned long operatorDetectStart = millis();
+  unsigned long lastProgressLog = 0;
+  while (currentOper.length() == 0 && (millis() - operatorDetectStart < 15000)) {
+    currentOper = modem.getOperator();
+    if (currentOper.length() == 0) {
+      delay(500);
+      feedWatchdog();
+      // Afficher progression toutes les 2 secondes
+      unsigned long elapsed = millis() - operatorDetectStart;
+      if (elapsed - lastProgressLog >= 2000) {
+        unsigned long remaining = (15000 - elapsed) / 1000;
+        if (remaining > 0) {
+          Serial.printf("[MODEM] ⏳ Attente détection opérateur... (%lu s restantes)\n", remaining);
+        }
+        lastProgressLog = elapsed;
+      }
+    }
   }
+  
+  // CRITIQUE: Détecter la carte SIM réelle pour déterminer l'APN correct
+  // En roaming, il faut utiliser l'APN de la carte SIM, pas de l'opérateur en roaming
+  // MÉTHODE 1 : Essayer de détecter via IMSI (plus fiable, contient le MCC+MNC réel)
+  String simOperator = detectSimOperatorFromImsi();
+  
+  // MÉTHODE 2 : Si IMSI n'a pas fonctionné, utiliser ICCID (moins fiable car préfixes partagés)
+  if (simOperator.length() == 0) {
+    simOperator = detectSimOperatorFromIccid(DEVICE_ICCID);
+    if (simOperator.length() == 0) {
+      Serial.println(F("[MODEM] 💡 IMSI non disponible, utilisation ICCID (moins fiable)"));
+    } else {
+      Serial.println(F("[MODEM] ✅ Détection via IMSI (méthode fiable)"));
+    }
+  } else {
+    Serial.println(F("[MODEM] ✅ Détection via IMSI (méthode la plus fiable)"));
+  }
+  
+  String simOperatorName = simOperator.length() > 0 ? getOperatorName(simOperator) : "";
+  bool isFreeSim = (simOperator.indexOf("20815") >= 0 || simOperator.indexOf("20816") >= 0);
+  
+  // Si l'ICCID ne permet pas de détecter (Orange/Free partagent des préfixes 893301/893302),
+  // on utilise plusieurs indices pour déterminer l'opérateur réel :
+  // 1. Si l'APN par défaut est "free", c'est probablement une carte Free Pro
+  // 2. Si l'opérateur détecté est Free (20815/20816), c'est Free
+  // 3. Si l'opérateur détecté est Orange (20801/20802) ET l'APN par défaut est "free", 
+  //    c'est probablement une carte Free Pro en roaming sur Orange
+  // 4. Sinon, on assume que c'est l'opérateur détecté (Orange si détecté)
+  if (simOperator.length() == 0 && currentOper.length() > 0) {
+    String iccidPrefix = DEVICE_ICCID.length() >= 6 ? DEVICE_ICCID.substring(0, 6) : "";
+    bool isAmbiguousPrefix = (iccidPrefix == "893301" || iccidPrefix == "893302" || 
+                              iccidPrefix == "893303" || iccidPrefix == "893304");
+    
+    if (isAmbiguousPrefix) {
+      // Préfixe ambigu (Orange/Free) - utiliser plusieurs indices
+      if (NETWORK_APN == "free" || OTT_DEFAULT_APN == "free") {
+        // L'APN par défaut est "free" → c'est probablement une carte Free Pro
+        isFreeSim = true;
+        simOperator = "20815"; // Free Mobile
+        simOperatorName = "Free Mobile";
+        Serial.printf("[MODEM] 🔍 Carte SIM Free Pro détectée via APN par défaut (ICCID: %s...)\n", 
+                      DEVICE_ICCID.substring(0, 10).c_str());
+        Serial.println(F("[MODEM] 💡 Les cartes Free Pro partagent les préfixes ICCID avec Orange"));
+        Serial.println(F("[MODEM] 💡 L'APN par défaut \"free\" indique que c'est une carte Free"));
+      } else if (currentOper.indexOf("20815") >= 0 || currentOper.indexOf("20816") >= 0) {
+        // Opérateur détecté = Free
+        isFreeSim = true;
+        simOperator = currentOper;
+        simOperatorName = getOperatorName(currentOper);
+        Serial.printf("[MODEM] 🔍 Carte SIM Free détectée via opérateur (ICCID: %s...)\n", 
+                      DEVICE_ICCID.substring(0, 10).c_str());
+      } else if (currentOper.indexOf("20801") >= 0 || currentOper.indexOf("20802") >= 0) {
+        // Opérateur détecté = Orange
+        // Si l'APN par défaut est "free", c'est probablement une carte Free Pro en roaming
+        if (NETWORK_APN == "free" || OTT_DEFAULT_APN == "free") {
+          isFreeSim = true;
+          simOperator = "20815"; // Free Mobile
+          simOperatorName = "Free Mobile";
+          Serial.printf("[MODEM] 🔍 Carte SIM Free Pro détectée (en roaming sur Orange)\n");
+          Serial.printf("[MODEM] 💡 Opérateur détecté: Orange, mais APN \"free\" indique carte Free Pro\n");
+        } else {
+          // Probablement Orange (réseau home)
+          simOperator = currentOper;
+          simOperatorName = getOperatorName(currentOper);
+          Serial.printf("[MODEM] 🔍 Carte SIM Orange détectée (ICCID: %s...)\n", 
+                        DEVICE_ICCID.substring(0, 10).c_str());
+        }
+      }
+    } else if (currentOper.length() > 0) {
+      // Préfixe non ambigu, utiliser l'opérateur détecté
+      if (currentOper.indexOf("20815") >= 0 || currentOper.indexOf("20816") >= 0) {
+        isFreeSim = true;
+        simOperator = currentOper;
+        simOperatorName = getOperatorName(currentOper);
+      } else {
+        simOperator = currentOper;
+        simOperatorName = getOperatorName(currentOper);
+      }
+    }
+  }
+  
+  if (simOperator.length() > 0) {
+    Serial.printf("[MODEM] 🔍 Carte SIM détectée: %s (ICCID: %s...)\n", 
+                  simOperatorName.c_str(), DEVICE_ICCID.substring(0, 10).c_str());
+  }
+  
+  // CRITIQUE: Utiliser l'APN de la carte SIM réelle, pas de l'opérateur en roaming
+  // Si on a détecté la carte SIM, utiliser son APN
+  // Sinon, utiliser l'APN de l'opérateur détecté (réseau home)
+  if (simOperator.length() > 0) {
+    // Carte SIM détectée : utiliser son APN (même en roaming)
+    String simApn = getRecommendedApnForOperator(simOperator);
+    if (simApn.length() > 0 && simApn != NETWORK_APN) {
+      apnToUse = simApn;
+      NETWORK_APN = apnToUse;
+      String currentOperatorName = currentOper.length() > 0 ? getOperatorName(currentOper) : "inconnu";
+      if (currentOper != simOperator) {
+        Serial.printf("[MODEM] 🔄 ROAMING détecté: Carte %s sur réseau %s\n", 
+                      simOperatorName.c_str(), currentOperatorName.c_str());
+        Serial.printf("[MODEM] ✅ Utilisation APN de la carte SIM: \"%s\" (pas de l'opérateur en roaming)\n", 
+                      apnToUse.c_str());
+      } else {
+        Serial.printf("[MODEM] ✅ Carte %s sur réseau home → APN: \"%s\"\n", 
+                      simOperatorName.c_str(), apnToUse.c_str());
+      }
+    } else if (simApn.length() > 0) {
+      apnToUse = simApn;
+      Serial.printf("[MODEM] ✅ Carte %s → APN: \"%s\"\n", simOperatorName.c_str(), apnToUse.c_str());
+    }
+  } else if (currentOper.length() > 0) {
+    // Carte SIM non détectée : utiliser l'APN de l'opérateur détecté
+    oper = currentOper;
+    String operatorName = getOperatorName(oper);
+    String recommendedApn = getRecommendedApnForOperator(oper);
+    if (recommendedApn.length() > 0) {
+      apnToUse = recommendedApn;
+      if (recommendedApn != NETWORK_APN) {
+        Serial.printf("[MODEM] 🔄 Opérateur détecté: %s (code: %s) → APN automatique: %s\n", 
+                      operatorName.c_str(), oper.c_str(), recommendedApn.c_str());
+      } else {
+        Serial.printf("[MODEM] ✅ Opérateur détecté: %s (code: %s) → APN: %s\n", 
+                      operatorName.c_str(), oper.c_str(), NETWORK_APN.c_str());
+      }
+      NETWORK_APN = apnToUse;
+    } else {
+      Serial.printf("[MODEM] ⚠️  Opérateur détecté: %s (code: %s) mais APN non reconnu → Utilisation APN configuré: %s\n", 
+                    operatorName.c_str(), oper.c_str(), NETWORK_APN.c_str());
+    }
+  } else {
+    // Aucune détection : utiliser l'APN configuré ou sauvegardé
+    if (oper.length() > 0) {
+      String operatorName = getOperatorName(oper);
+      Serial.printf("[MODEM] ⚠️  Opérateur non détecté après 15s → Utilisation opérateur sauvegardé: %s avec APN: %s\n", 
+                    operatorName.c_str(), apnToUse.c_str());
+    } else {
+      Serial.printf("[MODEM] ⚠️  Opérateur non détecté après 15s → Utilisation APN configuré: %s\n", NETWORK_APN.c_str());
+      Serial.println(F("[MODEM] 💡 L'APN sera détecté automatiquement lors de l'attachement réseau"));
+    }
+  }
+  
+  // Configurer l'APN détecté/recommandé (ou configuré par défaut si non détecté)
+  // Format: +CGDCONT=1,"IP","apn" (1=context ID, IP=type internet, apn=nom APN)
+  Serial.printf("[MODEM] 📡 Configuration APN: %s (type: IP pour internet)\n", apnToUse.c_str());
+  setApn(apnToUse);
 
   if (!attachNetwork(networkAttachTimeoutMs)) {
     if (!isUsbMode) {
@@ -999,19 +1166,14 @@ bool startModem()
     sendLog("ERROR", "Network unavailable");
     return false;
   }
-  if (!isUsbMode) {
-    Serial.println(F("[MODEM] réseau attaché"));
-  }
+  Serial.println(F("[MODEM] ✅ Réseau attaché"));
   if (!connectData(networkAttachTimeoutMs)) {
-    if (!isUsbMode) {
-      Serial.println(F("[MODEM] GPRS KO"));
-    }
+    Serial.println(F("[MODEM] ❌ GPRS KO - Échec connexion données"));
     sendLog("ERROR", "GPRS connection failed");
     return false;
   }
-  if (!isUsbMode) {
-    Serial.println(F("[MODEM] session data active"));
-  }
+  Serial.println(F("[MODEM] ✅ Session data active (GPRS connecté)"));
+  Serial.println(F("[MODEM] ✅ Prêt pour envoi de données à la base de données"));
 
 #ifdef TINY_GSM_MODEM_SIM7600
   // TLS géré par le modem SIM7600 (certificats chargés côté module)
@@ -1022,7 +1184,7 @@ bool startModem()
   
   // Activer le GPS si configuré
   if (gpsEnabled) {
-    // Logs GPS simplifiés et concis
+    // Logs GPS concis
     if (modem.enableGPS()) {
       Serial.println(F("[GPS] ✅ Activé | Fix: 30-60s"));
       sendLog("INFO", "GPS activé sur le modem");
@@ -1143,7 +1305,7 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   Serial.print(jsonOutput);  // Envoyer tout d'un coup
   Serial.flush();     // Forcer l'envoi immédiat
   
-  // Message de debug simplifié (seulement toutes les 20 mesures pour réduire le bruit)
+  // Message de debug (seulement toutes les 20 mesures pour réduire le bruit)
   if (sequence % 20 == 0) {
     String timeStr = formatTimeFromMillis(millis());
     if (latitude != nullptr && longitude != nullptr) {
@@ -1348,6 +1510,47 @@ static const char* regStatusToString(RegStatus status)
   }
 }
 
+// Fonction pour obtenir une description claire du statut d'enregistrement
+String getRegistrationStatusDescription(RegStatus reg) {
+  switch (reg) {
+    case REG_UNREGISTERED: return "Non enregistré sur le réseau";
+    case REG_SEARCHING: return "Recherche de réseau en cours";
+    case REG_DENIED: return "Accès refusé par le réseau";
+    case REG_OK_HOME: return "Enregistré sur le réseau (domicile)";
+    case REG_OK_ROAMING: return "Enregistré sur le réseau (roaming)";
+    case REG_UNKNOWN: return "Statut inconnu";
+    default: return "Statut inconnu";
+  }
+}
+
+// Fonction pour obtenir une description claire de l'opérateur
+String getOperatorDescription(const String& oper) {
+  if (oper.length() == 0) return "Opérateur non détecté";
+  
+  String name = getOperatorName(oper);
+  if (name.length() > 0) {
+    return name;
+  }
+  
+  // Si le nom n'est pas trouvé, retourner le code avec explication
+  if (oper.indexOf("20801") >= 0 || oper.indexOf("20802") >= 0) return "Orange France";
+  if (oper.indexOf("20810") >= 0 || oper.indexOf("20811") >= 0) return "SFR France";
+  if (oper.indexOf("20815") >= 0 || oper.indexOf("20816") >= 0) return "Free Mobile";
+  if (oper.indexOf("20820") >= 0 || oper.indexOf("20821") >= 0) return "Bouygues Telecom";
+  
+  return "Opérateur inconnu";
+}
+
+// Fonction pour obtenir une description claire du signal
+String getSignalDescription(int8_t csq) {
+  if (csq == 99) return "Signal invalide";
+  if (csq >= 20) return "Signal excellent";
+  if (csq >= 15) return "Signal bon";
+  if (csq >= 10) return "Signal moyen";
+  if (csq >= 5) return "Signal faible";
+  return "Signal très faible";
+}
+
 void logRadioSnapshot(const char* stage)
 {
   RegStatus reg = modem.getRegistrationStatus();
@@ -1355,52 +1558,89 @@ void logRadioSnapshot(const char* stage)
   String oper = modem.getOperator();
   bool eps = modem.isNetworkConnected();
   bool gprs = modem.isGprsConnected();
+  
+  // Vérifier l'état EPS (LTE) avec la fonction helper
+  bool epsOk = false;
+  String epsStatus = "Non disponible";
+  checkEpsStatus(epsOk, epsStatus);
 
-  // Afficher correctement CSQ et RSSI (CSQ=99 = signal invalide)
+  // Description claire du stage
+  String stageDesc = "";
+  if (strcmp(stage, "attach:start") == 0) stageDesc = "Début de connexion";
+  else if (strcmp(stage, "attach:success") == 0) stageDesc = "Connexion réussie";
+  else if (strcmp(stage, "attach:retry") == 0) stageDesc = "Nouvelle tentative";
+  else if (strcmp(stage, "attach:timeout") == 0) stageDesc = "Délai dépassé";
+  else if (strcmp(stage, "attach:csq_warn") == 0) stageDesc = "Avertissement signal";
+  else if (strcmp(stage, "attach:csq_fail") == 0) stageDesc = "Échec signal";
+  else if (strcmp(stage, "data:start") == 0) stageDesc = "Début connexion données";
+  else if (strcmp(stage, "data:connected") == 0) stageDesc = "Données connectées";
+  else if (strcmp(stage, "data:timeout") == 0) stageDesc = "Délai connexion données";
+  else stageDesc = stage;
+
+  Serial.println(F("┌─────────────────────────────────────────────────────────┐"));
+  Serial.printf("│ 📡 État réseau - %s\n", stageDesc.c_str());
+  Serial.println(F("├─────────────────────────────────────────────────────────┤"));
+  
+  // Signal
   if (csq == 99) {
-    Serial.printf("[MODEM][%s] CSQ=99 (Signal invalide) reg=%d (%s) oper=%s eps=%s gprs=%s\n",
-                  stage,
-                  reg,
-                  regStatusToString(reg),
-                  oper.length() ? oper.c_str() : "<n/a>",
-                  eps ? "ok" : "KO",
-                  gprs ? "ok" : "KO");
+    Serial.println(F("│ ⚠️  Signal: Invalide (antenne déconnectée ou pas de couverture)"));
   } else {
-    // Convertir CSQ en dBm pour affichage (seulement si CSQ valide)
-    int16_t rssi_dbm = csqToRssi(csq);
-    Serial.printf("[MODEM][%s] CSQ=%d (RSSI=%d dBm) reg=%d (%s) oper=%s eps=%s gprs=%s\n",
-                  stage,
-                  csq,
-                  rssi_dbm,
-                  reg,
-                  regStatusToString(reg),
-                  oper.length() ? oper.c_str() : "<n/a>",
-                  eps ? "ok" : "KO",
-                  gprs ? "ok" : "KO");
+    int rssi = csqToRssi(csq);
+    String signalDesc = getSignalDescription(csq);
+    Serial.printf("│ 📶 Signal: %s (RSSI: %d dBm)\n", signalDesc.c_str(), rssi);
   }
   
-  // Logs détaillés pour REG_DENIED
+  // Enregistrement réseau
+  String regDesc = getRegistrationStatusDescription(reg);
+  Serial.printf("│ 📍 Réseau: %s\n", regDesc.c_str());
+  
+  // Opérateur
+  String operDesc = getOperatorDescription(oper);
+  Serial.printf("│ 🏢 Opérateur: %s\n", operDesc.c_str());
+  
+  // EPS (LTE)
+  if (epsOk) {
+    Serial.printf("│ 📡 4G/LTE: Connecté (%s)\n", epsStatus.c_str());
+  } else {
+    Serial.printf("│ 📡 4G/LTE: Non connecté (%s)\n", epsStatus.c_str());
+  }
+  
+  // GPRS
+  if (gprs) {
+    Serial.println(F("│ 📱 Données mobiles: Connectées"));
+  } else {
+    Serial.println(F("│ 📱 Données mobiles: Non connectées"));
+  }
+  
+  Serial.println(F("└─────────────────────────────────────────────────────────┘"));
+  
+  // Messages d'aide supplémentaires pour les problèmes courants
   if (reg == REG_DENIED) {
-    Serial.println(F("[MODEM] ⚠️  ENREGISTREMENT REFUSÉ - Causes possibles:"));
-    Serial.println(F("[MODEM]   1. Carte SIM non activée pour les données"));
-    Serial.println(F("[MODEM]   2. APN incorrect pour l'opérateur"));
-    Serial.println(F("[MODEM]   3. Problème d'authentification réseau"));
+    Serial.println(F(""));
+    Serial.println(F("⚠️  ENREGISTREMENT REFUSÉ PAR LE RÉSEAU"));
+    Serial.println(F("   Causes possibles:"));
+    Serial.println(F("   • Carte SIM non activée pour les données"));
+    Serial.println(F("   • APN incorrect pour l'opérateur"));
+    Serial.println(F("   • Problème d'authentification réseau"));
     if (oper.length() > 0) {
       String recommendedApn = getRecommendedApnForOperator(oper);
       if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
-        Serial.printf("[MODEM]   → APN recommandé pour %s: %s (actuel: %s)\n", 
-                      oper.c_str(), recommendedApn.c_str(), NETWORK_APN.c_str());
+        Serial.printf("   → APN recommandé pour %s: %s (actuel: %s)\n", 
+                      operDesc.c_str(), recommendedApn.c_str(), NETWORK_APN.c_str());
       }
     }
+    Serial.println(F(""));
   }
   
-  // Logs détaillés pour CSQ=99 (signal invalide)
   if (csq == 99) {
-    Serial.println(F("[MODEM] ⚠️  SIGNAL INVALIDE (CSQ=99) - Causes possibles:"));
-    Serial.println(F("[MODEM]   1. Antenne déconnectée ou défectueuse"));
-    Serial.println(F("[MODEM]   2. Pas de couverture réseau à cet emplacement"));
-    Serial.println(F("[MODEM]   3. Modem non initialisé correctement"));
-    Serial.println(F("[MODEM]   4. Problème matériel (câble, connecteur)"));
+    Serial.println(F(""));
+    Serial.println(F("⚠️  SIGNAL INVALIDE"));
+    Serial.println(F("   Causes possibles:"));
+    Serial.println(F("   • Antenne déconnectée ou défectueuse"));
+    Serial.println(F("   • Pas de couverture réseau à cet emplacement"));
+    Serial.println(F("   • Modem non initialisé correctement"));
+    Serial.println(F("   • Problème matériel (câble, connecteur)"));
+    Serial.println(F(""));
   }
 }
 
@@ -1428,19 +1668,145 @@ bool waitForSimReady(uint32_t timeoutMs)
 }
 
 /**
+ * Détecte l'opérateur de la carte SIM réelle via l'ICCID (MÉTHODE FALLBACK)
+ * 
+ * Cette fonction est utilisée en fallback si detectSimOperatorFromImsi() échoue.
+ * 
+ * LIMITATIONS :
+ * - Free et Orange partagent les préfixes ICCID (893301, 893302, etc.)
+ * - Ne peut pas distinguer Free Pro d'Orange uniquement par ICCID
+ * - Utilise l'APN par défaut et l'opérateur détecté pour trancher
+ * 
+ * Pour une détection plus fiable, utiliser detectSimOperatorFromImsi() en priorité.
+ * 
+ * @param iccid ICCID de la carte SIM
+ * @return Code opérateur détecté ("20801" pour Orange, "20815" pour Free, etc.) ou "" si non détecté
+ */
+String detectSimOperatorFromIccid(const String& iccid) {
+  if (iccid.length() < 6) {
+    return "";
+  }
+  
+  // Préfixes ICCID français (les 6 premiers chiffres)
+  // Format ICCID: 89 (France) + 3 (mobile) + XXX (opérateur)
+  String prefix = iccid.substring(0, 6);
+  
+  // Orange France : 893301, 893302, 893303, 893304 (mais partagé avec Free)
+  // SFR France : 893310, 893311
+  // Bouygues Telecom : 893320, 893321
+  // Free Mobile : 893301, 893302 (partagé avec Orange - nécessite autre méthode)
+  
+  // Note: Free et Orange partagent des préfixes ICCID, donc on ne peut pas
+  // les distinguer uniquement par ICCID. On utilisera une combinaison de méthodes.
+  
+  if (prefix == "893310" || prefix == "893311") {
+    return "20810"; // SFR
+  } else if (prefix == "893320" || prefix == "893321") {
+    return "20820"; // Bouygues
+  }
+  
+  // Pour Orange/Free (893301, 893302, 893303, 893304), on ne peut pas distinguer
+  // uniquement par ICCID. 
+  // 
+  // IMPORTANT: Les cartes Free Pro utilisent souvent ces préfixes et sont souvent
+  // en roaming sur Orange. Si l'APN par défaut est "free", c'est probablement une carte Free.
+  // Sinon, on utilisera l'opérateur détecté par le modem pour décider.
+  //
+  // On retourne "" pour indiquer qu'une détection supplémentaire est nécessaire.
+  // La logique dans startModem() et attachNetworkWithRetry() privilégiera Free
+  // si l'APN par défaut est "free" ou si l'opérateur détecté est Free.
+  
+  return ""; // Nécessite détection supplémentaire (vérifier APN par défaut ou opérateur détecté)
+}
+
+/**
+ * Détecte l'opérateur de la carte SIM réelle via l'IMSI (MÉTHODE LA PLUS FIABLE)
+ * 
+ * L'IMSI contient le MCC+MNC de l'opérateur réel, même en roaming.
+ * Format IMSI : MCC (3 chiffres) + MNC (2-3 chiffres) + MSIN (numéro d'abonné)
+ * Pour la France : MCC = 208
+ * 
+ * Avantages par rapport à ICCID :
+ * - Plus fiable : contient le MCC+MNC réel de l'opérateur
+ * - Fonctionne même en roaming (identifie l'opérateur de la carte SIM, pas du réseau)
+ * - Résout le problème des cartes Free Pro qui partagent les préfixes ICCID avec Orange
+ * 
+ * @return Code opérateur détecté ("20801" pour Orange, "20815" pour Free, etc.) ou "" si non détecté
+ */
+String detectSimOperatorFromImsi() {
+  // Lire l'IMSI avec la commande AT+CIMI
+  modem.sendAT(GF("+CIMI"));
+  if (modem.waitResponse(2000, GF("+CIMI:")) == 1) {
+    String imsi = modem.stream.readStringUntil('\n');
+    imsi.trim();
+    
+    if (imsi.length() >= 5) {
+      // Extraire MCC+MNC (5 premiers chiffres pour la France)
+      String mccMnc = imsi.substring(0, 5);
+      
+      // Codes opérateurs français (MCC: 208)
+      if (mccMnc == "20801" || mccMnc == "20802") {
+        return "20801"; // Orange France
+      } else if (mccMnc == "20810" || mccMnc == "20811") {
+        return "20810"; // SFR France
+      } else if (mccMnc == "20815" || mccMnc == "20816") {
+        return "20815"; // Free Mobile
+      } else if (mccMnc == "20820" || mccMnc == "20821") {
+        return "20820"; // Bouygues Telecom
+      }
+      
+      // Si le MCC n'est pas 208, vérifier les 3 premiers chiffres (MCC)
+      if (imsi.length() >= 3) {
+        String mcc = imsi.substring(0, 3);
+        if (mcc == "208") {
+          // MCC français mais MNC non reconnu
+          Serial.printf("[MODEM] ⚠️ IMSI détecté (MCC: 208) mais MNC non reconnu: %s\n", mccMnc.c_str());
+        }
+      }
+    }
+  }
+  
+  return ""; // IMSI non lu ou format invalide
+}
+
+/**
+ * Configure l'APN sur le modem (factorise les appels répétés pour éviter la duplication)
+ * 
+ * Cette fonction centralise la configuration de l'APN pour éviter la duplication de code.
+ * Tous les appels à modem.sendAT(GF("+CGDCONT=1,\"IP\",\"...")) sont remplacés par setApn().
+ * 
+ * @param apn APN à configurer (ex: "free", "orange", "sl2sfr", "mmsbouygtel")
+ * @return true si la configuration a réussi, false sinon
+ */
+bool setApn(const String& apn) {
+  if (apn.length() == 0) {
+    return false;
+  }
+  
+  modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), apn.c_str(), "\"");
+  if (modem.waitResponse(2000) == 1) {
+    NETWORK_APN = apn;
+    return true;
+  }
+  return false;
+}
+
+/**
  * Obtient l'APN recommandé selon l'opérateur détecté
  * 
- * Configuration Free Mobile (MCC: 208, MNC: 15):
- * - APN Internet: "free" (pour données/internet)
- * - APN MMS: "mmsfree" (pour MMS uniquement, non utilisé ici)
- * 
- * On utilise "free" pour les données internet, pas "mmsfree" qui est réservé aux MMS.
+ * Configuration des opérateurs français:
+ * - Orange: "orange" ou "orange.fr"
+ * - SFR: "sl2sfr"
+ * - Free Mobile: "free" (même en roaming sur Orange)
+ * - Bouygues: "mmsbouygtel"
  */
 String getRecommendedApnForOperator(const String& operatorCode)
 {
   // Codes opérateurs français (MCC+MNC)
   if (operatorCode.indexOf("20801") >= 0 || operatorCode.indexOf("20802") >= 0) {
     // Orange France (MCC: 208, MNC: 01/02)
+    // APN Internet: "orange" ou "orange.fr" (les deux fonctionnent généralement)
+    // On utilise "orange" car c'est le plus court et le plus commun
     return String("orange");
   } else if (operatorCode.indexOf("20810") >= 0 || operatorCode.indexOf("20811") >= 0) {
     // SFR France (MCC: 208, MNC: 10/11)
@@ -1460,8 +1826,91 @@ String getRecommendedApnForOperator(const String& operatorCode)
 }
 
 /**
+ * Convertit le code opérateur (MCC+MNC) en nom d'opérateur lisible
+ * @param operatorCode Code opérateur (ex: "20801" pour Orange France)
+ * @return Nom de l'opérateur ou le code si non reconnu
+ */
+String getOperatorName(const String& operatorCode)
+{
+  // Codes opérateurs français (MCC+MNC)
+  if (operatorCode.indexOf("20801") >= 0 || operatorCode.indexOf("20802") >= 0) {
+    return String("Orange France");
+  } else if (operatorCode.indexOf("20810") >= 0 || operatorCode.indexOf("20811") >= 0) {
+    return String("SFR France");
+  } else if (operatorCode.indexOf("20815") >= 0 || operatorCode.indexOf("20816") >= 0) {
+    return String("Free Mobile");
+  } else if (operatorCode.indexOf("20820") >= 0) {
+    return String("Bouygues Telecom");
+  }
+  
+  // Si le code commence par 208, c'est un opérateur français non reconnu
+  if (operatorCode.indexOf("208") >= 0) {
+    return String("Opérateur FR (") + operatorCode + ")";
+  }
+  
+  // Par défaut, retourner le code tel quel
+  return operatorCode;
+}
+
+/**
+ * Vérifie l'état EPS (LTE) du modem
+ * @param epsOk Référence pour retourner si EPS est OK
+ * @param epsStatus Référence pour retourner le statut lisible
+ * @return true si la commande AT a réussi, false sinon
+ */
+bool checkEpsStatus(bool& epsOk, String& epsStatus)
+{
+  epsOk = false;
+  epsStatus = "N/A";
+  
+  modem.sendAT(GF("+CEREG?"));
+  if (modem.waitResponse(2000, GF("+CEREG:")) == 1) {
+    String res = modem.stream.readStringUntil('\n');
+    res.trim();
+    // Format: +CEREG: <n>,<stat>[,<tac>[,<ci>[,<AcT>]]]
+    // Exemple: "+CEREG: 2,1" ou "+CEREG: 2,1,\"1234\",\"5678\",7"
+    int commaPos = res.indexOf(',');
+    if (commaPos > 0) {
+      int stat = res.substring(commaPos + 1).toInt();
+      // stat: 0=not registered, 1=registered home, 2=searching, 3=denied, 4=unknown, 5=registered roaming
+      if (stat == 1 || stat == 5) {
+        epsOk = true;
+        epsStatus = (stat == 1) ? "OK (home)" : "OK (roaming)";
+      } else if (stat == 0) {
+        epsStatus = "KO (not registered)";
+      } else if (stat == 2) {
+        epsStatus = "KO (searching)";
+      } else if (stat == 3) {
+        epsStatus = "KO (denied)";
+      } else if (stat == 4) {
+        epsStatus = "KO (unknown)";
+      } else {
+        epsStatus = "KO (stat=" + String(stat) + ")";
+      }
+    } else {
+      epsStatus = "KO (parse error)";
+    }
+    return true;
+  }
+  epsStatus = "N/A (timeout)";
+  return false;
+}
+
+/**
  * Attache le réseau avec retry et backoff exponentiel
- * Gère spécifiquement le cas REG_DENIED avec tentative d'APN alternatif
+ * 
+ * Cette fonction gère l'attachement au réseau mobile :
+ * - Détection intelligente de l'opérateur via IMSI (prioritaire) ou ICCID (fallback)
+ * - Détection spéciale Free Pro en roaming (via IMSI + APN par défaut)
+ * - Configuration automatique de l'APN selon l'opérateur détecté
+ * - Gestion du roaming : utilise l'APN de la carte SIM, pas du réseau en roaming
+ * - Retry avec backoff exponentiel en cas d'échec
+ * - Gestion spécifique du cas REG_DENIED avec tentative d'APN alternatif
+ * - Logs clairs et informatifs pour faciliter le débogage
+ * 
+ * @param timeoutMs Timeout total en millisecondes
+ * @param maxRetries Nombre maximum de tentatives
+ * @return true si l'attachement a réussi, false sinon
  */
 bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
 {
@@ -1469,57 +1918,180 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
   uint8_t retryCount = 0;
   uint32_t baseDelay = 5000; // 5 secondes de base
   
-  Serial.println(F("[MODEM] attache réseau en cours (avec retry)"));
+  Serial.println(F(""));
+  Serial.println(F("═══════════════════════════════════════════════════════════"));
+  Serial.println(F("📡 Connexion au réseau mobile en cours..."));
+  Serial.println(F("═══════════════════════════════════════════════════════════"));
   logRadioSnapshot("attach:start");
   
-  // NOUVEAU: Détecter l'opérateur et utiliser l'APN recommandé dès le début si disponible
-  String oper = modem.getOperator();
+  // CRITIQUE: Détecter l'opérateur AVANT la première tentative d'attachement
+  // Si l'opérateur n'a pas été détecté dans startModem(), on l'attend ici (jusqu'à 10s)
+  // Cela évite les tentatives inutiles avec le mauvais APN
   String apnToUse = NETWORK_APN;
-  if (oper.length() > 0) {
-    Serial.printf("[MODEM] 📡 Opérateur détecté: %s\n", oper.c_str());
-    String recommendedApn = getRecommendedApnForOperator(oper);
-    if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
-      Serial.printf("[MODEM] ✅ Utilisation APN recommandé: %s (au lieu de %s)\n", 
-                    recommendedApn.c_str(), NETWORK_APN.c_str());
-      apnToUse = recommendedApn;
-      // Configurer l'APN recommandé dès le début
-      modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), apnToUse.c_str(), "\"");
-      modem.waitResponse(2000);
-      // Mettre à jour NETWORK_APN pour cette session
-      NETWORK_APN = apnToUse;
-    } else {
-      Serial.printf("[MODEM] ℹ️  Utilisation APN configuré: %s\n", NETWORK_APN.c_str());
+  String oper = modem.getOperator();
+  
+  // Si l'opérateur n'est pas encore détecté, attendre un peu (peut prendre quelques secondes après SIM ready)
+  if (oper.length() == 0) {
+    Serial.println(F("[MODEM] ⏳ Opérateur non encore détecté - Attente détection (max 10s)..."));
+    unsigned long operatorWaitStart = millis();
+    unsigned long lastWaitLog = 0;
+    while (oper.length() == 0 && (millis() - operatorWaitStart < 10000)) {
+      oper = modem.getOperator();
+      if (oper.length() == 0) {
+        delay(500);
+        feedWatchdog();
+        // Afficher progression toutes les 2 secondes
+        unsigned long elapsed = millis() - operatorWaitStart;
+        if (elapsed - lastWaitLog >= 2000) {
+          unsigned long remaining = (10000 - elapsed) / 1000;
+          if (remaining > 0) {
+            Serial.printf("[MODEM] ⏳ Attente détection opérateur... (%lu s restantes)\n", remaining);
+          }
+          lastWaitLog = elapsed;
+        }
+      }
     }
-  } else {
-    Serial.printf("[MODEM] ⚠️  Opérateur non détecté, utilisation APN configuré: %s\n", NETWORK_APN.c_str());
   }
   
-  // NOUVEAU: Attendre que le modem se stabilise et vérifier CSQ
-  // Le modem peut avoir besoin de plus de temps après l'initialisation
-  Serial.println(F("[MODEM] Attente stabilisation modem (5s)..."));
+  // CRITIQUE: Détecter la carte SIM réelle pour déterminer l'APN correct
+  // En roaming, il faut utiliser l'APN de la carte SIM, pas de l'opérateur en roaming
+  // MÉTHODE 1 : Essayer de détecter via IMSI (plus fiable, contient le MCC+MNC réel)
+  String simOperator = detectSimOperatorFromImsi();
+  
+  // MÉTHODE 2 : Si IMSI n'a pas fonctionné, utiliser ICCID (moins fiable car préfixes partagés)
+  if (simOperator.length() == 0) {
+    simOperator = detectSimOperatorFromIccid(DEVICE_ICCID);
+  }
+  String simOperatorName = simOperator.length() > 0 ? getOperatorName(simOperator) : "";
+  
+  // Si l'ICCID ne permet pas de détecter (Orange/Free partagent des préfixes 893301/893302),
+  // on utilise plusieurs indices pour déterminer l'opérateur réel :
+  // 1. Si l'APN par défaut est "free", c'est probablement une carte Free Pro
+  // 2. Si l'opérateur détecté est Free (20815/20816), c'est Free
+  // 3. Si l'opérateur détecté est Orange (20801/20802) ET l'APN par défaut est "free", 
+  //    c'est probablement une carte Free Pro en roaming sur Orange
+  // 4. Sinon, on assume que c'est l'opérateur détecté (Orange si détecté)
+  if (simOperator.length() == 0 && oper.length() > 0) {
+    String iccidPrefix = DEVICE_ICCID.length() >= 6 ? DEVICE_ICCID.substring(0, 6) : "";
+    bool isAmbiguousPrefix = (iccidPrefix == "893301" || iccidPrefix == "893302" || 
+                              iccidPrefix == "893303" || iccidPrefix == "893304");
+    
+    if (isAmbiguousPrefix) {
+      // Préfixe ambigu (Orange/Free) - utiliser plusieurs indices
+      if (NETWORK_APN == "free" || OTT_DEFAULT_APN == "free") {
+        // L'APN par défaut est "free" → c'est probablement une carte Free Pro
+        simOperator = "20815"; // Free Mobile
+        simOperatorName = "Free Mobile";
+        Serial.printf("[MODEM] 🔍 Carte SIM Free Pro détectée via APN par défaut (ICCID: %s...)\n", 
+                      DEVICE_ICCID.substring(0, 10).c_str());
+        Serial.println(F("[MODEM] 💡 Les cartes Free Pro partagent les préfixes ICCID avec Orange"));
+        Serial.println(F("[MODEM] 💡 L'APN par défaut \"free\" indique que c'est une carte Free"));
+      } else if (oper.indexOf("20815") >= 0 || oper.indexOf("20816") >= 0) {
+        // Opérateur détecté = Free
+        simOperator = oper;
+        simOperatorName = getOperatorName(oper);
+        Serial.printf("[MODEM] 🔍 Carte SIM Free détectée via opérateur (ICCID: %s...)\n", 
+                      DEVICE_ICCID.substring(0, 10).c_str());
+      } else if (oper.indexOf("20801") >= 0 || oper.indexOf("20802") >= 0) {
+        // Opérateur détecté = Orange
+        // Si l'APN par défaut est "free", c'est probablement une carte Free Pro en roaming
+        if (NETWORK_APN == "free" || OTT_DEFAULT_APN == "free") {
+          simOperator = "20815"; // Free Mobile
+          simOperatorName = "Free Mobile";
+          Serial.printf("[MODEM] 🔍 Carte SIM Free Pro détectée (en roaming sur Orange)\n");
+          Serial.printf("[MODEM] 💡 Opérateur détecté: Orange, mais APN \"free\" indique carte Free Pro\n");
+        } else {
+          // Probablement Orange (réseau home)
+          simOperator = oper;
+          simOperatorName = getOperatorName(oper);
+          Serial.printf("[MODEM] 🔍 Carte SIM Orange détectée (ICCID: %s...)\n", 
+                        DEVICE_ICCID.substring(0, 10).c_str());
+        }
+      }
+    } else if (oper.length() > 0) {
+      // Préfixe non ambigu, utiliser l'opérateur détecté
+      simOperator = oper;
+      simOperatorName = getOperatorName(oper);
+    }
+  }
+  
+  if (simOperator.length() > 0) {
+    Serial.printf("[MODEM] 🔍 Carte SIM détectée: %s (ICCID: %s...)\n", 
+                  simOperatorName.c_str(), DEVICE_ICCID.substring(0, 10).c_str());
+  }
+  
+  // Maintenant que l'opérateur est détecté (ou non), configurer l'APN correct
+  // CRITIQUE: Utiliser l'APN de la carte SIM réelle, pas de l'opérateur en roaming
+  if (simOperator.length() > 0) {
+    // Carte SIM détectée : utiliser son APN (même en roaming)
+    String simApn = getRecommendedApnForOperator(simOperator);
+    if (simApn.length() > 0 && simApn != apnToUse) {
+      String currentOperatorName = oper.length() > 0 ? getOperatorName(oper) : "inconnu";
+      if (oper != simOperator && oper.length() > 0) {
+        Serial.printf("[MODEM] 🔄 ROAMING détecté: Carte %s sur réseau %s\n", 
+                      simOperatorName.c_str(), currentOperatorName.c_str());
+        Serial.printf("[MODEM] ✅ Utilisation APN de la carte SIM: \"%s\" (pas de l'opérateur en roaming)\n", 
+                      simApn.c_str());
+      } else {
+        Serial.printf("[MODEM] ✅ Carte %s sur réseau home → APN: \"%s\"\n", 
+                      simOperatorName.c_str(), simApn.c_str());
+      }
+      apnToUse = simApn;
+      if (setApn(apnToUse)) {
+        LOG_I("MODEM", String("APN configuré: ") + apnToUse);
+      }
+      delay(1000);
+      feedWatchdog();
+    } else if (simApn.length() > 0) {
+      apnToUse = simApn;
+      LOG_D("MODEM", String(simOperatorName) + " → APN: " + apnToUse);
+    }
+  } else if (oper.length() > 0) {
+    // Carte SIM non détectée : utiliser l'APN de l'opérateur détecté
+    String operatorName = getOperatorName(oper);
+    String recommendedApn = getRecommendedApnForOperator(oper);
+    if (recommendedApn.length() > 0 && recommendedApn != apnToUse) {
+      LOG_I("MODEM", String(operatorName) + " (" + oper + ") → APN: " + apnToUse + " → " + recommendedApn);
+      apnToUse = recommendedApn;
+      if (setApn(apnToUse)) {
+        LOG_D("MODEM", String("APN configuré: ") + apnToUse);
+      }
+      delay(1000);
+      feedWatchdog();
+    } else if (recommendedApn.length() > 0) {
+      LOG_D("MODEM", String(operatorName) + " (" + oper + ") | APN: " + apnToUse);
+    } else {
+      LOG_W("MODEM", String(operatorName) + " (" + oper + ") APN non reconnu | APN: " + apnToUse);
+    }
+  } else {
+    LOG_W("MODEM", String("Opérateur non détecté | APN: ") + apnToUse);
+  }
+  
+  // Attendre stabilisation modem
+  LOG_D("MODEM", "Stabilisation modem (5s)...");
   unsigned long stabilStart = millis();
   while (millis() - stabilStart < 5000) {
     delay(500);
     feedWatchdog();
   }
+  LOG_D("MODEM", "Stabilisation OK");
   
   int8_t initialCsq = modem.getSignalQuality();
   if (initialCsq == 99) {
-    Serial.println(F("[MODEM] ⚠️ CSQ=99 - Attente supplémentaire (10s) avant reset..."));
-    // Attendre encore un peu - parfois le modem a besoin de plus de temps
+    LOG_W("MODEM", "Signal invalide - Attente 10s...");
     unsigned long waitStart = millis();
     while (millis() - waitStart < 10000) {
       delay(1000);
       feedWatchdog();
       initialCsq = modem.getSignalQuality();
       if (initialCsq != 99) {
-        Serial.printf("[MODEM] ✅ CSQ récupéré: %d\n", initialCsq);
+        LOG_I("MODEM", String("Signal récupéré: ") + initialCsq + " (" + csqToRssi(initialCsq) + " dBm)");
         break;
       }
     }
     
     if (initialCsq == 99) {
-      Serial.println(F("[MODEM] ⚠️ CSQ toujours à 99 - Reset modem"));
+      LOG_W("MODEM", "Signal toujours invalide - Réinitialisation modem...");
       modem.restart();
       // Attendre après reset
       unsigned long resetWaitStart = millis();
@@ -1528,17 +2100,18 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
         feedWatchdog();
         initialCsq = modem.getSignalQuality();
         if (initialCsq != 99) {
-          Serial.printf("[MODEM] ✅ CSQ récupéré après reset: %d\n", initialCsq);
+          LOG_I("MODEM", String("Signal récupéré après reset: ") + initialCsq + " (" + csqToRssi(initialCsq) + " dBm)");
           break;
         }
       }
       
       if (initialCsq == 99) {
-        Serial.println(F("[MODEM] ❌ CSQ toujours à 99 après reset - Continuer quand même (peut être temporaire)"));
-        // Ne pas retourner false immédiatement - continuer et voir si ça s'améliore
+        LOG_W("MODEM", "Signal toujours invalide après reset - Continuation");
         logRadioSnapshot("attach:csq_warn");
       }
     }
+  } else {
+    LOG_D("MODEM", String("Signal initial OK: ") + initialCsq + " (" + csqToRssi(initialCsq) + " dBm)");
   }
   
   while (millis() - start < timeoutMs && retryCount < maxRetries) {
@@ -1553,12 +2126,12 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
     // Vérifier CSQ avant chaque tentative
     int8_t csq = modem.getSignalQuality();
     if (csq == 99 && retryCount >= 2) {
-      Serial.println(F("[MODEM] ⚠️ CSQ=99 persistant après 2 tentatives - Reset modem"));
+      Serial.println(F("[MODEM] ⚠️ Signal invalide persistant après 2 tentatives - Réinitialisation du modem..."));
       modem.restart();
       delay(5000);
       csq = modem.getSignalQuality();
       if (csq == 99) {
-        Serial.println(F("[MODEM] ❌ CSQ toujours à 99 après reset"));
+        Serial.println(F("[MODEM] ❌ Signal toujours invalide après réinitialisation"));
         logRadioSnapshot("attach:csq_fail");
         return false;
       }
@@ -1567,27 +2140,87 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
     // Obtenir le statut d'enregistrement
     RegStatus reg = modem.getRegistrationStatus();
     
-    // Si REG_DENIED, essayer avec un APN alternatif (fallback)
-    if (reg == REG_DENIED && retryCount == 0 && apnToUse == NETWORK_APN) {
-      // Si on n'a pas encore utilisé l'APN recommandé, l'essayer maintenant
+    // Si REG_DENIED, essayer avec un APN alternatif (fallback uniquement si l'APN n'a pas été détecté dans startModem)
+    // Normalement, l'APN devrait déjà être correct grâce à la détection dans startModem()
+    // Ce fallback n'est qu'une sécurité supplémentaire
+    if (reg == REG_DENIED && retryCount == 0) {
+      // CRITIQUE: Détecter la carte SIM réelle pour utiliser son APN
+      String simOperator2 = detectSimOperatorFromIccid(DEVICE_ICCID);
       String oper2 = modem.getOperator();
-      if (oper2.length() > 0) {
-        String recommendedApn = getRecommendedApnForOperator(oper2);
-        if (recommendedApn.length() > 0 && recommendedApn != NETWORK_APN) {
-          Serial.printf("[MODEM] ⚠️  REG_DENIED - Tentative avec APN alternatif: %s (au lieu de %s)\n", 
-                        recommendedApn.c_str(), NETWORK_APN.c_str());
-          modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), recommendedApn.c_str(), "\"");
-          modem.waitResponse(2000);
-          apnToUse = recommendedApn;
+      
+      // Si l'ICCID ne permet pas de détecter, utiliser l'opérateur détecté
+      if (simOperator2.length() == 0 && oper2.length() > 0) {
+        if (oper2.indexOf("20815") >= 0 || oper2.indexOf("20816") >= 0) {
+          simOperator2 = oper2;
+        } else if (oper2.indexOf("20801") >= 0 || oper2.indexOf("20802") >= 0) {
+          simOperator2 = oper2;
+        }
+      }
+      
+      if (simOperator2.length() > 0) {
+        String simOperatorName2 = getOperatorName(simOperator2);
+        String simApn = getRecommendedApnForOperator(simOperator2);
+        
+        if (simApn.length() > 0 && simApn != apnToUse) {
+          String currentOperatorName2 = oper2.length() > 0 ? getOperatorName(oper2) : "inconnu";
+          if (oper2 != simOperator2 && oper2.length() > 0) {
+            Serial.printf("[MODEM] ⚠️  Accès refusé par le réseau - ROAMING détecté: Carte %s sur réseau %s\n", 
+                          simOperatorName2.c_str(), currentOperatorName2.c_str());
+            Serial.printf("[MODEM] ✅ Correction APN: %s → %s (APN de la carte SIM)\n", 
+                          apnToUse.c_str(), simApn.c_str());
+          } else {
+            Serial.printf("[MODEM] ⚠️  Accès refusé par le réseau - Correction APN: %s → %s (carte: %s)\n", 
+                          apnToUse.c_str(), simApn.c_str(), simOperatorName2.c_str());
+          }
+          if (setApn(simApn)) {
+            apnToUse = simApn;
+            Serial.printf("[MODEM] ✅ APN configuré: %s\n", apnToUse.c_str());
+          }
           NETWORK_APN = apnToUse;
+          Serial.printf("[MODEM] ✅ APN corrigé: %s\n", apnToUse.c_str());
           
-          // Remplacer delay() long par boucle avec feedWatchdog()
+          // Attendre que l'APN soit pris en compte
           unsigned long apnDelayStart = millis();
           while (millis() - apnDelayStart < 2000) {
             delay(100);
             feedWatchdog();
           }
           feedWatchdog();
+          Serial.println(F("[MODEM] 🔄 Nouvelle tentative d'attachement avec APN corrigé..."));
+        } else if (simApn.length() > 0) {
+          // L'APN est déjà correct mais REG_DENIED quand même
+          Serial.printf("[MODEM] ⚠️  Accès refusé par le réseau avec APN correct (%s) pour carte %s\n", 
+                        apnToUse.c_str(), simOperatorName2.c_str());
+          Serial.println(F("[MODEM] 💡 Vérifier: Carte SIM activée pour les données? Forfait actif?"));
+        }
+      } else if (oper2.length() > 0) {
+        // Carte SIM non détectée : utiliser l'APN de l'opérateur détecté
+        String operatorName2 = getOperatorName(oper2);
+        String recommendedApn = getRecommendedApnForOperator(oper2);
+        if (recommendedApn.length() > 0 && recommendedApn != apnToUse) {
+          Serial.printf("[MODEM] ⚠️  Accès refusé par le réseau - Correction APN: %s → %s (opérateur: %s)\n", 
+                        apnToUse.c_str(), recommendedApn.c_str(), operatorName2.c_str());
+          Serial.println(F("[MODEM] 💡 L'APN devrait normalement être détecté avant l'attachement"));
+          if (setApn(recommendedApn)) {
+            apnToUse = recommendedApn;
+            Serial.printf("[MODEM] ✅ APN configuré: %s\n", apnToUse.c_str());
+          }
+          NETWORK_APN = apnToUse;
+          Serial.printf("[MODEM] ✅ APN corrigé: %s\n", apnToUse.c_str());
+          
+          // Attendre que l'APN soit pris en compte
+          unsigned long apnDelayStart = millis();
+          while (millis() - apnDelayStart < 2000) {
+            delay(100);
+            feedWatchdog();
+          }
+          feedWatchdog();
+          Serial.println(F("[MODEM] 🔄 Nouvelle tentative d'attachement avec APN corrigé..."));
+        } else if (recommendedApn.length() > 0) {
+          // L'APN est déjà correct mais REG_DENIED quand même
+          Serial.printf("[MODEM] ⚠️  Accès refusé par le réseau avec APN correct (%s) pour %s\n", 
+                        apnToUse.c_str(), operatorName2.c_str());
+          Serial.println(F("[MODEM] 💡 Vérifier: SIM activée pour données? Forfait actif?"));
         }
       }
     }
@@ -1623,7 +2256,37 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
         if (modem.isNetworkConnected()) {
           networkAttached = true;
           logRadioSnapshot("attach:success");
-          Serial.println(F("[MODEM] ✅ Réseau attaché (statut OK)"));
+          String oper = modem.getOperator();
+          String operatorName = getOperatorName(oper);
+          
+          // Vérifier l'état GPRS et EPS
+          bool gprsOk = modem.isGprsConnected();
+          bool epsOk = false;
+          String epsStatus = "N/A";
+          checkEpsStatus(epsOk, epsStatus);
+          
+          Serial.printf("[MODEM] ✅ Réseau attaché avec succès (opérateur: %s, APN: %s)\n", 
+                        operatorName.c_str(), apnToUse.c_str());
+          
+          // Connecter les données mobiles après attachement réseau réussi
+          if (!gprsOk) {
+            Serial.println(F("[MODEM] 📡 Connexion des données mobiles en cours..."));
+            if (connectData(30000)) {
+              Serial.println(F("[MODEM] ✅ Données mobiles connectées"));
+            } else {
+              Serial.println(F("[MODEM] ⚠️ Attachement réseau OK mais données mobiles non connectées"));
+            }
+          }
+          
+          // Vérifier l'état final
+          gprsOk = modem.isGprsConnected();
+          checkEpsStatus(epsOk, epsStatus);
+          Serial.printf("[MODEM] 📊 État final: Données mobiles=%s | 4G/LTE=%s\n", 
+                        gprsOk ? "Connectées" : "Non connectées", epsStatus.c_str());
+          Serial.println(F("[MODEM] ✅ Prêt pour envoi de données à la base de données"));
+          
+          // Sauvegarder l'APN et l'opérateur détectés pour réutilisation au prochain réveil
+          saveNetworkParams(oper, apnToUse);
           return true;
         } else {
           // Statut OK mais isNetworkConnected() retourne false - attendre un peu plus
@@ -1633,7 +2296,37 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
           if (modem.isNetworkConnected()) {
             networkAttached = true;
             logRadioSnapshot("attach:success");
-            Serial.println(F("[MODEM] ✅ Réseau attaché après stabilisation"));
+            String oper = modem.getOperator();
+            String operatorName = getOperatorName(oper);
+            
+            // Vérifier l'état GPRS et EPS
+            bool gprsOk = modem.isGprsConnected();
+            bool epsOk = false;
+            String epsStatus = "N/A";
+            checkEpsStatus(epsOk, epsStatus);
+            
+            Serial.printf("[MODEM] ✅ Réseau attaché après stabilisation (opérateur: %s, APN: %s)\n", 
+                          operatorName.c_str(), apnToUse.c_str());
+            
+            // Connecter les données mobiles après attachement réseau réussi
+            if (!gprsOk) {
+              Serial.println(F("[MODEM] 📡 Connexion des données mobiles en cours..."));
+              if (connectData(30000)) {
+                Serial.println(F("[MODEM] ✅ Données mobiles connectées"));
+              } else {
+                Serial.println(F("[MODEM] ⚠️ Attachement réseau OK mais données mobiles non connectées"));
+              }
+            }
+            
+            // Vérifier l'état final
+            gprsOk = modem.isGprsConnected();
+            checkEpsStatus(epsOk, epsStatus);
+            Serial.printf("[MODEM] 📊 État final: Données mobiles=%s | 4G/LTE=%s\n", 
+                          gprsOk ? "Connectées" : "Non connectées", epsStatus.c_str());
+            Serial.println(F("[MODEM] ✅ Prêt pour envoi de données à la base de données"));
+            
+            // Sauvegarder l'APN et l'opérateur détectés pour réutilisation au prochain réveil
+            saveNetworkParams(oper, apnToUse);
             return true;
           }
         }
@@ -1644,7 +2337,36 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
         if (modem.waitForNetwork(5000)) { // Timeout de 5 secondes au lieu de 2
           networkAttached = true;
           logRadioSnapshot("attach:event");
-          Serial.println(F("[MODEM] ✅ Réseau attaché avec succès (waitForNetwork)"));
+          String oper = modem.getOperator();
+          String operatorName = getOperatorName(oper);
+          
+          // Vérifier l'état GPRS et EPS
+          bool gprsOk = modem.isGprsConnected();
+          bool epsOk = false;
+          String epsStatus = "N/A";
+          checkEpsStatus(epsOk, epsStatus);
+          
+          Serial.printf("[MODEM] ✅ Réseau attaché avec succès (waitForNetwork) - opérateur: %s, APN: %s\n", 
+                        operatorName.c_str(), apnToUse.c_str());
+          
+          // Connecter les données mobiles après attachement réseau réussi
+          if (!gprsOk) {
+            Serial.println(F("[MODEM] 📡 Connexion des données mobiles en cours..."));
+            if (connectData(30000)) {
+              Serial.println(F("[MODEM] ✅ Données mobiles connectées"));
+            } else {
+              Serial.println(F("[MODEM] ⚠️ Attachement réseau OK mais données mobiles non connectées"));
+            }
+          }
+          
+          // Vérifier l'état final
+          gprsOk = modem.isGprsConnected();
+          checkEpsStatus(epsOk, epsStatus);
+          Serial.printf("[MODEM] 📊 État final: Données mobiles=%s | 4G/LTE=%s\n", 
+                        gprsOk ? "Connectées" : "Non connectées", epsStatus.c_str());
+          
+          // Sauvegarder l'APN et l'opérateur détectés
+          saveNetworkParams(oper, apnToUse);
           return true;
         }
       }
@@ -1653,7 +2375,36 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
       if (checkCount % 3 == 0 && modem.isNetworkConnected()) {
         networkAttached = true;
         logRadioSnapshot("attach:direct");
-        Serial.println(F("[MODEM] ✅ Réseau attaché (vérification directe)"));
+        String oper = modem.getOperator();
+        String operatorName = getOperatorName(oper);
+        
+        // Vérifier l'état GPRS et EPS
+        bool gprsOk = modem.isGprsConnected();
+        bool epsOk = false;
+        String epsStatus = "N/A";
+        checkEpsStatus(epsOk, epsStatus);
+        
+        Serial.printf("[MODEM] ✅ Réseau attaché (vérification directe) - opérateur: %s, APN: %s\n", 
+                      operatorName.c_str(), apnToUse.c_str());
+        
+        // Connecter les données mobiles après attachement réseau réussi
+        if (!gprsOk) {
+          Serial.println(F("[MODEM] 📡 Connexion des données mobiles en cours..."));
+          if (connectData(30000)) {
+            Serial.println(F("[MODEM] ✅ Données mobiles connectées"));
+          } else {
+            Serial.println(F("[MODEM] ⚠️ Attachement réseau OK mais données mobiles non connectées"));
+          }
+        }
+        
+        // Vérifier l'état final
+        gprsOk = modem.isGprsConnected();
+        checkEpsStatus(epsOk, epsStatus);
+        Serial.printf("[MODEM] 📊 État final: Données mobiles=%s | 4G/LTE=%s\n", 
+                      gprsOk ? "Connectées" : "Non connectées", epsStatus.c_str());
+        
+        // Sauvegarder l'APN et l'opérateur détectés
+        saveNetworkParams(oper, apnToUse);
         return true;
       }
       
@@ -1735,8 +2486,9 @@ bool connectData(uint32_t timeoutMs)
     Serial.printf("[MODEM] Tentative connexion GPRS avec APN: %s\n", currentApn.c_str());
     
     // Configurer l'APN avant de se connecter
-    modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), currentApn.c_str(), "\"");
-    modem.waitResponse(2000);
+    if (setApn(currentApn)) {
+      Serial.printf("[MODEM] ✅ APN configuré: %s\n", currentApn.c_str());
+    }
     delay(1000);
     feedWatchdog();
     
@@ -1747,22 +2499,48 @@ bool connectData(uint32_t timeoutMs)
       // Vérifier l'état complet de la connexion
       // Remplacer delay() par boucle avec feedWatchdog()
       unsigned long stabilDelayStart = millis();
-      while (millis() - stabilDelayStart < 1000) {
+      while (millis() - stabilDelayStart < 2000) {
         delay(100);
         feedWatchdog();
       }
+      
+      // Vérifier l'état réseau (GPRS/GSM)
       bool networkOk = modem.isNetworkConnected();
       bool gprsOk = modem.isGprsConnected();
-      Serial.printf("[MODEM] 📊 État connexion: Réseau=%s | GPRS=%s\n", 
-                    networkOk ? "OK" : "KO", 
-                    gprsOk ? "OK" : "KO");
       
-      if (networkOk && gprsOk) {
+      // Vérifier l'état EPS (LTE) pour modem A7670G/SIM7600
+      bool epsOk = false;
+      String epsStatus = "N/A";
+      checkEpsStatus(epsOk, epsStatus);
+      
+      // Vérifier aussi l'activation du contexte PDP
+      bool pdpOk = false;
+      modem.sendAT(GF("+CGACT?"));
+      if (modem.waitResponse(2000, GF("+CGACT:")) == 1) {
+        String res = modem.stream.readStringUntil('\n');
+        res.trim();
+        // Format: +CGACT: <state>,<cid>
+        // state: 1=activated, 0=deactivated
+        int state = res.substring(res.indexOf(':') + 1).toInt();
+        pdpOk = (state == 1);
+      }
+      
+      Serial.printf("[MODEM] 📊 État connexion: Réseau=%s | Données mobiles=%s | 4G/LTE=%s | Contexte données=%s\n", 
+                    networkOk ? "Connecté" : "Non connecté", 
+                    gprsOk ? "Connectées" : "Non connectées",
+                    epsStatus.c_str(),
+                    pdpOk ? "Actif" : "Inactif");
+      
+      if (networkOk && (gprsOk || epsOk) && pdpOk) {
         Serial.println(F("[MODEM] ✅ Prêt pour envoi de données"));
-        sendLog("INFO", "Connexion GPRS réussie avec APN: " + currentApn, "network");
+        String logMsg = "Connexion réussie - GPRS:" + String(gprsOk ? "OK" : "KO") + 
+                       " EPS:" + epsStatus + " PDP:" + String(pdpOk ? "OK" : "KO");
+        sendLog("INFO", logMsg + " APN: " + currentApn, "network");
       } else {
-        Serial.println(F("[MODEM] ⚠️ Connexion GPRS mais état réseau incertain"));
-        sendLog("WARN", "Connexion GPRS réussie mais réseau non vérifié", "network");
+        Serial.println(F("[MODEM] ⚠️ Connexion mais état réseau incomplet"));
+        String logMsg = "Connexion partielle - GPRS:" + String(gprsOk ? "OK" : "KO") + 
+                       " EPS:" + epsStatus + " PDP:" + String(pdpOk ? "OK" : "KO");
+        sendLog("WARN", logMsg, "network");
       }
       
       return true;
@@ -1876,7 +2654,7 @@ float measureBattery()
   if (pct < 0.0f) pct = 0.0f;
   if (pct > 100.0f) pct = 100.0f;
   
-  // Log concis et lisible (format optimisé - même format que l'exemple)
+  // Log concis et lisible
   String timeStr = formatTimeFromMillis(millis());
   Serial.printf("%s[SENSOR] Batterie ADC=%d | V_adc=%.3fV | V_batt=%.3fV | Charge=%.1f%%\n", 
                 timeStr.c_str(), raw, adcVoltage, batteryVoltage, pct);
@@ -2172,6 +2950,36 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
   return ok;
 }
 
+// ============================================================================
+// FONCTION FACTORISÉE POUR ENVOI DE MESURES (évite duplication de code)
+// ============================================================================
+bool sendMeasurementWithContext(const char* context) {
+  Measurement m = captureSensorSnapshot();
+  
+  // RSSI
+  int8_t csq = modem.getSignalQuality();
+  m.rssi = csqToRssi(csq);
+  
+  // GPS (si activé)
+  float lat = 0.0, lon = 0.0;
+  bool hasLocation = false;
+  if (gpsEnabled) {
+    hasLocation = getDeviceLocationFast(&lat, &lon);
+  }
+  
+  // Envoyer mesure
+  bool sent = sendMeasurement(m, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr, context);
+  if (sent) {
+    LOG_I("AUTO", String("Mesure envoyée: ") + context);
+    lastFlowValue = m.flow;
+    lastMeasurementTime = millis();
+  } else {
+    LOG_W("AUTO", String("Échec envoi: ") + context);
+  }
+  
+  return sent;
+}
+
 int fetchCommands(Command* out, size_t maxCount)
 {
   if (maxCount == 0) return 0;
@@ -2353,9 +3161,7 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
         NETWORK_APN = sanitizeString(newApn, 64);
       }
     }
-    // Note : Le champ "jwt" était utilisé dans d'anciennes versions (< v2.0).
-    // L'authentification se fait maintenant uniquement par sim_iccid.
-    // Le champ est ignoré pour compatibilité avec d'anciennes commandes UPDATE_CONFIG.
+    // Note : Le champ "jwt" est ignoré. L'authentification se fait uniquement par sim_iccid.
     if (payloadDoc.containsKey("iccid")) {
       String newIccid = payloadDoc["iccid"].as<String>();
       // SÉCURITÉ: Valider longueur ICCID (20 chiffres max)
@@ -2479,6 +3285,30 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
         Serial.printf("✅ [CMD] send_every_n_wakeups changé: %d\n", sendEveryNWakeups);
       }
     }
+    // Nouveau : Niveau de log configurable à distance (debug)
+    if (payloadDoc.containsKey("log_level")) {
+      String level = payloadDoc["log_level"].as<String>();
+      level.toUpperCase();
+      LogLevel oldLevel = currentLogLevel;
+      if (level == "ERROR") {
+        currentLogLevel = LOG_ERROR;
+        Serial.println("✅ [CMD] Niveau de log changé: ERROR (erreurs critiques uniquement)");
+      } else if (level == "WARN" || level == "WARNING") {
+        currentLogLevel = LOG_WARN;
+        Serial.println("✅ [CMD] Niveau de log changé: WARN (avertissements + erreurs)");
+      } else if (level == "INFO") {
+        currentLogLevel = LOG_INFO;
+        Serial.println("✅ [CMD] Niveau de log changé: INFO (normal - défaut)");
+      } else if (level == "DEBUG") {
+        currentLogLevel = LOG_DEBUG;
+        Serial.println("✅ [CMD] Niveau de log changé: DEBUG (verbeux - tous les logs)");
+      } else {
+        Serial.printf("⚠️ [CMD] Niveau de log invalide: %s (valeurs: ERROR, WARN, INFO, DEBUG)\n", level.c_str());
+      }
+      if (currentLogLevel != oldLevel) {
+        sendLog("INFO", String("Log level changed: ") + level, "commands");
+      }
+    }
     saveConfig();
     
     // Afficher un résumé de ce qui a été modifié
@@ -2597,6 +3427,82 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       Serial.printf("%s[OTA] ⚠️  Le dispositif continue avec la version actuelle\n", errorTimeStr.c_str());
       Serial.println(F("═══════════════════════════════════════════════════════════"));
     }
+  } else if (cmd.verb == "GET_STATUS") {
+    // Nouvelle commande : récupérer l'état complet du dispositif
+    String timeStr = formatTimeFromMillis(millis());
+    Serial.printf("%s[CMD] 📊 GET_STATUS - Récupération état complet du dispositif...\n", timeStr.c_str());
+    
+    // Créer JSON avec état complet
+    DynamicJsonDocument statusDoc(1024);
+    
+    // Identifiants
+    statusDoc["device_serial"] = DEVICE_SERIAL;
+    statusDoc["sim_iccid"] = DEVICE_ICCID;
+    statusDoc["firmware_version"] = FIRMWARE_VERSION;
+    
+    // Configuration actuelle
+    statusDoc["sleep_minutes"] = configuredSleepMinutes;
+    statusDoc["gps_enabled"] = gpsEnabled;
+    statusDoc["roaming_enabled"] = roamingEnabled;
+    statusDoc["send_every_n_wakeups"] = sendEveryNWakeups;
+    
+    // Calibration
+    JsonArray cal = statusDoc.createNestedArray("calibration_coefficients");
+    cal.add(isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0);
+    cal.add(isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1);
+    cal.add(isnan(CAL_OVERRIDE_A2) ? 0.0f : CAL_OVERRIDE_A2);
+    
+    // Mesures airflow
+    statusDoc["airflow_passes"] = airflowPasses;
+    statusDoc["airflow_samples_per_pass"] = airflowSamplesPerPass;
+    statusDoc["airflow_delay_ms"] = airflowSampleDelayMs;
+    
+    // État modem
+    statusDoc["modem_ready"] = modemReady;
+    if (modemReady) {
+      statusDoc["network_connected"] = modem.isNetworkConnected();
+      statusDoc["gprs_connected"] = modem.isGprsConnected();
+      int8_t csq = modem.getSignalQuality();
+      statusDoc["signal_quality"] = csq;
+      statusDoc["rssi"] = csqToRssi(csq);
+    }
+    
+    // Réseau
+    statusDoc["apn"] = NETWORK_APN;
+    statusDoc["detected_operator"] = DETECTED_OPERATOR;
+    
+    // Niveau de log
+    String logLevelStr = "INFO";
+    if (currentLogLevel == LOG_ERROR) logLevelStr = "ERROR";
+    else if (currentLogLevel == LOG_WARN) logLevelStr = "WARN";
+    else if (currentLogLevel == LOG_INFO) logLevelStr = "INFO";
+    else if (currentLogLevel == LOG_DEBUG) logLevelStr = "DEBUG";
+    statusDoc["log_level"] = logLevelStr;
+    
+    // Mode USB
+    statusDoc["usb_mode_active"] = usbModeActive;
+    
+    // Runtime
+    statusDoc["uptime_ms"] = millis();
+    statusDoc["watchdog_seconds"] = watchdogTimeoutSeconds;
+    
+    // Sérialiser le status en string
+    String statusStr;
+    serializeJson(statusDoc, statusStr);
+    
+    // Afficher un résumé
+    Serial.printf("%s[CMD] 📊 État récupéré:\n", timeStr.c_str());
+    Serial.printf("%s      • Serial: %s | FW: %s\n", timeStr.c_str(), DEVICE_SERIAL.c_str(), FIRMWARE_VERSION);
+    Serial.printf("%s      • Sleep: %dmin | GPS: %s | Roaming: %s\n", timeStr.c_str(), 
+                  configuredSleepMinutes, gpsEnabled ? "ON" : "OFF", roamingEnabled ? "ON" : "OFF");
+    Serial.printf("%s      • Modem: %s | USB: %s | Log: %s\n", timeStr.c_str(),
+                  modemReady ? "OK" : "KO", usbModeActive ? "ON" : "OFF", logLevelStr.c_str());
+    
+    // Envoyer ACK avec payload contenant le status
+    bool ackOk = acknowledgeCommand(cmd, true, statusStr.c_str());
+    Serial.printf("%s[CMD] 📤 ACK avec status envoyé: %s (%d octets)\n", 
+                  timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec", statusStr.length());
+    sendLog("INFO", "GET_STATUS executed", "commands");
   } else {
     acknowledgeCommand(cmd, false, "verb not supported");
     sendLog("WARN", "Commande non supportée: " + cmd.verb, "commands");
@@ -2618,8 +3524,10 @@ void loadConfig()
   // Note: JWT retiré - authentification par ICCID uniquement
   DEVICE_ICCID = prefs.getString("iccid", DEVICE_ICCID);
   DEVICE_SERIAL = prefs.getString("serial", DEVICE_SERIAL);
+  // Charger l'opérateur sauvegardé pour pré-configurer l'APN au boot
+  DETECTED_OPERATOR = prefs.getString("operator", "");
   
-  // Réinitialiser le serial si c'est un ancien format (pas OTT-XX-XXX ni OTT-YY-NNN)
+  // Réinitialiser le serial si le format est invalide
   // Format valide : OTT-XX-XXX (temporaire) ou OTT-YY-NNN (définitif, ex: OTT-25-001)
   bool isValidFormat = false;
   if (DEVICE_SERIAL == "OTT-XX-XXX") {
@@ -2701,6 +3609,19 @@ void loadConfig()
   }
 }
 
+void saveNetworkParams(const String& oper, const String& apn)
+{
+  // Sauvegarder l'opérateur et l'APN détectés pour réutilisation au prochain réveil
+  if (oper.length() > 0) {
+    DETECTED_OPERATOR = oper;
+  }
+  if (apn.length() > 0) {
+    NETWORK_APN = apn;
+  }
+  // Persister dans NVS via saveConfig()
+  saveConfig();
+}
+
 void saveConfig()
 {
   if (!prefs.begin("ott-fw", false)) {
@@ -2712,6 +3633,10 @@ void saveConfig()
   prefs.putString("iccid", DEVICE_ICCID);
   prefs.putString("serial", DEVICE_SERIAL);
   prefs.putString("sim_pin", SIM_PIN);
+  // Sauvegarder l'opérateur détecté pour réutilisation au prochain boot
+  if (DETECTED_OPERATOR.length() > 0) {
+    prefs.putString("operator", DETECTED_OPERATOR);
+  }
   prefs.putFloat("cal_a0", CAL_OVERRIDE_A0);
   prefs.putFloat("cal_a1", CAL_OVERRIDE_A1);
   prefs.putFloat("cal_a2", CAL_OVERRIDE_A2);
@@ -2839,7 +3764,7 @@ void checkBootFailureAndRollback()
     return;
   }
   
-  // Si une OTA était en cours mais qu'on boot toujours sur l'ancienne version,
+  // Si une OTA était en cours mais que la version n'a pas changé,
   // cela peut indiquer un problème
   if (otaInProgress && String(FIRMWARE_VERSION) == previousFirmwareVersion) {
     Serial.println(F("[BOOT] OTA en cours mais version inchangée, possible échec"));
@@ -2873,7 +3798,7 @@ void rollbackToPreviousFirmware()
     return;
   }
   
-  // Note: Le rollback réel nécessiterait de reflasher l'ancienne partition OTA
+  // Note: Le rollback nécessiterait de reflasher la partition OTA précédente
   // Sur ESP32 avec OTA dual partition, on peut utiliser Update.swap()
   // Pour l'instant, on log juste l'événement et on réinitialise le compteur
   sendLog("WARN", "Rollback requis vers v" + previousFirmwareVersion, "ota");

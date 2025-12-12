@@ -249,6 +249,10 @@ export default function DebugTab() {
     onSuccess: (device) => {
       logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré avec succès`)
       appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré`, 'dashboard')
+      // Si on était en mode archivé, basculer vers la vue normale pour voir le dispositif restauré
+      if (showArchived) {
+        setShowArchived(false)
+      }
       // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
       invalidateCache()
       createTimeoutWithCleanup(async () => {

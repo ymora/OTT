@@ -29,6 +29,7 @@ require_once __DIR__ . '/api/handlers/devices/demo.php';
 require_once __DIR__ . '/api/handlers/firmwares.php';
 require_once __DIR__ . '/api/handlers/notifications.php';
 require_once __DIR__ . '/api/handlers/usb_logs.php';
+require_once __DIR__ . '/api/handlers/database_audit.php';
 
 // Démarrer le buffer de sortie pour capturer toute sortie HTML accidentelle
 ob_start();
@@ -217,9 +218,23 @@ if (empty($jwtSecret)) {
         http_response_code(500);
         die(json_encode(['success' => false, 'error' => 'JWT_SECRET must be set in production']));
     }
-    // En local, générer un secret aléatoire (mais loguer un avertissement)
-    // Utiliser un secret basé sur un hash pour éviter les secrets hardcodés
-    $jwtSecret = hash('sha256', __FILE__ . getenv('USER') . getenv('COMPUTERNAME') . date('Y-m-d'));
+    // En local, générer un secret aléatoire constant (mais loguer un avertissement)
+    // IMPORTANT: Le secret doit rester constant pour valider les tokens existants
+    // Utiliser un hash basé sur des informations stables (sans date) pour éviter les secrets hardcodés
+    // Si un fichier de cache existe, le réutiliser pour garantir la constance
+    $secretCacheFile = __DIR__ . '/.jwt_secret_cache';
+    if (file_exists($secretCacheFile)) {
+        $jwtSecret = trim(file_get_contents($secretCacheFile));
+        if (empty($jwtSecret)) {
+            // Si le fichier est vide, régénérer
+            $jwtSecret = hash('sha256', __FILE__ . getenv('USER') . getenv('COMPUTERNAME') . 'JWT_SECRET_CONSTANT');
+            file_put_contents($secretCacheFile, $jwtSecret);
+        }
+    } else {
+        // Générer un nouveau secret et le sauvegarder
+        $jwtSecret = hash('sha256', __FILE__ . getenv('USER') . getenv('COMPUTERNAME') . 'JWT_SECRET_CONSTANT');
+        file_put_contents($secretCacheFile, $jwtSecret);
+    }
     error_log('[SECURITY WARNING] JWT_SECRET not set, using generated secret. This is UNSAFE in production!');
 }
 define('JWT_SECRET', $jwtSecret);
@@ -1037,6 +1052,10 @@ function parseRequestPath() {
     } else {
         // Sinon, utiliser REQUEST_URI directement
         $path = parse_url($requestUri, PHP_URL_PATH);
+        // Si le path contient encore api.php, le supprimer
+        if (strpos($path, '/api.php') !== false) {
+            $path = str_replace('/api.php', '', $path);
+        }
     }
     
     // Normaliser le path : supprimer les espaces, normaliser les slashes
@@ -1052,6 +1071,11 @@ function parseRequestPath() {
 
 $path = parseRequestPath();
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
+// Debug pour database-audit (toujours actif pour ce endpoint)
+if (strpos($path, 'database-audit') !== false || strpos($_SERVER['REQUEST_URI'] ?? '', 'database-audit') !== false) {
+    error_log('[ROUTER DEBUG] Path: ' . $path . ' | REQUEST_URI: ' . ($_SERVER['REQUEST_URI'] ?? 'N/A') . ' | Method: ' . $method . ' | SCRIPT_NAME: ' . ($_SERVER['SCRIPT_NAME'] ?? 'N/A'));
+}
 
 // Debug conditionnel pour certaines routes (seulement si DEBUG_ERRORS est activé)
 if (getenv('DEBUG_ERRORS') === 'true') {
@@ -1441,10 +1465,14 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 } elseif(preg_match('#/admin/diagnostic/measurements$#', $path) && $method === 'GET') {
     handleDiagnosticMeasurements();
 
-// Audit
-} elseif(preg_match('#/audit$#', $path) && $method === 'GET') {
+// Audit - IMPORTANT: database-audit AVANT /audit pour éviter les conflits
+} elseif(($path === '/admin/database-audit' || preg_match('#^/admin/database-audit/?$#', $path) || preg_match('#/admin/database-audit#', $path)) && $method === 'GET') {
+    error_log('[ROUTER] ✅ Route /admin/database-audit matchée - Path: ' . $path . ' Method: ' . $method . ' | REQUEST_URI: ' . ($_SERVER['REQUEST_URI'] ?? 'N/A'));
+    handleDatabaseAudit();
+    exit;
+} elseif(($path === '/audit' || preg_match('#^/audit/?$#', $path)) && $method === 'GET') {
     handleGetAuditLogs();
-} elseif(preg_match('#/audit$#', $path) && $method === 'DELETE') {
+} elseif(($path === '/audit' || preg_match('#^/audit/?$#', $path)) && $method === 'DELETE') {
     handleClearAuditLogs();
 
 // Logs

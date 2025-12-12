@@ -66,7 +66,6 @@ CREATE TABLE IF NOT EXISTS patients (
   id SERIAL PRIMARY KEY,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
-  birth_date DATE,
   phone VARCHAR(20),
   email VARCHAR(100),
   address TEXT,
