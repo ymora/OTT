@@ -270,7 +270,9 @@ function handleRunMigration() {
     }
     
     try {
-        $migrationFile = $_POST['file'] ?? $_GET['file'] ?? 'schema.sql';
+        // Lire le body JSON pour POST ou utiliser GET/POST pour compatibilité
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $migrationFile = $body['file'] ?? $_POST['file'] ?? $_GET['file'] ?? 'schema.sql';
         
         // SÉCURITÉ: Validation stricte du nom de fichier pour éviter les injections de chemin
         // Autoriser uniquement les fichiers SQL dans le répertoire sql/
@@ -1418,6 +1420,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleGetLatestMeasurements();
 } elseif(preg_match('#/measurements/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteMeasurement($m[1]);
+} elseif(preg_match('#/measurements/(\d+)$#', $path, $m) && $method === 'PATCH') {
+    handleRestoreMeasurement($m[1]);
 
 // Patients (V1 compatible)
 } elseif(preg_match('#/patients$#', $path) && $method === 'GET') {

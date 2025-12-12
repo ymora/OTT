@@ -70,6 +70,9 @@ services:
     ports:
       - "3000:3000"
     environment:
+      # NOTE: http://localhost:8000 pour développement local (Docker)
+      #       env.example utilise https://ott-jbln.onrender.com pour production
+      #       C'est normal - chaque environnement a sa propre configuration
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_ENABLE_DEMO_RESET: "false"
       NODE_ENV: production

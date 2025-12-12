@@ -2137,6 +2137,7 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
       Serial.printf(" | GPS=%.6f,%.6f", *latitude, *longitude);
     }
     Serial.println();
+    Serial.println(F("[MODEM] ✅ Envoi des données effectué !"));
     sendLog("INFO", "Measurement posted successfully", "measurements");
   } else {
     Serial.printf("[API] ❌ Échec envoi mesure à la base de données\n");

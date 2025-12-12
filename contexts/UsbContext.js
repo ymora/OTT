@@ -39,6 +39,7 @@ export function UsbProvider({ children }) {
   
   // Batch des logs pour envoi au serveur (pour monitoring à distance)
   const logsToSendRef = useRef([])
+  const sentCommandsCacheRef = useRef(new Set()) // Cache pour éviter de renvoyer les mêmes commandes
   
   // Initialiser le système de partage
   useEffect(() => {
@@ -275,9 +276,33 @@ export function UsbProvider({ children }) {
         const data = await response.json()
         if (!data.success || !data.commands || data.commands.length === 0) return
         
-        // Envoyer chaque commande UPDATE_CONFIG via USB
+        // Envoyer chaque commande UPDATE_CONFIG via USB et la marquer comme exécutée
         for (const cmd of data.commands) {
           if (cmd.command === 'UPDATE_CONFIG' && cmd.payload) {
+            // Vérifier si la commande a déjà été envoyée dans cette session (sécurité supplémentaire)
+            const cmdKey = `${cmd.id}_${cmd.command}`
+            if (sentCommandsCacheRef.current.has(cmdKey)) {
+              logger.debug(`[USB] Commande ${cmd.id} déjà envoyée dans cette session, marquage comme exécutée...`)
+              // Marquer quand même comme exécutée au cas où
+              try {
+                await fetchWithAuth(
+                  `${API_URL}/api.php/devices/commands/ack`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      command_id: cmd.id,
+                      device_sim_iccid: device
+                    })
+                  },
+                  { requiresAuth: true }
+                )
+              } catch (err) {
+                logger.debug('[USB] Erreur marquage commande déjà envoyée:', err)
+              }
+              continue
+            }
+            
             const payload = typeof cmd.payload === 'string' 
               ? JSON.parse(cmd.payload) 
               : cmd.payload
@@ -287,6 +312,43 @@ export function UsbProvider({ children }) {
             await write(commandLine)
             
             logger.log(`📤 [USB] Commande UPDATE_CONFIG envoyée:`, payload)
+            
+            // Ajouter au cache pour éviter de renvoyer dans la même session
+            sentCommandsCacheRef.current.add(cmdKey)
+            
+            // Marquer la commande comme exécutée dans la base de données
+            try {
+              const ackResponse = await fetchWithAuth(
+                `${API_URL}/api.php/devices/commands/ack`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    command_id: cmd.id,
+                    device_sim_iccid: device,
+                    status: 'executed',
+                    message: 'Commande envoyée via USB'
+                  })
+                },
+                { requiresAuth: true }
+              )
+              
+              if (ackResponse.ok) {
+                const ackData = await ackResponse.json()
+                if (ackData.success) {
+                  logger.debug(`✅ [USB] Commande ${cmd.id} marquée comme exécutée`)
+                  // Garder la commande dans le cache pour éviter les renvois multiples
+                  // même après marquage réussi (sécurité supplémentaire)
+                } else {
+                  logger.warn(`⚠️ [USB] Échec marquage commande ${cmd.id}:`, ackData.error)
+                }
+              } else {
+                logger.warn(`⚠️ [USB] Erreur HTTP lors du marquage commande ${cmd.id}:`, ackResponse.status)
+              }
+            } catch (err) {
+              logger.error(`❌ [USB] Erreur lors du marquage commande ${cmd.id} comme exécutée:`, err)
+              // Ne pas bloquer si le marquage échoue, mais logger l'erreur
+            }
           }
         }
       } catch (err) {
@@ -299,7 +361,9 @@ export function UsbProvider({ children }) {
     // Exécuter immédiatement au démarrage
     checkAndSendCommands()
     
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+    }
   }, [isConnected, usbConnectedDevice, write, fetchWithAuth, API_URL])
   
   // Stockage des mesures USB locales pour comparaison avec OTA
@@ -379,6 +443,7 @@ export function UsbProvider({ children }) {
       // Le firmware envoie déjà en OTA normalement (processus parallèle)
       // Les logs USB montrent en live ce qui se passe (modem, GPS, envoi API)
       // Le monitoring OTA compare les mesures USB locales avec celles qui arrivent dans la BDD
+      // Le tableau affiche uniquement ce qui est stocké en base de données (provenant de l'OTA)
       
     } catch (err) {
       logger.error('❌ Erreur enregistrement mesure USB locale:', err)

@@ -1515,6 +1515,41 @@ try {
         $securityScore = [Math]::Min(10, ($securityScore + $npmAuditResult.Score) / 2)
     }
     
+    # VÉRIFICATION MODALS UNIFIÉS - Confirmations
+    Write-Info "Verification modals unifies pour confirmations..."
+    $windowConfirms = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\' -and
+        $_.FullName -notmatch '\\docs\\'
+    } | Select-String -Pattern 'window\.confirm\s*\(|confirm\s*\(' | Where-Object {
+        # Exclure les commentaires et les chaînes de caractères
+        $_.Line -notmatch '^\s*//' -and
+        $_.Line -notmatch "['\`"].*confirm.*['\`"]"
+    })
+    
+    if ($windowConfirms.Count -gt 0) {
+        Write-Warn "  $($windowConfirms.Count) utilisation(s) de window.confirm() detectee(s) - utiliser ConfirmModal unifie"
+        foreach ($confirm in $windowConfirms) {
+            $auditResults.Warnings += "window.confirm() dans $($confirm.Path):$($confirm.LineNumber) - remplacer par ConfirmModal"
+        }
+        $securityScore -= 0.5
+        $auditResults.Recommendations += "Remplacer $($windowConfirms.Count) window.confirm() par ConfirmModal pour une UX unifiee"
+    } else {
+        Write-OK "  Toutes les confirmations utilisent ConfirmModal unifie"
+    }
+    
+    # Vérifier que ConfirmModal est bien importé et utilisé
+    Write-Info "Verification utilisation ConfirmModal..."
+    $confirmModalImports = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\' -and
+        $_.FullName -notmatch '\\docs\\'
+    } | Select-String -Pattern 'import.*ConfirmModal|from.*ConfirmModal').Count
+    
+    if ($confirmModalImports -gt 0) {
+        Write-OK "  ConfirmModal importe dans $confirmModalImports fichier(s)"
+    }
+    
     Write-OK "Verification securite terminee"
     
 } catch {
@@ -4326,7 +4361,7 @@ if ($totalElementsInutiles -gt 0) {
     if ($scriptsRedondants.Count -gt 0) {
         $auditResults.Recommendations += "Supprimer $($scriptsRedondants.Count) script(s) redondant(s)"
     }
-    $auditResults.Recommendations += "Exécuter scripts\NETTOYER_ELEMENTS_INUTILES.ps1 pour nettoyer automatiquement"
+    $auditResults.Recommendations += "Vérifier manuellement les éléments inutiles détectés (scripts archivés disponibles dans scripts/archive/)"
 }
 
 Write-Host ""
@@ -4704,6 +4739,35 @@ if ($script:apiAuthFailed) {
     Write-Host ("  [SCORE] SCORE GLOBAL PONDERE (mis à jour) : {0}/10" -f $scoreGlobal) -ForegroundColor $(if($scoreGlobal -ge 9.5){"Green"}elseif($scoreGlobal -ge 8){"Yellow"}else{"Red"})
     Write-Host ""
     Write-Host ("=" * 80) -ForegroundColor Gray
+    
+    # NOUVEAU: Export JSON du rapport pour analyse programmatique
+    Write-Host ""
+    Write-Section "Export Rapport JSON"
+    try {
+        $jsonReport = @{
+            timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            project = if ($script:Config.Project) { $script:Config.Project.Name } else { "OTT Dashboard" }
+            scores = $auditResults.Scores
+            scoreGlobal = $scoreGlobal
+            warnings = $auditResults.Warnings
+            recommendations = $auditResults.Recommendations
+            issues = $auditResults.Issues
+            statistics = @{
+                totalFiles = $auditResults.Statistics.TotalFiles
+                totalLines = $auditResults.Statistics.TotalLines
+                jsFiles = $auditResults.Statistics.JSFiles
+                phpFiles = $auditResults.Statistics.PHPFiles
+            }
+            secrets = $auditResults.Secrets
+            outdatedPackages = $auditResults.OutdatedPackages
+        }
+        
+        $jsonPath = Join-Path (Get-Location) "audit-complet\resultats\audit_resultat_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
+        $jsonReport | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
+        Write-OK "Rapport JSON exporte: $jsonPath"
+    } catch {
+        Write-Warn "Erreur export JSON: $($_.Exception.Message)"
+    }
 }
 
 # Verdict final

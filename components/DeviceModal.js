@@ -767,6 +767,7 @@ export default function DeviceModal({
             }
             
             // Si envoyé via USB, sauvegarder aussi en base pour cohérence
+            // Mais ne pas créer de commande UPDATE_CONFIG car elle a déjà été envoyée via USB
             if (result.method === 'USB') {
               try {
                 await fetchJson(
@@ -775,7 +776,7 @@ export default function DeviceModal({
                   `/api.php/devices/${editingItem.id}/config`,
                   {
                     method: 'PUT',
-                    body: JSON.stringify(configPayload)
+                    body: JSON.stringify({ ...configPayload, via_usb: true })
                   },
                   { requiresAuth: true }
                 )
@@ -918,19 +919,32 @@ export default function DeviceModal({
                 })
                 await usbWrite(command + '\n')
                 logger.log('✅ Configuration envoyée via USB')
+                
+                // Sauvegarder en base mais ne pas créer de commande UPDATE_CONFIG
+                // car elle a déjà été envoyée via USB
+                await fetchJson(
+                  fetchWithAuth,
+                  API_URL,
+                  `/api.php/devices/${data.device.id}/config`,
+                  {
+                    method: 'PUT',
+                    body: JSON.stringify({ ...configPayload, via_usb: true })
+                  },
+                  { requiresAuth: true }
+                )
+              } else {
+                // Pas de connexion USB, sauvegarder en base (créera une commande UPDATE_CONFIG pour OTA)
+                await fetchJson(
+                  fetchWithAuth,
+                  API_URL,
+                  `/api.php/devices/${data.device.id}/config`,
+                  {
+                    method: 'PUT',
+                    body: JSON.stringify(configPayload)
+                  },
+                  { requiresAuth: true }
+                )
               }
-              
-              // Toujours sauvegarder en base
-              await fetchJson(
-                fetchWithAuth,
-                API_URL,
-                `/api.php/devices/${data.device.id}/config`,
-                {
-                  method: 'PUT',
-                  body: JSON.stringify(configPayload)
-                },
-                { requiresAuth: true }
-              )
             } catch (configErr) {
               logger.warn('⚠️ Erreur sauvegarde configuration:', configErr)
             }

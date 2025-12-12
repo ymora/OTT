@@ -2123,6 +2123,216 @@ export default function DebugTab() {
           </div>
         </div>
 
+        {/* Statuts GPS, Réseau et Envoi de données */}
+        {isConnected && (
+          <div className="mb-6">
+            <div className="card">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+                📊 Statut Système
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Statut Réseau */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">📡</span>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Réseau</h3>
+                  </div>
+                  {(() => {
+                    // Extraire TOUS les statuts réseau des logs récents (ordre chronologique inverse)
+                    const networkLogs = [...allLogs]
+                      .reverse()
+                      .filter(log => 
+                        log.line.includes('État connexion') || 
+                        log.line.includes('Réseau=') || 
+                        log.line.includes('GPRS=')
+                      )
+                    
+                    // Prendre le log le plus récent (premier dans la liste inversée = le dernier chronologiquement)
+                    const latestNetworkLog = networkLogs[0]
+                    
+                    if (latestNetworkLog) {
+                      const line = latestNetworkLog.line
+                      // Pattern amélioré pour capturer OK ou KO (pas juste OK|KO littéral)
+                      const reseauMatch = line.match(/Réseau=([OKKO]+)/i)
+                      const gprsMatch = line.match(/GPRS=([OKKO]+)/i)
+                      const reseau = reseauMatch ? reseauMatch[1].toUpperCase() : null
+                      const gprs = gprsMatch ? gprsMatch[1].toUpperCase() : null
+                      
+                      // Calculer le temps écoulé depuis ce log
+                      const timeAgo = Math.floor((Date.now() - new Date(latestNetworkLog.timestamp).getTime()) / 1000)
+                      
+                      return (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium px-2 py-1 rounded ${
+                              reseau === 'OK' 
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                                : reseau === 'KO'
+                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'
+                            }`}>
+                              Réseau: {reseau || 'N/A'}
+                            </span>
+                            {timeAgo < 60 && (
+                              <span className="text-xs text-gray-500 dark:text-gray-500">
+                                ({timeAgo}s)
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium px-2 py-1 rounded ${
+                              gprs === 'OK' 
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                                : gprs === 'KO'
+                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'
+                            }`}>
+                              GPRS: {gprs || 'N/A'}
+                            </span>
+                          </div>
+                          {usbStreamLastMeasurement?.rssi != null && (
+                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                              RSSI: {usbStreamLastMeasurement.rssi} dBm
+                            </div>
+                          )}
+                          {/* Afficher un indicateur si le statut a changé récemment */}
+                          {networkLogs.length > 1 && (() => {
+                            const previousLog = networkLogs[1]
+                            const prevLine = previousLog.line
+                            const prevReseauMatch = prevLine.match(/Réseau=([OKKO]+)/i)
+                            const prevGprsMatch = prevLine.match(/GPRS=([OKKO]+)/i)
+                            const prevReseau = prevReseauMatch ? prevReseauMatch[1].toUpperCase() : null
+                            const prevGprs = prevGprsMatch ? prevGprsMatch[1].toUpperCase() : null
+                            
+                            const hasChanged = (reseau !== prevReseau || gprs !== prevGprs) && timeAgo < 30
+                            
+                            if (hasChanged) {
+                              return (
+                                <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                                  ⚠️ Changement récent
+                                </div>
+                              )
+                            }
+                            return null
+                          })()}
+                        </div>
+                      )
+                    }
+                    
+                    // Fallback si pas de log réseau mais RSSI disponible
+                    if (usbStreamLastMeasurement?.rssi != null) {
+                      return (
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          RSSI: {usbStreamLastMeasurement.rssi} dBm
+                        </div>
+                      )
+                    }
+                    
+                    return (
+                      <div className="text-sm text-gray-500 dark:text-gray-500">
+                        En attente...
+                      </div>
+                    )
+                  })()}
+                </div>
+                
+                {/* Statut GPS */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">📍</span>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">GPS</h3>
+                  </div>
+                  {(() => {
+                    const hasGps = usbStreamLastMeasurement?.latitude != null && 
+                                   usbStreamLastMeasurement?.longitude != null
+                    
+                    if (hasGps) {
+                      return (
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-green-700 dark:text-green-400">
+                            ✅ Actif
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            {usbStreamLastMeasurement.latitude.toFixed(4)}, {usbStreamLastMeasurement.longitude.toFixed(4)}
+                          </div>
+                        </div>
+                      )
+                    }
+                    
+                    // Vérifier dans les logs si GPS est mentionné
+                    const gpsLog = [...allLogs].reverse().find(log => 
+                      log.line.includes('GPS') || log.line.includes('latitude')
+                    )
+                    
+                    if (gpsLog && gpsLog.line.includes('GPS=null')) {
+                      return (
+                        <div className="text-xs text-gray-500 dark:text-gray-500">
+                          ❌ Désactivé
+                        </div>
+                      )
+                    }
+                    
+                    return (
+                      <div className="text-sm text-gray-500 dark:text-gray-500">
+                        Non disponible
+                      </div>
+                    )
+                  })()}
+                </div>
+                
+                {/* Confirmation Envoi de Données */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">✅</span>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Envoi OTA</h3>
+                  </div>
+                  {(() => {
+                    // Chercher la dernière confirmation d'envoi
+                    const sendLog = [...allLogs].reverse().find(log => 
+                      log.line.includes('Envoi des données effectué') ||
+                      log.line.includes('[MODEM] ✅ Envoi des données effectué')
+                    )
+                    
+                    if (sendLog) {
+                      const timeAgo = Math.floor((Date.now() - new Date(sendLog.timestamp).getTime()) / 1000)
+                      return (
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-green-700 dark:text-green-400">
+                            ✅ Données envoyées
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            Il y a {timeAgo < 60 ? `${timeAgo}s` : `${Math.floor(timeAgo / 60)}min`}
+                          </div>
+                        </div>
+                      )
+                    }
+                    
+                    // Chercher "Prêt pour envoi"
+                    const readyLog = [...allLogs].reverse().find(log => 
+                      log.line.includes('Prêt pour envoi de données')
+                    )
+                    
+                    if (readyLog) {
+                      return (
+                        <div className="text-xs text-yellow-700 dark:text-yellow-400">
+                          ⏳ Prêt pour envoi...
+                        </div>
+                      )
+                    }
+                    
+                    return (
+                      <div className="text-sm text-gray-500 dark:text-gray-500">
+                        En attente...
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Console de logs USB */}
         <div className="mb-6">
           <div className="mb-4 flex items-start justify-between gap-4">

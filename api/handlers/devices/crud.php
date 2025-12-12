@@ -662,15 +662,17 @@ function handleUpdateDevice($device_id) {
                     ? (extractYearFromSerial($deviceSerial) ?: date('y'))
                     : date('y');
                 
-                // Construire le nom du dispositif avec le nom du patient
-                $firstName = trim($patient['first_name'] ?? '');
-                $lastName = trim($patient['last_name'] ?? '');
-                
-                if (empty($firstName) && empty($lastName)) {
-                    // Fallback si pas de nom
-                    $newDeviceName = sprintf('OTT-%s-Patient-%d', $year, $patientId);
+                // Construire le nom du dispositif SANS le nom du patient (pour éviter la redondance dans le tableau)
+                // Le nom du patient sera affiché uniquement dans la colonne "Patient"
+                // Format: OTT-YY où YY est l'année (ou numéro sérial si disponible)
+                $deviceSerial = $device['device_serial'] ?? null;
+                if ($deviceSerial && is_string($deviceSerial) && preg_match('/\d{2}/', $deviceSerial, $matches)) {
+                    // Extraire les 2 derniers chiffres du serial comme numéro
+                    $number = substr($deviceSerial, -2);
+                    $newDeviceName = sprintf('OTT-%s', $number);
                 } else {
-                    $newDeviceName = sprintf('OTT-%s-%s %s', $year, $firstName, $lastName);
+                    // Utiliser l'année si pas de serial
+                    $newDeviceName = sprintf('OTT-%s', $year);
                 }
                 
                 $updates[] = "device_name = :device_name_patient";

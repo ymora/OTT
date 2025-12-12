@@ -186,7 +186,8 @@ function handleGetNotificationsQueue() {
     
     try {
         // Compter le total
-        $countStmt = $pdo->query("SELECT COUNT(*) FROM notifications_queue");
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM notifications_queue");
+        $countStmt->execute();
         $total = intval($countStmt->fetchColumn());
         
         $stmt = $pdo->prepare("

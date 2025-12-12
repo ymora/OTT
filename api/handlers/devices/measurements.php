@@ -135,6 +135,32 @@ function handlePostMeasurement() {
                     $updateParams['firmware_version'] = $firmware_version;
                 }
                 
+                // Mettre à jour le device_serial si le firmware envoie un serial valide (pas temporaire)
+                // et que le dispositif n'a pas de serial ou a un serial temporaire
+                $device_serial_from_payload = $input['device_serial'] ?? null;
+                $isSerialTemporary = $device_serial_from_payload && (
+                    strpos($device_serial_from_payload, 'OTT-XX-XXX') !== false ||
+                    strpos($device_serial_from_payload, 'TEMP-') === 0
+                );
+                $hasSerial = !empty($device['device_serial']);
+                $hasTemporarySerial = $hasSerial && (
+                    strpos($device['device_serial'], 'OTT-XX-XXX') !== false ||
+                    strpos($device['device_serial'], 'TEMP-') === 0
+                );
+                
+                if ($device_serial_from_payload && !$isSerialTemporary) {
+                    // Le firmware envoie un serial valide
+                    if (!$hasSerial || $hasTemporarySerial || $device['device_serial'] !== $device_serial_from_payload) {
+                        // Mettre à jour le serial si :
+                        // - Le dispositif n'a pas de serial
+                        // - Le dispositif a un serial temporaire
+                        // - Le serial est différent
+                        $updateFields[] = 'device_serial = :device_serial';
+                        $updateParams['device_serial'] = $device_serial_from_payload;
+                        error_log("[Measurement] Mise à jour device_serial pour device_id=$device_id: '{$device['device_serial']}' → '$device_serial_from_payload'");
+                    }
+                }
+                
                 // Gestion de la position
                 if ($latitude !== null && $longitude !== null) {
                     if ($latitude >= -90 && $latitude <= 90 && $longitude >= -180 && $longitude <= 180) {
@@ -209,13 +235,14 @@ function handlePostMeasurement() {
             
             try {
                 // Vérifier si les colonnes GPS existent dans measurements
-                $checkGpsStmt = $pdo->query("
+                $checkGpsStmt = $pdo->prepare("
                     SELECT EXISTS (
                         SELECT 1 FROM information_schema.columns 
                         WHERE table_name = 'measurements' 
                         AND column_name = 'latitude'
                     ) as has_latitude
                 ");
+                $checkGpsStmt->execute();
                 $gpsCheck = $checkGpsStmt->fetch(PDO::FETCH_ASSOC);
                 $hasGpsColumns = ($gpsCheck['has_latitude'] === true || $gpsCheck['has_latitude'] === 't' || $gpsCheck['has_latitude'] === 1);
                 
@@ -438,7 +465,7 @@ function handleGetDeviceHistory($device_id) {
     
     try {
         // Vérifier si les colonnes GPS existent dans measurements
-        $checkGpsColumns = $pdo->query("
+        $checkGpsColumns = $pdo->prepare("
             SELECT EXISTS (
                 SELECT 1 FROM information_schema.columns 
                 WHERE table_name = 'measurements' 
@@ -449,17 +476,47 @@ function handleGetDeviceHistory($device_id) {
                 WHERE table_name = 'measurements' 
                 AND column_name = 'longitude'
             ) as has_longitude
-        ")->fetch(PDO::FETCH_ASSOC);
+        ");
+        $checkGpsColumns->execute();
+        $checkGpsColumns = $checkGpsColumns->fetch(PDO::FETCH_ASSOC);
         
         $hasGpsColumns = ($checkGpsColumns['has_latitude'] === true || $checkGpsColumns['has_latitude'] === 't' || $checkGpsColumns['has_latitude'] === 1) &&
                          ($checkGpsColumns['has_longitude'] === true || $checkGpsColumns['has_longitude'] === 't' || $checkGpsColumns['has_longitude'] === 1);
         
-        // Compter le total
+        // Vérifier si la colonne deleted_at existe
+        $checkDeletedAtStmt = $pdo->prepare("
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'measurements' 
+                AND column_name = 'deleted_at'
+            ) as has_deleted_at
+        ");
+        $checkDeletedAtStmt->execute();
+        $checkDeletedAt = $checkDeletedAtStmt->fetch(PDO::FETCH_ASSOC);
+        $hasDeletedAt = $checkDeletedAt && $checkDeletedAt['has_deleted_at'];
+        
+        // Gérer l'affichage des archives
+        $showArchived = isset($_GET['show_archived']) && ($_GET['show_archived'] === 'true' || $_GET['show_archived'] === '1');
+        
+        // Filtrer les mesures archivées selon le paramètre
+        $deletedAtFilter = "";
+        if ($hasDeletedAt) {
+            if ($showArchived) {
+                // Afficher uniquement les mesures archivées
+                $deletedAtFilter = " AND m.deleted_at IS NOT NULL";
+            } else {
+                // Exclure les mesures archivées (comportement par défaut)
+                $deletedAtFilter = " AND m.deleted_at IS NULL";
+            }
+        }
+        
+        // Compter le total selon le filtre
         $countSql = "
             SELECT COUNT(*)
             FROM measurements m
             JOIN devices d ON m.device_id = d.id
             WHERE m.device_id = :device_id
+            $deletedAtFilter
         ";
         $countStmt = $pdo->prepare($countSql);
         $countStmt->execute(['device_id' => $device_id]);
@@ -476,6 +533,7 @@ function handleGetDeviceHistory($device_id) {
                 FROM measurements m
                 JOIN devices d ON m.device_id = d.id
                 WHERE m.device_id = :device_id 
+                $deletedAtFilter
                 ORDER BY m.timestamp DESC 
                 LIMIT :limit OFFSET :offset
             ";
@@ -489,6 +547,7 @@ function handleGetDeviceHistory($device_id) {
                 FROM measurements m
                 JOIN devices d ON m.device_id = d.id
                 WHERE m.device_id = :device_id 
+                $deletedAtFilter
                 ORDER BY m.timestamp DESC 
                 LIMIT :limit OFFSET :offset
             ";
@@ -594,26 +653,29 @@ function handleDiagnosticMeasurements() {
         $diagnostic = [];
         
         // 1. Compter les dispositifs
-        $stmt = $pdo->query("SELECT COUNT(*) FROM devices WHERE deleted_at IS NULL");
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM devices WHERE deleted_at IS NULL");
+        $stmt->execute();
         $diagnostic['devices_count'] = (int)$stmt->fetchColumn();
         
         // 2. Compter les mesures totales
-        $stmt = $pdo->query("SELECT COUNT(*) FROM measurements");
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM measurements");
+        $stmt->execute();
         $diagnostic['measurements_total'] = (int)$stmt->fetchColumn();
         
         // 3. Compter les mesures des dernières 24h
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT COUNT(*) 
             FROM measurements m
             JOIN devices d ON m.device_id = d.id
             WHERE m.timestamp >= NOW() - INTERVAL '24 HOURS'
             AND d.deleted_at IS NULL
         ");
+        $stmt->execute();
         $diagnostic['measurements_24h'] = (int)$stmt->fetchColumn();
         
         // 4. Liste des dispositifs avec nombre de mesures
         // Inclure aussi les dispositifs avec last_seen récent mais sans mesures (incohérence)
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT d.id, d.sim_iccid, d.device_name, d.device_serial, 
                    COUNT(m.id) as measurement_count,
                    MAX(m.timestamp) as last_measurement,
@@ -629,10 +691,11 @@ function handleDiagnosticMeasurements() {
             GROUP BY d.id, d.sim_iccid, d.device_name, d.device_serial, d.last_seen
             ORDER BY last_measurement DESC NULLS LAST, d.last_seen DESC NULLS LAST
         ");
+        $stmt->execute();
         $diagnostic['devices'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         // 5. Dernières 10 mesures
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT m.id, m.device_id, d.sim_iccid, d.device_name, 
                    m.timestamp, m.flowrate, m.battery, m.signal_strength, m.device_status
             FROM measurements m
@@ -641,10 +704,11 @@ function handleDiagnosticMeasurements() {
             ORDER BY m.timestamp DESC
             LIMIT 10
         ");
+        $stmt->execute();
         $diagnostic['latest_measurements'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         // 6. Dispositifs sans mesures
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT d.id, d.sim_iccid, d.device_name, d.device_serial, d.last_seen
             FROM devices d
             LEFT JOIN measurements m ON d.id = m.device_id
@@ -652,10 +716,11 @@ function handleDiagnosticMeasurements() {
             AND m.id IS NULL
             ORDER BY d.last_seen DESC NULLS LAST
         ");
+        $stmt->execute();
         $diagnostic['devices_without_measurements'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         // 7. Statistiques par dispositif (mesures 24h)
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT d.sim_iccid, d.device_name, COUNT(m.id) as count, MAX(m.timestamp) as last_measurement
             FROM measurements m
             JOIN devices d ON m.device_id = d.id
@@ -664,6 +729,7 @@ function handleDiagnosticMeasurements() {
             GROUP BY d.id, d.sim_iccid, d.device_name
             ORDER BY last_measurement DESC
         ");
+        $stmt->execute();
         $diagnostic['measurements_by_device_24h'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         echo json_encode([
@@ -703,21 +769,114 @@ function handleDeleteMeasurement($measurement_id) {
             return;
         }
         
-        // Supprimer la mesure
-        $deleteStmt = $pdo->prepare("DELETE FROM measurements WHERE id = :id");
-        $deleteStmt->execute(['id' => $measurement_id]);
+        // Vérifier si la colonne deleted_at existe
+        $checkDeletedAtStmt = $pdo->prepare("
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'measurements' 
+                AND column_name = 'deleted_at'
+            ) as has_deleted_at
+        ");
+        $checkDeletedAtStmt->execute();
+        $checkDeletedAt = $checkDeletedAtStmt->fetch(PDO::FETCH_ASSOC);
+        $hasDeletedAt = $checkDeletedAt && $checkDeletedAt['has_deleted_at'];
         
-        error_log("[Measurement] ✅ Mesure $measurement_id supprimée définitivement par admin (device_id: {$measurement['device_id']})");
+        // Déterminer l'action : archive=true pour archivage, permanent=true pour suppression définitive
+        $archive = isset($_GET['archive']) && $_GET['archive'] === 'true';
+        $permanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
         
-        echo json_encode([
-            'success' => true,
-            'message' => 'Mesure supprimée définitivement'
-        ]);
+        if ($archive && $hasDeletedAt) {
+            // Archivage (soft delete) - marquer comme supprimé avec deleted_at
+            $updateStmt = $pdo->prepare("UPDATE measurements SET deleted_at = NOW() WHERE id = :id");
+            $updateStmt->execute(['id' => $measurement_id]);
+            
+            error_log("[Measurement] ✅ Mesure $measurement_id archivée par admin (device_id: {$measurement['device_id']})");
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Mesure archivée'
+            ]);
+        } else {
+            // Suppression définitive
+            $deleteStmt = $pdo->prepare("DELETE FROM measurements WHERE id = :id");
+            $deleteStmt->execute(['id' => $measurement_id]);
+            
+            error_log("[Measurement] ✅ Mesure $measurement_id supprimée définitivement par admin (device_id: {$measurement['device_id']})");
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Mesure supprimée définitivement'
+            ]);
+        }
         
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleDeleteMeasurement] ❌ ERREUR: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
+/**
+ * PATCH /api.php/measurements/:id
+ * Restaurer une mesure archivée (admin uniquement)
+ */
+function handleRestoreMeasurement($measurement_id) {
+    global $pdo;
+    
+    requireAdmin();
+    
+    try {
+        // Vérifier si la colonne deleted_at existe
+        $checkDeletedAtStmt = $pdo->prepare("
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'measurements' 
+                AND column_name = 'deleted_at'
+            ) as has_deleted_at
+        ");
+        $checkDeletedAtStmt->execute();
+        $checkDeletedAt = $checkDeletedAtStmt->fetch(PDO::FETCH_ASSOC);
+        $hasDeletedAt = $checkDeletedAt && $checkDeletedAt['has_deleted_at'];
+        
+        if (!$hasDeletedAt) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'La fonctionnalité de restauration n\'est pas disponible (colonne deleted_at absente)']);
+            return;
+        }
+        
+        // Vérifier que la mesure existe et est archivée
+        $stmt = $pdo->prepare("SELECT id, device_id, deleted_at FROM measurements WHERE id = :id");
+        $stmt->execute(['id' => $measurement_id]);
+        $measurement = $stmt->fetch();
+        
+        if (!$measurement) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Mesure non trouvée']);
+            return;
+        }
+        
+        if ($measurement['deleted_at'] === null) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Cette mesure n\'est pas archivée']);
+            return;
+        }
+        
+        // Restaurer la mesure (définir deleted_at à NULL)
+        $updateStmt = $pdo->prepare("UPDATE measurements SET deleted_at = NULL WHERE id = :id");
+        $updateStmt->execute(['id' => $measurement_id]);
+        
+        error_log("[Measurement] ✅ Mesure $measurement_id restaurée par admin (device_id: {$measurement['device_id']})");
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Mesure restaurée'
+        ]);
+        
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleRestoreMeasurement] ❌ ERREUR: ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }

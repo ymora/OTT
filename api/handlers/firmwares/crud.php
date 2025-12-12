@@ -49,12 +49,13 @@ function handleGetFirmwares() {
         // Vérifier si la colonne status existe
         $hasStatusColumn = false;
         try {
-            $checkStmt = $pdo->query("
+            $checkStmt = $pdo->prepare("
                 SELECT EXISTS (
                     SELECT 1 FROM information_schema.columns 
                     WHERE table_name = 'firmware_versions' AND column_name = 'status'
                 )
             ");
+            $checkStmt->execute();
             $hasStatusColumn = $checkStmt->fetchColumn();
         } catch (Exception $e) {
             error_log('[handleGetFirmwares] ⚠️ Erreur vérification colonne status: ' . $e->getMessage());
@@ -71,7 +72,8 @@ function handleGetFirmwares() {
         }
         
         // Compter le total
-        $countStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM firmware_versions");
+        $countStmt->execute();
         $total = intval($countStmt->fetchColumn());
         
         // IMPORTANT: Exclure ino_content et bin_content (BYTEA) de la liste car :

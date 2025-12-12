@@ -44,6 +44,8 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const [copyLogsSuccess, setCopyLogsSuccess] = useState(false)
   const eventSourceRef = useRef(null)
   const compileLogsRef = useRef(null)
+  const statusCheckIntervalRef = useRef(null)
+  const timeoutRef = useRef(null)
 
   const { data, loading, refetch, invalidateCache } = useApiData(
     ['/api.php/firmwares'],
@@ -680,7 +682,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
       // Variables pour le monitoring de la connexion SSE
       let lastMessageTime = Date.now()
-      let statusCheckInterval = null
+      // statusCheckInterval est maintenant géré via statusCheckIntervalRef (déclaré avec useRef)
       const maxSilenceTime = 60000 // 60 secondes sans message = problème
       let messageCount = 0
 
@@ -738,9 +740,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
             }])
             resetCompilationState()
             eventSource.close()
-            if (statusCheckInterval) {
-              clearInterval(statusCheckInterval)
-              statusCheckInterval = null
+            if (statusCheckIntervalRef.current) {
+              clearInterval(statusCheckIntervalRef.current)
+              statusCheckIntervalRef.current = null
             }
             refetch() // Rafraîchir la liste des firmwares
           } else if (data.type === 'error') {
@@ -752,9 +754,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
             }])
             resetCompilationState()
             eventSource.close()
-            if (statusCheckInterval) {
-              clearInterval(statusCheckInterval)
-              statusCheckInterval = null
+            if (statusCheckIntervalRef.current) {
+              clearInterval(statusCheckIntervalRef.current)
+              statusCheckIntervalRef.current = null
             }
             refetch() // Rafraîchir la liste des firmwares
           } else {
@@ -777,7 +779,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
       }
 
       // Ajouter un timeout de sécurité pour détecter les connexions qui se ferment silencieusement
-      statusCheckInterval = setInterval(() => {
+      statusCheckIntervalRef.current = setInterval(() => {
         const timeSinceLastMessage = Date.now() - lastMessageTime
         if (timeSinceLastMessage > maxSilenceTime && compiling) {
           setCompileLogs(prev => [...prev, {
@@ -801,12 +803,18 @@ export default function InoEditorTab({ onUploadSuccess }) {
                     }])
                     resetCompilationState()
                     refetch()
-                    clearInterval(statusCheckInterval)
+                    if (statusCheckIntervalRef.current) {
+                      clearInterval(statusCheckIntervalRef.current)
+                      statusCheckIntervalRef.current = null
+                    }
                   } else if (firmware.status === 'error') {
                     setError(`Erreur de compilation: ${firmware.error_message || 'Erreur inconnue'}`)
                     resetCompilationState()
                     refetch()
-                    clearInterval(statusCheckInterval)
+                    if (statusCheckIntervalRef.current) {
+                      clearInterval(statusCheckIntervalRef.current)
+                      statusCheckIntervalRef.current = null
+                    }
                   }
                 }
               }
@@ -838,7 +846,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
         
         // Ne pas fermer immédiatement - attendre un peu pour voir si la connexion se rétablit
         // EventSource essaie automatiquement de se reconnecter
-        setTimeout(() => {
+        createTimeoutWithCleanup(() => {
           // Si la connexion est fermée (readyState === 2), vérifier le statut du firmware
           if (eventSource.readyState === EventSource.CLOSED) {
             // Vérifier le statut du firmware après 3 secondes (plus rapide)
@@ -858,7 +866,10 @@ export default function InoEditorTab({ onUploadSuccess }) {
                       }])
                       resetCompilationState()
                       refetch()
-                      clearInterval(statusCheckInterval)
+                      if (statusCheckIntervalRef.current) {
+                        clearInterval(statusCheckIntervalRef.current)
+                        statusCheckIntervalRef.current = null
+                      }
                     } else if (firmware.status === 'compiling') {
                       setCompileLogs(prev => [...prev, {
                         timestamp: new Date().toLocaleTimeString('fr-FR'),
@@ -869,7 +880,10 @@ export default function InoEditorTab({ onUploadSuccess }) {
                       setError(`Erreur de compilation: ${firmware.error_message || 'Erreur inconnue'}`)
                       resetCompilationState()
                       refetch()
-                      clearInterval(statusCheckInterval)
+                      if (statusCheckIntervalRef.current) {
+                        clearInterval(statusCheckIntervalRef.current)
+                        statusCheckIntervalRef.current = null
+                      }
                     }
                   }
                 }

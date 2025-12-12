@@ -627,11 +627,21 @@
     <h3>🔁 Flux de données</h3>
     <ul>
         <li><strong>Montant (device → cloud)</strong> : le firmware mesure (débit, batterie) toutes les 5 min, propage via HTTPS/JSON vers <code>/api.php/devices/measurements</code> et <code>/logs</code>.</li>
-        <li><strong>USB streaming</strong> : En mode USB, envoi toutes les secondes via Web Serial API, parsing JSON côté React, affichage temps réel dans terminal.</li>
+        <li><strong>USB streaming</strong> : En mode USB, envoi toutes les secondes via Web Serial API, parsing JSON côté React, affichage temps réel dans terminal. <strong>⚠️ Important</strong> : Le mode USB sert uniquement à visualiser ce qui se passe en live. Le firmware continue de fonctionner normalement et d'envoyer en OTA. Aucun envoi séparé n'est effectué depuis le dashboard pour éviter les doublons.</li>
         <li><strong>Persisté</strong> : l'API Docker (Render) écrit en PostgreSQL (tables <code>devices</code>, <code>measurements</code>, <code>alerts</code>, <code>audit_logs</code>…), via PDO.</li>
         <li><strong>Descendant</strong> : le Dashboard Next.js (GitHub Pages) appelle l'API (<code>NEXT_PUBLIC_API_URL</code>) pour stats, cartes, notifications, OTA.</li>
         <li><strong>Auth</strong> : Next.js poste sur <code>/api.php/auth/login</code>, stocke le JWT (LocalStorage) et <code>fetchWithAuth</code> ajoute <code>Authorization: Bearer ...</code> à chaque requête.</li>
     </ul>
+    
+    <h4>📤 Logs de Confirmation d'Envoi de Données</h4>
+    <p>Le firmware affiche une séquence de logs pour confirmer l'envoi réussi des mesures :</p>
+    <pre><code>[MODEM] ✅ Prêt pour envoi de données
+[MODEM] 📊 État connexion: Réseau=OK | GPRS=OK
+[API] 📤 URL: https://ott-jbln.onrender.com:443/api.php/devices/measurements
+[HTTP] POST /api.php/devices/measurements → Status: 200
+[API] ✅ Mesure reçue par la base de données avec succès
+[MODEM] ✅ Envoi des données effectué !</code></pre>
+    <p>Le log final <code>[MODEM] ✅ Envoi des données effectué !</code> confirme que la transmission OTA a été complétée avec succès. Ce log n'apparaît que si l'envoi a réussi (status HTTP 200-299).</p>
     
     <h3>📁 Structure du Projet</h3>
     
@@ -1039,6 +1049,15 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h3>📊 Base de Données PostgreSQL</h3>
     <p>Le schéma comprend <strong>16 tables</strong> : devices, patients, measurements, alerts, device_logs, users, roles, permissions, device_configurations, firmware_versions, etc.</p>
     
+    <h4>📦 Archivage des Mesures</h4>
+    <p>La table <code>measurements</code> inclut une colonne <code>deleted_at</code> (TIMESTAMPTZ) pour l'archivage logiciel (soft delete) :</p>
+    <ul>
+        <li><strong>Archivage</strong> : Les mesures peuvent être archivées via <code>DELETE /api.php/measurements/{id}?archive=true</code>, ce qui définit <code>deleted_at</code> sans supprimer l'enregistrement</li>
+        <li><strong>Restauration</strong> : Les mesures archivées peuvent être restaurées via <code>PATCH /api.php/measurements/{id}</code> avec <code>{deleted_at: null}</code> (admin only)</li>
+        <li><strong>Filtrage</strong> : Par défaut, les requêtes excluent les mesures archivées (<code>deleted_at IS NULL</code>), sauf si le paramètre <code>show_archived=true</code> est fourni</li>
+        <li><strong>Suppression définitive</strong> : Les administrateurs peuvent supprimer définitivement une mesure via <code>DELETE /api.php/measurements/{id}?permanent=true</code></li>
+    </ul>
+    
     <h3>⚡ Performance & Cache</h3>
     <ul>
         <li><strong>Cache Redis</strong> : Système de cache avec support Redis optionnel (variables <code>REDIS_HOST</code>, <code>REDIS_PORT</code>, <code>REDIS_PASSWORD</code>)</li>
@@ -1067,9 +1086,14 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li><code>GET/POST/PUT/DELETE /api.php/devices</code> - Gestion des dispositifs (avec pagination)</li>
         <li><code>GET/POST/PUT/DELETE /api.php/patients</code> - Gestion des patients (avec pagination)</li>
         <li><code>POST /api.php/devices/measurements</code> - Enregistrement des mesures</li>
+        <li><code>GET /api.php/devices/{id}/history</code> - Historique des mesures d'un dispositif (avec filtres <code>show_archived</code>)</li>
+        <li><code>DELETE /api.php/measurements/{id}?archive=true</code> - Archivage d'une mesure (soft delete)</li>
+        <li><code>DELETE /api.php/measurements/{id}?permanent=true</code> - Suppression définitive d'une mesure (admin only)</li>
+        <li><code>PATCH /api.php/measurements/{id}</code> - Restauration d'une mesure archivée (admin only)</li>
         <li><code>GET /api.php/alerts</code> - Gestion des alertes (avec pagination)</li>
         <li><code>GET /api.php/commands</code> - Liste des commandes (avec pagination, admin only)</li>
         <li><code>GET/POST/PUT/DELETE /api.php/users</code> - Gestion des utilisateurs (avec pagination, admin only)</li>
+        <li><code>POST /api.php/migrate</code> - Exécution de scripts SQL de migration (admin only)</li>
         <li><code>GET /api.php/docs/openapi.json</code> - Documentation OpenAPI/Swagger</li>
     </ul>
     
@@ -1105,6 +1129,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li><strong>🔌 Dispositifs OTT</strong> : Gestion complète (liste, carte, détails, OTA, commandes, logs, streaming USB)</li>
         <li><strong>🏥 Patients</strong> : Gestion des patients avec assignation/désassignation de dispositifs</li>
         <li><strong>👨‍💼 Utilisateurs</strong> : Gestion des utilisateurs, rôles et permissions (admin uniquement)</li>
+        <li><strong>🛠️ Migrations</strong> : Page admin pour exécuter des scripts SQL de migration (admin uniquement)</li>
         <li><strong>⚙️ Outils</strong> : Upload firmware, compilation, flash USB, streaming USB, configuration dispositifs</li>
         <li><strong>📚 Documentation</strong> : 3 documentations intégrées (Présentation, Développeurs, Commerciale) + Suivi temps</li>
     </ul>
@@ -1119,6 +1144,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li><strong>Streaming USB</strong> : Visualiser les mesures en temps réel via USB avec affichage min/max (débit, batterie, RSSI)</li>
         <li><strong>Carte Interactive</strong> : Visualisation géographique des dispositifs avec Leaflet</li>
         <li><strong>Logs</strong> : Consulter les mesures, logs et alertes de chaque dispositif</li>
+        <li><strong>Archivage Mesures</strong> : Administrateurs peuvent archiver, restaurer ou supprimer définitivement les mesures dans l'historique</li>
     </ul>
     
     <h4>⚙️ Outils Techniques</h4>
@@ -1149,9 +1175,25 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     
     <h4>Gestion des Archives</h4>
     <ul>
-        <li>Éléments archivés : seule action de restauration disponible</li>
-        <li>Exclusion automatique des statistiques et fonctionnalités actives</li>
-        <li>Affichage visuel avec badge "🗄️ Archivé"</li>
+        <li><strong>Mesures</strong> : Les administrateurs peuvent archiver, restaurer ou supprimer définitivement les mesures depuis le modal d'historique</li>
+        <li><strong>Filtre archives</strong> : Bouton "Afficher archivées" pour voir les mesures archivées dans l'historique</li>
+        <li><strong>Éléments archivés</strong> : Exclusion automatique des statistiques et fonctionnalités actives</li>
+        <li><strong>Affichage visuel</strong> : Badge "🗄️ Archivé" pour les éléments archivés, icônes d'action conditionnelles (archive/restauration)</li>
+    </ul>
+    
+    <h4>🛠️ Page Migrations Admin</h4>
+    <ul>
+        <li><strong>Interface</strong> : Page dédiée accessible depuis le menu (admin uniquement) pour exécuter des scripts SQL</li>
+        <li><strong>Scripts disponibles</strong> : Sélection dans une liste déroulante (migration complète, migrations spécifiques, scripts de nettoyage)</li>
+        <li><strong>Sécurité</strong> : Vérification du rôle admin côté serveur avant exécution</li>
+        <li><strong>Exemples</strong> : Nettoyage des noms de dispositifs, ajout de colonnes (deleted_at), migrations de schéma</li>
+    </ul>
+    
+    <h4>✅ Modals de Confirmation Unifiés</h4>
+    <ul>
+        <li><strong>ConfirmModal</strong> : Composant unifié pour toutes les confirmations utilisateur (remplace window.confirm)</li>
+        <li><strong>UX améliorée</strong> : Interface cohérente avec design system, messages personnalisables</li>
+        <li><strong>Utilisation</strong> : Archivage, suppression, restauration, et autres actions critiques</li>
     </ul>
     
     <h4>Déploiement</h4>
@@ -1882,10 +1924,20 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <ul>
         <li><strong>devices</strong> : Dispositifs IoT OTT (PK: id, UNIQUE: sim_iccid, device_serial)</li>
         <li><strong>device_configurations</strong> : Configuration des dispositifs (firmware, OTA, calibration)</li>
-        <li><strong>measurements</strong> : Mesures de débit et batterie</li>
+        <li><strong>measurements</strong> : Mesures de débit et batterie (inclut colonne <code>deleted_at</code> pour l'archivage logiciel)</li>
         <li><strong>alerts</strong> : Alertes système (batterie faible, offline, etc.)</li>
         <li><strong>device_logs</strong> : Logs événements dispositifs</li>
         <li><strong>device_commands</strong> : Commandes envoyées aux dispositifs</li>
+    </ul>
+    
+    <h4>📦 Archivage des Mesures (Soft Delete)</h4>
+    <p>La table <code>measurements</code> utilise un système d'archivage logiciel avec la colonne <code>deleted_at</code> :</p>
+    <ul>
+        <li><strong>Colonne</strong> : <code>deleted_at TIMESTAMPTZ</code> (nullable, NULL = actif, valeur = archivé)</li>
+        <li><strong>Archivage</strong> : Les mesures archivées conservent leurs données mais sont exclues des requêtes par défaut</li>
+        <li><strong>Restauration</strong> : Les mesures peuvent être restaurées en remettant <code>deleted_at</code> à NULL</li>
+        <li><strong>Suppression définitive</strong> : Option disponible uniquement pour les administrateurs</li>
+        <li><strong>Migration</strong> : Script disponible : <code>sql/migration_add_measurements_deleted_at.sql</code></li>
     </ul>
     
     <h4>🔄 Firmwares</h4>
@@ -1916,6 +1968,15 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
         <li>Suppression d'un device → suppression automatique des measurements, alerts, logs, commands associés</li>
         <li>Suppression d'un patient → les devices associés ont leur patient_id mis à NULL (ON DELETE SET NULL)</li>
         <li>Suppression d'un utilisateur → les audit_logs conservent l'user_id (ON DELETE SET NULL)</li>
+    </ul>
+    
+    <h4>🛠️ Migrations SQL</h4>
+    <p>Des scripts SQL de migration sont disponibles dans <code>sql/</code> :</p>
+    <ul>
+        <li><strong><code>migration.sql</strong></code> : Migration complète (schéma + migrations)</li>
+        <li><strong><code>migration_add_measurements_deleted_at.sql</strong></code> : Ajout de la colonne <code>deleted_at</code> à <code>measurements</code></li>
+        <li><strong><code>migration_cleanup_device_names.sql</strong></code> : Nettoyage des noms de dispositifs (suppression des noms de patients)</li>
+        <li><strong>Exécution</strong> : Via la page "🛠️ Migrations" dans le dashboard (admin uniquement) ou directement en base de données</li>
     </ul>
     
     <div class="alert alert-info">

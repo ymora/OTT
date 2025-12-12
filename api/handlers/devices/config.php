@@ -236,7 +236,11 @@ function handleUpdateDeviceConfig($device_id) {
                 }
             }
             
-            if (!empty($configPayload)) {
+            // Ne créer une commande UPDATE_CONFIG que si elle n'a pas déjà été envoyée via USB
+            // Si via_usb=true dans la requête, ne pas créer de commande (déjà envoyée)
+            $viaUsb = isset($input['via_usb']) && $input['via_usb'] === true;
+            
+            if (!empty($configPayload) && !$viaUsb) {
                 $cmdStmt = $pdo->prepare("
                     INSERT INTO device_commands (device_id, command, payload, status, created_at)
                     VALUES (:device_id, 'UPDATE_CONFIG', :payload::jsonb, 'pending', NOW())
@@ -246,10 +250,12 @@ function handleUpdateDeviceConfig($device_id) {
                     'payload' => json_encode($configPayload)
                 ]);
                 error_log("[Config Update] Commande UPDATE_CONFIG créée pour dispositif $device_id : " . json_encode($configPayload));
+            } else if ($viaUsb && !empty($configPayload)) {
+                error_log("[Config Update] Commande UPDATE_CONFIG non créée pour dispositif $device_id (déjà envoyée via USB)");
             }
             
             auditLog('device.config_updated', 'device', $device_id, $old_config, $input);
-            echo json_encode(['success' => true, 'command_created' => !empty($configPayload)]);
+            echo json_encode(['success' => true, 'command_created' => !empty($configPayload) && !$viaUsb]);
         } else {
             error_log("[Config Update] Aucun champ à mettre à jour pour device_id=$device_id");
             http_response_code(400);

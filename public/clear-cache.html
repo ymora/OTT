@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nettoyage du Cache</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .info { color: #3b82f6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Nettoyage du Cache</h1>
+        <p>Cette page nettoie le cache et les Service Workers pour forcer le rechargement des fichiers.</p>
+        
+        <button onclick="clearEverything()">Nettoyer Tout</button>
+        <button onclick="clearServiceWorkers()">Désenregistrer Service Workers</button>
+        <button onclick="clearCache()">Vider le Cache</button>
+        <button onclick="location.reload(true)">Recharger la Page</button>
+        
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        async function clearServiceWorkers() {
+            log('Démarrage désenregistrement des Service Workers...');
+            
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    log(`Nombre de Service Workers trouvés: ${registrations.length}`);
+                    
+                    for (let registration of registrations) {
+                        const unregistered = await registration.unregister();
+                        log(`Service Worker désenregistré: ${unregistered ? '✅ Succès' : '⚠️ Échec'}`);
+                    }
+                    
+                    log('✅ Tous les Service Workers ont été désenregistrés', 'success');
+                } catch (err) {
+                    log(`❌ Erreur: ${err.message}`, 'error');
+                }
+            } else {
+                log('ℹ️ Service Workers non supportés par ce navigateur', 'info');
+            }
+        }
+
+        async function clearCache() {
+            log('Démarrage nettoyage du cache...');
+            
+            if ('caches' in window) {
+                try {
+                    const cacheNames = await caches.keys();
+                    log(`Nombre de caches trouvés: ${cacheNames.length}`);
+                    
+                    for (let cacheName of cacheNames) {
+                        const deleted = await caches.delete(cacheName);
+                        log(`Cache supprimé "${cacheName}": ${deleted ? '✅ Succès' : '⚠️ Échec'}`);
+                    }
+                    
+                    log('✅ Tous les caches ont été supprimés', 'success');
+                } catch (err) {
+                    log(`❌ Erreur: ${err.message}`, 'error');
+                }
+            } else {
+                log('ℹ️ Cache API non supportée par ce navigateur', 'info');
+            }
+        }
+
+        async function clearEverything() {
+            log('🧹 Démarrage nettoyage complet...', 'info');
+            
+            await clearServiceWorkers();
+            await clearCache();
+            
+            // Nettoyer aussi localStorage et sessionStorage si nécessaire
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                log('✅ localStorage et sessionStorage vidés', 'success');
+            } catch (err) {
+                log(`⚠️ Erreur lors du nettoyage du storage: ${err.message}`, 'error');
+            }
+            
+            log('✅ Nettoyage complet terminé ! Redirection dans 2 secondes...', 'success');
+            
+            setTimeout(() => {
+                window.location.href = '/dashboard';
+            }, 2000);
+        }
+
+        // Auto-exécuter au chargement
+        window.addEventListener('load', () => {
+            log('Page de nettoyage de cache chargée', 'info');
+            log('Cliquez sur "Nettoyer Tout" pour vider complètement le cache', 'info');
+        });
+    </script>
+</body>
+</html>
+

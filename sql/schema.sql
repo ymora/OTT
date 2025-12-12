@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS measurements (
   device_status VARCHAR(50),
   latitude NUMERIC(10,8),
   longitude NUMERIC(11,8),
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 CREATE INDEX idx_measurements_device_time ON measurements(device_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_measurements_location ON measurements(latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;

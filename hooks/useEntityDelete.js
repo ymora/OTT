@@ -16,7 +16,7 @@ import logger from '@/lib/logger'
  * @param {string} entityName - Nom de l'entité (pour les messages)
  * @param {Function} getEntityName - Fonction pour obtenir le nom affiché de l'entité
  * @param {Function} onCloseModal - Fonction optionnelle pour fermer un modal si l'entité supprimée est en cours d'édition
- * @returns {Object} { deleteLoading, deleteError, handleDelete, setDeleteError }
+ * @returns {Object} { deleteLoading, deleteError, handleDelete, setDeleteError, confirmDelete, setConfirmDelete, itemToDelete, setItemToDelete }
  */
 export function useEntityDelete({
   fetchWithAuth,
@@ -28,22 +28,32 @@ export function useEntityDelete({
 }) {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState(null)
+  const [deleteEndpoint, setDeleteEndpoint] = useState(null)
 
-  const handleDelete = useCallback(async (itemToDelete, endpoint) => {
+  // Fonction pour initier la suppression (ouvre le modal de confirmation)
+  const handleDelete = useCallback((itemToDelete, endpoint) => {
+    setItemToDelete(itemToDelete)
+    setDeleteEndpoint(endpoint)
+    setConfirmDelete(true)
+  }, [])
+
+  // Fonction pour confirmer et exécuter la suppression
+  const executeDelete = useCallback(async () => {
+    if (!itemToDelete) return
+
     const displayName = getEntityName(itemToDelete)
     
-    if (!confirm(`⚠️ Êtes-vous sûr de vouloir supprimer ${entityName} "${displayName}" ?\n\nCette action est irréversible.`)) {
-      return
-    }
-
     try {
       setDeleteLoading(true)
       setDeleteError(null)
+      setConfirmDelete(false)
       
       const response = await fetchJson(
         fetchWithAuth,
         API_URL,
-        endpoint || `/api.php/${entityName}s/${itemToDelete.id}`,
+        deleteEndpoint || `/api.php/${entityName}s/${itemToDelete.id}`,
         { method: 'DELETE' },
         { requiresAuth: true }
       )
@@ -56,6 +66,10 @@ export function useEntityDelete({
         if (onCloseModal && itemToDelete.id) {
           onCloseModal(itemToDelete.id)
         }
+        
+        // Réinitialiser l'état
+        setItemToDelete(null)
+        setDeleteEndpoint(null)
       } else {
         throw new Error(response.error || 'Erreur lors de la suppression')
       }
@@ -63,17 +77,32 @@ export function useEntityDelete({
       const errorMessage = err.error || err.message || 'Erreur lors de la suppression'
       setDeleteError(errorMessage)
       logger.error(`❌ Erreur suppression ${entityName}:`, errorMessage)
+      // Ne pas réinitialiser itemToDelete en cas d'erreur pour permettre de réessayer
       throw err
     } finally {
       setDeleteLoading(false)
     }
-  }, [fetchWithAuth, API_URL, refetch, entityName, getEntityName, onCloseModal])
+  }, [fetchWithAuth, API_URL, refetch, entityName, getEntityName, onCloseModal, itemToDelete, deleteEndpoint])
+
+  // Fonction pour annuler la suppression
+  const cancelDelete = useCallback(() => {
+    setConfirmDelete(false)
+    setItemToDelete(null)
+    setDeleteEndpoint(null)
+    setDeleteError(null)
+  }, [])
 
   return {
     deleteLoading,
     deleteError,
     handleDelete,
-    setDeleteError
+    setDeleteError,
+    confirmDelete,
+    setConfirmDelete,
+    itemToDelete,
+    setItemToDelete,
+    executeDelete,
+    cancelDelete
   }
 }
 

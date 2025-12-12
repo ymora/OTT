@@ -14,14 +14,13 @@ $rootDir = Split-Path -Parent $scriptDir
 # Changer vers le répertoire racine du projet
 Set-Location $rootDir
 
-# S'assurer que le répertoire de résultats existe
+# S'assurer que le répertoire de résultats existe (chemin correct sans doublon)
 $resultsDir = Join-Path $rootDir "audit-complet\resultats"
 if (-not (Test-Path $resultsDir)) {
     New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
 }
 
 # Nettoyer les résultats précédents avant de lancer l'audit
-$resultsDir = Join-Path $rootDir "audit-complet\resultats"
 if (Test-Path $resultsDir) {
     $oldResults = Get-ChildItem -Path $resultsDir -Filter "audit_resultat_*.txt" -ErrorAction SilentlyContinue
     if ($oldResults) {
