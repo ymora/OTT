@@ -379,3 +379,4 @@ else if (cmd.verb == "GET_STATUS") {
 
 **Aucune modification obligatoire. Le système est cohérent et bien conçu.**
 
+

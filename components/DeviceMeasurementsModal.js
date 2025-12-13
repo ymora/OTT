@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { fetchJson } from '@/lib/api'
+import { useApiCall, useModalState } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -13,10 +13,9 @@ import Modal from '@/components/Modal'
  * Modal pour afficher l'historique des mesures d'un dispositif
  */
 export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
-  const { fetchWithAuth, API_URL, user } = useAuth()
+  const { user } = useAuth()
   const [measurements, setMeasurements] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const { loading, error, call } = useApiCall({ requiresAuth: true })
   const [showArchived, setShowArchived] = useState(false)
   const [deletingMeasurement, setDeletingMeasurement] = useState(null)
   const [archivingMeasurement, setArchivingMeasurement] = useState(null)
@@ -34,18 +33,9 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
   const loadMeasurements = useCallback(async () => {
     if (!device?.id) return
 
-    setLoading(true)
-    setError(null)
-    
     try {
       const url = `/api.php/devices/${device.id}/history${showArchived ? '?show_archived=true' : ''}`
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        url,
-        { method: 'GET' },
-        { requiresAuth: true }
-      )
+      const data = await call(url, { method: 'GET' })
       
       if (data.success && data.measurements) {
         setMeasurements(data.measurements)
@@ -54,25 +44,21 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
           logger.warn(`⚠️ Aucune mesure trouvée pour dispositif ${device.id} (${device.device_name || device.sim_iccid})`)
         }
       } else {
-        const errorMsg = data.error || 'Impossible de charger les mesures'
-        logger.error(`❌ Erreur API: ${errorMsg}`)
-        setError(errorMsg)
+        // Erreur déjà gérée par useApiCall
+        setMeasurements([])
       }
     } catch (err) {
-      logger.error('Erreur chargement mesures:', err)
-      setError(err.message || 'Erreur lors du chargement des mesures')
+      // Erreur déjà gérée par useApiCall
       setMeasurements([])
-    } finally {
-      setLoading(false)
     }
-  }, [device?.id, fetchWithAuth, API_URL, showArchived])
+  }, [device?.id, showArchived, call])
 
   useEffect(() => {
     if (isOpen && device?.id) {
       loadMeasurements()
     } else {
       setMeasurements([])
-      setError(null)
+      // Note: error est géré par useApiCall, pas besoin de le réinitialiser manuellement
       setSelectedMeasurements(new Set()) // Réinitialiser la sélection quand le modal se ferme
     }
   }, [isOpen, device?.id, loadMeasurements])
@@ -425,6 +411,13 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     document.body.removeChild(link)
   }
 
+  // Debug: logger pour vérifier que le composant est rendu
+  useEffect(() => {
+    if (isOpen) {
+      logger.debug('[DeviceMeasurementsModal] Modal ouvert, showArchived:', showArchived)
+    }
+  }, [isOpen, showArchived])
+
   return (
     <Modal
       isOpen={isOpen}
@@ -432,7 +425,38 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
       title={device ? `📊 Historique des mesures - ${device.device_name || device.sim_iccid || 'Dispositif'}` : 'Historique des mesures'}
       maxWidth="max-w-6xl"
     >
+      {/* Case à cocher pour afficher les archives - TOUJOURS VISIBLE - AVANT TOUT */}
+      <div 
+        className="w-full flex items-center justify-start mb-4 pb-3 border-b-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 rounded-lg"
+        style={{ display: 'flex', visibility: 'visible', opacity: 1, zIndex: 10 }}
+      >
+        <label 
+          className="flex items-center gap-3 cursor-pointer"
+          style={{ display: 'flex', visibility: 'visible', opacity: 1 }}
+        >
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => {
+              logger.debug('[DeviceMeasurementsModal] Checkbox changé:', e.target.checked)
+              setShowArchived(e.target.checked)
+            }}
+            className="w-6 h-6 text-blue-600 bg-white border-2 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
+            aria-label="Afficher les mesures archivées"
+            id="show-archived-checkbox"
+            style={{ display: 'block', visibility: 'visible', opacity: 1, width: '24px', height: '24px', flexShrink: 0 }}
+          />
+          <span 
+            className="text-base font-bold text-blue-900 dark:text-blue-100"
+            style={{ display: 'inline-block', visibility: 'visible', opacity: 1 }}
+          >
+            🗄️ Afficher les mesures archivées
+          </span>
+        </label>
+      </div>
+
       <div className="space-y-4">
+
         {error && (
           <ErrorMessage 
             error={error} 
@@ -463,19 +487,6 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
                   )}
                 </p>
                 <div className="flex items-center gap-3">
-                  {isAdmin && (
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showArchived}
-                        onChange={(e) => setShowArchived(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                      />
-                      <span className="text-sm text-blue-800 dark:text-blue-200">
-                        🗄️ Afficher les archives
-                      </span>
-                    </label>
-                  )}
                   <button
                     onClick={handleExportCSV}
                     className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
@@ -751,11 +762,11 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
         isOpen={confirmRestoreModal.isOpen}
         onClose={() => setConfirmRestoreModal({ isOpen: false, measurementId: null })}
         onConfirm={confirmRestoreMeasurement}
-        title="Restaurer une mesure"
+        title="♻️ Restaurer une mesure"
         message="Êtes-vous sûr de vouloir restaurer cette mesure ? Elle sera à nouveau visible dans l'historique."
         confirmText="Restaurer"
         cancelText="Annuler"
-        variant="info"
+        variant="success"
         loading={restoringMeasurement === confirmRestoreModal.measurementId}
       />
       

@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v2.0
+ *  OTT Firmware v2.5
  * ================================================================
  * 
  * MATÉRIEL : LILYGO TTGO T-A7670G ESP32 Dev Board
@@ -82,7 +82,7 @@ static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
 #define OTT_DEFAULT_ICCID "89330123456789012345"
 #endif
 
-// Numérotation automatique des dispositifs (v2.0)
+// Numérotation automatique des dispositifs (v2.5)
 // ================================================
 // À la sortie d'usine, le firmware est flashé avec le serial par défaut "OTT-XX-XXX"
 // 
@@ -125,7 +125,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "2.0"
+#define FIRMWARE_VERSION_STR "2.5"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -329,7 +329,7 @@ bool getDeviceLocationFast(float* latitude, float* longitude);
 void setup()
 {
   initSerial();
-  Serial.println(F("\n═══ OTT Firmware v2.0 ═══"));
+  Serial.println(F("\n═══ OTT Firmware v2.5 ═══"));
   Serial.printf("Serial: %s | ICCID: %s\n", 
                 DEVICE_SERIAL.c_str(), 
                 DEVICE_ICCID.substring(0, 10).c_str());
@@ -1272,12 +1272,13 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
     doc["longitude"] = *longitude;
   }
   
-  // Configuration
+  // Configuration essentielle seulement (pour réduire la taille des messages)
+  // La config complète est disponible via GET_CONFIG
   doc["interval_ms"] = intervalMs;
   doc["sleep_minutes"] = configuredSleepMinutes;
   doc["measurement_duration_ms"] = airflowSampleDelayMs;
   
-  // Coefficients de calibration
+  // Coefficients de calibration (essentiels pour les calculs)
   JsonArray calArray = doc.createNestedArray("calibration_coefficients");
   float a0 = isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0;
   float a1 = isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1;
@@ -1285,11 +1286,6 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   calArray.add(a0);
   calArray.add(a1);
   calArray.add(a2);
-  
-  // Paramètres de mesure
-  doc["airflow_passes"] = airflowPasses;
-  doc["airflow_samples_per_pass"] = airflowSamplesPerPass;
-  doc["airflow_delay_ms"] = airflowSampleDelayMs;
   
   // Timestamp
   doc["timestamp_ms"] = millis();
@@ -3427,37 +3423,51 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       Serial.printf("%s[OTA] ⚠️  Le dispositif continue avec la version actuelle\n", errorTimeStr.c_str());
       Serial.println(F("═══════════════════════════════════════════════════════════"));
     }
-  } else if (cmd.verb == "GET_STATUS") {
-    // Nouvelle commande : récupérer l'état complet du dispositif
+  } else if (cmd.verb == "GET_STATUS" || cmd.verb == "GET_CONFIG") {
+    // Commande : récupérer l'état complet ET toute la configuration du dispositif
     String timeStr = formatTimeFromMillis(millis());
-    Serial.printf("%s[CMD] 📊 GET_STATUS - Récupération état complet du dispositif...\n", timeStr.c_str());
+    Serial.printf("%s[CMD] 📊 %s - Récupération configuration complète du dispositif...\n", timeStr.c_str(), cmd.verb.c_str());
     
-    // Créer JSON avec état complet
-    DynamicJsonDocument statusDoc(1024);
+    // Créer JSON avec état complet et TOUTE la configuration
+    DynamicJsonDocument statusDoc(2048);  // Augmenté pour toute la config
     
     // Identifiants
     statusDoc["device_serial"] = DEVICE_SERIAL;
     statusDoc["sim_iccid"] = DEVICE_ICCID;
     statusDoc["firmware_version"] = FIRMWARE_VERSION;
+    statusDoc["device_name"] = buildDeviceName();
     
-    // Configuration actuelle
+    // Configuration complète (tous les paramètres stockés en NVS)
     statusDoc["sleep_minutes"] = configuredSleepMinutes;
-    statusDoc["gps_enabled"] = gpsEnabled;
-    statusDoc["roaming_enabled"] = roamingEnabled;
+    statusDoc["measurement_duration_ms"] = airflowSampleDelayMs;
     statusDoc["send_every_n_wakeups"] = sendEveryNWakeups;
     
-    // Calibration
-    JsonArray cal = statusDoc.createNestedArray("calibration_coefficients");
-    cal.add(isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0);
-    cal.add(isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1);
-    cal.add(isnan(CAL_OVERRIDE_A2) ? 0.0f : CAL_OVERRIDE_A2);
+    // Coefficients de calibration
+    JsonArray calArray = statusDoc.createNestedArray("calibration_coefficients");
+    float a0 = isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0;
+    float a1 = isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1;
+    float a2 = isnan(CAL_OVERRIDE_A2) ? 0.0f : CAL_OVERRIDE_A2;
+    calArray.add(a0);
+    calArray.add(a1);
+    calArray.add(a2);
     
-    // Mesures airflow
+    // Paramètres de mesure
     statusDoc["airflow_passes"] = airflowPasses;
     statusDoc["airflow_samples_per_pass"] = airflowSamplesPerPass;
     statusDoc["airflow_delay_ms"] = airflowSampleDelayMs;
     
-    // État modem
+    // GPS et roaming
+    statusDoc["gps_enabled"] = gpsEnabled;
+    statusDoc["roaming_enabled"] = roamingEnabled;
+    
+    // Paramètres modem (tous les timeouts)
+    statusDoc["watchdog_seconds"] = watchdogTimeoutSeconds;
+    statusDoc["modem_boot_timeout_ms"] = modemBootTimeoutMs;
+    statusDoc["sim_ready_timeout_ms"] = simReadyTimeoutMs;
+    statusDoc["network_attach_timeout_ms"] = networkAttachTimeoutMs;
+    statusDoc["modem_max_reboots"] = modemMaxReboots;
+    
+    // État modem (si disponible)
     statusDoc["modem_ready"] = modemReady;
     if (modemReady) {
       statusDoc["network_connected"] = modem.isNetworkConnected();
@@ -3465,11 +3475,62 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       int8_t csq = modem.getSignalQuality();
       statusDoc["signal_quality"] = csq;
       statusDoc["rssi"] = csqToRssi(csq);
+      
+      // État SIM (utiliser getSimStatus de TinyGsm)
+      SimStatus simStatus = modem.getSimStatus();
+      String simStatusStr = "UNKNOWN";
+      if (simStatus == SIM_READY) {
+        simStatusStr = "READY";
+      } else if (simStatus == SIM_LOCKED) {
+        simStatusStr = "LOCKED";
+      } else if (simStatus == SIM_ANTITHEFT_LOCKED) {
+        simStatusStr = "ANTITHEFT_LOCKED";
+      } else if (simStatus == SIM_ERROR) {
+        simStatusStr = "ERROR";
+      }
+      statusDoc["sim_status"] = simStatusStr;
+      
+      // Numéro de téléphone SIM (si disponible) - AT+CNUM
+      // Note: Certaines cartes SIM ne stockent pas le numéro, retournera vide
+      String simNumber = "";
+      modem.sendAT(F("+CNUM"));
+      if (modem.waitResponse(5000, GF("+CNUM:")) == 1) {
+        // Format: +CNUM: "","+33612345678",129,7,4
+        String response = modem.stream.readStringUntil('\n');
+        response.trim();
+        // Extraire le numéro entre les guillemets (chercher le deuxième numéro)
+        int firstQuote = response.indexOf('"');
+        if (firstQuote >= 0) {
+          int secondQuote = response.indexOf('"', firstQuote + 1);
+          if (secondQuote > firstQuote) {
+            // Premier numéro (peut être vide), chercher le deuxième
+            int thirdQuote = response.indexOf('"', secondQuote + 1);
+            int fourthQuote = response.indexOf('"', thirdQuote + 1);
+            if (thirdQuote >= 0 && fourthQuote > thirdQuote + 1) {
+              simNumber = response.substring(thirdQuote + 1, fourthQuote);
+            }
+          }
+        }
+        modem.waitResponse();
+      } else {
+        modem.waitResponse();
+      }
+      if (simNumber.length() > 0) {
+        statusDoc["sim_phone_number"] = simNumber;
+      }
+    } else {
+      statusDoc["sim_status"] = "MODEM_NOT_READY";
     }
     
-    // Réseau
+    // Réseau (toute la configuration réseau)
     statusDoc["apn"] = NETWORK_APN;
+    statusDoc["sim_pin"] = SIM_PIN;
     statusDoc["detected_operator"] = DETECTED_OPERATOR;
+    
+    // OTA (toute la configuration OTA)
+    statusDoc["ota_primary_url"] = otaPrimaryUrl;
+    statusDoc["ota_fallback_url"] = otaFallbackUrl;
+    statusDoc["ota_md5"] = otaExpectedMd5;
     
     // Niveau de log
     String logLevelStr = "INFO";
@@ -3486,23 +3547,30 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     statusDoc["uptime_ms"] = millis();
     statusDoc["watchdog_seconds"] = watchdogTimeoutSeconds;
     
+    // Type de réponse pour identification par le frontend
+    statusDoc["type"] = "config_response";
+    statusDoc["mode"] = "usb_stream";
+    
     // Sérialiser le status en string
     String statusStr;
     serializeJson(statusDoc, statusStr);
     
+    // Envoyer directement sur Serial (format JSON compatible avec le parser du frontend)
+    Serial.println(statusStr);
+    Serial.flush();
+    
     // Afficher un résumé
-    Serial.printf("%s[CMD] 📊 État récupéré:\n", timeStr.c_str());
+    Serial.printf("%s[CMD] 📊 Configuration complète envoyée:\n", timeStr.c_str());
     Serial.printf("%s      • Serial: %s | FW: %s\n", timeStr.c_str(), DEVICE_SERIAL.c_str(), FIRMWARE_VERSION);
     Serial.printf("%s      • Sleep: %dmin | GPS: %s | Roaming: %s\n", timeStr.c_str(), 
                   configuredSleepMinutes, gpsEnabled ? "ON" : "OFF", roamingEnabled ? "ON" : "OFF");
     Serial.printf("%s      • Modem: %s | USB: %s | Log: %s\n", timeStr.c_str(),
                   modemReady ? "OK" : "KO", usbModeActive ? "ON" : "OFF", logLevelStr.c_str());
+    Serial.printf("%s[CMD] ✅ Configuration complète envoyée (%d octets)\n", timeStr.c_str(), statusStr.length());
     
-    // Envoyer ACK avec payload contenant le status
-    bool ackOk = acknowledgeCommand(cmd, true, statusStr.c_str());
-    Serial.printf("%s[CMD] 📤 ACK avec status envoyé: %s (%d octets)\n", 
-                  timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec", statusStr.length());
-    sendLog("INFO", "GET_STATUS executed", "commands");
+    // Envoyer ACK (sans payload pour éviter duplication)
+    bool ackOk = acknowledgeCommand(cmd, true, "config sent");
+    sendLog("INFO", String(cmd.verb) + " envoyé - Configuration complète", "commands");
   } else {
     acknowledgeCommand(cmd, false, "verb not supported");
     sendLog("WARN", "Commande non supportée: " + cmd.verb, "commands");

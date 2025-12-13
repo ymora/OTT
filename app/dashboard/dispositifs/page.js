@@ -82,34 +82,12 @@ export default function OutilsPage() {
           d.device_name === identifier
         )
         
-        // ✨ AUTO-CRÉATION: Si le dispositif n'existe pas, le créer automatiquement
+        // ⚠️ AUTO-CRÉATION DÉSACTIVÉE: Ne pas créer automatiquement pour éviter les conflits
+        // Le dispositif apparaîtra dans le tableau via usbVirtualDevice mais ne sera pas enregistré en base
+        // L'utilisateur devra l'enregistrer manuellement s'il le souhaite
         if (!device) {
-          logger.log(`🆕 [AUTO-CREATE] Dispositif non trouvé (${identifier}), création automatique...`)
-          
-          const createPayload = {
-            device_name: updateData.device_name || `USB-${identifier.slice(-4)}`,
-            sim_iccid: updateData.sim_iccid || (identifier.startsWith('89') ? identifier : null),
-            device_serial: updateData.device_serial || (!identifier.startsWith('89') ? identifier : null),
-            firmware_version: firmwareVersion || null,
-            status: 'active', // La contrainte SQL n'accepte que 'active' ou 'inactive'
-            last_seen: updateData.last_seen || new Date().toISOString()
-          }
-          
-          if (updateData.last_battery !== undefined) createPayload.last_battery = updateData.last_battery
-          if (updateData.last_flowrate !== undefined) createPayload.last_flowrate = updateData.last_flowrate
-          if (updateData.last_rssi !== undefined) createPayload.last_rssi = updateData.last_rssi
-          
-          await fetchWithAuth(
-            `${API_URL}/api.php/devices`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(createPayload)
-            },
-            { requiresAuth: true }
-          )
-          
-          logger.log('✅ [AUTO-CREATE] Dispositif créé avec succès')
+          // Ne pas créer automatiquement - le dispositif apparaîtra via usbVirtualDevice
+          // Ne pas logger pour éviter le spam, mais ne pas bloquer non plus
           return
         }
         

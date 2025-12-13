@@ -2,14 +2,14 @@
 
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { fetchJson } from '@/lib/api'
+import { useApiCall } from '@/hooks'
 import logger from '@/lib/logger'
 
 export default function AdminMigrationsPage() {
-  const { fetchWithAuth, API_URL, user } = useAuth()
-  const [loading, setLoading] = useState(false)
+  const { user } = useAuth()
   const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
+  // Utiliser useApiCall pour simplifier la gestion des appels API
+  const { loading, error, call, setError } = useApiCall({ requiresAuth: true, autoReset: false })
 
   const isAdmin = user?.role_name === 'admin' || user?.role === 'admin' || user?.roles?.includes('admin')
 
@@ -19,24 +19,16 @@ export default function AdminMigrationsPage() {
       return
     }
 
-    setLoading(true)
-    setError(null)
     setResult(null)
 
     try {
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        '/api.php/migrate',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ file: migrationFile })
+      const data = await call('/api.php/migrate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
         },
-        { requiresAuth: true }
-      )
+        body: JSON.stringify({ file: migrationFile })
+      })
 
       if (data.success) {
         setResult({
@@ -46,7 +38,38 @@ export default function AdminMigrationsPage() {
         })
         logger.log(`✅ Migration ${migrationFile} exécutée avec succès`)
       } else {
-        setError(data.error || 'Erreur lors de l\'exécution de la migration')
+        // Construire un message d'erreur détaillé
+        const errorParts = []
+        errorParts.push(`❌ ${data.error || 'Erreur lors de l\'exécution de la migration'}`)
+        
+        if (data.logs && Array.isArray(data.logs) && data.logs.length > 0) {
+          errorParts.push('')
+          errorParts.push('📋 Détails:')
+          data.logs.forEach(log => {
+            errorParts.push(`  ${log}`)
+          })
+        }
+        
+        if (data.details) {
+          errorParts.push('')
+          errorParts.push('🔍 Informations techniques:')
+          if (Array.isArray(data.details)) {
+            data.details.forEach(detail => {
+              errorParts.push(`  ${detail}`)
+            })
+          } else if (typeof data.details === 'object') {
+            errorParts.push(`  ${JSON.stringify(data.details, null, 2)}`)
+          } else {
+            errorParts.push(`  ${data.details}`)
+          }
+        }
+        
+        if (data.code) {
+          errorParts.push('')
+          errorParts.push(`Code erreur: ${data.code}`)
+        }
+        
+        setError(errorParts.join('\n'))
       }
     } catch (err) {
       logger.error('Erreur migration:', err)
@@ -101,8 +124,6 @@ export default function AdminMigrationsPage() {
         stack: err.stack,
         fullError: err
       })
-    } finally {
-      setLoading(false)
     }
   }
 

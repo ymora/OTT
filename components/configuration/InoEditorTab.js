@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useTimers } from '@/hooks'
+import { useApiData, useTimers, useApiCall, useActionState } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import Modal from '@/components/Modal'
@@ -18,13 +18,14 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [currentStep, setCurrentStep] = useState(null)
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(null)
+  // Utiliser useActionState pour gérer error/success de manière unifiée
+  const { error, success, setError, setSuccess, reset: resetMessages } = useActionState({ resetOnNewAction: true })
+  // Utiliser useApiCall pour les appels API simples
+  const { loading: loadingIno, call: apiCall } = useApiCall({ requiresAuth: true })
   const [showVersionExistsModal, setShowVersionExistsModal] = useState(false)
   const [existingFirmware, setExistingFirmware] = useState(null)
   const [pendingFile, setPendingFile] = useState(null)
   const [editingFirmwareId, setEditingFirmwareId] = useState(null)
-  const [loadingIno, setLoadingIno] = useState(false)
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
   const [firmwareToDelete, setFirmwareToDelete] = useState(null)
   const [deletingFirmware, setDeletingFirmware] = useState(null)
@@ -244,26 +245,10 @@ export default function InoEditorTab({ onUploadSuccess }) {
     })
   }
 
-  // Vérifier si la version existe déjà
-  const checkVersionExists = async (version) => {
+  // Vérifier si la version existe déjà (utiliser useApiCall)
+  const checkVersionExists = useCallback(async (version) => {
     try {
-      const response = await fetchWithAuth(
-        `${API_URL}/api.php/firmwares/check-version/${encodeURIComponent(version)}`,
-        { method: 'GET' },
-        { requiresAuth: true }
-      )
-      
-      if (response.status === 404) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Endpoint de vérification non disponible')
-      }
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Erreur HTTP ${response.status}`)
-      }
-      
-      const data = await response.json()
+      const data = await apiCall(`/api.php/firmwares/check-version/${encodeURIComponent(version)}`, { method: 'GET' })
       
       if (!data.success) {
         throw new Error(data.error || 'Erreur API')
@@ -274,7 +259,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
       logger.error('Erreur vérification version:', err)
       throw err
     }
-  }
+  }, [apiCall])
 
   // Gérer la sélection de fichier
   const handleFileSelect = useCallback(async (e) => {

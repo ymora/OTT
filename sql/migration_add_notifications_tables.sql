@@ -96,3 +96,4 @@ CREATE INDEX IF NOT EXISTS idx_notifications_queue_patient ON notifications_queu
 SELECT 'MIGRATION NOTIFICATIONS COMPLETE' as status;
 
 
+

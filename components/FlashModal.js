@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useUsb } from '@/contexts/UsbContext'
 import { useSerialPort } from '@/components/SerialPortManager'
-import { useTimers } from '@/hooks'
+import { useTimers, useApiCall } from '@/hooks'
 import { ESPLoader } from 'esptool-js'
 import logger from '@/lib/logger'
 
@@ -17,8 +17,9 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
   const { fetchWithAuth, API_URL } = useAuth()
   const [firmwares, setFirmwares] = useState([])
   const [selectedFirmware, setSelectedFirmware] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  // Utiliser useApiCall pour le chargement des firmwares
+  const { loading, error: loadError, call: loadFirmwaresCall } = useApiCall({ requiresAuth: true, autoReset: false })
+  const [error, setError] = useState(null) // Pour les erreurs de flash/OTA
   const [flashing, setFlashing] = useState(false)
   const [flashProgress, setFlashProgress] = useState(0)
   const [terminalLogs, setTerminalLogs] = useState([])
@@ -82,20 +83,13 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
   // Charger les firmwares
   const loadFirmwares = useCallback(async () => {
     try {
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        '/api.php/firmwares',
-        {},
-        { requiresAuth: true }
-      )
+      const data = await loadFirmwaresCall('/api.php/firmwares', {})
       setFirmwares(data.firmwares || [])
     } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+      // Erreur déjà gérée par useApiCall (dans loadError)
+      setFirmwares([])
     }
-  }, [API_URL, fetchWithAuth])
+  }, [loadFirmwaresCall])
 
   // Charger au montage
   useEffect(() => {
@@ -870,9 +864,9 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
           </div>
 
           {/* Erreurs */}
-          {(error || serialError) && (
+          {(error || loadError || serialError) && (
             <div className="alert alert-warning text-sm">
-              {error || serialError}
+              {error || loadError || serialError}
             </div>
           )}
         </div>

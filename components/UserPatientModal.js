@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { fetchJson } from '@/lib/api'
+import { useApiCall } from '@/hooks'
 import ErrorMessage from '@/components/ErrorMessage'
 import { isValidEmail, isValidPhone } from '@/lib/utils'
 import logger from '@/lib/logger'
@@ -56,7 +57,8 @@ export default function UserPatientModal({
   const [formErrors, setFormErrors] = useState({})
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [loadingNotifPrefs, setLoadingNotifPrefs] = useState(false)
+  // Utiliser useApiCall pour le chargement des préférences de notifications
+  const { loading: loadingNotifPrefs, call: apiCall } = useApiCall({ requiresAuth: true })
   const [showPassword, setShowPassword] = useState(false)
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
   const [passwordConfirm, setPasswordConfirm] = useState('')
@@ -200,18 +202,11 @@ export default function UserPatientModal({
     if (!editingItem?.id) return
     
     try {
-      setLoadingNotifPrefs(true)
       const endpoint = type === 'user' 
         ? `/api.php/users/${editingItem.id}/notifications`
         : `/api.php/patients/${editingItem.id}/notifications`
       
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        endpoint,
-        {},
-        { requiresAuth: true }
-      )
+      const data = await apiCall(endpoint, { method: 'GET' })
       
       if (data.preferences) {
         // Convertir les booléens correctement, garder les strings (phone_number) et autres types
@@ -233,8 +228,7 @@ export default function UserPatientModal({
       }
     } catch (err) {
       logger.warn('Erreur chargement préférences:', err)
-    } finally {
-      setLoadingNotifPrefs(false)
+      // Erreur déjà gérée par useApiCall
     }
   }
   
