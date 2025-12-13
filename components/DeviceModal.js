@@ -1162,44 +1162,24 @@ export default function DeviceModal({
             )}
           </div>
 
-          {/* Deuxième ligne : SIM ICCID et Numéro de série */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* SIM ICCID - Lecture seule (vient de la SIM) */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                SIM ICCID
-              </label>
-              <input
-                type="text"
-                name="sim_iccid"
-                value={formData.sim_iccid || 'N/A'}
-                readOnly
-                disabled
-                className="input w-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
-                placeholder="Ex: 89314404000012345678"
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Lecture seule (vient de la SIM)</p>
-            </div>
-
-            {/* Numéro de série */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Numéro de série {editingItem?.id && <span className="text-xs text-gray-500">(non modifiable)</span>}
-              </label>
-              <input
-                type="text"
-                name="device_serial"
-                value={formData.device_serial || 'OTT-XXX (auto-généré)'}
-                onChange={handleInputChange}
-                disabled={!!editingItem?.id}
-                className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''} ${editingItem?.id ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' : ''}`}
-                placeholder="Auto-généré (OTT-001, OTT-002, etc.)"
-                title={editingItem?.id ? 'Le numéro de série ne peut pas être modifié (traçabilité médicale)' : 'Sera généré automatiquement'}
-              />
-              {formErrors.device_serial && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_serial}</p>
-              )}
-            </div>
+          {/* Numéro de série */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+              Numéro de série {editingItem?.id && <span className="text-xs text-gray-500">(non modifiable)</span>}
+            </label>
+            <input
+              type="text"
+              name="device_serial"
+              value={formData.device_serial || 'OTT-XXX (auto-généré)'}
+              onChange={handleInputChange}
+              disabled={!!editingItem?.id}
+              className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''} ${editingItem?.id ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' : ''}`}
+              placeholder="Auto-généré (OTT-001, OTT-002, etc.)"
+              title={editingItem?.id ? 'Le numéro de série ne peut pas être modifié (traçabilité médicale)' : 'Sera généré automatiquement'}
+            />
+            {formErrors.device_serial && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_serial}</p>
+            )}
           </div>
 
           {/* Section Informations SIM et Firmware */}
