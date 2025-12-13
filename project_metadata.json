@@ -1,0 +1,150 @@
+{
+  "technologies": [
+    "PHP API"
+  ],
+  "api": {
+    "baseUrl": "",
+    "endpoints": [
+      "/bootstrap/env_loader.php",
+      "/bootstrap/database.php",
+      "/bootstrap/notifications.php",
+      "/api/helpers.php",
+      "/api/helpers_sql.php",
+      "/api/validators.php",
+      "/api/cache.php",
+      "/api/handlers/auth.php",
+      "/api/handlers/devices/utils.php",
+      "/api/handlers/devices/crud.php",
+      "/api/handlers/devices/patients.php",
+      "/api/handlers/devices/measurements.php",
+      "/api/handlers/devices/commands.php",
+      "/api/handlers/devices/alerts.php",
+      "/api/handlers/devices/logs.php",
+      "/api/handlers/devices/config.php",
+      "/api/handlers/devices/ota.php",
+      "/api/handlers/devices/reports.php",
+      "/api/handlers/devices/demo.php",
+      "/api/handlers/firmwares.php",
+      "/api/handlers/notifications.php",
+      "/api/handlers/usb_logs.php",
+      "/api/handlers/database_audit.php",
+      "/.jwt_secret_cache",
+      "/sql",
+      "/^migration_[a-z0-9_]+\\.sql$/",
+      "/\\.sql$/",
+      "/^\\s*--/",
+      "/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/",
+      "/api.php",
+      "/api.php",
+      "/api.php",
+      "/api.php",
+      "/../public/SUIVI_TEMPS_FACTURATION.md",
+      "/scripts/deploy/generate_time_tracking.sh",
+      "/../public/",
+      "/../",
+      "/../scripts/",
+      "/../scripts/deploy/generate_time_tracking.sh",
+      "/../public/",
+      "/migrate.html",
+      "/public/migrate.html",
+      "/diagnostic-measurements.html",
+      "/public/diagnostic-measurements.html",
+      "/devices/test/create",
+      "/api/handlers/firmwares/debug_logs.php",
+      "/admin/migrate-complete",
+      "/admin/diagnostic/measurements",
+      "/admin/database-audit",
+      "/audit",
+      "/audit",
+      "/api/openapi.json"
+    ],
+    "authEndpoint": "/api.php/auth/login"
+  },
+  "hasFrontend": true,
+  "hasFirmware": true,
+  "hasDatabase": true,
+  "firmware": {
+    "version": "2.5",
+    "directory": "/hardware/firmware",
+    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino"
+  },
+  "frontend": {
+    "routes": [
+      {
+        "route": "/",
+        "name": "C:\\",
+        "file": "/app/page.js"
+      },
+      {
+        "route": "/dashboard",
+        "name": "dashboard",
+        "file": "/app/dashboard/page.js"
+      },
+      {
+        "route": "/dashboard/admin-migrations",
+        "name": "admin-migrations",
+        "file": "/app/dashboard/admin-migrations/page.js"
+      },
+      {
+        "route": "/dashboard/dispositifs",
+        "name": "dispositifs",
+        "file": "/app/dashboard/dispositifs/page.js"
+      },
+      {
+        "route": "/dashboard/documentation",
+        "name": "documentation",
+        "file": "/app/dashboard/documentation/page.js"
+      },
+      {
+        "route": "/dashboard/patients",
+        "name": "patients",
+        "file": "/app/dashboard/patients/page.js"
+      },
+      {
+        "route": "/dashboard/users",
+        "name": "users",
+        "file": "/app/dashboard/users/page.js"
+      }
+    ],
+    "framework": "Next.js",
+    "buildTool": ""
+  },
+  "database": {
+    "schemaFile": "/sql/schema.sql",
+    "expectedTables": [
+      "roles",
+      "permissions",
+      "role_permissions",
+      "users",
+      "patients",
+      "devices",
+      "measurements",
+      "alerts",
+      "device_logs",
+      "device_configurations",
+      "firmware_versions",
+      "user_notifications_preferences",
+      "patient_notifications_preferences",
+      "notifications_queue",
+      "audit_logs",
+      "device_commands",
+      "usb_logs"
+    ],
+    "type": "PostgreSQL"
+  },
+  "projectType": "nextjs",
+  "detectedAt": "2025-12-13 22:42:51",
+  "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
+  "hasApi": true,
+  "project": {
+    "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
+    "name": "ott-dashboard",
+    "company": "",
+    "version": "3.1.0"
+  },
+  "github": {
+    "baseUrl": "https://ymora.github.io/OTT",
+    "basePath": "/OTT",
+    "repo": "ymora/OTT"
+  }
+}
