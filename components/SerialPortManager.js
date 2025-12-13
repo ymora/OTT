@@ -23,49 +23,61 @@ export function useSerialPort() {
   // Vérifier le support de Web Serial API
   const isSupported = typeof navigator !== 'undefined' && 'serial' in navigator
   
-  // Initialiser le système de partage
+  // Initialiser le système de partage (une seule fois au montage)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       portSharingRef.current = getUsbPortSharing()
       
+      // Debounce pour éviter les oscillations
+      let stateChangeTimeout = null
+      
       // Écouter les changements d'état
       const unsubscribeState = portSharingRef.current.on('state-changed', async (data) => {
-        const wasMaster = isMasterRef.current
-        isMasterRef.current = data.isMaster
-        logger.debug('[SerialPortManager] State changed:', data)
-        
-        // Si on n'est plus master mais qu'on a un port ouvert, le fermer automatiquement
-        if (!data.isMaster && wasMaster && isConnected && port) {
-          logger.warn('[SerialPortManager] No longer master, closing port automatically...')
-          try {
-            // Fermer le port sans notifier le système de partage (car on n'est plus master)
-            if (readerRef.current) {
-              try {
-                await readerRef.current.cancel()
-                // Note: reader n'a pas de méthode release() dans Web Serial API
-              } catch (e) {
-                // Ignorer les erreurs
-              }
-              readerRef.current = null
-            }
-            if (writerRef.current) {
-              // Note: writer n'a pas de méthode release() dans Web Serial API
-              writerRef.current = null
-            }
-            if (port) {
-              try {
-                await port.close()
-              } catch (e) {
-                // Ignorer les erreurs
-              }
-            }
-            setIsConnected(false)
-            setPort(null)
-            logger.debug('[SerialPortManager] Port closed after losing master status')
-          } catch (err) {
-            logger.error('[SerialPortManager] Error closing port after losing master status:', err)
-          }
+        // Debounce : attendre 500ms avant de traiter le changement d'état
+        if (stateChangeTimeout) {
+          clearTimeout(stateChangeTimeout)
         }
+        
+        stateChangeTimeout = setTimeout(async () => {
+          const wasMaster = isMasterRef.current
+          isMasterRef.current = data.isMaster
+          logger.debug('[SerialPortManager] State changed (debounced):', data)
+          
+          // Si on n'est plus master mais qu'on a un port ouvert, le fermer automatiquement
+          // Utiliser les refs pour éviter les dépendances
+          const currentPort = port
+          const currentIsConnected = isConnected
+          
+          if (!data.isMaster && wasMaster && currentIsConnected && currentPort) {
+            logger.warn('[SerialPortManager] No longer master, closing port automatically...')
+            try {
+              // Fermer le port sans notifier le système de partage (car on n'est plus master)
+              if (readerRef.current) {
+                try {
+                  await readerRef.current.cancel()
+                } catch (e) {
+                  // Ignorer les erreurs
+                }
+                readerRef.current = null
+              }
+              if (writerRef.current) {
+                writerRef.current = null
+              }
+              if (currentPort) {
+                try {
+                  await currentPort.close()
+                } catch (e) {
+                  // Ignorer les erreurs
+                }
+              }
+              setIsConnected(false)
+              setPort(null)
+              logger.debug('[SerialPortManager] Port closed after losing master status')
+            } catch (err) {
+              logger.error('[SerialPortManager] Error closing port after losing master status:', err)
+            }
+          }
+        }, 500) // Debounce de 500ms
       })
       
       // Écouter les données reçues depuis un autre onglet (si on n'est pas master)
@@ -77,11 +89,15 @@ export function useSerialPort() {
       })
       
       return () => {
+        if (stateChangeTimeout) {
+          clearTimeout(stateChangeTimeout)
+        }
         unsubscribeState()
         unsubscribeData()
       }
     }
-  }, [isConnected])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Dépendances vides = initialisation unique
 
   // Demander l'accès à un port série
   const requestPort = useCallback(async () => {
@@ -626,14 +642,19 @@ export function useSerialPort() {
     }
   }, [port, isConnected])
 
-  // Nettoyer à la déconnexion
+  // Nettoyer uniquement au démontage du composant (pas à chaque changement d'état)
   useEffect(() => {
     return () => {
-      if (isConnected) {
-        disconnect()
+      // Nettoyer uniquement au démontage du composant
+      if (port && (port.readable || port.writable)) {
+        logger.debug('[SerialPortManager] Cleanup: fermeture du port au démontage')
+        disconnect().catch(err => {
+          logger.warn('[SerialPortManager] Cleanup: erreur lors de la fermeture:', err)
+        })
       }
     }
-  }, [isConnected, disconnect])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Dépendances vides = uniquement au démontage
 
   return {
     port,

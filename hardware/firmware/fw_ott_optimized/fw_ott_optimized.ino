@@ -202,6 +202,8 @@ static const unsigned long OTA_CHECK_INTERVAL_MS = 30000;  // Vérifier commande
 static bool usbModeActive = false;
 static unsigned long lastUsbCheck = 0;
 static const unsigned long USB_CHECK_INTERVAL_MS = 500;  // Vérifier USB toutes les 500ms
+static int usbStateCounter = 0;  // Compteur pour debounce (éviter oscillations)
+static const int USB_STATE_THRESHOLD = 3;  // Nombre de vérifications consécutives nécessaires pour changer d'état
 static bool watchdogConfigured = false;
 static String otaPrimaryUrl;
 static String otaFallbackUrl;
@@ -443,20 +445,38 @@ void loop()
   unsigned long now = millis();
   
   // =========================================================================
-  // DÉTECTION USB DYNAMIQUE (vérification toutes les 500ms)
+  // DÉTECTION USB DYNAMIQUE (vérification toutes les 500ms avec debounce)
   // =========================================================================
   if (now - lastUsbCheck >= USB_CHECK_INTERVAL_MS) {
     lastUsbCheck = now;
     bool currentUsbState = Serial.availableForWrite() > 0;
     
+    // Debounce : compter les états consécutifs pour éviter les oscillations
+    if (currentUsbState) {
+      // USB détecté : incrémenter le compteur
+      if (usbStateCounter < USB_STATE_THRESHOLD) {
+        usbStateCounter++;
+      }
+    } else {
+      // USB non détecté : décrémenter le compteur
+      if (usbStateCounter > 0) {
+        usbStateCounter--;
+      }
+    }
+    
+    // Changer d'état seulement si le compteur atteint le seuil
+    bool newUsbState = (usbStateCounter >= USB_STATE_THRESHOLD);
+    
     // Transition OFF → ON (USB branché)
-    if (currentUsbState && !usbModeActive) {
+    if (newUsbState && !usbModeActive) {
       usbModeActive = true;
+      usbStateCounter = USB_STATE_THRESHOLD;  // Verrouiller l'état
       Serial.println(F("\n🔌 USB connecté → Streaming 1s"));
     }
     // Transition ON → OFF (USB débranché)
-    else if (!currentUsbState && usbModeActive) {
+    else if (!newUsbState && usbModeActive) {
       usbModeActive = false;
+      usbStateCounter = 0;  // Réinitialiser le compteur
       Serial.println(F("\n📡 USB déconnecté → Mode hybride"));
     }
   }
@@ -1318,14 +1338,42 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
 // Gérer les commandes série (config, calibration, etc.)
 void handleSerialCommand(const String& command)
 {
-  // Ignorer les lignes qui sont du JSON (données de streaming sortantes)
-  // Les lignes JSON commencent par '{' et ne sont pas des commandes
   String trimmed = command;
   trimmed.trim();
   
-  // Ignorer les lignes JSON complètes (commencent par '{')
+  // Vérifier si c'est une commande JSON entrante (commence par '{' et contient "command")
   if (trimmed.startsWith("{")) {
-    // C'est du JSON de streaming, pas une commande - ignorer silencieusement
+    // C'est peut-être une commande JSON entrante, vérifier
+    if (trimmed.indexOf("\"command\"") >= 0 || trimmed.indexOf("'command'") >= 0) {
+      // C'est une commande JSON entrante, la traiter
+      StaticJsonDocument<512> cmdDoc;
+      DeserializationError error = deserializeJson(cmdDoc, trimmed);
+      
+      if (!error && cmdDoc.containsKey("command")) {
+        String cmdVerb = cmdDoc["command"].as<String>();
+        cmdVerb.toUpperCase();
+        
+        // Créer une structure Command pour compatibilité avec handleCommand
+        Command cmd;
+        cmd.id = 0; // Pas d'ID pour les commandes USB
+        cmd.verb = cmdVerb;
+        cmd.payloadRaw = ""; // Le payload sera dans cmdDoc si nécessaire
+        
+        // Extraire le payload si présent
+        if (cmdDoc.containsKey("payload") || cmdDoc.containsKey("config")) {
+          String payloadStr;
+          serializeJson(cmdDoc, payloadStr);
+          cmd.payloadRaw = payloadStr;
+        }
+        
+        // Traiter la commande
+        uint32_t dummySleep = configuredSleepMinutes;
+        handleCommand(cmd, dummySleep);
+        return;
+      }
+    }
+    
+    // C'est du JSON de streaming sortant, pas une commande - ignorer silencieusement
     return;
   }
   
