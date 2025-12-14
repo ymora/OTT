@@ -5,6 +5,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useApiCall } from '@/hooks'
 import logger from '@/lib/logger'
 import { fetchJson } from '@/lib/api'
+import Modal from '@/components/Modal'
+import ErrorMessage from '@/components/ErrorMessage'
+import SuccessMessage from '@/components/SuccessMessage'
+import LoadingSpinner from '@/components/LoadingSpinner'
 
 export default function AdminMigrationsPage() {
   const { user, fetchWithAuth, API_URL } = useAuth()
@@ -12,6 +16,11 @@ export default function AdminMigrationsPage() {
   const [migrationHistory, setMigrationHistory] = useState([])
   const [showHidden, setShowHidden] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
+  const [success, setSuccess] = useState(null)
+  const [actionError, setActionError] = useState(null)
+  const [deletingMigration, setDeletingMigration] = useState(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [migrationToDelete, setMigrationToDelete] = useState(null)
   // Utiliser useApiCall pour simplifier la gestion des appels API
   const { loading, error, call, setError } = useApiCall({ requiresAuth: true, autoReset: false })
 
@@ -218,7 +227,8 @@ export default function AdminMigrationsPage() {
         executedAt: history?.executed_at,
         executedBy: history?.executed_by_email,
         duration: history?.duration_ms,
-        historyId: history?.id,
+        historyId: history?.id, // Permet la suppression même si non appliquée avec succès (status != 'success')
+        status: history?.status,
         hidden: history?.hidden || false
       }
     }).filter(m => showHidden || !m.hidden)
@@ -255,18 +265,37 @@ export default function AdminMigrationsPage() {
     }
   }
 
-  const deleteMigration = async (historyId) => {
+  const openDeleteModal = (migration) => {
+    // Toujours ouvrir le modal, même si pas de historyId
+    // Le modal gérera l'affichage du message approprié
+    setMigrationToDelete(migration)
+    setShowDeleteModal(true)
+    setActionError(null)
+  }
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false)
+    setMigrationToDelete(null)
+    setActionError(null)
+  }
+
+  const deleteMigration = async () => {
     if (!isAdmin) return
     
-    if (!confirm('⚠️ Êtes-vous sûr de vouloir supprimer définitivement cette migration de l\'historique ? Cette action est irréversible.')) {
+    // Si pas de historyId, il n'y a rien à supprimer
+    if (!migrationToDelete?.historyId) {
+      setActionError('Cette migration n\'a pas d\'entrée dans l\'historique à supprimer')
       return
     }
     
     try {
+      setDeletingMigration(migrationToDelete.historyId)
+      setActionError(null)
+      
       const data = await fetchJson(
         fetchWithAuth,
         API_URL,
-        `/api.php/migrations/history/${historyId}`,
+        `/api.php/migrations/history/${migrationToDelete.historyId}`,
         { method: 'DELETE' },
         { requiresAuth: true }
       )
@@ -283,45 +312,48 @@ export default function AdminMigrationsPage() {
         if (historyData.success) {
           setMigrationHistory(historyData.history || [])
         }
+        setSuccess('Migration supprimée définitivement de l\'historique')
         logger.log('✅ Migration supprimée définitivement')
+        closeDeleteModal()
       }
     } catch (err) {
       logger.error('Erreur suppression migration:', err)
-      setError('Erreur lors de la suppression de la migration: ' + (err.message || 'Erreur inconnue'))
+      setActionError('Erreur lors de la suppression de la migration: ' + (err.message || 'Erreur inconnue'))
+    } finally {
+      setDeletingMigration(null)
     }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-3xl font-bold">🛠️ Migrations Base de Données</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">
+          Exécutez des scripts SQL pour mettre à jour la base de données. 
+          <strong className="text-red-600 dark:text-red-400"> Utilisez avec précaution !</strong>
+        </p>
+      </div>
+
+      {/* Toggle pour afficher les migrations masquées */}
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showHidden}
+            onChange={(e) => setShowHidden(e.target.checked)}
+            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+          />
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            🗄️ Afficher les migrations masquées
+          </span>
+        </label>
+      </div>
+
       <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold mb-2">🛠️ Migrations Base de Données</h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Exécutez des scripts SQL pour mettre à jour la base de données. 
-              <strong className="text-red-600 dark:text-red-400"> Utilisez avec précaution !</strong>
-            </p>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showHidden}
-              onChange={(e) => setShowHidden(e.target.checked)}
-              className="rounded"
-            />
-            Afficher les migrations masquées
-          </label>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-red-800 dark:text-red-200 font-semibold mb-2">❌ Erreur</p>
-            <pre className="text-red-700 dark:text-red-300 text-sm mt-1 whitespace-pre-wrap font-mono bg-red-100 dark:bg-red-900/30 p-3 rounded overflow-x-auto">
-              {error}
-            </pre>
-          </div>
-        )}
-
+        <ErrorMessage error={error} onClose={() => setError(null)} />
+        <ErrorMessage error={actionError} onClose={() => setActionError(null)} />
+        <SuccessMessage message={success} onClose={() => setSuccess(null)} />
+        
         {result && (
           <div className={`mb-4 p-4 rounded-lg border ${
             result.success 
@@ -345,107 +377,204 @@ export default function AdminMigrationsPage() {
         )}
 
         {loadingHistory ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            ⏳ Chargement de l'historique...
-          </div>
+          <LoadingSpinner size="lg" text="Chargement de l'historique..." />
         ) : (
-          <div className="space-y-4">
-            {migrations.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                {showHidden ? 'Aucune migration (masquée ou non)' : 'Aucune migration disponible'}
-              </div>
-            ) : (
-              migrations.map((migration) => (
-                <div 
-                  key={migration.id}
-                  className={`p-4 border-2 rounded-lg transition-all ${
-                    migration.executed 
-                      ? 'border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20 shadow-sm' 
-                      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-lg">{migration.name}</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Nom</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Description</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Statut</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Exécutée le</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Par</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Fichier</th>
+                  <th className="text-right py-3 px-4 text-gray-700 dark:text-gray-300">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {migrations.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-8 text-center text-gray-500 dark:text-gray-400">
+                      {showHidden ? 'Aucune migration (masquée ou non)' : 'Aucune migration disponible'}
+                    </td>
+                  </tr>
+                ) : (
+                  migrations.map((migration, i) => (
+                    <tr 
+                      key={migration.id} 
+                      className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${migration.hidden ? 'opacity-60' : ''}`}
+                      style={{animationDelay: `${i * 0.05}s`}}
+                    >
+                      <td className="table-cell py-3 px-4 font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>{migration.name}</span>
+                        </div>
+                      </td>
+                      <td className="table-cell py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
+                        {migration.description}
+                      </td>
+                      <td className="table-cell py-3 px-4">
                         {migration.executed ? (
-                          <span className="px-3 py-1 text-sm font-bold bg-green-500 text-white rounded-full shadow-sm flex items-center gap-1">
-                            <span>✅</span>
-                            <span>Poussée / Exécutée</span>
+                          <span className="badge badge-success">✅ Exécutée</span>
+                        ) : migration.historyId ? (
+                          <span className="badge bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+                            ⚠️ Échouée
                           </span>
                         ) : (
-                          <span className="px-3 py-1 text-sm font-bold bg-orange-500 text-white rounded-full shadow-sm flex items-center gap-1">
-                            <span>⏳</span>
-                            <span>Non poussée</span>
+                          <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                            ⏳ Non exécutée
                           </span>
                         )}
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                        {migration.description}
-                      </p>
-                      {migration.executed && migration.executedAt && (
-                        <div className="mb-2 p-2 bg-green-100 dark:bg-green-900/30 rounded text-xs text-green-800 dark:text-green-200">
-                          <strong>📅 Exécutée le :</strong> {new Date(migration.executedAt).toLocaleString('fr-FR')}
-                          {migration.executedBy && (
-                            <>
-                              <br />
-                              <strong>👤 Par :</strong> {migration.executedBy}
-                            </>
+                      </td>
+                      <td className="table-cell py-3 px-4 text-sm">
+                        {migration.executedAt 
+                          ? new Date(migration.executedAt).toLocaleString('fr-FR', { 
+                              day: '2-digit', 
+                              month: '2-digit', 
+                              year: 'numeric',
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })
+                          : '-'}
+                      </td>
+                      <td className="table-cell py-3 px-4 text-sm">
+                        {migration.executedBy || '-'}
+                      </td>
+                      <td className="table-cell py-3 px-4">
+                        <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                          {migration.id}
+                        </code>
+                      </td>
+                      <td className="table-cell py-3 px-4">
+                        <div className="flex items-center justify-end gap-2">
+                          {migration.historyId && (
+                            <button
+                              onClick={() => hideMigration(migration.historyId)}
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                              title="Masquer cette migration du dashboard"
+                            >
+                              <span className="text-lg">👁️</span>
+                            </button>
                           )}
-                          {migration.duration && (
-                            <>
-                              <br />
-                              <strong>⏱️ Durée :</strong> {parseFloat(migration.duration).toFixed(0)}ms
-                            </>
-                          )}
+                          <button
+                            onClick={() => openDeleteModal(migration)}
+                            disabled={deletingMigration === migration.historyId}
+                            className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
+                              migration.historyId 
+                                ? 'hover:bg-red-100 dark:hover:bg-red-900/30' 
+                                : 'opacity-50 cursor-not-allowed'
+                            }`}
+                            title={
+                              migration.historyId 
+                                ? "Supprimer définitivement cette migration de l'historique" 
+                                : "Cette migration n'a pas d'entrée dans l'historique à supprimer"
+                            }
+                          >
+                            <span className="text-lg">{deletingMigration === migration.historyId ? '⏳' : '🗑️'}</span>
+                          </button>
+                          <button
+                            onClick={() => runMigration(migration.id)}
+                            disabled={loading || migration.executed}
+                            className={`p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              migration.executed
+                                ? 'bg-gray-400 cursor-not-allowed text-white'
+                                : migration.variant === 'success'
+                                ? 'bg-green-600 hover:bg-green-700 text-white'
+                                : migration.variant === 'warning'
+                                ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                            }`}
+                            title={migration.executed ? 'Déjà exécutée' : migration.variant === 'success' ? 'Réparer' : 'Exécuter'}
+                          >
+                            <span className="text-lg">
+                              {loading ? '⏳' : migration.executed ? '✅' : migration.variant === 'success' ? '🔧' : '🚀'}
+                            </span>
+                          </button>
                         </div>
-                      )}
-                      <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                        {migration.id}
-                      </code>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {migration.executed && migration.historyId && (
-                        <>
-                          <button
-                            onClick={() => hideMigration(migration.historyId)}
-                            className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors border border-gray-300 dark:border-gray-600 rounded"
-                            title="Masquer cette migration du dashboard"
-                          >
-                            👁️ Masquer
-                          </button>
-                          <button
-                            onClick={() => deleteMigration(migration.historyId)}
-                            className="px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border border-red-300 dark:border-red-700 rounded"
-                            title="Supprimer définitivement cette migration de l'historique"
-                          >
-                            🗑️ Supprimer
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={() => runMigration(migration.id)}
-                        disabled={loading || migration.executed}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                          migration.executed
-                            ? 'bg-gray-400 cursor-not-allowed text-white'
-                            : migration.variant === 'success'
-                            ? 'bg-green-600 hover:bg-green-700 text-white'
-                            : migration.variant === 'warning'
-                            ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
-                            : 'bg-blue-600 hover:bg-blue-700 text-white'
-                        }`}
-                      >
-                        {loading ? '⏳ Exécution...' : migration.executed ? '✅ Déjà exécutée' : migration.variant === 'success' ? '🔧 Réparer' : '🚀 Exécuter'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
+      {/* Modal de confirmation de suppression */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={closeDeleteModal}
+        title="🗑️ Supprimer la migration"
+      >
+        {migrationToDelete && (
+          <>
+            {actionError && (
+              <div className="alert alert-warning mb-4">
+                {actionError}
+              </div>
+            )}
+
+            <div className="mb-4">
+              {migrationToDelete.historyId ? (
+                <>
+                  <p className="text-gray-700 dark:text-gray-300 mb-2">
+                    Êtes-vous sûr de vouloir supprimer définitivement cette migration de l'historique ?
+                  </p>
+                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                    <p className="font-medium text-primary">
+                      {migrationToDelete.name}
+                    </p>
+                    <p className="text-xs text-muted font-mono mt-1">
+                      {migrationToDelete.id}
+                    </p>
+                  </div>
+                  <p className="text-sm text-red-600 dark:text-red-400 mt-3">
+                    ⚠️ Cette action est irréversible.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-700 dark:text-gray-300 mb-2">
+                    Cette migration n'a pas d'entrée dans l'historique à supprimer.
+                  </p>
+                  <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
+                    <p className="font-medium text-primary">
+                      {migrationToDelete.name}
+                    </p>
+                    <p className="text-xs text-muted font-mono mt-1">
+                      {migrationToDelete.id}
+                    </p>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
+                    ℹ️ Cette migration n'a jamais été exécutée, il n'y a donc rien à supprimer de l'historique.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                className="btn-secondary"
+                onClick={closeDeleteModal}
+                disabled={deletingMigration === migrationToDelete.historyId}
+              >
+                Fermer
+              </button>
+              {migrationToDelete.historyId && (
+                <button
+                  className="btn-primary bg-red-600 hover:bg-red-700"
+                  onClick={deleteMigration}
+                  disabled={deletingMigration === migrationToDelete.historyId}
+                >
+                  {deletingMigration === migrationToDelete.historyId ? '⏳ Suppression...' : '🗑️ Supprimer'}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   )
 }

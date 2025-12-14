@@ -5464,7 +5464,7 @@ if ($script:apiAuthFailed) {
             # Compléter Phase 14 : Base de Données (seulement si phase 14 sélectionnée)
             if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 14) {
                 Write-Host "`n  === Analyse Base de Données ===" -ForegroundColor Yellow
-            try {
+                try {
                 # 1. Audit complet du schéma via API (vérifie code vs base en ligne)
                 Write-Host "  🔍 Exécution audit complet du schéma (code vs base en ligne)..." -ForegroundColor Cyan
                 try {
@@ -5600,9 +5600,9 @@ if ($script:apiAuthFailed) {
                     $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
                     Write-Host "  Score BDD (méthode alternative): $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
                 }
-            } catch {
-                Write-Err "  Erreur analyse BDD: $($_.Exception.Message)"
-            }
+                } catch {
+                    Write-Err "  Erreur analyse BDD: $($_.Exception.Message)"
+                }
             }  # Fin if phase 14 sélectionnée
             
             break  # Sortir de la boucle si l'authentification réussit
@@ -5621,9 +5621,10 @@ if ($script:apiAuthFailed) {
         Write-Warn "  Les phases API et BDD restent incomplètes"
         $auditResults.Issues += "API: Échec définitif après $maxRetries tentatives d'authentification"
     }
-    
-    # Recalculer le score global après les mises à jour
-    $scoreWeights = @{
+}  # Fin if apiAuthFailed
+
+# Recalculer le score global après les mises à jour
+$scoreWeights = @{
         "Architecture" = 1.0
         "CodeMort" = 1.5
         "Duplication" = 1.2
@@ -5683,18 +5684,18 @@ if ($script:apiAuthFailed) {
             outdatedPackages = $auditResults.OutdatedPackages
         }
         
-        $jsonPath = Join-Path $resultsDir "audit_resultat_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
-        $jsonReport | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
-        Write-OK "Rapport JSON exporte: $jsonPath"
-    } catch {
-        Write-Warn "Erreur export JSON: $($_.Exception.Message)"
-    }
-    
-    # Export des plans de correction
-    if ($auditResults.CorrectionPlans.Count -gt 0) {
-        Write-Host ""
-        Write-Section "Export Plans de Correction"
-        try {
+    $jsonPath = Join-Path $resultsDir "audit_resultat_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
+    $jsonReport | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
+    Write-OK "Rapport JSON exporte: $jsonPath"
+} catch {
+    Write-Warn "Erreur export JSON: $($_.Exception.Message)"
+}
+
+# Export des plans de correction
+if ($auditResults.CorrectionPlans.Count -gt 0) {
+    Write-Host ""
+    Write-Section "Export Plans de Correction"
+    try {
             $correctionPlansPath = if (-not [string]::IsNullOrEmpty($CorrectionPlansFile)) {
                 $CorrectionPlansFile
             } else {
@@ -5724,22 +5725,21 @@ Résumé par sévérité:
 
 "@
             
-            foreach ($plan in $auditResults.CorrectionPlans | Sort-Object { 
-                $severityOrder = @{ 'critical' = 0; 'high' = 1; 'medium' = 2; 'low' = 3; 'info' = 4 }
-                $severityOrder[$_.Severity]
-            }) {
-                $textReport += Format-CorrectionPlan -Plan $plan
-                $textReport += "`n"
-            }
-            
-            $textReport | Out-File -FilePath $textReportPath -Encoding UTF8
-            Write-OK "Rapport texte genere: $textReportPath"
-        } catch {
-            Write-Warn "Erreur export plans de correction: $($_.Exception.Message)"
+        foreach ($plan in $auditResults.CorrectionPlans | Sort-Object { 
+            $severityOrder = @{ 'critical' = 0; 'high' = 1; 'medium' = 2; 'low' = 3; 'info' = 4 }
+            $severityOrder[$_.Severity]
+        }) {
+            $textReport += Format-CorrectionPlan -Plan $plan
+            $textReport += "`n"
         }
-    } else {
-        Write-Info "Aucun plan de correction genere (aucun probleme detecte ou plans non implementes)"
+        
+        $textReport | Out-File -FilePath $textReportPath -Encoding UTF8
+        Write-OK "Rapport texte genere: $textReportPath"
+    } catch {
+        Write-Warn "Erreur export plans de correction: $($_.Exception.Message)"
     }
+} else {
+    Write-Info "Aucun plan de correction genere (aucun probleme detecte ou plans non implementes)"
 }
 
 # Sauvegarder l'état final
