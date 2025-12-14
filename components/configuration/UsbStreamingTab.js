@@ -658,7 +658,7 @@ export default function DebugTab() {
         
         const result = await response.json()
         logger.log('✅ Mesure USB enregistrée:', result)
-        appendUsbStreamLog(`✅ Mesure enregistrée avec succès dans la base distante (device_id: ${result.device_id || 'N/A'})`)
+        appendUsbStreamLog(`✅ [BASE DE DONNÉES] Mesure enregistrée avec succès (device_id: ${result.device_id || 'N/A'}, flowrate: ${measurement.flowrate || 'N/A'}, battery: ${measurement.battery || 'N/A'}%)`, 'dashboard')
         
         // Rafraîchir les données après l'enregistrement
         createTimeoutWithCleanup(() => {
@@ -733,6 +733,7 @@ export default function DebugTab() {
             if (createResponse.ok) {
               const result = await createResponse.json()
               logger.log('✅ [AUTO-CREATE] Dispositif créé avec succès:', result.device)
+              appendUsbStreamLog(`✅ [BASE DE DONNÉES] Dispositif créé automatiquement en base (ID: ${result.device?.id || identifier})`, 'dashboard')
               
               // Rafraîchir la liste des dispositifs
               createTimeoutWithCleanup(() => {
@@ -769,6 +770,10 @@ export default function DebugTab() {
         
         if (response.ok) {
           logger.log(`✅ [AUTO-UPDATE] Dispositif ${device.id} mis à jour`)
+          const updatedFields = Object.keys(updatePayload).filter(k => updatePayload[k] !== undefined)
+          if (updatedFields.length > 0) {
+            appendUsbStreamLog(`✅ [BASE DE DONNÉES] Dispositif ${device.id} mis à jour (${updatedFields.join(', ')})`, 'dashboard')
+          }
           createTimeoutWithCleanup(() => {
             refetchDevices()
             notifyDevicesUpdated()

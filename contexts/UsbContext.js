@@ -617,6 +617,7 @@ export function UsbProvider({ children }) {
                 firmwareVersion: firmwareVersion || '(non disponible)',
                 last_seen: now
               })
+              appendUsbStreamLog(`✅ [BASE DE DONNÉES] Informations dispositif envoyées (ID: ${identifier}, firmware: ${firmwareVersion || 'N/A'})`, 'dashboard')
             } else {
               logger.debug('⚠️ Aucun identifiant disponible dans device_info pour mise à jour base de données')
             }
@@ -1214,6 +1215,7 @@ export function UsbProvider({ children }) {
                   battery: measurement.battery !== null && measurement.battery !== undefined ? measurement.battery : '(non disponible)',
                   last_seen: now
                 })
+                // Log ajouté dans updateDevice (UsbStreamingTab.js) pour éviter doublon
               } else {
                 logger.debug('⚠️ Aucun identifiant disponible pour mise à jour base de données')
               }
