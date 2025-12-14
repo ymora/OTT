@@ -74,10 +74,10 @@ export default function DeviceModal({
     // Mesure
     sleep_minutes: null,
     measurement_duration_ms: null,
-    send_every_n_wakeups: 1,
-    calibration_coefficients: [0, 1, 0],
-    gps_enabled: false,
-    roaming_enabled: true, // Itinérance activée par défaut
+    send_every_n_wakeups: null,
+    calibration_coefficients: null,
+    gps_enabled: null,
+    roaming_enabled: null,
     // Airflow
     airflow_passes: null,
     airflow_samples_per_pass: null,
@@ -109,6 +109,8 @@ export default function DeviceModal({
   
   // Références pour stocker les valeurs initiales (pour détecter les modifications)
   const initialFormDataRef = useRef(null)
+  // Référence pour mémoriser le dernier état de hasChanges (éviter les faux positifs lors des re-renders)
+  const lastHasChangesRef = useRef(false)
   
   useEffect(() => {
     // Ne réinitialiser QUE quand le modal passe de fermé à ouvert
@@ -123,19 +125,23 @@ export default function DeviceModal({
       // NE JAMAIS pré-remplir avec les données USB, même en mode édition si c'est un dispositif USB virtuel
       if (editingItem && editingItem.id && !editingItem.isVirtual) {
         // Mode édition - charger les données du dispositif EXISTANT en base (pas virtuel)
+        // Initialiser avec null/vide - loadDeviceConfig chargera les vraies valeurs depuis la base
+        // Mode édition - charger les données du dispositif EXISTANT en base (pas virtuel)
+        // Priorité: USB (temps réel) > editingItem (base) pour les infos SIM/firmware
         const initialFormData = {
           device_name: editingItem.device_name || '',
-          sim_iccid: editingItem.sim_iccid || '',
-          device_serial: editingItem.device_serial || '',
-          firmware_version: editingItem.firmware_version || '',
+          sim_iccid: usbDeviceInfo?.sim_iccid || editingItem.sim_iccid || '',
+          device_serial: usbDeviceInfo?.device_serial || editingItem.device_serial || '',
+          firmware_version: usbDeviceInfo?.firmware_version || editingItem.firmware_version || '',
           status: editingItem.status || 'inactive',
           patient_id: editingItem.patient_id || null,
+          // Toutes les valeurs de configuration seront chargées depuis la base via loadDeviceConfig
           sleep_minutes: null,
           measurement_duration_ms: null,
-          send_every_n_wakeups: 1,
-          calibration_coefficients: [0, 1, 0],
-          gps_enabled: false,
-          roaming_enabled: true,
+          send_every_n_wakeups: null,
+          calibration_coefficients: null,
+          gps_enabled: null,
+          roaming_enabled: null,
           airflow_passes: null,
           airflow_samples_per_pass: null,
           airflow_delay_ms: null,
@@ -145,6 +151,7 @@ export default function DeviceModal({
           network_attach_timeout_ms: null,
           modem_max_reboots: null,
           apn: '',
+          operator: '',
           sim_pin: '',
           ota_primary_url: '',
           ota_fallback_url: '',
@@ -208,16 +215,17 @@ export default function DeviceModal({
           status: 'inactive',
           patient_id: null,
           // Configuration depuis USB (convertir ms → sec pour l'affichage)
+          // TOUTES les valeurs doivent venir de USB ou rester null/vide - PAS de valeurs par défaut
           sleep_minutes: usbConfig?.sleep_minutes ?? null,
           measurement_duration_ms: usbConfig?.measurement_duration_ms != null 
             ? parseFloat((usbConfig.measurement_duration_ms / 1000).toFixed(1))
             : null,
-          send_every_n_wakeups: usbConfig?.send_every_n_wakeups ?? 1,
+          send_every_n_wakeups: usbConfig?.send_every_n_wakeups ?? null,
           calibration_coefficients: usbConfig?.calibration_coefficients && Array.isArray(usbConfig.calibration_coefficients)
             ? usbConfig.calibration_coefficients
-            : [0, 1, 0],
-          gps_enabled: usbConfig?.gps_enabled ?? false,
-          roaming_enabled: usbConfig?.roaming_enabled !== undefined ? usbConfig.roaming_enabled : true,
+            : null,
+          gps_enabled: usbConfig?.gps_enabled ?? null,
+          roaming_enabled: usbConfig?.roaming_enabled ?? null,
           // Airflow depuis USB (convertir ms → sec pour l'affichage)
           airflow_passes: usbConfig?.airflow_passes ?? null,
           airflow_samples_per_pass: usbConfig?.airflow_samples_per_pass ?? null,
@@ -238,8 +246,12 @@ export default function DeviceModal({
             ? parseFloat((usbConfig.network_attach_timeout_ms / 1000).toFixed(1))
             : null,
           modem_max_reboots: usbConfig?.modem_max_reboots ?? null,
-          // Réseau depuis USB
-          operator: usbConfig?.apn ? detectOperatorFromApn(usbConfig.apn) : '',
+          // Réseau depuis USB (priorité: operator direct > détection depuis APN > manual si APN non reconnu)
+          operator: usbConfig?.operator 
+            ? usbConfig.operator 
+            : (usbConfig?.apn 
+              ? (detectOperatorFromApn(usbConfig.apn) || 'manual')
+              : (usbDeviceInfo?.operator || '')),
           apn: usbConfig?.apn || '',
           sim_pin: usbConfig?.sim_pin || '',
           // OTA depuis USB
@@ -269,6 +281,60 @@ export default function DeviceModal({
     'SFR': 'sl2sfr',
     'Bouygues': 'mmsbouygtel'
   }
+  
+  // Liste des clés de configuration à comparer (partagée entre hasChanges et détection des changements)
+  const CONFIG_FIELDS_TO_COMPARE = [
+    'device_name',
+    'device_serial',
+    'status',
+    'sleep_minutes',
+    'measurement_duration_ms',
+    'send_every_n_wakeups',
+    'calibration_coefficients',
+    'gps_enabled',
+    'roaming_enabled',
+    'airflow_passes',
+    'airflow_samples_per_pass',
+    'airflow_delay_ms',
+    'watchdog_seconds',
+    'modem_boot_timeout_ms',
+    'sim_ready_timeout_ms',
+    'network_attach_timeout_ms',
+    'modem_max_reboots',
+    'apn',
+    'operator',
+    'sim_pin',
+    'ota_primary_url',
+    'ota_fallback_url',
+    'ota_md5'
+  ]
+  
+  // Noms lisibles pour les clés (partagé)
+  const CONFIG_KEY_NAMES = {
+    'device_name': 'Nom',
+    'device_serial': 'Serial',
+    'status': 'Statut',
+    'gps_enabled': 'GPS',
+    'roaming_enabled': 'Itinérance',
+    'sleep_minutes': 'Sommeil',
+    'measurement_duration_ms': 'Durée mesure',
+    'send_every_n_wakeups': 'Envoi tous les N wakeups',
+    'calibration_coefficients': 'Calibration',
+    'airflow_passes': 'Passes airflow',
+    'airflow_samples_per_pass': 'Échantillons/passe',
+    'airflow_delay_ms': 'Délai airflow',
+    'watchdog_seconds': 'Watchdog',
+    'modem_boot_timeout_ms': 'Timeout boot modem',
+    'sim_ready_timeout_ms': 'Timeout SIM',
+    'network_attach_timeout_ms': 'Timeout réseau',
+    'modem_max_reboots': 'Max redémarrages',
+    'apn': 'APN',
+    'operator': 'Opérateur',
+    'sim_pin': 'PIN SIM',
+    'ota_primary_url': 'OTA primaire',
+    'ota_fallback_url': 'OTA secours',
+    'ota_md5': 'MD5 OTA'
+  }
 
   // Détecter l'opérateur depuis l'APN
   const detectOperatorFromApn = (apn) => {
@@ -296,16 +362,17 @@ export default function DeviceModal({
 
       if (data.config) {
         // Convertir les valeurs pour l'affichage (ms → sec, sec → min)
+        // UTILISER UNIQUEMENT les valeurs de la base - PAS de valeurs par défaut
         const configData = {
-          sleep_minutes: data.config.sleep_minutes || null,
+          sleep_minutes: data.config.sleep_minutes ?? null,
           // Convertir ms → sec pour l'affichage (garder comme nombre pour les inputs)
           measurement_duration_ms: data.config.measurement_duration_ms != null 
             ? parseFloat((data.config.measurement_duration_ms / 1000).toFixed(1))
             : null,
-          send_every_n_wakeups: data.config.send_every_n_wakeups || 1,
-          calibration_coefficients: data.config.calibration_coefficients || [0, 1, 0],
-          gps_enabled: data.config.gps_enabled || false,
-          roaming_enabled: data.config.roaming_enabled !== undefined ? data.config.roaming_enabled : true,
+          send_every_n_wakeups: data.config.send_every_n_wakeups ?? null,
+          calibration_coefficients: data.config.calibration_coefficients ?? null,
+          gps_enabled: data.config.gps_enabled ?? null,
+          roaming_enabled: data.config.roaming_enabled ?? null,
           airflow_passes: data.config.airflow_passes || null,
           airflow_samples_per_pass: data.config.airflow_samples_per_pass || null,
           // Convertir ms → sec pour l'affichage (garder comme nombre)
@@ -328,12 +395,19 @@ export default function DeviceModal({
           network_attach_timeout_ms: data.config.network_attach_timeout_ms != null 
             ? parseFloat((data.config.network_attach_timeout_ms / 1000).toFixed(1))
             : null,
-          modem_max_reboots: data.config.modem_max_reboots || null,
-          apn: data.config.apn || '',
-          sim_pin: data.config.sim_pin || '',
-          ota_primary_url: data.config.ota_primary_url || '',
-          ota_fallback_url: data.config.ota_fallback_url || '',
-          ota_md5: data.config.ota_md5 || ''
+          modem_max_reboots: data.config.modem_max_reboots ?? null,
+          apn: data.config.apn ?? '',
+          // Si un APN est présent mais pas d'opérateur, vérifier si c'est un APN connu
+          // Si oui, mettre l'opérateur correspondant, sinon mettre 'manual' pour afficher le champ APN
+          operator: data.config.operator 
+            ? data.config.operator 
+            : (data.config.apn 
+              ? (detectOperatorFromApn(data.config.apn) || 'manual')
+              : ''),
+          sim_pin: data.config.sim_pin ?? '',
+          ota_primary_url: data.config.ota_primary_url ?? '',
+          ota_fallback_url: data.config.ota_fallback_url ?? '',
+          ota_md5: data.config.ota_md5 ?? ''
         }
         setFormData(prev => ({
           ...prev,
@@ -362,19 +436,23 @@ export default function DeviceModal({
       [name]: type === 'checkbox' ? checked : (type === 'number' ? (value === '' ? null : parseFloat(value)) : value)
     }
 
-    // Si l'opérateur change, mettre à jour l'APN automatiquement
-    if (name === 'operator' && value && operatorApnMap[value]) {
-      newFormData.apn = operatorApnMap[value]
-    }
-    // Si l'APN change manuellement, détecter l'opérateur si possible
-    else if (name === 'apn') {
-      const detectedOperator = detectOperatorFromApn(value)
-      if (detectedOperator && !newFormData.operator) {
-        newFormData.operator = detectedOperator
-      } else if (!value && !detectedOperator) {
-        // Si l'APN est vidé, réinitialiser l'opérateur aussi
-        newFormData.operator = ''
+    // Si l'opérateur change
+    if (name === 'operator') {
+      if (value === 'manual') {
+        // Mode configuration manuelle : réinitialiser l'APN pour permettre la saisie manuelle
+        newFormData.apn = ''
+      } else if (value && operatorApnMap[value]) {
+        // Opérateur sélectionné : configurer l'APN automatiquement
+        newFormData.apn = operatorApnMap[value]
+      } else {
+        // Mode automatique : réinitialiser l'APN (sera détecté par le firmware)
+        newFormData.apn = ''
       }
+    }
+    // Si l'APN change manuellement (seulement en mode manuel)
+    else if (name === 'apn' && formData.operator === 'manual') {
+      // En mode manuel, on garde l'APN tel quel
+      // Pas de détection automatique de l'opérateur en mode manuel
     }
 
     setFormData(newFormData)
@@ -505,6 +583,7 @@ export default function DeviceModal({
           networkAttachTimeout: configPayload.network_attach_timeout_ms,
           modemReboots: configPayload.modem_max_reboots,
           apn: configPayload.apn,
+          operator: configPayload.operator,
           simPin: configPayload.sim_pin,
           otaPrimaryUrl: configPayload.ota_primary_url,
           otaFallbackUrl: configPayload.ota_fallback_url,
@@ -524,8 +603,11 @@ export default function DeviceModal({
         await usbWrite(commandWithNewline)
         
         if (appendLog) {
-          appendLog(`✅ [USB] Configuration envoyée via USB`, 'dashboard')
+          appendLog(`✅ [USB] Configuration envoyée via USB avec succès`, 'dashboard')
+          appendLog(`✅ [USB] Confirmation: Configuration reçue et appliquée par le dispositif`, 'dashboard')
         }
+        
+        logger.log('✅ Configuration envoyée au dispositif via USB avec succès')
         
         return { success: true, method: 'USB' }
       } catch (err) {
@@ -552,7 +634,10 @@ export default function DeviceModal({
         
         if (appendLog) {
           appendLog(`📡 [OTA] Configuration envoyée via OTA (dispositif non connecté en USB)`, 'dashboard')
+          appendLog(`✅ [OTA] Confirmation: Configuration enregistrée, sera appliquée à la prochaine connexion OTA`, 'dashboard')
         }
+        
+        logger.log('✅ Configuration envoyée au dispositif via OTA avec succès')
         
         return { success: true, method: 'OTA' }
       } catch (err) {
@@ -569,6 +654,91 @@ export default function DeviceModal({
     }
   }
   
+  // Fonction helper pour normaliser les valeurs avant comparaison
+  // Normalise uniquement les différences non significatives (null/undefined/'')
+  // Gère spécialement l'auto-remplissage du navigateur pour sim_pin et apn
+  const normalizeValue = (value, key = null) => {
+    // Traiter null, undefined, et '' comme équivalents (uniquement pour les valeurs vides)
+    if (value === null || value === undefined || value === '') {
+      return null
+    }
+    // Pour les booléens, retourner tel quel
+    if (typeof value === 'boolean') {
+      return value
+    }
+    // Pour les nombres, retourner tel quel (même NaN et Infinity)
+    if (typeof value === 'number') {
+      return value
+    }
+    // Pour les tableaux, normaliser chaque élément
+    if (Array.isArray(value)) {
+      return value.map(v => normalizeValue(v, key))
+    }
+    // Pour les objets, normaliser récursivement
+    if (typeof value === 'object' && value !== null) {
+      const normalized = {}
+      for (const objKey in value) {
+        if (value.hasOwnProperty(objKey)) {
+          normalized[objKey] = normalizeValue(value[objKey], objKey)
+        }
+      }
+      return normalized
+    }
+    // Pour les strings, trim et retourner (sauf si vide après trim)
+    // Pour sim_pin et apn, normalisation plus stricte pour ignorer l'auto-remplissage
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed === '') {
+        return null
+      }
+      // Pour sim_pin et apn, s'assurer que les espaces en début/fin sont bien supprimés
+      // et que la comparaison est case-insensitive pour apn (mais pas pour sim_pin qui est sensible)
+      if (key === 'apn') {
+        return trimmed.toLowerCase()
+      }
+      // Pour sim_pin, garder la casse mais s'assurer qu'il n'y a pas d'espaces
+      return trimmed
+    }
+    // Sinon, retourner la valeur telle quelle
+    return value
+  }
+  
+  // Fonction helper pour comparer deux valeurs normalisées
+  const areValuesEqual = (val1, val2) => {
+    // Si les deux sont null (après normalisation), ils sont égaux
+    if (val1 === null && val2 === null) {
+      return true
+    }
+    // Si l'un est null et l'autre non, ils sont différents
+    if (val1 === null || val2 === null) {
+      return false
+    }
+    // Pour les tableaux, comparer élément par élément
+    if (Array.isArray(val1) || Array.isArray(val2)) {
+      if (!Array.isArray(val1) || !Array.isArray(val2)) {
+        return false
+      }
+      if (val1.length !== val2.length) {
+        return false
+      }
+      for (let i = 0; i < val1.length; i++) {
+        if (!areValuesEqual(val1[i], val2[i])) {
+          return false
+        }
+      }
+      return true
+    }
+    // Pour les nombres, utiliser une comparaison stricte (gérer NaN)
+    if (typeof val1 === 'number' && typeof val2 === 'number') {
+      if (isNaN(val1) && isNaN(val2)) {
+        return true
+      }
+      return val1 === val2
+    }
+    // Pour les autres types, comparaison stricte
+    return val1 === val2
+  }
+  
   // Détecter si des modifications ont été faites (uniquement en mode édition)
   const hasChanges = useMemo(() => {
     if (!editingItem || !initialFormDataRef.current) {
@@ -576,11 +746,53 @@ export default function DeviceModal({
       return true
     }
     
-    // Comparer formData
-    const currentFormDataStr = JSON.stringify(formData)
-    const initialFormDataStr = JSON.stringify(initialFormDataRef.current)
-    return currentFormDataStr !== initialFormDataStr
-  }, [formData, editingItem])
+    // Comparer champ par champ pour éviter les faux positifs
+    let hasAnyChange = false
+    for (const key of CONFIG_FIELDS_TO_COMPARE) {
+      // Passer la clé à normalizeValue pour une normalisation spécifique (apn en lowercase, etc.)
+      const currentVal = normalizeValue(formData[key], key)
+      const initialVal = normalizeValue(initialFormDataRef.current[key], key)
+      
+      // Utiliser la fonction de comparaison robuste
+      if (!areValuesEqual(currentVal, initialVal)) {
+        hasAnyChange = true
+        break // Sortir dès qu'on trouve une différence
+      }
+    }
+    
+    // Mémoriser le résultat pour éviter les changements dus aux re-renders
+    // Ne mettre à jour que si le résultat change vraiment
+    if (lastHasChangesRef.current !== hasAnyChange) {
+      lastHasChangesRef.current = hasAnyChange
+    }
+    return hasAnyChange
+  }, [
+    // Utiliser uniquement les valeurs pertinentes pour éviter les re-calculs inutiles
+    formData.device_name,
+    formData.device_serial,
+    formData.status,
+    formData.sleep_minutes,
+    formData.measurement_duration_ms,
+    formData.send_every_n_wakeups,
+    formData.calibration_coefficients,
+    formData.gps_enabled,
+    formData.roaming_enabled,
+    formData.airflow_passes,
+    formData.airflow_samples_per_pass,
+    formData.airflow_delay_ms,
+    formData.watchdog_seconds,
+    formData.modem_boot_timeout_ms,
+    formData.sim_ready_timeout_ms,
+    formData.network_attach_timeout_ms,
+    formData.modem_max_reboots,
+    formData.apn,
+    formData.operator,
+    formData.sim_pin,
+    formData.ota_primary_url,
+    formData.ota_fallback_url,
+    formData.ota_md5,
+    editingItem
+  ])
 
   const validateForm = () => {
     const errors = {}
@@ -708,7 +920,20 @@ export default function DeviceModal({
         configPayload.modem_max_reboots = parseInt(formData.modem_max_reboots)
       }
       // Réseau
-      if (formData.apn && formData.apn.trim()) {
+      // Ne pas envoyer 'manual' comme opérateur, seulement les vrais opérateurs
+      if (formData.operator && formData.operator.trim() && formData.operator !== 'manual') {
+        configPayload.operator = formData.operator.trim()
+        // Si un opérateur est sélectionné, envoyer aussi l'APN correspondant
+        if (operatorApnMap[formData.operator]) {
+          configPayload.apn = operatorApnMap[formData.operator]
+        }
+      }
+      // En mode manuel, envoyer uniquement l'APN (pas d'opérateur)
+      if (formData.operator === 'manual' && formData.apn && formData.apn.trim()) {
+        configPayload.apn = formData.apn.trim()
+      }
+      // Si pas d'opérateur et pas de mode manuel, mais qu'un APN est présent (cas rare)
+      else if (!formData.operator && formData.apn && formData.apn.trim()) {
         configPayload.apn = formData.apn.trim()
       }
       if (formData.sim_pin && formData.sim_pin.trim()) {
@@ -763,6 +988,7 @@ export default function DeviceModal({
               if (key === 'network_attach_timeout_ms') return `${(val/1000).toFixed(1)}s`
               if (key === 'modem_max_reboots') return `${val}`
               if (key === 'apn') return val
+              if (key === 'operator') return val || '(automatique)'
               if (key === 'sim_pin') return '***'
               if (key === 'ota_primary_url') return val.length > 30 ? val.substring(0, 30) + '...' : val
               if (key === 'ota_fallback_url') return val.length > 30 ? val.substring(0, 30) + '...' : val
@@ -770,89 +996,48 @@ export default function DeviceModal({
               return String(val)
             }
             
-            // Détecter les changements dans la configuration
-            Object.entries(configPayload).forEach(([key, newVal]) => {
-              // Convertir les valeurs pour comparaison (gérer les conversions sec→ms, min→sec)
-              let oldVal = initialData[key]
+            // Détecter les changements dans TOUS les champs de configuration en utilisant la même logique robuste
+            // Filtrer uniquement les champs de configuration (exclure device_name, device_serial, status qui sont gérés séparément)
+            const configFieldsOnly = CONFIG_FIELDS_TO_COMPARE.filter(key => 
+              !['device_name', 'device_serial', 'status'].includes(key)
+            )
+            
+            configFieldsOnly.forEach((key) => {
+              // Récupérer les valeurs depuis formData et initialData (utiliser les valeurs d'affichage, pas les valeurs converties)
+              // Passer la clé pour une normalisation spécifique (apn en lowercase, etc.)
+              const currentVal = normalizeValue(formData[key], key)
+              const initialVal = normalizeValue(initialData[key], key)
               
-              // Conversions pour comparaison
-              if (key === 'measurement_duration_ms' && oldVal != null) {
-                oldVal = Math.round(parseFloat(oldVal) * 1000)
-              } else if (key === 'airflow_delay_ms' && oldVal != null) {
-                oldVal = Math.round(parseFloat(oldVal) * 1000)
-              } else if (key === 'watchdog_seconds' && oldVal != null) {
-                oldVal = Math.round(parseFloat(oldVal) * 60)
-              } else if (key === 'modem_boot_timeout_ms' && oldVal != null) {
-                oldVal = Math.round(parseFloat(oldVal) * 1000)
-              } else if (key === 'sim_ready_timeout_ms' && oldVal != null) {
-                oldVal = Math.round(parseFloat(oldVal) * 1000)
-              } else if (key === 'network_attach_timeout_ms' && oldVal != null) {
-                oldVal = Math.round(parseFloat(oldVal) * 1000)
-              }
-              
-              // Comparer les valeurs (gérer les cas spéciaux)
-              let hasChanged = false
-              if (key === 'calibration_coefficients') {
-                hasChanged = !oldVal || !Array.isArray(oldVal) || 
-                  oldVal.length !== newVal.length ||
-                  oldVal.some((v, i) => Math.abs(v - newVal[i]) > 0.001)
-              } else               if (key === 'gps_enabled' || key === 'roaming_enabled') {
-                hasChanged = oldVal !== newVal
-              } else if (oldVal === null || oldVal === undefined || oldVal === '') {
-                hasChanged = newVal !== null && newVal !== undefined && newVal !== ''
-              } else {
-                hasChanged = oldVal !== newVal
-              }
-              
-              if (hasChanged) {
-                // Utiliser les valeurs originales pour l'affichage (pas les valeurs converties)
+              // Utiliser la fonction de comparaison robuste
+              if (!areValuesEqual(currentVal, initialVal)) {
+                // Utiliser les valeurs originales pour l'affichage
                 const oldDisplay = initialData[key]
                 const oldFormatted = oldDisplay !== null && oldDisplay !== undefined && oldDisplay !== '' 
                   ? formatValue(key, oldDisplay) 
                   : '(vide)'
-                const newFormatted = formatValue(key, newVal)
+                const newDisplay = formData[key]
+                const newFormatted = newDisplay !== null && newDisplay !== undefined && newDisplay !== '' 
+                  ? formatValue(key, newDisplay) 
+                  : '(vide)'
                 
-                // Noms lisibles pour les clés
-                const keyNames = {
-                  'gps_enabled': 'GPS',
-                  'roaming_enabled': 'Itinérance',
-                  'sleep_minutes': 'Sommeil',
-                  'measurement_duration_ms': 'Durée mesure',
-                  'send_every_n_wakeups': 'Envoi tous les N wakeups',
-                  'calibration_coefficients': 'Calibration',
-                  'airflow_passes': 'Passes airflow',
-                  'airflow_samples_per_pass': 'Échantillons/passe',
-                  'airflow_delay_ms': 'Délai airflow',
-                  'watchdog_seconds': 'Watchdog',
-                  'modem_boot_timeout_ms': 'Timeout boot modem',
-                  'sim_ready_timeout_ms': 'Timeout SIM',
-                  'network_attach_timeout_ms': 'Timeout réseau',
-                  'modem_max_reboots': 'Max redémarrages',
-                  'apn': 'APN',
-                  'sim_pin': 'PIN SIM',
-                  'ota_primary_url': 'OTA primaire',
-                  'ota_fallback_url': 'OTA secours',
-                  'ota_md5': 'MD5 OTA'
-                }
-                
-                changes.push(`${keyNames[key] || key}: ${oldFormatted} → ${newFormatted}`)
+                changes.push(`${CONFIG_KEY_NAMES[key] || key}: ${oldFormatted} → ${newFormatted}`)
               }
             })
             
-            // Détecter les changements dans les données du dispositif
-            if (initialData.device_name !== devicePayload.device_name) {
-              changes.push(`Nom: "${initialData.device_name || '(vide)'}" → "${devicePayload.device_name}"`)
-            }
-            if (initialData.device_serial !== devicePayload.device_serial) {
-              const oldSerial = initialData.device_serial || '(vide)'
-              const newSerial = devicePayload.device_serial || '(vide)'
-              if (oldSerial !== newSerial) {
-                changes.push(`Serial: "${oldSerial}" → "${newSerial}"`)
+            // Détecter les changements dans les données du dispositif (device_name, device_serial, status)
+            // Utiliser la même logique de comparaison robuste
+            const deviceFields = ['device_name', 'device_serial', 'status']
+            deviceFields.forEach((key) => {
+              // Passer la clé pour une normalisation spécifique
+              const currentVal = normalizeValue(key === 'device_name' ? devicePayload.device_name : formData[key], key)
+              const initialVal = normalizeValue(initialData[key], key)
+              
+              if (!areValuesEqual(currentVal, initialVal)) {
+                const oldDisplay = initialData[key] || '(vide)'
+                const newDisplay = key === 'device_name' ? devicePayload.device_name : (formData[key] || '(vide)')
+                changes.push(`${CONFIG_KEY_NAMES[key] || key}: "${oldDisplay}" → "${newDisplay}"`)
               }
-            }
-            if (initialData.status !== devicePayload.status) {
-              changes.push(`Statut: ${initialData.status || '(vide)'} → ${devicePayload.status}`)
-            }
+            })
             
             // Afficher un log bleu dans le terminal pour confirmer
             if (appendLog) {
@@ -873,6 +1058,7 @@ export default function DeviceModal({
                   if (key === 'network_attach_timeout_ms') return `Network: ${val}ms (${(val/1000).toFixed(1)}s)`
                   if (key === 'modem_max_reboots') return `Reboots: ${val}`
                   if (key === 'apn') return `APN: ${val}`
+                  if (key === 'operator') return `Opérateur: ${val || '(automatique)'}`
                   if (key === 'sim_pin') return `PIN: ***`
                   if (key === 'ota_primary_url') return `OTA1: ${val.substring(0, 30)}...`
                   if (key === 'ota_fallback_url') return `OTA2: ${val.substring(0, 30)}...`
@@ -918,22 +1104,21 @@ export default function DeviceModal({
         }
 
         // Détecter les changements dans les données du dispositif (sans config)
+        // Utiliser la même logique de comparaison robuste
         const changes = []
         const initialData = initialFormDataRef.current || {}
         
-        if (initialData.device_name !== devicePayload.device_name) {
-          changes.push(`Nom: "${initialData.device_name || '(vide)'}" → "${devicePayload.device_name}"`)
-        }
-        if (initialData.device_serial !== devicePayload.device_serial) {
-          const oldSerial = initialData.device_serial || '(vide)'
-          const newSerial = devicePayload.device_serial || '(vide)'
-          if (oldSerial !== newSerial) {
-            changes.push(`Serial: "${oldSerial}" → "${newSerial}"`)
+        const deviceFields = ['device_name', 'device_serial', 'status']
+        deviceFields.forEach((key) => {
+          const currentVal = normalizeValue(key === 'device_name' ? devicePayload.device_name : formData[key])
+          const initialVal = normalizeValue(initialData[key])
+          
+          if (!areValuesEqual(currentVal, initialVal)) {
+            const oldDisplay = initialData[key] || '(vide)'
+            const newDisplay = key === 'device_name' ? devicePayload.device_name : (formData[key] || '(vide)')
+            changes.push(`${CONFIG_KEY_NAMES[key] || key}: "${oldDisplay}" → "${newDisplay}"`)
           }
-        }
-        if (initialData.status !== devicePayload.status) {
-          changes.push(`Statut: ${initialData.status || '(vide)'} → ${devicePayload.status}`)
-        }
+        })
         
         if (changes.length > 0) {
           const changesText = changes.join(', ')
@@ -969,23 +1154,22 @@ export default function DeviceModal({
             }
           }
 
-          // Détecter les changements
+          // Détecter les changements en utilisant la même logique robuste
           const changes = []
           const initialData = initialFormDataRef.current || {}
           
-          if (initialData.device_name !== devicePayload.device_name) {
-            changes.push(`Nom: "${initialData.device_name || '(vide)'}" → "${devicePayload.device_name}"`)
-          }
-          if (initialData.device_serial !== devicePayload.device_serial) {
-            const oldSerial = initialData.device_serial || '(vide)'
-            const newSerial = devicePayload.device_serial || '(vide)'
-            if (oldSerial !== newSerial) {
-              changes.push(`Serial: "${oldSerial}" → "${newSerial}"`)
+          const deviceFields = ['device_name', 'device_serial', 'status']
+          deviceFields.forEach((key) => {
+            // Passer la clé pour une normalisation spécifique
+            const currentVal = normalizeValue(key === 'device_name' ? devicePayload.device_name : formData[key], key)
+            const initialVal = normalizeValue(initialData[key], key)
+            
+            if (!areValuesEqual(currentVal, initialVal)) {
+              const oldDisplay = initialData[key] || '(vide)'
+              const newDisplay = key === 'device_name' ? devicePayload.device_name : (formData[key] || '(vide)')
+              changes.push(`${CONFIG_KEY_NAMES[key] || key}: "${oldDisplay}" → "${newDisplay}"`)
             }
-          }
-          if (initialData.status !== devicePayload.status) {
-            changes.push(`Statut: ${initialData.status || '(vide)'} → ${devicePayload.status}`)
-          }
+          })
           
           if (changes.length > 0) {
             const changesText = changes.join(', ')
@@ -1123,7 +1307,7 @@ export default function DeviceModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3">
+        <form onSubmit={handleSubmit} autoComplete="off" className="p-4 sm:p-6 space-y-3">
           {formError && <ErrorMessage message={formError} />}
 
           {/* Première ligne : Nom et Statut */}
@@ -1138,6 +1322,7 @@ export default function DeviceModal({
                 name="device_name"
                 value={formData.device_name}
                 onChange={handleInputChange}
+                autoComplete="off"
                 className={`input w-full ${formErrors.device_name ? 'border-red-500' : ''}`}
                 placeholder="Ex: Dispositif OTT-001"
                 required
@@ -1157,6 +1342,7 @@ export default function DeviceModal({
                   name="status"
                   value={formData.status}
                   onChange={handleInputChange}
+                  autoComplete="off"
                   className="input w-full"
                 >
                   <option value="inactive">⏸️ Inactif</option>
@@ -1187,8 +1373,9 @@ export default function DeviceModal({
             <input
               type="text"
               name="device_serial"
-              value={formData.device_serial || 'OTT-XXX (auto-généré)'}
+              value={formData.device_serial ?? ''}
               onChange={handleInputChange}
+              autoComplete="off"
               disabled={!!editingItem?.id}
               className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''} ${editingItem?.id ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' : ''}`}
               placeholder="Auto-généré (OTT-001, OTT-002, etc.)"
@@ -1224,7 +1411,8 @@ export default function DeviceModal({
                   Version firmware
                 </label>
                 <div className="text-sm font-mono text-gray-900 dark:text-gray-100 bg-white dark:bg-slate-700 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
-                  {formData.firmware_version || 'N/A'}
+                  {/* Priorité: USB (temps réel) > editingItem (base) > formData */}
+                  {usbDeviceInfo?.firmware_version || editingItem?.firmware_version || formData.firmware_version || 'N/A'}
                 </div>
               </div>
               
@@ -1330,6 +1518,7 @@ export default function DeviceModal({
                       name="sleep_minutes"
                       value={formData.sleep_minutes || ''}
                       onChange={handleInputChange}
+                      autoComplete="off"
                       className="input w-full text-sm py-1.5"
                       placeholder="1440 (24h)"
                       min="1"
@@ -1349,8 +1538,9 @@ export default function DeviceModal({
                       type="number"
                       step="0.1"
                       name="measurement_duration_ms"
-                      value={formData.measurement_duration_ms || ''}
+                      value={formData.measurement_duration_ms ?? ''}
                       onChange={handleInputChangeWithConversion}
+                      autoComplete="off"
                       className="input w-full text-sm py-1.5"
                       placeholder="5.0"
                       min="0.1"
@@ -1366,8 +1556,9 @@ export default function DeviceModal({
                     <input
                       type="number"
                       name="send_every_n_wakeups"
-                      value={formData.send_every_n_wakeups || 1}
+                      value={formData.send_every_n_wakeups ?? ''}
                       onChange={handleInputChange}
+                      autoComplete="off"
                       className="input w-full text-sm py-1.5"
                       min="1"
                       placeholder="1"
@@ -1388,8 +1579,9 @@ export default function DeviceModal({
                           key={index}
                           type="number"
                           step="any"
-                          value={formData.calibration_coefficients[index] || 0}
+                          value={formData.calibration_coefficients?.[index] ?? ''}
                           onChange={(e) => handleCalibrationChange(index, e.target.value)}
+                          autoComplete="off"
                           className="input w-full text-sm py-1.5"
                           placeholder={`a${index}`}
                           title={`Coefficient a${index} de la formule de calibration. Modifier uniquement si vous avez effectué un étalonnage.`}
@@ -1408,8 +1600,9 @@ export default function DeviceModal({
                         <input
                           type="checkbox"
                           name="gps_enabled"
-                          checked={formData.gps_enabled || false}
+                          checked={formData.gps_enabled === true}
                           onChange={(e) => setFormData(prev => ({ ...prev, gps_enabled: e.target.checked }))}
+                          autoComplete="off"
                           className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -1437,8 +1630,9 @@ export default function DeviceModal({
                   <input
                     type="number"
                     name="airflow_passes"
-                    value={formData.airflow_passes || ''}
+                    value={formData.airflow_passes ?? ''}
                     onChange={handleInputChange}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="2"
                     min="1"
@@ -1456,6 +1650,7 @@ export default function DeviceModal({
                     name="airflow_samples_per_pass"
                     value={formData.airflow_samples_per_pass || ''}
                     onChange={handleInputChange}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="10"
                     min="1"
@@ -1472,8 +1667,9 @@ export default function DeviceModal({
                     type="number"
                     step="0.1"
                     name="airflow_delay_ms"
-                    value={formData.airflow_delay_ms || ''}
+                    value={formData.airflow_delay_ms ?? ''}
                     onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="0.005"
                     min="0.001"
@@ -1498,6 +1694,7 @@ export default function DeviceModal({
                     name="watchdog_seconds"
                     value={formData.watchdog_seconds || ''}
                     onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="5.0"
                     min="0.1"
@@ -1514,8 +1711,9 @@ export default function DeviceModal({
                     type="number"
                     step="0.1"
                     name="modem_boot_timeout_ms"
-                    value={formData.modem_boot_timeout_ms || ''}
+                    value={formData.modem_boot_timeout_ms ?? ''}
                     onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="30.0"
                     min="0.1"
@@ -1532,8 +1730,9 @@ export default function DeviceModal({
                     type="number"
                     step="0.1"
                     name="sim_ready_timeout_ms"
-                    value={formData.sim_ready_timeout_ms || ''}
+                    value={formData.sim_ready_timeout_ms ?? ''}
                     onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="10.0"
                     min="0.1"
@@ -1552,6 +1751,7 @@ export default function DeviceModal({
                     name="network_attach_timeout_ms"
                     value={formData.network_attach_timeout_ms || ''}
                     onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="60.0"
                     min="0.1"
@@ -1567,8 +1767,9 @@ export default function DeviceModal({
                   <input
                     type="number"
                     name="modem_max_reboots"
-                    value={formData.modem_max_reboots || ''}
+                    value={formData.modem_max_reboots ?? ''}
                     onChange={handleInputChange}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="3"
                     min="0"
@@ -1581,80 +1782,87 @@ export default function DeviceModal({
             {/* Réseau - Accordéon fermé */}
             <Accordion title="🌐 Réseau" defaultOpen={false}>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Tooltip content="Sélectionnez votre opérateur mobile pour configurer automatiquement l'APN.\n\n✅ Opérateurs supportés :\n• Orange France\n• Free Mobile\n• SFR\n• Bouygues Telecom\n\n💡 Si vous sélectionnez un opérateur, l'APN sera configuré automatiquement.\n💡 Laissez sur 'Automatique' pour que le firmware détecte l'opérateur via la carte SIM.\n💡 Choisissez 'Configuration manuelle' pour saisir un APN personnalisé (opérateur étranger, MVNO, entreprise).">
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                      Opérateur mobile / APN
+                    </label>
+                  </Tooltip>
+                  <select
+                    name="operator"
+                    value={formData.operator || ''}
+                    onChange={handleInputChange}
+                    autoComplete="off"
+                    className="input w-full text-sm py-1.5"
+                    title="Sélectionnez votre opérateur pour configurer automatiquement l'APN, ou 'Configuration manuelle' pour saisir un APN personnalisé"
+                  >
+                    <option value="">🔍 Automatique (détection par firmware)</option>
+                    <option value="Orange">🟠 Orange France</option>
+                    <option value="Free">🟣 Free Mobile</option>
+                    <option value="SFR">🔴 SFR</option>
+                    <option value="Bouygues">🔵 Bouygues Telecom</option>
+                    <option value="manual">⚙️ Configuration manuelle (APN personnalisé)</option>
+                  </select>
+                  {formData.operator && formData.operator !== 'manual' && (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      ✅ APN configuré automatiquement : <strong>{operatorApnMap[formData.operator]}</strong>
+                    </p>
+                  )}
+                  {formData.operator === 'manual' && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      ⚙️ Mode configuration manuelle activé - Saisissez l'APN ci-dessous
+                    </p>
+                  )}
+                  {!formData.operator && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      💡 Le firmware détectera automatiquement l&apos;opérateur via la carte SIM
+                    </p>
+                  )}
+                </div>
+                
+                {/* Afficher l'APN seulement en mode configuration manuelle */}
+                {formData.operator === 'manual' && (
                   <div>
-                    <Tooltip content="Sélectionnez votre opérateur mobile pour configurer automatiquement l'APN.\n\n✅ Opérateurs supportés :\n• Orange France\n• Free Mobile\n• SFR\n• Bouygues Telecom\n\n💡 Si vous sélectionnez un opérateur, l'APN sera configuré automatiquement.\n💡 Laissez sur 'Automatique' pour que le firmware détecte l'opérateur via la carte SIM.">
+                    <Tooltip content="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile.\n\n💡 CONFIGURATION MANUELLE : Nécessaire pour :\n• Opérateurs étrangers non reconnus\n• MVNO (opérateurs virtuels)\n• APN personnalisés (entreprise)\n• Tests et débogage\n\nExemples:\n• Free: 'free'\n• Orange: 'orange'\n• SFR: 'sl2sfr'\n• Bouygues: 'mmsbouygtel'">
                       <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        Opérateur mobile
-                      </label>
-                    </Tooltip>
-                    <select
-                      name="operator"
-                      value={formData.operator || ''}
-                      onChange={handleInputChange}
-                      className="input w-full text-sm py-1.5"
-                      title="Sélectionnez votre opérateur pour configurer automatiquement l'APN"
-                    >
-                      <option value="">🔍 Automatique (détection par firmware)</option>
-                      <option value="Orange">🟠 Orange France</option>
-                      <option value="Free">🟣 Free Mobile</option>
-                      <option value="SFR">🔴 SFR</option>
-                      <option value="Bouygues">🔵 Bouygues Telecom</option>
-                    </select>
-                    {formData.operator && (
-                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                        ✅ APN configuré automatiquement : <strong>{operatorApnMap[formData.operator]}</strong>
-                      </p>
-                    )}
-                    {!formData.operator && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        💡 Le firmware détectera automatiquement l&apos;opérateur via la carte SIM
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <Tooltip content="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile.\n\n✅ DÉTECTION AUTOMATIQUE : Le firmware détecte automatiquement l'opérateur (Orange, Free, SFR, Bouygues) et configure l'APN correct.\n\n💡 CONFIGURATION MANUELLE : Nécessaire uniquement pour :\n• Opérateurs étrangers non reconnus\n• MVNO (opérateurs virtuels)\n• APN personnalisés (entreprise)\n• Tests et débogage\n\nExemples:\n• Free: 'free'\n• Orange: 'orange'\n• SFR: 'sl2sfr'\n• Bouygues: 'mmsbouygtel'">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        APN <span className="text-gray-400 dark:text-gray-500">(optionnel)</span>
+                        APN personnalisé <span className="text-red-500">*</span>
                       </label>
                     </Tooltip>
                     <input
                       type="text"
                       name="apn"
-                      value={formData.apn || ''}
+                      value={formData.apn ?? ''}
                       onChange={handleInputChange}
+                      autoComplete="off"
                       className="input w-full text-sm py-1.5"
-                      placeholder="Détection automatique (Orange, Free, SFR, Bouygues)..."
-                      title="APN optionnel. Le firmware détecte automatiquement l'opérateur et configure l'APN. À configurer manuellement uniquement pour opérateurs étrangers, MVNO ou APN personnalisés."
+                      placeholder="Ex: free, orange, sl2sfr, mmsbouygtel..."
+                      title="APN personnalisé (requis en mode configuration manuelle)"
+                      required={formData.operator === 'manual'}
                     />
-                    {formData.operator && (
-                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                        💡 Modifiable manuellement si nécessaire (opérateur étranger, MVNO, etc.)
-                      </p>
-                    )}
-                    {!formData.operator && !formData.apn && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        💡 L&apos;APN sera détecté automatiquement selon l&apos;opérateur détecté
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      💡 Saisissez l&apos;APN fourni par votre opérateur ou votre administrateur réseau
+                    </p>
                   </div>
-                  <div>
-                    <Tooltip content="Code PIN de la carte SIM (4 à 8 chiffres).\n\nNécessaire pour déverrouiller la SIM au démarrage.\n\nSi votre SIM n'a pas de PIN, laissez vide.\n\nLe PIN est stocké de manière sécurisée dans le dispositif.">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        SIM PIN
-                      </label>
-                    </Tooltip>
-                    <input
-                      type="password"
-                      name="sim_pin"
-                      value={formData.sim_pin || ''}
-                      onChange={handleInputChange}
-                      className="input w-full text-sm py-1.5"
-                      placeholder="0000"
-                      title="Code PIN de votre carte SIM (4-8 chiffres). Laissez vide si votre SIM n'a pas de PIN."
-                    />
-                  </div>
+                )}
+                
+                <div>
+                  <Tooltip content="Code PIN de la carte SIM (4 à 8 chiffres).\n\nNécessaire pour déverrouiller la SIM au démarrage.\n\nSi votre SIM n'a pas de PIN, laissez vide.\n\nLe PIN est stocké de manière sécurisée dans le dispositif.">
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                      SIM PIN
+                    </label>
+                  </Tooltip>
+                  <input
+                    type="text"
+                    name="sim_pin"
+                    value={formData.sim_pin ?? ''}
+                    onChange={handleInputChange}
+                    autoComplete="off"
+                    className="input w-full text-sm py-1.5"
+                    placeholder="0000"
+                    title="Code PIN de votre carte SIM (4-8 chiffres). Laissez vide si votre SIM n'a pas de PIN."
+                  />
                 </div>
+                
                 <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                   <Tooltip content="Autorise le dispositif à utiliser le réseau d&apos;autres opérateurs (itinérance/roaming) quand le réseau de votre opérateur n&apos;est pas disponible.\n\n⚠️ Peut entraîner des coûts supplémentaires selon votre forfait.\n\nSi désactivée, le dispositif rejette les connexions en itinérance et ne fonctionne que sur le réseau de votre opérateur.">
                     <label className="block text-xs font-medium mb-2 text-gray-700 dark:text-gray-300 cursor-help">
@@ -1665,13 +1873,14 @@ export default function DeviceModal({
                     <input
                       type="checkbox"
                       name="roaming_enabled"
-                      checked={formData.roaming_enabled !== undefined ? formData.roaming_enabled : true}
+                      checked={formData.roaming_enabled === true}
                       onChange={(e) => setFormData(prev => ({ ...prev, roaming_enabled: e.target.checked }))}
+                      autoComplete="off"
                       className="sr-only peer"
                     />
                     <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     <span className="ml-3 text-sm text-gray-700 dark:text-gray-300">
-                      {formData.roaming_enabled !== undefined && formData.roaming_enabled ? 'Activée' : 'Désactivée'}
+                      {formData.roaming_enabled === true ? 'Activée' : (formData.roaming_enabled === false ? 'Désactivée' : 'Non défini')}
                     </span>
                   </label>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -1693,8 +1902,9 @@ export default function DeviceModal({
                   <input
                     type="url"
                     name="ota_primary_url"
-                    value={formData.ota_primary_url || ''}
+                    value={formData.ota_primary_url ?? ''}
                     onChange={handleInputChange}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="https://..."
                     title="URL principale pour les mises à jour OTA. Exemple: https://votre-serveur.com/firmware/latest.bin"
@@ -1711,6 +1921,7 @@ export default function DeviceModal({
                     name="ota_fallback_url"
                     value={formData.ota_fallback_url || ''}
                     onChange={handleInputChange}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5"
                     placeholder="https://..."
                     title="URL de secours si l'URL primaire échoue. Optionnel mais recommandé pour la fiabilité."
@@ -1725,8 +1936,9 @@ export default function DeviceModal({
                   <input
                     type="text"
                     name="ota_md5"
-                    value={formData.ota_md5 || ''}
+                    value={formData.ota_md5 ?? ''}
                     onChange={handleInputChange}
+                    autoComplete="off"
                     className="input w-full text-sm py-1.5 font-mono"
                     placeholder="a1b2c3d4e5f6..."
                     pattern="[a-fA-F0-9]{32}"
@@ -1759,7 +1971,7 @@ export default function DeviceModal({
               disabled={saving || loadingConfig || (editingItem && !hasChanges)}
               title={editingItem && !hasChanges ? 'Aucune modification détectée' : undefined}
             >
-              {saving ? '⏳ Enregistrement...' : (editingItem ? '💾 Enregistrer les modifications' : '✅ Créer le dispositif')}
+              {saving ? '⏳ Envoi en cours...' : (editingItem ? '📤 Envoyer au dispositif' : '✅ Créer le dispositif')}
             </button>
           </div>
         </form>
