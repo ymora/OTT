@@ -255,6 +255,42 @@ export default function AdminMigrationsPage() {
     }
   }
 
+  const deleteMigration = async (historyId) => {
+    if (!isAdmin) return
+    
+    if (!confirm('⚠️ Êtes-vous sûr de vouloir supprimer définitivement cette migration de l\'historique ? Cette action est irréversible.')) {
+      return
+    }
+    
+    try {
+      const data = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/migrations/history/${historyId}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      
+      if (data.success) {
+        // Recharger l'historique
+        const historyData = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          '/api.php/migrations/history',
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        if (historyData.success) {
+          setMigrationHistory(historyData.history || [])
+        }
+        logger.log('✅ Migration supprimée définitivement')
+      }
+    } catch (err) {
+      logger.error('Erreur suppression migration:', err)
+      setError('Erreur lors de la suppression de la migration: ' + (err.message || 'Erreur inconnue'))
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="card">
@@ -322,31 +358,47 @@ export default function AdminMigrationsPage() {
               migrations.map((migration) => (
                 <div 
                   key={migration.id}
-                  className={`p-4 border rounded-lg ${
+                  className={`p-4 border-2 rounded-lg transition-all ${
                     migration.executed 
-                      ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10' 
-                      : 'border-gray-200 dark:border-gray-700'
+                      ? 'border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20 shadow-sm' 
+                      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-lg">{migration.name}</h3>
-                        {migration.executed && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded">
-                            ✅ Exécutée
+                        {migration.executed ? (
+                          <span className="px-3 py-1 text-sm font-bold bg-green-500 text-white rounded-full shadow-sm flex items-center gap-1">
+                            <span>✅</span>
+                            <span>Poussée / Exécutée</span>
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 text-sm font-bold bg-orange-500 text-white rounded-full shadow-sm flex items-center gap-1">
+                            <span>⏳</span>
+                            <span>Non poussée</span>
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                         {migration.description}
                       </p>
                       {migration.executed && migration.executedAt && (
-                        <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">
-                          Exécutée le {new Date(migration.executedAt).toLocaleString('fr-FR')}
-                          {migration.executedBy && ` par ${migration.executedBy}`}
-                          {migration.duration && ` (${parseFloat(migration.duration).toFixed(0)}ms)`}
-                        </p>
+                        <div className="mb-2 p-2 bg-green-100 dark:bg-green-900/30 rounded text-xs text-green-800 dark:text-green-200">
+                          <strong>📅 Exécutée le :</strong> {new Date(migration.executedAt).toLocaleString('fr-FR')}
+                          {migration.executedBy && (
+                            <>
+                              <br />
+                              <strong>👤 Par :</strong> {migration.executedBy}
+                            </>
+                          )}
+                          {migration.duration && (
+                            <>
+                              <br />
+                              <strong>⏱️ Durée :</strong> {parseFloat(migration.duration).toFixed(0)}ms
+                            </>
+                          )}
+                        </div>
                       )}
                       <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
                         {migration.id}
@@ -354,13 +406,22 @@ export default function AdminMigrationsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       {migration.executed && migration.historyId && (
-                        <button
-                          onClick={() => hideMigration(migration.historyId)}
-                          className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                          title="Masquer cette migration du dashboard"
-                        >
-                          👁️ Masquer
-                        </button>
+                        <>
+                          <button
+                            onClick={() => hideMigration(migration.historyId)}
+                            className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors border border-gray-300 dark:border-gray-600 rounded"
+                            title="Masquer cette migration du dashboard"
+                          >
+                            👁️ Masquer
+                          </button>
+                          <button
+                            onClick={() => deleteMigration(migration.historyId)}
+                            className="px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border border-red-300 dark:border-red-700 rounded"
+                            title="Supprimer définitivement cette migration de l'historique"
+                          >
+                            🗑️ Supprimer
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => runMigration(migration.id)}

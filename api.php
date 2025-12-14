@@ -642,6 +642,51 @@ function handleHideMigration($historyId) {
     }
 }
 
+/**
+ * DELETE /api.php/migrations/history/:id
+ * Supprimer définitivement une migration de l'historique (admin uniquement)
+ */
+function handleDeleteMigration($historyId) {
+    global $pdo;
+    
+    // Nettoyer le buffer de sortie
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    
+    requireAdmin();
+    
+    try {
+        $stmt = $pdo->prepare("
+            DELETE FROM migration_history 
+            WHERE id = :id
+        ");
+        $stmt->execute(['id' => $historyId]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Migration supprimée définitivement de l\'historique'
+            ]);
+        } else {
+            http_response_code(404);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Migration non trouvée'
+            ]);
+        }
+        
+    } catch (Exception $e) {
+        error_log('[handleDeleteMigration] Erreur: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Erreur lors de la suppression de la migration'
+        ]);
+    }
+}
+
 function handleRepairDatabase() {
     global $pdo;
     
@@ -1816,6 +1861,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleGetMigrationHistory();
 } elseif($method === 'POST' && preg_match('#^/migrations/history/(\d+)/hide/?$#', $path, $m)) {
     handleHideMigration($m[1]);
+} elseif($method === 'DELETE' && preg_match('#^/migrations/history/(\d+)/?$#', $path, $m)) {
+    handleDeleteMigration($m[1]);
 } elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {
     // Nettoyer le buffer AVANT d'appeler handleRunMigration pour éviter que les warnings polluent la réponse
     while (ob_get_level() > 0) {
