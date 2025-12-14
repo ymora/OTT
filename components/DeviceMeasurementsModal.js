@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useApiCall, useModalState } from '@/hooks'
+import { useApiCall, useModalState, useEntityArchive, useEntityPermanentDelete, useEntityRestore } from '@/hooks'
+import { fetchJson } from '@/lib/api'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -13,13 +14,10 @@ import Modal from '@/components/Modal'
  * Modal pour afficher l'historique des mesures d'un dispositif
  */
 export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
-  const { user } = useAuth()
+  const { user, fetchWithAuth, API_URL } = useAuth()
   const [measurements, setMeasurements] = useState([])
   const { loading, error, call } = useApiCall({ requiresAuth: true })
   const [showArchived, setShowArchived] = useState(false)
-  const [deletingMeasurement, setDeletingMeasurement] = useState(null)
-  const [archivingMeasurement, setArchivingMeasurement] = useState(null)
-  const [restoringMeasurement, setRestoringMeasurement] = useState(null)
   const [selectedMeasurements, setSelectedMeasurements] = useState(new Set())
   const [deletingMultiple, setDeletingMultiple] = useState(false)
   const [archivingMultiple, setArchivingMultiple] = useState(false)
@@ -84,117 +82,90 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
     setConfirmArchiveModal({ isOpen: true, measurementId })
   }
 
+  // Utiliser le hook unifié pour l'archivage
+  const { archive: archiveMeasurement, archiving: archivingMeasurement } = useEntityArchive({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'measurements',
+    refetch: loadMeasurements,
+    onSuccess: (measurement) => {
+      // Retirer la mesure de la liste
+      setMeasurements(prev => prev.filter(m => m.id !== measurement.id))
+      logger.log(`✅ Mesure ${measurement.id} archivée`)
+    },
+    onError: (errorMsg) => {
+      logger.error(`❌ Erreur archivage mesure: ${errorMsg}`)
+      setError(errorMsg)
+    },
+    invalidateCache: () => {} // Pas de cache à invalider ici
+  })
+  
   const confirmArchiveMeasurement = async () => {
     const { measurementId } = confirmArchiveModal
     if (!measurementId) return
     
     setConfirmArchiveModal({ isOpen: false, measurementId: null })
-    setArchivingMeasurement(measurementId)
-    setError(null)
-
-    try {
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/measurements/${measurementId}?archive=true`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-
-      if (data.success) {
-        // Retirer la mesure de la liste
-        setMeasurements(prev => prev.filter(m => m.id !== measurementId))
-        logger.log(`✅ Mesure ${measurementId} archivée`)
-      } else {
-        const errorMsg = data.error || 'Erreur lors de l\'archivage'
-        logger.error(`❌ Erreur archivage mesure: ${errorMsg}`)
-        setError(errorMsg)
-      }
-    } catch (err) {
-      logger.error('Erreur archivage mesure:', err)
-      setError(err.message || 'Erreur lors de l\'archivage de la mesure')
-    } finally {
-      setArchivingMeasurement(null)
-    }
+    // Utiliser le hook pour archiver
+    await archiveMeasurement({ id: measurementId })
   }
 
   const handleDeleteMeasurement = async (measurementId) => {
     setConfirmDeleteModal({ isOpen: true, measurementId })
   }
 
+  // Utiliser le hook unifié pour la suppression définitive
+  const { permanentDelete: deleteMeasurement, deleting: deletingMeasurement } = useEntityPermanentDelete({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'measurements',
+    refetch: loadMeasurements,
+    onSuccess: (measurement) => {
+      // Retirer la mesure de la liste
+      setMeasurements(prev => prev.filter(m => m.id !== measurement.id))
+      logger.log(`✅ Mesure ${measurement.id} supprimée définitivement`)
+    },
+    onError: (errorMsg) => {
+      logger.error(`❌ Erreur suppression mesure: ${errorMsg}`)
+      setError(errorMsg)
+    },
+    invalidateCache: () => {} // Pas de cache à invalider ici
+  })
+  
   const confirmDeleteMeasurement = async () => {
     const { measurementId } = confirmDeleteModal
     if (!measurementId) return
     
     setConfirmDeleteModal({ isOpen: false, measurementId: null })
-    setDeletingMeasurement(measurementId)
-    setError(null)
-
-    try {
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/measurements/${measurementId}?permanent=true`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-
-      if (data.success) {
-        // Retirer la mesure de la liste
-        setMeasurements(prev => prev.filter(m => m.id !== measurementId))
-        logger.log(`✅ Mesure ${measurementId} supprimée définitivement`)
-      } else {
-        const errorMsg = data.error || 'Erreur lors de la suppression'
-        logger.error(`❌ Erreur suppression mesure: ${errorMsg}`)
-        setError(errorMsg)
-      }
-    } catch (err) {
-      logger.error('Erreur suppression mesure:', err)
-      setError(err.message || 'Erreur lors de la suppression de la mesure')
-    } finally {
-      setDeletingMeasurement(null)
-    }
+    // Utiliser le hook pour supprimer
+    await deleteMeasurement({ id: measurementId })
   }
 
   const handleRestoreMeasurement = async (measurementId) => {
     setConfirmRestoreModal({ isOpen: true, measurementId })
   }
 
+  // Utiliser le hook unifié pour la restauration
+  const { restore: restoreMeasurement, restoring: restoringMeasurement } = useEntityRestore('measurements', {
+    onSuccess: async (measurement) => {
+      // Recharger les mesures
+      await loadMeasurements()
+      logger.log(`✅ Mesure ${measurement.id} restaurée`)
+    },
+    onError: (errorMsg) => {
+      logger.error(`❌ Erreur restauration mesure: ${errorMsg}`)
+      setError(errorMsg)
+    },
+    invalidateCache: () => {}, // Pas de cache à invalider ici
+    refetch: loadMeasurements
+  })
+  
   const confirmRestoreMeasurement = async () => {
     const { measurementId } = confirmRestoreModal
     if (!measurementId) return
     
     setConfirmRestoreModal({ isOpen: false, measurementId: null })
-    setRestoringMeasurement(measurementId)
-    setError(null)
-
-    try {
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/measurements/${measurementId}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ deleted_at: null })
-        },
-        { requiresAuth: true }
-      )
-
-      if (data.success) {
-        // Recharger les mesures
-        await loadMeasurements()
-        logger.log(`✅ Mesure ${measurementId} restaurée`)
-      } else {
-        const errorMsg = data.error || 'Erreur lors de la restauration'
-        logger.error(`❌ Erreur restauration mesure: ${errorMsg}`)
-        setError(errorMsg)
-      }
-    } catch (err) {
-      logger.error('Erreur restauration mesure:', err)
-      setError(err.message || 'Erreur lors de la restauration de la mesure')
-    } finally {
-      setRestoringMeasurement(null)
-    }
+    // Utiliser le hook pour restaurer
+    await restoreMeasurement({ id: measurementId })
   }
 
   // Vérifier si l'utilisateur est admin (support de plusieurs formats de rôle)

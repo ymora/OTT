@@ -500,27 +500,18 @@ export function useSerialPort() {
               break
             } else if (readErr.name === 'FramingError' || readErr.message?.includes('Framing')) {
               // Erreur de framing : souvent temporaire, ignorer et continuer
-              consecutiveErrors++
-              if (consecutiveErrors <= 3) {
-                // Ignorer les premières erreurs de framing (souvent temporaires)
-                logger.debug(`[SerialPortManager] Erreur de framing ignorée (${consecutiveErrors}/3)`)
-                await new Promise(resolve => setTimeout(resolve, 50))
-                continue
-              } else if (consecutiveErrors === 4) {
-                // Logger une seule fois après les 3 premières
+              // IMPORTANT: Ne pas incrémenter consecutiveErrors pour les erreurs de framing
+              // car elles sont souvent dues à des problèmes de timing et ne doivent pas
+              // interrompre la communication
+              if (consecutiveErrors === 0) {
+                // Logger une seule fois au début
                 logger.warn(`[SerialPortManager] Erreurs de framing détectées (continuation silencieuse...)`)
-                await new Promise(resolve => setTimeout(resolve, 100))
-                continue
-              } else if (consecutiveErrors % 100 === 0) {
-                // Logger seulement toutes les 100 erreurs pour éviter le spam
-                logger.debug(`[SerialPortManager] ${consecutiveErrors} erreurs de framing (continuation...)`)
-                await new Promise(resolve => setTimeout(resolve, 100))
-                continue
-              } else {
-                // Continuer silencieusement
-                await new Promise(resolve => setTimeout(resolve, 100))
-                continue
               }
+              // Réinitialiser le compteur d'erreurs pour ne pas bloquer la communication
+              consecutiveErrors = 0
+              // Attendre un peu avant de continuer pour laisser le port se stabiliser
+              await new Promise(resolve => setTimeout(resolve, 50))
+              continue
             } else {
               consecutiveErrors++
               

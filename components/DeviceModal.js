@@ -557,6 +557,13 @@ export default function DeviceModal({
         return { success: true, method: 'OTA' }
       } catch (err) {
         logger.error('Erreur envoi config OTA:', err)
+        // Si l'erreur indique que le dispositif n'existe pas, ne pas bloquer
+        // (peut arriver si le dispositif est en cours de création)
+        if (err.message?.includes('not found') || err.message?.includes('n\'existe pas') || err.message?.includes('does not exist')) {
+          logger.warn('⚠️ Dispositif non trouvé en base, configuration sera envoyée lors de la prochaine connexion OTA')
+          // Retourner un succès partiel pour ne pas bloquer le processus
+          return { success: true, method: 'OTA', pending: true }
+        }
         throw err
       }
     }

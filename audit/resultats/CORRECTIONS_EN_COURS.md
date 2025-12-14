@@ -76,3 +76,4 @@
 
 **Note** : Le rapport d'audit est généré avec `Tee-Object` qui écrit en temps réel, mais le fichier peut ne pas être immédiatement visible si le processus n'a pas terminé complètement. Le fichier devrait apparaître dans `audit/resultats/audit_resultat_YYYYMMDD_HHMMSS.txt`.
 
+

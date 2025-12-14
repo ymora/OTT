@@ -419,7 +419,7 @@ function MarkdownViewer({ fileName }) {
       setLoading(false)
       isLoadingRef.current = false
     }
-  }, [fileName])
+  }, [fileName, API_URL, parseMarkdownForCharts])
 
   // Fonction pour régénérer le fichier de suivi du temps
   const regenerateTimeTracking = useCallback(async (force = false) => {
@@ -469,7 +469,7 @@ function MarkdownViewer({ fileName }) {
     } finally {
       setRegenerating(false)
     }
-  }, [fileName, API_URL, regenerateCall, regenerating, reloadContent])
+  }, [fileName, regenerateCall, regenerating, reloadContent])
 
   useEffect(() => {
     // Réinitialiser les refs quand le fileName change (nouveau composant monté)

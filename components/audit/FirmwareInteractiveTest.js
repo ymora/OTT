@@ -111,33 +111,94 @@ export default function FirmwareInteractiveTest({ onTestComplete, compact = fals
         
         // Attendre la réponse (augmenté à 5 secondes)
         logger.log('[FirmwareTest] ⏳ Attente réponse (5 secondes)...')
-        await new Promise(resolve => setTimeout(resolve, 5000))
         
-        // Vérifier les nouveaux logs reçus après l'envoi
-        const newLogs = usbStreamLogs.slice(logsBefore)
-        logger.log('[FirmwareTest] 📊 Nouveaux logs reçus:', newLogs.length)
+        // Attendre avec vérification périodique (plus réactif)
+        // Vérifier à la fois usbDeviceInfo (mis à jour quand la réponse arrive) et usbStreamLogs
+        let configResponse = null
+        let configDetectedViaDeviceInfo = false
+        const maxWaitTime = 5000
+        const checkInterval = 200
+        const maxChecks = Math.ceil(maxWaitTime / checkInterval)
         
-        // Chercher la réponse dans les nouveaux logs (plus large recherche)
-        // Le firmware envoie: {"type":"config_response","mode":"usb_stream",...}
-        const configResponse = newLogs.find(log => {
-          if (!log.line) return false
-          const line = log.line
-          // Chercher JSON avec type: "config_response"
-          if (line.includes('"type":"config_response"') || line.includes('"type": "config_response"')) {
-            return true
+        // État initial de usbDeviceInfo pour détecter les changements
+        const initialConfig = usbDeviceInfo?.config
+        const initialFirmwareVersion = usbDeviceInfo?.firmware_version
+        
+        for (let i = 0; i < maxChecks; i++) {
+          await new Promise(resolve => setTimeout(resolve, checkInterval))
+          
+          // Vérifier d'abord usbDeviceInfo (plus fiable que les logs)
+          // Si la config est mise à jour, c'est que la réponse config_response a été reçue
+          const currentDeviceInfo = usbDeviceInfo
+          if (currentDeviceInfo) {
+            // Vérifier si la config a été mise à jour (signe que config_response a été reçue)
+            const hasConfig = currentDeviceInfo.config && 
+                              (currentDeviceInfo.config.sleep_minutes != null || 
+                               currentDeviceInfo.config.measurement_duration_ms != null ||
+                               currentDeviceInfo.config.calibration_coefficients)
+            
+            // Vérifier si firmware_version a été mis à jour
+            const firmwareUpdated = currentDeviceInfo.firmware_version && 
+                                    currentDeviceInfo.firmware_version !== initialFirmwareVersion
+            
+            // Si la config est complète OU si firmware_version est présent, c'est que la réponse a été reçue
+            if (hasConfig || (firmwareUpdated && currentDeviceInfo.firmware_version)) {
+              configDetectedViaDeviceInfo = true
+              configResponse = { detected: true, source: 'usbDeviceInfo' }
+              logger.log(`[FirmwareTest] ✅ Réponse détectée via usbDeviceInfo après ${(i + 1) * checkInterval}ms`)
+              break
+            }
           }
-          // Chercher aussi dans les logs formatés
-          const lineLower = line.toLowerCase()
-          return lineLower.includes('config_response') || 
-                 lineLower.includes('configuration complète envoyée') ||
-                 (line.startsWith('{') && line.includes('firmware_version') && line.includes('device_serial') && line.includes('sim_iccid'))
-        })
+          
+          // Vérifier aussi les logs (au cas où)
+          const currentLogs = usbStreamLogs || []
+          
+          // Chercher la réponse dans TOUS les logs
+          const logResponse = currentLogs.find(log => {
+            if (!log || !log.line) return false
+            const line = log.line.trim()
+            
+            // Chercher JSON avec type: "config_response"
+            if (line.startsWith('{') && (line.includes('"type":"config_response"') || line.includes('"type": "config_response"'))) {
+              return true
+            }
+            // Chercher aussi dans les logs formatés
+            const lineLower = line.toLowerCase()
+            if (lineLower.includes('config_response') || 
+                lineLower.includes('configuration complète envoyée')) {
+              return true
+            }
+            // Chercher JSON avec firmware_version + device_serial + sim_iccid (signature config_response)
+            if (line.startsWith('{') && 
+                line.includes('firmware_version') && 
+                line.includes('device_serial') && 
+                line.includes('sim_iccid') &&
+                line.includes('sleep_minutes')) {
+              return true
+            }
+            return false
+          })
+          
+          if (logResponse) {
+            configResponse = logResponse
+            logger.log(`[FirmwareTest] ✅ Réponse détectée dans les logs après ${(i + 1) * checkInterval}ms`)
+            break
+          }
+        }
         
-        // Afficher les derniers logs pour debug
-        if (!configResponse && newLogs.length > 0) {
+        logger.log(`[FirmwareTest] 📊 État final:`)
+        logger.log(`  - Logs totaux: ${usbStreamLogs?.length || 0}, Nouveaux: ${(usbStreamLogs?.length || 0) - logsBefore}`)
+        logger.log(`  - usbDeviceInfo: ${usbDeviceInfo ? 'présent' : 'absent'}`)
+        logger.log(`  - usbDeviceInfo.config: ${usbDeviceInfo?.config ? 'présent' : 'absent'}`)
+        logger.log(`  - usbDeviceInfo.firmware_version: ${usbDeviceInfo?.firmware_version || 'absent'}`)
+        
+        // Afficher les derniers logs pour debug si pas de réponse
+        if (!configResponse && usbStreamLogs && usbStreamLogs.length > 0) {
           logger.warn('[FirmwareTest] ⚠️ Derniers logs reçus (pour debug):')
-          newLogs.slice(-5).forEach((log, idx) => {
-            logger.warn(`[FirmwareTest]   ${idx + 1}. ${log.line?.substring(0, 100)}...`)
+          const lastLogs = usbStreamLogs.slice(-10)
+          lastLogs.forEach((log, idx) => {
+            const line = log?.line || ''
+            logger.warn(`[FirmwareTest]   ${idx + 1}. ${line.substring(0, 150)}...`)
           })
         }
         
@@ -146,18 +207,24 @@ export default function FirmwareInteractiveTest({ onTestComplete, compact = fals
           results.commandsSupported.push('GET_CONFIG')
           logger.log('[FirmwareTest] ✅ GET_CONFIG répond correctement')
           
-          // Essayer d'extraire la version depuis la réponse
-          try {
-            const jsonMatch = configResponse.line.match(/\{[^}]*"firmware_version"[^}]*\}/)
-            if (jsonMatch) {
-              const jsonData = JSON.parse(jsonMatch[0])
-              if (jsonData.firmware_version) {
-                results.version = jsonData.firmware_version
-                logger.log('[FirmwareTest] 📌 Version détectée depuis réponse:', jsonData.firmware_version)
+          // Extraire la version depuis usbDeviceInfo ou depuis la réponse JSON
+          if (configDetectedViaDeviceInfo && usbDeviceInfo?.firmware_version) {
+            results.version = usbDeviceInfo.firmware_version
+            logger.log('[FirmwareTest] 📌 Version détectée depuis usbDeviceInfo:', usbDeviceInfo.firmware_version)
+          } else if (configResponse.line) {
+            // Essayer d'extraire la version depuis la réponse JSON
+            try {
+              const jsonMatch = configResponse.line.match(/\{[^}]*"firmware_version"[^}]*\}/)
+              if (jsonMatch) {
+                const jsonData = JSON.parse(jsonMatch[0])
+                if (jsonData.firmware_version) {
+                  results.version = jsonData.firmware_version
+                  logger.log('[FirmwareTest] 📌 Version détectée depuis réponse JSON:', jsonData.firmware_version)
+                }
               }
+            } catch (e) {
+              // Ignorer erreur parsing JSON
             }
-          } catch (e) {
-            // Ignorer erreur parsing JSON
           }
         } else {
           results.commandsTested.push({ command: 'GET_CONFIG', status: 'timeout' })

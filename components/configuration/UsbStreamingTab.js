@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useTimers, useEntityRestore, useSmartDeviceRefresh } from '@/hooks'
+import { useApiData, useTimers, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh } from '@/hooks'
 import { createUpdateConfigCommand } from '@/lib/deviceCommands'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import { isArchived } from '@/lib/utils'
@@ -298,6 +298,53 @@ export default function DebugTab() {
     },
     invalidateCache,
     refetch: refetchDevices
+  })
+  
+  // Utiliser le hook unifié pour l'archivage
+  const { archive: handleArchiveDevice, archiving: archivingDevice } = useEntityArchive({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'devices',
+    refetch: refetchDevices,
+    onSuccess: (device) => {
+      logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`)
+      appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`, 'dashboard')
+      setSuccessMessage('✅ Dispositif archivé')
+      invalidateCache()
+      createTimeoutWithCleanup(() => {
+        refetchDevices()
+      }, 500)
+      createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
+    },
+    onError: (errorMessage) => {
+      logger.error('Erreur archivage dispositif:', errorMessage)
+      appendUsbStreamLog(`❌ Erreur archivage: ${errorMessage}`, 'dashboard')
+    },
+    invalidateCache,
+    currentUser: user
+  })
+  
+  // Utiliser le hook unifié pour la suppression définitive
+  const { permanentDelete: handlePermanentDeleteDevice, deleting: deletingDevice } = useEntityPermanentDelete({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'devices',
+    refetch: refetchDevices,
+    onSuccess: (device) => {
+      logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`)
+      appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`, 'dashboard')
+      setSuccessMessage('✅ Dispositif supprimé définitivement')
+      invalidateCache()
+      createTimeoutWithCleanup(() => {
+        refetchDevices()
+      }, 300)
+      createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
+    },
+    onError: (errorMessage) => {
+      logger.error('Erreur suppression dispositif:', errorMessage)
+      appendUsbStreamLog(`❌ Erreur suppression: ${errorMessage}`, 'dashboard')
+    },
+    invalidateCache
   })
   // Extraire les dispositifs depuis la réponse API
   // La structure de l'API est: { success: true, devices: [...] }
@@ -701,8 +748,7 @@ export default function DebugTab() {
   )
   const compiledFirmwares = (firmwaresData?.firmwares?.firmwares || []).filter(fw => fw.status === 'compiled')
   
-  // États pour la suppression
-  const [deleting, setDeleting] = useState(false)
+  // États pour les messages de succès
   const [successMessage, setSuccessMessage] = useState(null)
   
   // État pour le modal RAZ console
@@ -1319,76 +1365,7 @@ export default function DebugTab() {
     </tr>
   )
 
-  // Fonction pour supprimer un dispositif
-  const handleArchiveDevice = useCallback(async (device) => {
-    setDeleting(true)
-    try {
-      const isAdmin = user?.role_name === 'admin'
-      const url = isAdmin 
-        ? `/api.php/devices/${device.id}?archive=true`
-        : `/api.php/devices/${device.id}`
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        url,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      
-      if (response.success) {
-        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`)
-        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`, 'dashboard')
-        setSuccessMessage('✅ Dispositif archivé')
-        // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
-        invalidateCache()
-        createTimeoutWithCleanup(() => {
-          refetchDevices()
-        }, 500)
-        createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
-      } else {
-        logger.error('Erreur archivage dispositif:', response.error)
-        appendUsbStreamLog(`❌ Erreur archivage: ${response.error}`, 'dashboard')
-      }
-    } catch (err) {
-      logger.error('Erreur archivage dispositif:', err)
-      appendUsbStreamLog(`❌ Erreur archivage: ${err.message || err}`, 'dashboard')
-    } finally {
-      setDeleting(false)
-    }
-  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog, user, createTimeoutWithCleanup, setSuccessMessage])
-  
-  const handlePermanentDeleteDevice = useCallback(async (device) => {
-    setDeleting(true)
-    try {
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${device.id}?permanent=true`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      
-      if (response.success) {
-        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`)
-        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`, 'dashboard')
-        setSuccessMessage('✅ Dispositif supprimé définitivement')
-        // Debounce pour éviter les refetch multiples rapides
-        invalidateCache()
-        createTimeoutWithCleanup(() => {
-          refetchDevices()
-        }, 300)
-        createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
-      } else {
-        logger.error('Erreur suppression dispositif:', response.error)
-        appendUsbStreamLog(`❌ Erreur suppression: ${response.error}`, 'dashboard')
-      }
-    } catch (err) {
-      logger.error('Erreur suppression dispositif:', err)
-      appendUsbStreamLog(`❌ Erreur suppression: ${err.message || err}`, 'dashboard')
-    } finally {
-      setDeleting(false)
-    }
-  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog, createTimeoutWithCleanup, setSuccessMessage])
+  // Les fonctions handleArchiveDevice et handlePermanentDeleteDevice sont maintenant fournies par les hooks useEntityArchive et useEntityPermanentDelete
   
   // Plus de modal - actions directes
   
@@ -2193,30 +2170,30 @@ export default function DebugTab() {
                               <>
                                 <button
                                   onClick={() => handleArchiveDevice(device)}
-                                  disabled={deleting}
+                                  disabled={archivingDevice === device.id || deletingDevice === device.id}
                                   className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Archiver le dispositif"
                                 >
-                                  <span className="text-lg">{deleting ? '⏳' : '🗄️'}</span>
+                                  <span className="text-lg">{archivingDevice === device.id ? '⏳' : '🗄️'}</span>
                                 </button>
                                 <button
                                   onClick={() => handlePermanentDeleteDevice(device)}
-                                  disabled={deleting}
+                                  disabled={archivingDevice === device.id || deletingDevice === device.id}
                                   className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Supprimer définitivement le dispositif"
                                 >
-                                  <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
+                                  <span className="text-lg">{deletingDevice === device.id ? '⏳' : '🗑️'}</span>
                                 </button>
                               </>
                             ) : (
                               /* Non-administrateurs : Archive uniquement (pas de suppression définitive) */
                               <button
                                 onClick={() => handleArchiveDevice(device)}
-                                disabled={deleting}
+                                disabled={archivingDevice === device.id || deletingDevice === device.id}
                                 className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="Archiver le dispositif"
                               >
-                                <span className="text-lg">{deleting ? '⏳' : '🗄️'}</span>
+                                <span className="text-lg">{archivingDevice === device.id ? '⏳' : '🗄️'}</span>
                               </button>
                             )}
                           </>

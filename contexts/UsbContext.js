@@ -818,7 +818,21 @@ export function UsbProvider({ children }) {
           
           // 2. Extraire et stocker la configuration
           // Détecter si c'est une réponse GET_CONFIG/GET_STATUS (contient type: "config_response")
-          const isConfigResponse = payload.type === 'config_response'
+          const isConfigResponse = payload.type === 'config_response' || 
+                                   (payload.mode === 'usb_stream' && payload.type === 'config_response')
+          
+          // Log de débogage pour config_response
+          if (isConfigResponse) {
+            logger.log('🔍🔍🔍 [USB] CONFIG_RESPONSE DÉTECTÉ:', {
+              type: payload.type,
+              mode: payload.mode,
+              has_sleep_minutes: payload.sleep_minutes != null,
+              has_firmware_version: !!payload.firmware_version,
+              has_device_serial: !!payload.device_serial,
+              has_sim_iccid: !!payload.sim_iccid
+            })
+            appendUsbStreamLog('🔍 CONFIG_RESPONSE détecté - Configuration complète reçue', 'dashboard')
+          }
           
           // Si c'est une réponse GET_CONFIG, elle contient TOUTE la configuration
           // Sinon, on extrait seulement les champs essentiels des messages de streaming
@@ -871,10 +885,30 @@ export function UsbProvider({ children }) {
                 }
             
             if (isConfigResponse) {
-              logger.log('✅ Configuration COMPLÈTE reçue via GET_CONFIG:', deviceConfigFromUsb)
-              appendUsbStreamLog('✅ Configuration complète reçue du dispositif', 'dashboard')
+              logger.log('✅✅✅ Configuration COMPLÈTE reçue via GET_CONFIG:', JSON.stringify(deviceConfigFromUsb, null, 2))
+              appendUsbStreamLog('✅ Configuration complète reçue du dispositif (GET_CONFIG)', 'dashboard')
+              
+              // Mettre à jour aussi firmware_version et device_serial depuis config_response
+              if (payload.firmware_version) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  firmware_version: payload.firmware_version
+                }))
+              }
+              if (payload.device_serial) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  device_serial: payload.device_serial
+                }))
+              }
+              if (payload.sim_iccid) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  sim_iccid: payload.sim_iccid
+                }))
+              }
             } else {
-              logger.log('✅ Configuration extraite du format unifié:', deviceConfigFromUsb)
+              logger.log('✅ Configuration extraite du format unifié:', JSON.stringify(deviceConfigFromUsb, null, 2))
               const configSummary = [
                 deviceConfigFromUsb.sleep_minutes != null ? `Sleep=${deviceConfigFromUsb.sleep_minutes}min` : null,
                 deviceConfigFromUsb.measurement_duration_ms != null ? `Durée=${deviceConfigFromUsb.measurement_duration_ms}ms` : null,

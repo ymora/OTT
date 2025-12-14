@@ -2,91 +2,13 @@
 /**
  * Firmware Compilation Operations
  * Compile firmware and send SSE messages
+ * 
+ * Refactorisé : Fonctions SSE et cleanup extraites dans des modules séparés
  */
 
-function sendSSE($type, $message = '', $data = null) {
-    $payload = null;
-    
-    if ($type === 'log') {
-        $level = $message;
-        $message = $data;
-        $payload = ['type' => 'log', 'level' => $level, 'message' => $message];
-    } else if ($type === 'progress') {
-        $payload = ['type' => 'progress', 'progress' => $message];
-    } else if ($type === 'success') {
-        $payload = ['type' => 'success', 'message' => $message, 'version' => $data];
-    } else if ($type === 'error') {
-        $payload = ['type' => 'error', 'message' => $message];
-    }
-    
-    if ($payload !== null) {
-        echo "data: " . json_encode($payload) . "\n\n";
-        flush();
-    }
-}
-
-/**
- * Nettoie les anciens répertoires de build pour éviter l'accumulation
- */
-function cleanupOldBuildDirs() {
-    $temp_dir = sys_get_temp_dir();
-    $pattern = $temp_dir . '/ott_firmware_build_*';
-    
-    // Trouver tous les répertoires de build de plus de 1 heure
-    $build_dirs = glob($pattern, GLOB_ONLYDIR);
-    if (!$build_dirs) {
-        return;
-    }
-    
-    $now = time();
-    $cleaned = 0;
-    
-    foreach ($build_dirs as $dir) {
-        // Extraire le timestamp du nom du répertoire
-        if (preg_match('/ott_firmware_build_\d+_(\d+)$/', $dir, $matches)) {
-            $build_time = (int)$matches[1];
-            $age = $now - $build_time;
-            
-            // Supprimer les répertoires de plus de 1 heure
-            if ($age > 3600) {
-                cleanupBuildDir($dir);
-                $cleaned++;
-            }
-        }
-    }
-    
-    if ($cleaned > 0) {
-        error_log("[cleanupOldBuildDirs] Nettoyé $cleaned ancien(s) répertoire(s) de build");
-    }
-}
-
-/**
- * Nettoie un répertoire de build de manière sécurisée
- */
-function cleanupBuildDir($build_dir) {
-    if (empty($build_dir) || !is_dir($build_dir)) {
-        return;
-    }
-    
-    // Vérifier que c'est bien un répertoire de build (sécurité)
-    if (strpos($build_dir, 'ott_firmware_build_') === false) {
-        error_log("[cleanupBuildDir] ⚠️ Tentative de suppression d'un répertoire non autorisé: $build_dir");
-        return;
-    }
-    
-    // Supprimer récursivement
-    if (is_windows()) {
-        // Windows: utiliser rmdir /s /q
-        exec('rmdir /s /q ' . escapeshellarg($build_dir) . ' 2>&1', $output, $return_code);
-    } else {
-        // Linux/Unix: utiliser rm -rf
-        exec('rm -rf ' . escapeshellarg($build_dir) . ' 2>&1', $output, $return_code);
-    }
-    
-    if ($return_code !== 0) {
-        error_log("[cleanupBuildDir] ⚠️ Erreur lors de la suppression de $build_dir: " . implode("\n", $output));
-    }
-}
+// Charger les modules refactorisés
+require_once __DIR__ . '/compile/sse.php';
+require_once __DIR__ . '/compile/cleanup.php';
 
 function handleCompileFirmware($firmware_id) {
     global $pdo;

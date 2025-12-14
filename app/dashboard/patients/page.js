@@ -81,12 +81,12 @@ export default function PatientsPage() {
   // Filtrer uniquement les dispositifs assignés aux patients (non archivés)
   const devices = useMemo(() => {
     return (allDevices || []).filter(d => d.patient_id && !isArchived(d))
-  }, [allDevices])
+  }, [allDevices, isArchived])
   
   // Dispositifs libres (non assignés et non archivés)
   const freeDevices = useMemo(() => {
     return (allDevices || []).filter(d => !d.patient_id && !isArchived(d))
-  }, [allDevices])
+  }, [allDevices, isArchived])
 
 
   const handleAssignDevice = async (patient, deviceId) => {
