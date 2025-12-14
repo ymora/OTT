@@ -1,20 +1,29 @@
 # Gestion des Permissions pour Maxime
 
-## Problème
+## ⚠️ Problème Important
 Si Maxime est **admin** du dépôt, il peut bypasser les règles de protection de branche et pusher directement sur `main`, même si vous avez configuré les règles de protection.
 
-## Solution : Retirer les droits Admin à Maxime
+## ✅ Solution : S'assurer que Maxime n'a PAS les droits Admin
 
 ### Étape 1 : Vérifier les permissions actuelles
 1. Allez sur : https://github.com/ymora/OTT/settings/access
 2. Cherchez Maxime dans la liste des collaborateurs
-3. Vérifiez son rôle actuel (Admin, Write, Read, etc.)
+3. Vérifiez son rôle actuel :
+   - ❌ **Admin** = Peut bypasser les règles (PROBLÈME)
+   - ✅ **Write** ou **Maintain** = Ne peut PAS bypasser (CORRECT)
 
-### Étape 2 : Modifier les permissions
-Si Maxime est **Admin** :
-1. Cliquez sur le menu déroulant à côté de son nom
-2. Changez le rôle de **Admin** à **Write** (ou **Maintain** si disponible)
-3. Cliquez sur "Change role" ou "Save"
+### Étape 2 : Si Maxime est déjà collaborateur avec Admin
+1. Cliquez sur le menu déroulant (3 points ou menu) à côté de son nom
+2. Sélectionnez "Change role" ou "Manage access"
+3. Changez le rôle de **Admin** à **Write** (ou **Maintain** si disponible)
+4. Cliquez sur "Change role" ou "Save"
+
+### Étape 3 : Si Maxime a une invitation en attente
+1. Trouvez l'invitation pour `maxime@happlyzmedical.com`
+2. Si l'invitation propose le rôle **Admin** :
+   - Annulez l'invitation
+   - Créez une nouvelle invitation avec le rôle **Write** ou **Maintain**
+3. Si l'invitation propose déjà **Write** ou **Maintain** : ✅ C'est bon !
 
 ### Étape 3 : Vérifier la configuration
 - **Maxime avec rôle "Write"** : 
