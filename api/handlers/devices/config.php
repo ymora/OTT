@@ -85,7 +85,7 @@ function handleUpdateDeviceConfig($device_id) {
             'network_attach_timeout_ms' => 'INTEGER',
             'modem_max_reboots' => 'INTEGER',
             'apn' => 'VARCHAR(64)',
-            'sim_pin' => 'VARCHAR(8)',
+            'sim_pin' => 'VARCHAR(16)',  // Standard 3GPP: 4-8 chiffres, stocké en VARCHAR(16)
             'ota_primary_url' => 'TEXT',
             'ota_fallback_url' => 'TEXT',
             'ota_md5' => 'VARCHAR(32)'
@@ -169,6 +169,29 @@ function handleUpdateDeviceConfig($device_id) {
                 if ($input[$field] === null || $input[$field] === '') {
                     $updates[] = "$field = NULL";
                 } else {
+                    // Validation spécifique pour sim_pin (standard 3GPP: 4-8 chiffres)
+                    if ($field === 'sim_pin') {
+                        $simPin = (string)$input[$field];
+                        if (strlen($simPin) < 4 || strlen($simPin) > 8) {
+                            error_log("[Config Update] ⚠️ sim_pin longueur invalide (4-8 requis): " . strlen($simPin));
+                            http_response_code(400);
+                            echo json_encode([
+                                'success' => false, 
+                                'error' => 'Le code PIN SIM doit contenir entre 4 et 8 chiffres (standard 3GPP)'
+                            ]);
+                            return;
+                        }
+                        if (!preg_match('/^\d+$/', $simPin)) {
+                            error_log("[Config Update] ⚠️ sim_pin format invalide (chiffres uniquement): " . substr($simPin, 0, 3) . '...');
+                            http_response_code(400);
+                            echo json_encode([
+                                'success' => false, 
+                                'error' => 'Le code PIN SIM doit contenir uniquement des chiffres'
+                            ]);
+                            return;
+                        }
+                    }
+                    
                     $updates[] = "$field = :$field";
                     // Convertir les valeurs selon le type
                     if (is_array($input[$field])) {
@@ -231,6 +254,11 @@ function handleUpdateDeviceConfig($device_id) {
             $allConfigFields = array_merge($configFields, $airflowFields, $modemFields, $networkFields, $otaFields);
             
             foreach($allConfigFields as $field) {
+                // Ignorer via_usb (flag technique, pas un paramètre de config)
+                if ($field === 'via_usb') {
+                    continue;
+                }
+                
                 if (array_key_exists($field, $input) && $input[$field] !== null && $input[$field] !== '') {
                     $configPayload[$field] = $input[$field];
                 }

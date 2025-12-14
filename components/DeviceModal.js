@@ -606,6 +606,16 @@ export default function DeviceModal({
       }
     }
 
+    // Validation SIM PIN (4-8 chiffres, standard SIM)
+    if (formData.sim_pin && formData.sim_pin.trim().length > 0) {
+      const simPin = formData.sim_pin.trim()
+      if (simPin.length < 4 || simPin.length > 8) {
+        errors.sim_pin = 'Le code PIN SIM doit contenir entre 4 et 8 chiffres'
+      } else if (!/^\d+$/.test(simPin)) {
+        errors.sim_pin = 'Le code PIN SIM doit contenir uniquement des chiffres'
+      }
+    }
+
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }

@@ -149,6 +149,12 @@ export default function AdminMigrationsPage() {
       name: '🔧 Réparer la base de données',
       description: '✅ Crée toutes les tables manquantes (notifications, index, etc.) SANS PERTE DE DONNÉES. Utilisez ceci pour corriger les erreurs "table not found".',
       variant: 'success'
+    },
+    {
+      id: 'migration_sim_pin_varchar16.sql',
+      name: '📱 Mettre à jour sim_pin (VARCHAR 8→16)',
+      description: '✅ Augmente la limite de sim_pin de VARCHAR(8) à VARCHAR(16). Corrige l\'erreur "value too long for type character varying(8)" lors de la configuration des dispositifs. Validation applicative reste à 4-8 chiffres (standard 3GPP).',
+      variant: 'success'
     }
   ]
 

@@ -32,7 +32,8 @@ require_once __DIR__ . '/api/handlers/notifications.php';
 require_once __DIR__ . '/api/handlers/usb_logs.php';
 require_once __DIR__ . '/api/handlers/database_audit.php';
 
-// Démarrer le buffer de sortie pour capturer toute sortie HTML accidentelle
+// Démarrer le buffer de sortie TRÈS TÔT pour capturer toute sortie HTML accidentelle (warnings, notices, etc.)
+// IMPORTANT: Doit être AVANT la définition des constantes pour capturer les éventuels warnings
 ob_start();
 
 // Headers CORS (DOIT être en tout premier)
@@ -242,12 +243,29 @@ define('JWT_SECRET', $jwtSecret);
 define('JWT_EXPIRATION', 86400); // 24h
 define('AUTH_DISABLED', getenv('AUTH_DISABLED') === 'true');
 
-define('SENDGRID_API_KEY', getenv('SENDGRID_API_KEY') ?: '');
-define('SENDGRID_FROM_EMAIL', getenv('SENDGRID_FROM_EMAIL') ?: 'noreply@happlyz.com');
+// Définir les constantes de manière sûre pour éviter les warnings
+// Vérifier si les constantes existent déjà avant de les définir
+if (!defined('SENDGRID_API_KEY')) {
+    $sendgridApiKey = getenv('SENDGRID_API_KEY');
+    define('SENDGRID_API_KEY', $sendgridApiKey !== false ? $sendgridApiKey : '');
+}
+if (!defined('SENDGRID_FROM_EMAIL')) {
+    $sendgridFromEmail = getenv('SENDGRID_FROM_EMAIL');
+    define('SENDGRID_FROM_EMAIL', $sendgridFromEmail !== false ? $sendgridFromEmail : 'noreply@happlyz.com');
+}
 
-define('TWILIO_ACCOUNT_SID', getenv('TWILIO_ACCOUNT_SID') ?: '');
-define('TWILIO_AUTH_TOKEN', getenv('TWILIO_AUTH_TOKEN') ?: '');
-define('TWILIO_FROM_NUMBER', getenv('TWILIO_FROM_NUMBER') ?: '');
+if (!defined('TWILIO_ACCOUNT_SID')) {
+    $twilioAccountSid = getenv('TWILIO_ACCOUNT_SID');
+    define('TWILIO_ACCOUNT_SID', $twilioAccountSid !== false ? $twilioAccountSid : '');
+}
+if (!defined('TWILIO_AUTH_TOKEN')) {
+    $twilioAuthToken = getenv('TWILIO_AUTH_TOKEN');
+    define('TWILIO_AUTH_TOKEN', $twilioAuthToken !== false ? $twilioAuthToken : '');
+}
+if (!defined('TWILIO_FROM_NUMBER')) {
+    $twilioFromNumber = getenv('TWILIO_FROM_NUMBER');
+    define('TWILIO_FROM_NUMBER', $twilioFromNumber !== false ? $twilioFromNumber : '');
+}
 
 // define('ENABLE_DEMO_RESET', getenv('ENABLE_DEMO_RESET') === 'true'); // SUPPRIMÉ: Fonctionnalité Reset Demo retirée
 define('SQL_BASE_DIR', __DIR__ . '/sql');
@@ -274,6 +292,18 @@ try {
 
 function handleRunMigration() {
     global $pdo;
+    
+    // Désactiver l'affichage des erreurs pour éviter qu'elles polluent la réponse JSON
+    $oldDisplayErrors = ini_get('display_errors');
+    ini_set('display_errors', 0);
+    
+    // Nettoyer le buffer de sortie pour éviter que les warnings PHP polluent la réponse JSON
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
+    // Définir le header JSON dès le début
+    header('Content-Type: application/json; charset=utf-8');
     
     $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? null;
     $allowWithoutAuth = in_array($remoteAddr, ['127.0.0.1', '::1', 'localhost'], true) || AUTH_DISABLED || getenv('ALLOW_MIGRATION_ENDPOINT') === 'true';
@@ -442,6 +472,11 @@ function handleRunMigration() {
             'error' => 'Migration error',
             'message' => $e->getMessage()
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } finally {
+        // Restaurer l'état précédent de display_errors
+        if (isset($oldDisplayErrors)) {
+            ini_set('display_errors', $oldDisplayErrors);
+        }
     }
 }
 
@@ -655,7 +690,7 @@ ADD COLUMN IF NOT EXISTS sim_ready_timeout_ms INTEGER,
 ADD COLUMN IF NOT EXISTS network_attach_timeout_ms INTEGER,
 ADD COLUMN IF NOT EXISTS modem_max_reboots INTEGER,
 ADD COLUMN IF NOT EXISTS apn VARCHAR(64),
-ADD COLUMN IF NOT EXISTS sim_pin VARCHAR(8),
+ADD COLUMN IF NOT EXISTS sim_pin VARCHAR(16),  -- Standard 3GPP: 4-8 chiffres, stocké en VARCHAR(16)
 ADD COLUMN IF NOT EXISTS ota_primary_url TEXT,
 ADD COLUMN IF NOT EXISTS ota_fallback_url TEXT,
 ADD COLUMN IF NOT EXISTS ota_md5 VARCHAR(32);
@@ -1615,6 +1650,10 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
 
 // Migration & Admin (endpoints de maintenance - admin uniquement)
 } elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {
+    // Nettoyer le buffer AVANT d'appeler handleRunMigration pour éviter que les warnings polluent la réponse
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
     handleRunMigration();
 } elseif(preg_match('#/admin/repair-database$#', $path) && $method === 'POST') {
     handleRepairDatabase();
