@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation'
 import { withBasePath } from '@/lib/utils'
 import logger from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
+import { useApiCall } from '@/hooks'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import MetadataCard from '@/components/MetadataCard'
 import DayDetailsModal from '@/components/DayDetailsModal'
@@ -195,7 +196,9 @@ function MarkdownViewer({ fileName }) {
   const [regenerating, setRegenerating] = useState(false)
   const [selectedDay, setSelectedDay] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { fetchWithAuth, API_URL } = useAuth()
+  const { API_URL } = useAuth()
+  // Utiliser useApiCall pour l'appel API de régénération
+  const { call: regenerateCall } = useApiCall({ requiresAuth: true })
   
   // Ref pour éviter les rechargements multiples du même fichier
   const loadedFileNameRef = useRef(null)
@@ -416,7 +419,7 @@ function MarkdownViewer({ fileName }) {
       setLoading(false)
       isLoadingRef.current = false
     }
-  }, [fileName])
+  }, [fileName, API_URL, parseMarkdownForCharts])
 
   // Fonction pour régénérer le fichier de suivi du temps
   const regenerateTimeTracking = useCallback(async (force = false) => {
@@ -432,14 +435,11 @@ function MarkdownViewer({ fileName }) {
     try {
       logger.debug('🔄 Régénération du fichier de suivi du temps...')
       
-      const regenerateResponse = await fetchWithAuth(
-        `${API_URL}/api.php/docs/regenerate-time-tracking`,
-        { method: 'POST' },
-        { requiresAuth: true }
-      )
+      const regenerateData = await regenerateCall('/api.php/docs/regenerate-time-tracking', {
+        method: 'POST'
+      })
       
-      if (regenerateResponse.ok) {
-        const regenerateData = await regenerateResponse.json()
+      if (regenerateData && regenerateData.success !== false) {
         logger.debug('✅ Fichier régénéré avec succès:', regenerateData)
         // Mettre à jour le timestamp de dernière régénération
         lastRegenerationTimeRef.current = Date.now()
@@ -450,16 +450,14 @@ function MarkdownViewer({ fileName }) {
         await reloadContent()
       } else {
         // Vérifier si c'est une erreur 501 (non disponible sur cette plateforme)
-        if (regenerateResponse.status === 501) {
-          const errorData = await regenerateResponse.json().catch(() => ({}))
+        if (regenerateData?.code === 501 || regenerateData?.status === 501) {
           logger.debug('ℹ️ Régénération automatique non disponible sur ce serveur (non-Windows). Le fichier existant sera utilisé.')
           // Ne pas lancer d'erreur, simplement ignorer et continuer avec le fichier existant
           return
         }
         
         // Autre erreur
-        const errorData = await regenerateResponse.json().catch(() => ({}))
-        logger.warn('⚠️ Erreur lors de la régénération:', errorData)
+        logger.warn('⚠️ Erreur lors de la régénération:', regenerateData)
         // Ne pas bloquer : on continue avec le fichier existant
         return
       }
@@ -471,7 +469,7 @@ function MarkdownViewer({ fileName }) {
     } finally {
       setRegenerating(false)
     }
-  }, [fileName, API_URL, fetchWithAuth, regenerating, reloadContent])
+  }, [fileName, regenerateCall, regenerating, reloadContent])
 
   useEffect(() => {
     // Réinitialiser les refs quand le fileName change (nouveau composant monté)

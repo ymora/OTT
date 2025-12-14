@@ -961,6 +961,8 @@ function runSqlFile(PDO $pdo, $filename) {
             }
             
             try {
+                // SÉCURITÉ: $statement provient du parsing d'un fichier SQL statique (parseSqlStatements)
+                // et ne contient jamais de variables utilisateur non échappées - utilisation de exec() sécurisée ici
                 $pdo->exec($statement);
                 error_log("[runSqlFile] ✅ Instruction " . ($index + 1) . " exécutée avec succès");
             } catch (PDOException $e) {

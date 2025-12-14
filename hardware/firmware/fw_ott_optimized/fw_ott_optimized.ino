@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  OTT Firmware v2.0
+ *  OTT Firmware v2.5
  * ================================================================
  * 
  * MATÉRIEL : LILYGO TTGO T-A7670G ESP32 Dev Board
@@ -82,7 +82,7 @@ static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
 #define OTT_DEFAULT_ICCID "89330123456789012345"
 #endif
 
-// Numérotation automatique des dispositifs (v2.0)
+// Numérotation automatique des dispositifs (v2.5)
 // ================================================
 // À la sortie d'usine, le firmware est flashé avec le serial par défaut "OTT-XX-XXX"
 // 
@@ -115,6 +115,7 @@ String NETWORK_APN    = OTT_DEFAULT_APN;
 String DEVICE_ICCID   = OTT_DEFAULT_ICCID;
 String DEVICE_SERIAL  = OTT_DEFAULT_SERIAL;
 String DETECTED_OPERATOR = "";  // Opérateur détecté (MCC+MNC) - sauvegardé pour réutilisation
+bool apnManual = false;  // Flag indiquant que l'APN a été configuré manuellement (ne pas écraser par détection auto)
 
 const char* API_HOST       = "ott-jbln.onrender.com";
 const uint16_t API_PORT    = 443;
@@ -125,7 +126,7 @@ const char* PATH_LOGS      = "/devices/logs";
 
 // Version du firmware - stockée dans une section spéciale pour extraction depuis le binaire
 // Cette constante sera visible dans le binaire compilé via une section .version
-#define FIRMWARE_VERSION_STR "2.0"
+#define FIRMWARE_VERSION_STR "2.5"
 const char* FIRMWARE_VERSION = FIRMWARE_VERSION_STR;
 
 // Section de version lisible depuis le binaire (utilise __attribute__ pour créer une section)
@@ -202,6 +203,8 @@ static const unsigned long OTA_CHECK_INTERVAL_MS = 30000;  // Vérifier commande
 static bool usbModeActive = false;
 static unsigned long lastUsbCheck = 0;
 static const unsigned long USB_CHECK_INTERVAL_MS = 500;  // Vérifier USB toutes les 500ms
+static int usbStateCounter = 0;  // Compteur pour debounce (éviter oscillations)
+static const int USB_STATE_THRESHOLD = 3;  // Nombre de vérifications consécutives nécessaires pour changer d'état
 static bool watchdogConfigured = false;
 static String otaPrimaryUrl;
 static String otaFallbackUrl;
@@ -329,7 +332,7 @@ bool getDeviceLocationFast(float* latitude, float* longitude);
 void setup()
 {
   initSerial();
-  Serial.println(F("\n═══ OTT Firmware v2.0 ═══"));
+  Serial.println(F("\n═══ OTT Firmware v2.5 ═══"));
   Serial.printf("Serial: %s | ICCID: %s\n", 
                 DEVICE_SERIAL.c_str(), 
                 DEVICE_ICCID.substring(0, 10).c_str());
@@ -443,20 +446,38 @@ void loop()
   unsigned long now = millis();
   
   // =========================================================================
-  // DÉTECTION USB DYNAMIQUE (vérification toutes les 500ms)
+  // DÉTECTION USB DYNAMIQUE (vérification toutes les 500ms avec debounce)
   // =========================================================================
   if (now - lastUsbCheck >= USB_CHECK_INTERVAL_MS) {
     lastUsbCheck = now;
     bool currentUsbState = Serial.availableForWrite() > 0;
     
+    // Debounce : compter les états consécutifs pour éviter les oscillations
+    if (currentUsbState) {
+      // USB détecté : incrémenter le compteur
+      if (usbStateCounter < USB_STATE_THRESHOLD) {
+        usbStateCounter++;
+      }
+    } else {
+      // USB non détecté : décrémenter le compteur
+      if (usbStateCounter > 0) {
+        usbStateCounter--;
+      }
+    }
+    
+    // Changer d'état seulement si le compteur atteint le seuil
+    bool newUsbState = (usbStateCounter >= USB_STATE_THRESHOLD);
+    
     // Transition OFF → ON (USB branché)
-    if (currentUsbState && !usbModeActive) {
+    if (newUsbState && !usbModeActive) {
       usbModeActive = true;
+      usbStateCounter = USB_STATE_THRESHOLD;  // Verrouiller l'état
       Serial.println(F("\n🔌 USB connecté → Streaming 1s"));
     }
     // Transition ON → OFF (USB débranché)
-    else if (!currentUsbState && usbModeActive) {
+    else if (!newUsbState && usbModeActive) {
       usbModeActive = false;
+      usbStateCounter = 0;  // Réinitialiser le compteur
       Serial.println(F("\n📡 USB déconnecté → Mode hybride"));
     }
   }
@@ -527,7 +548,7 @@ void loop()
       // Message de démarrage au premier affichage
       if (firstUsbDisplay) {
         firstUsbDisplay = false;
-        LOG_I("USB", String("Streaming démarré | Modem: ") + (modemReady ? "OK" : "KO"));
+        LOG_I("USB", String(F("Streaming démarré | Modem: ")) + (modemReady ? F("OK") : F("KO")));
       }
       
       // Capturer mesure pour affichage USB
@@ -541,7 +562,7 @@ void loop()
         if (usbSequence % 30 == 0) {
           bool networkOk = modem.isNetworkConnected();
           bool gprsOk = modem.isGprsConnected();
-          LOG_D("USB", String("Signal: ") + m.rssi + " dBm | Net: " + (networkOk ? "OK" : "KO") + " | GPRS: " + (gprsOk ? "OK" : "KO"));
+          LOG_D("USB", String(F("Signal: ")) + m.rssi + F(" dBm | Net: ") + (networkOk ? F("OK") : F("KO")) + F(" | GPRS: ") + (gprsOk ? F("OK") : F("KO")));
         }
       } else {
         m.rssi = 0;
@@ -558,7 +579,7 @@ void loop()
         hasLocation = getDeviceLocationFast(&latitude, &longitude);
         // Afficher uniquement si GPS valide et toutes les 30 secondes (réduit spam)
         if (hasLocation && usbSequence % 30 == 0) {
-          LOG_D("USB", String("GPS: ") + latitude + "," + longitude);
+          LOG_D("USB", String(F("GPS: ")) + latitude + F(",") + longitude);
         }
       }
       
@@ -594,7 +615,7 @@ void loop()
       if (gpsEnabled) {
         hasLocationOta = getDeviceLocation(&latOta, &lonOta);
         if (hasLocationOta) {
-          LOG_D("OTA", String("GPS: ") + latOta + "," + lonOta);
+          LOG_D("OTA", String(F("GPS: ")) + latOta + F(",") + lonOta);
         }
       }
       
@@ -604,8 +625,8 @@ void loop()
         lastOtaMeasurementTime = now;
         lastFlowValue = mOta.flow;
         lastMeasurementTime = now;
-        LOG_I("OTA", String("Mesure OK (") + mOta.flow + " L/min, " + (int)mOta.battery + "%, " + mOta.rssi + " dBm)");
-        LOG_D("OTA", String("Prochaine dans ") + configuredSleepMinutes + " min");
+        LOG_I("OTA", String(F("Mesure OK (")) + mOta.flow + F(" L/min, ") + (int)mOta.battery + F("%, ") + mOta.rssi + F(" dBm)"));
+        LOG_D("OTA", String(F("Prochaine dans ")) + configuredSleepMinutes + F(" min"));
       } else {
         LOG_W("OTA", "Échec envoi - réessai prochain cycle");
       }
@@ -654,25 +675,36 @@ void loop()
       }
     }
     
-    // Traiter commandes série (config, calibration, etc.)
-    static String commandBuffer = "";
+    delay(100); // Petit délai pour ne pas surcharger
+    return; // Sortir de loop(), on reviendra au prochain cycle
+  }
+  
+  // =========================================================================
+  // TRAITEMENT COMMANDES SÉRIE (toujours actif, même sans mode USB)
+  // =========================================================================
+  // Traiter commandes série (config, calibration, etc.) - TOUJOURS, même si pas en mode USB
+  // Cela permet de recevoir des commandes même si le firmware n'a pas détecté USB
+  static String commandBuffer = "";
+  if (Serial.available() > 0) {
     while (Serial.available()) {
       char incoming = Serial.read();
       if (incoming == '\r') continue;
       if (incoming == '\n') {
         commandBuffer.trim();
         if (commandBuffer.length() > 0) {
+          Serial.print(F("[CMD] Buffer complet: "));
+          Serial.println(commandBuffer);
           handleSerialCommand(commandBuffer);
         }
         commandBuffer = "";
       } else {
         commandBuffer += incoming;
-        if (commandBuffer.length() > 128) commandBuffer = "";
+        if (commandBuffer.length() > 128) {
+          Serial.println(F("[CMD] Buffer trop long, reset"));
+          commandBuffer = "";
+        }
       }
     }
-    
-    delay(100); // Petit délai pour ne pas surcharger
-    return; // Sortir de loop(), on reviendra au prochain cycle
   }
   
   // =========================================================================
@@ -759,7 +791,7 @@ void loop()
       lastMeasurementTime = now;
       Serial.printf("%s[SENSOR] ✅ Envoyé: %.2f L/min | %.0f%% | %d dBm\n", 
                     timeStr.c_str(), m.flow, m.battery, m.rssi);
-      sendLog("INFO", "Mesure envoyée avec succès: " + String(m.flow) + " L/min", "measurements");
+      sendLog("INFO", String(F("Mesure envoyée avec succès: ")) + String(m.flow) + F(" L/min"), "measurements");
     } else {
       Serial.printf("%s[SENSOR] ❌ Échec envoi mesure\n", timeStr.c_str());
       sendLog("ERROR", "Échec envoi mesure - vérifier connexion API", "measurements");
@@ -964,7 +996,7 @@ bool startModem()
       // Avertir si l'ICCID configuré diffère de l'ICCID réel
       Serial.printf("[MODEM] ATTENTION: ICCID configuré (%s) diffère de l'ICCID réel (%s)\n", 
                     DEVICE_ICCID.c_str(), realIccid.c_str());
-      sendLog("WARN", "ICCID mismatch: config=" + DEVICE_ICCID + " real=" + realIccid, "config");
+      sendLog("WARN", String(F("ICCID mismatch: config=")) + DEVICE_ICCID + F(" real=") + realIccid, "config");
     }
   } else if (realIccid.length() > 0) {
     Serial.printf("[MODEM] ICCID réel invalide (longueur %d): %s\n", realIccid.length(), realIccid.c_str());
@@ -1101,9 +1133,14 @@ bool startModem()
   }
   
   // CRITIQUE: Utiliser l'APN de la carte SIM réelle, pas de l'opérateur en roaming
-  // Si on a détecté la carte SIM, utiliser son APN
-  // Sinon, utiliser l'APN de l'opérateur détecté (réseau home)
-  if (simOperator.length() > 0) {
+  // MAIS: Ne pas écraser l'APN si il a été configuré manuellement (apnManual = true)
+  // Si on a détecté la carte SIM, utiliser son APN (sauf si APN manuel)
+  // Sinon, utiliser l'APN de l'opérateur détecté (réseau home) (sauf si APN manuel)
+  if (apnManual) {
+    // APN configuré manuellement - ne pas écraser par détection automatique
+    Serial.printf("[MODEM] 🔒 APN configuré manuellement: \"%s\" (ne sera pas écrasé par détection auto)\n", NETWORK_APN.c_str());
+    apnToUse = NETWORK_APN;
+  } else if (simOperator.length() > 0) {
     // Carte SIM détectée : utiliser son APN (même en roaming)
     String simApn = getRecommendedApnForOperator(simOperator);
     if (simApn.length() > 0 && simApn != NETWORK_APN) {
@@ -1272,12 +1309,13 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
     doc["longitude"] = *longitude;
   }
   
-  // Configuration
+  // Configuration essentielle seulement (pour réduire la taille des messages)
+  // La config complète est disponible via GET_CONFIG
   doc["interval_ms"] = intervalMs;
   doc["sleep_minutes"] = configuredSleepMinutes;
   doc["measurement_duration_ms"] = airflowSampleDelayMs;
   
-  // Coefficients de calibration
+  // Coefficients de calibration (essentiels pour les calculs)
   JsonArray calArray = doc.createNestedArray("calibration_coefficients");
   float a0 = isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0;
   float a1 = isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1;
@@ -1285,11 +1323,6 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   calArray.add(a0);
   calArray.add(a1);
   calArray.add(a2);
-  
-  // Paramètres de mesure
-  doc["airflow_passes"] = airflowPasses;
-  doc["airflow_samples_per_pass"] = airflowSamplesPerPass;
-  doc["airflow_delay_ms"] = airflowSampleDelayMs;
   
   // Timestamp
   doc["timestamp_ms"] = millis();
@@ -1322,14 +1355,63 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
 // Gérer les commandes série (config, calibration, etc.)
 void handleSerialCommand(const String& command)
 {
-  // Ignorer les lignes qui sont du JSON (données de streaming sortantes)
-  // Les lignes JSON commencent par '{' et ne sont pas des commandes
   String trimmed = command;
   trimmed.trim();
   
-  // Ignorer les lignes JSON complètes (commencent par '{')
+  // Debug : afficher la commande reçue
+  Serial.print(F("[CMD] 🔍 DEBUG: Commande reçue: "));
+  Serial.println(trimmed);
+  Serial.print(F("[CMD] 🔍 DEBUG: Longueur: "));
+  Serial.print(trimmed.length());
+  Serial.println(F(" caractères"));
+  
+  // Vérifier si c'est une commande JSON entrante (commence par '{' et contient "command")
   if (trimmed.startsWith("{")) {
-    // C'est du JSON de streaming, pas une commande - ignorer silencieusement
+    // C'est peut-être une commande JSON entrante, vérifier
+    if (trimmed.indexOf("\"command\"") >= 0 || trimmed.indexOf("'command'") >= 0) {
+      // C'est une commande JSON entrante, la traiter
+      StaticJsonDocument<512> cmdDoc;
+      DeserializationError error = deserializeJson(cmdDoc, trimmed);
+      
+      if (!error && cmdDoc.containsKey("command")) {
+        String cmdVerb = cmdDoc["command"].as<String>();
+        cmdVerb.toUpperCase();
+        
+        Serial.print(F("[CMD] 🔍 DEBUG: Commande JSON détectée: "));
+        Serial.println(cmdVerb);
+        
+        // Créer une structure Command pour compatibilité avec handleCommand
+        Command cmd;
+        cmd.id = 0; // Pas d'ID pour les commandes USB
+        cmd.verb = cmdVerb;
+        cmd.payloadRaw = ""; // Le payload sera dans cmdDoc si nécessaire
+        
+        // Extraire le payload si présent
+        if (cmdDoc.containsKey("payload") || cmdDoc.containsKey("config")) {
+          String payloadStr;
+          serializeJson(cmdDoc, payloadStr);
+          cmd.payloadRaw = payloadStr;
+        }
+        
+        Serial.print(F("[CMD] 🔍 DEBUG: Appel handleCommand pour: "));
+        Serial.println(cmdVerb);
+        
+        // Traiter la commande
+        uint32_t dummySleep = configuredSleepMinutes;
+        handleCommand(cmd, dummySleep);
+        
+        Serial.print(F("[CMD] 🔍 DEBUG: handleCommand terminé pour: "));
+        Serial.println(cmdVerb);
+        return;
+      } else if (error) {
+        Serial.print(F("[CMD] 🔍 DEBUG: Erreur parsing JSON: "));
+        Serial.println(error.c_str());
+      } else {
+        Serial.println(F("[CMD] 🔍 DEBUG: JSON valide mais pas de clé 'command'"));
+      }
+    }
+    
+    // C'est du JSON de streaming sortant, pas une commande - ignorer silencieusement
     return;
   }
   
@@ -1803,22 +1885,23 @@ bool setApn(const String& apn) {
 String getRecommendedApnForOperator(const String& operatorCode)
 {
   // Codes opérateurs français (MCC+MNC)
+  // OPTIMISATION RAM: Utiliser des constantes au lieu de String() pour économiser la RAM
   if (operatorCode.indexOf("20801") >= 0 || operatorCode.indexOf("20802") >= 0) {
     // Orange France (MCC: 208, MNC: 01/02)
     // APN Internet: "orange" ou "orange.fr" (les deux fonctionnent généralement)
     // On utilise "orange" car c'est le plus court et le plus commun
-    return String("orange");
+    return F("orange");
   } else if (operatorCode.indexOf("20810") >= 0 || operatorCode.indexOf("20811") >= 0) {
     // SFR France (MCC: 208, MNC: 10/11)
-    return String("sl2sfr");
+    return F("sl2sfr");
   } else if (operatorCode.indexOf("20815") >= 0 || operatorCode.indexOf("20816") >= 0) {
     // Free Mobile France (MCC: 208, MNC: 15/16)
     // APN Internet: "free" (pour données/internet)
     // Note: "mmsfree" existe mais est uniquement pour MMS, pas pour internet
-    return String("free");
+    return F("free");
   } else if (operatorCode.indexOf("20820") >= 0) {
     // Bouygues Telecom France (MCC: 208, MNC: 20)
-    return String("mmsbouygtel");
+    return F("mmsbouygtel");
   }
   
   // Par défaut, retourner l'APN configuré
@@ -1833,19 +1916,20 @@ String getRecommendedApnForOperator(const String& operatorCode)
 String getOperatorName(const String& operatorCode)
 {
   // Codes opérateurs français (MCC+MNC)
+  // OPTIMISATION RAM: Utiliser F() au lieu de String() pour économiser la RAM
   if (operatorCode.indexOf("20801") >= 0 || operatorCode.indexOf("20802") >= 0) {
-    return String("Orange France");
+    return F("Orange France");
   } else if (operatorCode.indexOf("20810") >= 0 || operatorCode.indexOf("20811") >= 0) {
-    return String("SFR France");
+    return F("SFR France");
   } else if (operatorCode.indexOf("20815") >= 0 || operatorCode.indexOf("20816") >= 0) {
-    return String("Free Mobile");
+    return F("Free Mobile");
   } else if (operatorCode.indexOf("20820") >= 0) {
-    return String("Bouygues Telecom");
+    return F("Bouygues Telecom");
   }
   
   // Si le code commence par 208, c'est un opérateur français non reconnu
   if (operatorCode.indexOf("208") >= 0) {
-    return String("Opérateur FR (") + operatorCode + ")";
+    return String(F("Opérateur FR (")) + operatorCode + F(")");
   }
   
   // Par défaut, retourner le code tel quel
@@ -1885,7 +1969,7 @@ bool checkEpsStatus(bool& epsOk, String& epsStatus)
       } else if (stat == 4) {
         epsStatus = "KO (unknown)";
       } else {
-        epsStatus = "KO (stat=" + String(stat) + ")";
+        epsStatus = String(F("KO (stat=")) + String(stat) + F(")");
       }
     } else {
       epsStatus = "KO (parse error)";
@@ -2022,7 +2106,13 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
   
   // Maintenant que l'opérateur est détecté (ou non), configurer l'APN correct
   // CRITIQUE: Utiliser l'APN de la carte SIM réelle, pas de l'opérateur en roaming
-  if (simOperator.length() > 0) {
+  // MAIS: Ne pas écraser l'APN si il a été configuré manuellement (apnManual = true)
+  if (apnManual) {
+    // APN configuré manuellement - ne pas écraser par détection automatique
+    Serial.printf("[MODEM] 🔒 APN configuré manuellement: \"%s\" (ne sera pas écrasé par détection auto)\n", apnToUse.c_str());
+    // Utiliser l'APN configuré manuellement
+    apnToUse = NETWORK_APN;
+  } else if (simOperator.length() > 0) {
     // Carte SIM détectée : utiliser son APN (même en roaming)
     String simApn = getRecommendedApnForOperator(simOperator);
     if (simApn.length() > 0 && simApn != apnToUse) {
@@ -2038,33 +2128,33 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
       }
       apnToUse = simApn;
       if (setApn(apnToUse)) {
-        LOG_I("MODEM", String("APN configuré: ") + apnToUse);
+        LOG_I("MODEM", String(F("APN configuré: ")) + apnToUse);
       }
       delay(1000);
       feedWatchdog();
     } else if (simApn.length() > 0) {
       apnToUse = simApn;
-      LOG_D("MODEM", String(simOperatorName) + " → APN: " + apnToUse);
+      LOG_D("MODEM", simOperatorName + F(" → APN: ") + apnToUse);
     }
   } else if (oper.length() > 0) {
     // Carte SIM non détectée : utiliser l'APN de l'opérateur détecté
     String operatorName = getOperatorName(oper);
     String recommendedApn = getRecommendedApnForOperator(oper);
     if (recommendedApn.length() > 0 && recommendedApn != apnToUse) {
-      LOG_I("MODEM", String(operatorName) + " (" + oper + ") → APN: " + apnToUse + " → " + recommendedApn);
+        LOG_I("MODEM", operatorName + F(" (") + oper + F(") → APN: ") + apnToUse + F(" → ") + recommendedApn);
       apnToUse = recommendedApn;
       if (setApn(apnToUse)) {
-        LOG_D("MODEM", String("APN configuré: ") + apnToUse);
+        LOG_D("MODEM", String(F("APN configuré: ")) + apnToUse);
       }
       delay(1000);
       feedWatchdog();
     } else if (recommendedApn.length() > 0) {
-      LOG_D("MODEM", String(operatorName) + " (" + oper + ") | APN: " + apnToUse);
+      LOG_D("MODEM", operatorName + F(" (") + oper + F(") | APN: ") + apnToUse);
     } else {
-      LOG_W("MODEM", String(operatorName) + " (" + oper + ") APN non reconnu | APN: " + apnToUse);
+      LOG_W("MODEM", operatorName + F(" (") + oper + F(") APN non reconnu | APN: ") + apnToUse);
     }
   } else {
-    LOG_W("MODEM", String("Opérateur non détecté | APN: ") + apnToUse);
+    LOG_W("MODEM", String(F("Opérateur non détecté | APN: ")) + apnToUse);
   }
   
   // Attendre stabilisation modem
@@ -2085,7 +2175,7 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
       feedWatchdog();
       initialCsq = modem.getSignalQuality();
       if (initialCsq != 99) {
-        LOG_I("MODEM", String("Signal récupéré: ") + initialCsq + " (" + csqToRssi(initialCsq) + " dBm)");
+        LOG_I("MODEM", String(F("Signal récupéré: ")) + initialCsq + F(" (") + csqToRssi(initialCsq) + F(" dBm)"));
         break;
       }
     }
@@ -2100,7 +2190,7 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
         feedWatchdog();
         initialCsq = modem.getSignalQuality();
         if (initialCsq != 99) {
-          LOG_I("MODEM", String("Signal récupéré après reset: ") + initialCsq + " (" + csqToRssi(initialCsq) + " dBm)");
+          LOG_I("MODEM", String(F("Signal récupéré après reset: ")) + initialCsq + F(" (") + csqToRssi(initialCsq) + F(" dBm)"));
           break;
         }
       }
@@ -2111,7 +2201,7 @@ bool attachNetworkWithRetry(uint32_t timeoutMs, uint8_t maxRetries)
       }
     }
   } else {
-    LOG_D("MODEM", String("Signal initial OK: ") + initialCsq + " (" + csqToRssi(initialCsq) + " dBm)");
+    LOG_D("MODEM", String(F("Signal initial OK: ")) + initialCsq + F(" (") + csqToRssi(initialCsq) + F(" dBm)"));
   }
   
   while (millis() - start < timeoutMs && retryCount < maxRetries) {
@@ -2464,7 +2554,8 @@ bool connectData(uint32_t timeoutMs)
     }
   }
   // APN génériques en dernier recours
-  apnList[2] = "internet";
+  // OPTIMISATION RAM: Utiliser F() pour la constante
+  apnList[2] = F("internet");
   
   uint8_t apnIndex = 0;
   uint8_t maxApnAttempts = 3;
@@ -2533,13 +2624,13 @@ bool connectData(uint32_t timeoutMs)
       
       if (networkOk && (gprsOk || epsOk) && pdpOk) {
         Serial.println(F("[MODEM] ✅ Prêt pour envoi de données"));
-        String logMsg = "Connexion réussie - GPRS:" + String(gprsOk ? "OK" : "KO") + 
-                       " EPS:" + epsStatus + " PDP:" + String(pdpOk ? "OK" : "KO");
-        sendLog("INFO", logMsg + " APN: " + currentApn, "network");
+        String logMsg = String(F("Connexion réussie - GPRS:")) + String(gprsOk ? F("OK") : F("KO")) + 
+                       String(F(" EPS:")) + epsStatus + String(F(" PDP:")) + String(pdpOk ? F("OK") : F("KO"));
+        sendLog("INFO", logMsg + String(F(" APN: ")) + currentApn, "network");
       } else {
         Serial.println(F("[MODEM] ⚠️ Connexion mais état réseau incomplet"));
-        String logMsg = "Connexion partielle - GPRS:" + String(gprsOk ? "OK" : "KO") + 
-                       " EPS:" + epsStatus + " PDP:" + String(pdpOk ? "OK" : "KO");
+        String logMsg = String(F("Connexion partielle - GPRS:")) + String(gprsOk ? F("OK") : F("KO")) + 
+                       String(F(" EPS:")) + epsStatus + String(F(" PDP:")) + String(pdpOk ? F("OK") : F("KO"));
         sendLog("WARN", logMsg, "network");
       }
       
@@ -2748,6 +2839,7 @@ float airflowToLpm(float airflow)
 
 String buildPath(const char* path)
 {
+  // OPTIMISATION RAM: API_PREFIX est déjà une constante, pas besoin de F()
   return String(API_PREFIX) + path;
 }
 
@@ -2761,6 +2853,7 @@ String buildPath(const char* path)
 // Cette fonction est conservée pour compatibilité future si besoin d'ajouter un token.
 String buildAuthHeader()
 {
+  // OPTIMISATION RAM: Retourner String vide sans allocation
   return String();  // Pas d'authentification JWT pour les mesures (ICCID suffit)
 }
 
@@ -2940,7 +3033,7 @@ bool sendMeasurement(const Measurement& m, float* latitude, float* longitude, co
       if (errorMsg.length() > 200) {
         errorMsg = errorMsg.substring(0, 200) + "...";
       }
-      sendLog("ERROR", "Measurement failed: " + errorMsg, "measurements");
+      sendLog("ERROR", String(F("Measurement failed: ")) + errorMsg, "measurements");
     } else {
       Serial.println(F("[API] ⚠️ Pas de réponse de la base de données"));
       sendLog("ERROR", "Measurement failed: pas de réponse API", "measurements");
@@ -2970,11 +3063,11 @@ bool sendMeasurementWithContext(const char* context) {
   // Envoyer mesure
   bool sent = sendMeasurement(m, hasLocation ? &lat : nullptr, hasLocation ? &lon : nullptr, context);
   if (sent) {
-    LOG_I("AUTO", String("Mesure envoyée: ") + context);
+    LOG_I("AUTO", String(F("Mesure envoyée: ")) + context);
     lastFlowValue = m.flow;
     lastMeasurementTime = millis();
   } else {
-    LOG_W("AUTO", String("Échec envoi: ") + context);
+    LOG_W("AUTO", String(F("Échec envoi: ")) + context);
   }
   
   return sent;
@@ -2984,7 +3077,8 @@ int fetchCommands(Command* out, size_t maxCount)
 {
   if (maxCount == 0) return 0;
   String response;
-  String path = String("/devices/") + DEVICE_ICCID + "/commands/pending?limit=" + String(maxCount);
+  // OPTIMISATION RAM: Utiliser F() pour les chaînes constantes
+  String path = String(F("/devices/")) + DEVICE_ICCID + F("/commands/pending?limit=") + String(maxCount);
   if (!httpGet(path.c_str(), &response)) {
     String timeStr = formatTimeFromMillis(millis());
     Serial.printf("%s[API] ❌ Échec récupération commandes depuis la base de données\n", timeStr.c_str());
@@ -3142,7 +3236,7 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     Serial.printf("%s[CMD] ✅ SET_SLEEP_SECONDS: %d minutes\n", timeStr.c_str(), nextSleepMinutes);
     bool ackOk = acknowledgeCommand(cmd, true, "Sleep updated");
     Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
-    sendLog("INFO", "Sleep interval set to " + String(nextSleepMinutes) + " min", "commands");
+    sendLog("INFO", String(F("Sleep interval set to ")) + String(nextSleepMinutes) + F(" min"), "commands");
   } else if (cmd.verb == "PING") {
     Serial.printf("%s[CMD] ✅ PING reçu - Envoi pong...\n", timeStr.c_str());
     bool ackOk = acknowledgeCommand(cmd, true, "pong");
@@ -3154,11 +3248,20 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       sendLog("WARN", "UPDATE_CONFIG sans payload", "commands");
       return;
     }
-      if (payloadDoc.containsKey("apn")) {
+    
+    // Liste des champs modifiés pour affichage
+    String updatedFields = "";
+    
+    if (payloadDoc.containsKey("apn")) {
       String newApn = payloadDoc["apn"].as<String>();
       // SÉCURITÉ: Valider et limiter la longueur de l'APN
       if (newApn.length() > 0 && newApn.length() <= 64) {
+        String oldApn = NETWORK_APN;
         NETWORK_APN = sanitizeString(newApn, 64);
+        apnManual = true;  // Marquer l'APN comme configuré manuellement
+        if (updatedFields.length() > 0) updatedFields += ", ";
+        updatedFields += String(F("APN: ")) + oldApn + F(" → ") + NETWORK_APN;
+        Serial.printf("✅ [CMD] APN changé: %s → %s (configuré manuellement - ne sera pas écrasé par détection auto)\n", oldApn.c_str(), NETWORK_APN.c_str());
       }
     }
     // Note : Le champ "jwt" est ignoré. L'authentification se fait uniquement par sim_iccid.
@@ -3306,21 +3409,33 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
         Serial.printf("⚠️ [CMD] Niveau de log invalide: %s (valeurs: ERROR, WARN, INFO, DEBUG)\n", level.c_str());
       }
       if (currentLogLevel != oldLevel) {
-        sendLog("INFO", String("Log level changed: ") + level, "commands");
+        sendLog("INFO", String(F("Log level changed: ")) + level, "commands");
       }
     }
     saveConfig();
     
     // Afficher un résumé de ce qui a été modifié
+    Serial.println("═══════════════════════════════════════════════════════════");
     Serial.println("✅ [CMD] Configuration appliquée et sauvegardée en NVS");
+    Serial.println("═══════════════════════════════════════════════════════════");
+    if (updatedFields.length() > 0) {
+      Serial.printf("📝 Champs modifiés: %s\n", updatedFields.c_str());
+    } else {
+      Serial.println("📝 Aucun champ modifié (valeurs identiques)");
+    }
     Serial.printf("    • Serial: %s | ICCID: %s\n", DEVICE_SERIAL.c_str(), DEVICE_ICCID.substring(0,10).c_str());
     Serial.printf("    • APN: %s | PIN: %s\n", NETWORK_APN.c_str(), SIM_PIN.length() > 0 ? "***" : "non configuré");
     Serial.printf("    • Sleep: %d min | GPS: %s | Roaming: %s | Envoi: tous les %d wakeup(s)\n", 
                   configuredSleepMinutes, gpsEnabled ? "ON" : "OFF", roamingEnabled ? "ON" : "OFF", sendEveryNWakeups);
+    Serial.println("═══════════════════════════════════════════════════════════");
     
     bool ackOk = acknowledgeCommand(cmd, true, "config updated");
     Serial.printf("%s[CMD] 📤 ACK envoyé: %s\n", timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec");
-    sendLog("INFO", "Configuration mise à jour à distance", "commands");
+    if (updatedFields.length() > 0) {
+      sendLog("INFO", String(F("Configuration mise à jour: ")) + updatedFields, "commands");
+    } else {
+      sendLog("INFO", "Configuration vérifiée (aucun changement)", "commands");
+    }
     Serial.println(F("[CMD] 🔄 Redémarrage du dispositif dans 2 secondes..."));
     // Remplacer delay() par boucle avec feedWatchdog() avant redémarrage
     unsigned long rebootDelayStart = millis();
@@ -3398,7 +3513,7 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     }
     Serial.printf("%s[OTA] 🚀 Démarrage de la mise à jour OTA...\n", timeStr.c_str());
     
-    sendLog("INFO", "OTA request: " + url + (expectedVersion.length() ? " (v" + expectedVersion + ")" : ""), "ota");
+    sendLog("INFO", String(F("OTA request: ")) + url + (expectedVersion.length() ? String(F(" (v")) + expectedVersion + F(")") : String("")), "ota");
     bool otaOk = performOtaUpdate(url, md5, expectedVersion);
     bool ackOk = acknowledgeCommand(cmd, otaOk, otaOk ? "ota applied" : "ota failed");
     if (otaOk) {
@@ -3427,37 +3542,51 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       Serial.printf("%s[OTA] ⚠️  Le dispositif continue avec la version actuelle\n", errorTimeStr.c_str());
       Serial.println(F("═══════════════════════════════════════════════════════════"));
     }
-  } else if (cmd.verb == "GET_STATUS") {
-    // Nouvelle commande : récupérer l'état complet du dispositif
+  } else if (cmd.verb == "GET_STATUS" || cmd.verb == "GET_CONFIG") {
+    // Commande : récupérer l'état complet ET toute la configuration du dispositif
     String timeStr = formatTimeFromMillis(millis());
-    Serial.printf("%s[CMD] 📊 GET_STATUS - Récupération état complet du dispositif...\n", timeStr.c_str());
+    Serial.printf("%s[CMD] 📊 %s - Récupération configuration complète du dispositif...\n", timeStr.c_str(), cmd.verb.c_str());
     
-    // Créer JSON avec état complet
-    DynamicJsonDocument statusDoc(1024);
+    // Créer JSON avec état complet et TOUTE la configuration
+    DynamicJsonDocument statusDoc(2048);  // Augmenté pour toute la config
     
     // Identifiants
     statusDoc["device_serial"] = DEVICE_SERIAL;
     statusDoc["sim_iccid"] = DEVICE_ICCID;
     statusDoc["firmware_version"] = FIRMWARE_VERSION;
+    statusDoc["device_name"] = buildDeviceName();
     
-    // Configuration actuelle
+    // Configuration complète (tous les paramètres stockés en NVS)
     statusDoc["sleep_minutes"] = configuredSleepMinutes;
-    statusDoc["gps_enabled"] = gpsEnabled;
-    statusDoc["roaming_enabled"] = roamingEnabled;
+    statusDoc["measurement_duration_ms"] = airflowSampleDelayMs;
     statusDoc["send_every_n_wakeups"] = sendEveryNWakeups;
     
-    // Calibration
-    JsonArray cal = statusDoc.createNestedArray("calibration_coefficients");
-    cal.add(isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0);
-    cal.add(isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1);
-    cal.add(isnan(CAL_OVERRIDE_A2) ? 0.0f : CAL_OVERRIDE_A2);
+    // Coefficients de calibration
+    JsonArray calArray = statusDoc.createNestedArray("calibration_coefficients");
+    float a0 = isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0;
+    float a1 = isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1;
+    float a2 = isnan(CAL_OVERRIDE_A2) ? 0.0f : CAL_OVERRIDE_A2;
+    calArray.add(a0);
+    calArray.add(a1);
+    calArray.add(a2);
     
-    // Mesures airflow
+    // Paramètres de mesure
     statusDoc["airflow_passes"] = airflowPasses;
     statusDoc["airflow_samples_per_pass"] = airflowSamplesPerPass;
     statusDoc["airflow_delay_ms"] = airflowSampleDelayMs;
     
-    // État modem
+    // GPS et roaming
+    statusDoc["gps_enabled"] = gpsEnabled;
+    statusDoc["roaming_enabled"] = roamingEnabled;
+    
+    // Paramètres modem (tous les timeouts)
+    statusDoc["watchdog_seconds"] = watchdogTimeoutSeconds;
+    statusDoc["modem_boot_timeout_ms"] = modemBootTimeoutMs;
+    statusDoc["sim_ready_timeout_ms"] = simReadyTimeoutMs;
+    statusDoc["network_attach_timeout_ms"] = networkAttachTimeoutMs;
+    statusDoc["modem_max_reboots"] = modemMaxReboots;
+    
+    // État modem (si disponible)
     statusDoc["modem_ready"] = modemReady;
     if (modemReady) {
       statusDoc["network_connected"] = modem.isNetworkConnected();
@@ -3465,11 +3594,62 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
       int8_t csq = modem.getSignalQuality();
       statusDoc["signal_quality"] = csq;
       statusDoc["rssi"] = csqToRssi(csq);
+      
+      // État SIM (utiliser getSimStatus de TinyGsm)
+      SimStatus simStatus = modem.getSimStatus();
+      String simStatusStr = "UNKNOWN";
+      if (simStatus == SIM_READY) {
+        simStatusStr = "READY";
+      } else if (simStatus == SIM_LOCKED) {
+        simStatusStr = "LOCKED";
+      } else if (simStatus == SIM_ANTITHEFT_LOCKED) {
+        simStatusStr = "ANTITHEFT_LOCKED";
+      } else if (simStatus == SIM_ERROR) {
+        simStatusStr = "ERROR";
+      }
+      statusDoc["sim_status"] = simStatusStr;
+      
+      // Numéro de téléphone SIM (si disponible) - AT+CNUM
+      // Note: Certaines cartes SIM ne stockent pas le numéro, retournera vide
+      String simNumber = "";
+      modem.sendAT(F("+CNUM"));
+      if (modem.waitResponse(5000, GF("+CNUM:")) == 1) {
+        // Format: +CNUM: "","+33612345678",129,7,4
+        String response = modem.stream.readStringUntil('\n');
+        response.trim();
+        // Extraire le numéro entre les guillemets (chercher le deuxième numéro)
+        int firstQuote = response.indexOf('"');
+        if (firstQuote >= 0) {
+          int secondQuote = response.indexOf('"', firstQuote + 1);
+          if (secondQuote > firstQuote) {
+            // Premier numéro (peut être vide), chercher le deuxième
+            int thirdQuote = response.indexOf('"', secondQuote + 1);
+            int fourthQuote = response.indexOf('"', thirdQuote + 1);
+            if (thirdQuote >= 0 && fourthQuote > thirdQuote + 1) {
+              simNumber = response.substring(thirdQuote + 1, fourthQuote);
+            }
+          }
+        }
+        modem.waitResponse();
+      } else {
+        modem.waitResponse();
+      }
+      if (simNumber.length() > 0) {
+        statusDoc["sim_phone_number"] = simNumber;
+      }
+    } else {
+      statusDoc["sim_status"] = "MODEM_NOT_READY";
     }
     
-    // Réseau
+    // Réseau (toute la configuration réseau)
     statusDoc["apn"] = NETWORK_APN;
+    statusDoc["sim_pin"] = SIM_PIN;
     statusDoc["detected_operator"] = DETECTED_OPERATOR;
+    
+    // OTA (toute la configuration OTA)
+    statusDoc["ota_primary_url"] = otaPrimaryUrl;
+    statusDoc["ota_fallback_url"] = otaFallbackUrl;
+    statusDoc["ota_md5"] = otaExpectedMd5;
     
     // Niveau de log
     String logLevelStr = "INFO";
@@ -3486,26 +3666,38 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes)
     statusDoc["uptime_ms"] = millis();
     statusDoc["watchdog_seconds"] = watchdogTimeoutSeconds;
     
+    // Type de réponse pour identification par le frontend
+    statusDoc["type"] = "config_response";
+    statusDoc["mode"] = "usb_stream";
+    
     // Sérialiser le status en string
     String statusStr;
     serializeJson(statusDoc, statusStr);
     
+    // Envoyer directement sur Serial (format JSON compatible avec le parser du frontend)
+    // IMPORTANT: Envoyer avec Serial.println() pour que le frontend puisse détecter la ligne complète
+    Serial.println(statusStr);
+    Serial.flush();
+    
+    // Log de débogage pour confirmer l'envoi
+    Serial.printf("%s[CMD] 🔍 DEBUG: Réponse GET_CONFIG envoyée (%d octets)\n", timeStr.c_str(), statusStr.length());
+    Serial.printf("%s[CMD] 🔍 DEBUG: Type: config_response, Mode: usb_stream\n", timeStr.c_str());
+    
     // Afficher un résumé
-    Serial.printf("%s[CMD] 📊 État récupéré:\n", timeStr.c_str());
+    Serial.printf("%s[CMD] 📊 Configuration complète envoyée:\n", timeStr.c_str());
     Serial.printf("%s      • Serial: %s | FW: %s\n", timeStr.c_str(), DEVICE_SERIAL.c_str(), FIRMWARE_VERSION);
     Serial.printf("%s      • Sleep: %dmin | GPS: %s | Roaming: %s\n", timeStr.c_str(), 
                   configuredSleepMinutes, gpsEnabled ? "ON" : "OFF", roamingEnabled ? "ON" : "OFF");
     Serial.printf("%s      • Modem: %s | USB: %s | Log: %s\n", timeStr.c_str(),
                   modemReady ? "OK" : "KO", usbModeActive ? "ON" : "OFF", logLevelStr.c_str());
+    Serial.printf("%s[CMD] ✅ Configuration complète envoyée (%d octets)\n", timeStr.c_str(), statusStr.length());
     
-    // Envoyer ACK avec payload contenant le status
-    bool ackOk = acknowledgeCommand(cmd, true, statusStr.c_str());
-    Serial.printf("%s[CMD] 📤 ACK avec status envoyé: %s (%d octets)\n", 
-                  timeStr.c_str(), ackOk ? "✅ Succès" : "❌ Échec", statusStr.length());
-    sendLog("INFO", "GET_STATUS executed", "commands");
+    // Envoyer ACK (sans payload pour éviter duplication)
+    bool ackOk = acknowledgeCommand(cmd, true, "config sent");
+    sendLog("INFO", cmd.verb + F(" envoyé - Configuration complète"), "commands");
   } else {
     acknowledgeCommand(cmd, false, "verb not supported");
-    sendLog("WARN", "Commande non supportée: " + cmd.verb, "commands");
+    sendLog("WARN", String(F("Commande non supportée: ")) + cmd.verb, "commands");
   }
 }
 
@@ -3526,6 +3718,8 @@ void loadConfig()
   DEVICE_SERIAL = prefs.getString("serial", DEVICE_SERIAL);
   // Charger l'opérateur sauvegardé pour pré-configurer l'APN au boot
   DETECTED_OPERATOR = prefs.getString("operator", "");
+  // Charger le flag indiquant si l'APN a été configuré manuellement
+  apnManual = prefs.getBool("apn_manual", false);
   
   // Réinitialiser le serial si le format est invalide
   // Format valide : OTT-XX-XXX (temporaire) ou OTT-YY-NNN (définitif, ex: OTT-25-001)
@@ -3637,6 +3831,8 @@ void saveConfig()
   if (DETECTED_OPERATOR.length() > 0) {
     prefs.putString("operator", DETECTED_OPERATOR);
   }
+  // Sauvegarder le flag indiquant si l'APN a été configuré manuellement
+  prefs.putBool("apn_manual", apnManual);
   prefs.putFloat("cal_a0", CAL_OVERRIDE_A0);
   prefs.putFloat("cal_a1", CAL_OVERRIDE_A1);
   prefs.putFloat("cal_a2", CAL_OVERRIDE_A2);

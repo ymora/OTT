@@ -205,7 +205,7 @@ export default function DashboardPage() {
         </div>
       </div>
     )
-  }, [activeDevices, geolocatedDevices, loading, focusDeviceId])
+  }, [activeDevices, geolocatedDevices, loading, focusDeviceId, devices])
 
   // Mémoriser les dispositifs en ligne
   const onlineDevicesList = useMemo(() => {

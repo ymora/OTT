@@ -1,7 +1,0 @@
-L'audit a généré des questions pour analyse IA.
-Fichier: audit/audit-ai.json
-
-Pour continuer:
-1. Dites à l'IA: 'Analyse audit/audit-ai.json et réponds'
-2. L'IA va générer: audit/audit-ai-resp.json
-3. Relancez l'audit ou dites: 'Continue audit avec réponses IA'

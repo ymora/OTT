@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useTimers, useEntityRestore, useSmartDeviceRefresh } from '@/hooks'
+import { useApiData, useTimers, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh } from '@/hooks'
 import { createUpdateConfigCommand } from '@/lib/deviceCommands'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import { isArchived } from '@/lib/utils'
@@ -15,6 +15,7 @@ import FlashModal from '@/components/FlashModal'
 import DeviceModal from '@/components/DeviceModal'
 import DeviceMeasurementsModal from '@/components/DeviceMeasurementsModal'
 import SuccessMessage from '@/components/SuccessMessage'
+import FirmwareInteractiveTest from '@/components/audit/FirmwareInteractiveTest'
 
 export default function DebugTab() {
   const usbContext = useUsb()
@@ -80,6 +81,38 @@ export default function DebugTab() {
       logger.debug('[USB-TAB] Cleanup')
     }
   }, [])
+  
+  // Debug: Vérifier l'état de la connexion et du streaming
+  const hasLoggedTest = useRef(false)
+  useEffect(() => {
+    logger.debug('[UsbStreamingTab] État USB:', {
+      isConnected,
+      port: port ? 'présent' : 'absent',
+      usbStreamStatus,
+      usbStreamLogsLength: usbStreamLogs.length,
+      usbStreamError,
+      usbVirtualDevice: usbVirtualDevice ? usbVirtualDevice.device_name : 'null',
+      usbDeviceInfo: usbDeviceInfo ? 'présent' : 'null'
+    })
+    
+    // Ajouter un log de test au montage pour vérifier que les logs fonctionnent (une seule fois)
+    if (!hasLoggedTest.current) {
+      hasLoggedTest.current = true
+      appendUsbStreamLog('🔍 [TEST] Composant UsbStreamingTab monté - Console de logs active', 'dashboard')
+      logger.log('[UsbStreamingTab] Log de test ajouté')
+    }
+    
+    // Si connecté mais streaming pas démarré, essayer de démarrer
+    if (isConnected && port && usbStreamStatus === 'idle' && !usbStreamError) {
+      logger.log('[UsbStreamingTab] Connexion détectée mais streaming idle, démarrage automatique...')
+      appendUsbStreamLog('🔄 [AUTO] Démarrage automatique du streaming USB...', 'dashboard')
+      startUsbStreaming(port).catch(err => {
+        logger.error('[UsbStreamingTab] Erreur démarrage streaming:', err)
+        appendUsbStreamLog(`❌ [AUTO] Erreur démarrage: ${err.message || err}`, 'dashboard')
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, port, usbStreamStatus, usbStreamError, usbVirtualDevice, usbDeviceInfo])
   
   // Log contexte USB uniquement si changement important
   useEffect(() => {
@@ -266,6 +299,53 @@ export default function DebugTab() {
     invalidateCache,
     refetch: refetchDevices
   })
+  
+  // Utiliser le hook unifié pour l'archivage
+  const { archive: handleArchiveDevice, archiving: archivingDevice } = useEntityArchive({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'devices',
+    refetch: refetchDevices,
+    onSuccess: (device) => {
+      logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`)
+      appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`, 'dashboard')
+      setSuccessMessage('✅ Dispositif archivé')
+      invalidateCache()
+      createTimeoutWithCleanup(() => {
+        refetchDevices()
+      }, 500)
+      createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
+    },
+    onError: (errorMessage) => {
+      logger.error('Erreur archivage dispositif:', errorMessage)
+      appendUsbStreamLog(`❌ Erreur archivage: ${errorMessage}`, 'dashboard')
+    },
+    invalidateCache,
+    currentUser: user
+  })
+  
+  // Utiliser le hook unifié pour la suppression définitive
+  const { permanentDelete: handlePermanentDeleteDevice, deleting: deletingDevice } = useEntityPermanentDelete({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'devices',
+    refetch: refetchDevices,
+    onSuccess: (device) => {
+      logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`)
+      appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`, 'dashboard')
+      setSuccessMessage('✅ Dispositif supprimé définitivement')
+      invalidateCache()
+      createTimeoutWithCleanup(() => {
+        refetchDevices()
+      }, 300)
+      createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
+    },
+    onError: (errorMessage) => {
+      logger.error('Erreur suppression dispositif:', errorMessage)
+      appendUsbStreamLog(`❌ Erreur suppression: ${errorMessage}`, 'dashboard')
+    },
+    invalidateCache
+  })
   // Extraire les dispositifs depuis la réponse API
   // La structure de l'API est: { success: true, devices: [...] }
   const allDevicesFromApi = useMemo(() => {
@@ -415,18 +495,30 @@ export default function DebugTab() {
   
   // Fusionner les logs locaux et distants
   const allLogs = useMemo(() => {
+    // Debug: logger l'état pour diagnostiquer
+    logger.debug('[UsbStreamingTab] allLogs calculation:', {
+      isConnected,
+      usbStreamLogsLength: usbStreamLogs.length,
+      shouldUseRemoteLogs,
+      remoteLogsLength: remoteLogs.length,
+      usbStreamStatus
+    })
+    
     // Si on a une connexion USB locale, utiliser uniquement les logs locaux
     if (isConnected || usbStreamLogs.length > 0) {
+      logger.debug('[UsbStreamingTab] Using local USB logs:', usbStreamLogs.length)
       return usbStreamLogs
     }
     
     // Sinon, utiliser les logs distants (pour admin)
     if (shouldUseRemoteLogs) {
+      logger.debug('[UsbStreamingTab] Using remote logs:', remoteLogs.length)
       return remoteLogs
     }
     
+    logger.debug('[UsbStreamingTab] No logs available')
     return []
-  }, [usbStreamLogs, remoteLogs, isConnected, shouldUseRemoteLogs])
+  }, [usbStreamLogs, remoteLogs, isConnected, shouldUseRemoteLogs, usbStreamStatus])
   
   // STREAMING AUTOMATIQUE en temps réel pour les admins
   useEffect(() => {
@@ -656,8 +748,7 @@ export default function DebugTab() {
   )
   const compiledFirmwares = (firmwaresData?.firmwares?.firmwares || []).filter(fw => fw.status === 'compiled')
   
-  // États pour la suppression
-  const [deleting, setDeleting] = useState(false)
+  // États pour les messages de succès
   const [successMessage, setSuccessMessage] = useState(null)
   
   // État pour le modal RAZ console
@@ -1274,76 +1365,7 @@ export default function DebugTab() {
     </tr>
   )
 
-  // Fonction pour supprimer un dispositif
-  const handleArchiveDevice = useCallback(async (device) => {
-    setDeleting(true)
-    try {
-      const isAdmin = user?.role_name === 'admin'
-      const url = isAdmin 
-        ? `/api.php/devices/${device.id}?archive=true`
-        : `/api.php/devices/${device.id}`
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        url,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      
-      if (response.success) {
-        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`)
-        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`, 'dashboard')
-        setSuccessMessage('✅ Dispositif archivé')
-        // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
-        invalidateCache()
-        createTimeoutWithCleanup(() => {
-          refetchDevices()
-        }, 500)
-        createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
-      } else {
-        logger.error('Erreur archivage dispositif:', response.error)
-        appendUsbStreamLog(`❌ Erreur archivage: ${response.error}`, 'dashboard')
-      }
-    } catch (err) {
-      logger.error('Erreur archivage dispositif:', err)
-      appendUsbStreamLog(`❌ Erreur archivage: ${err.message || err}`, 'dashboard')
-    } finally {
-      setDeleting(false)
-    }
-  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog, user, createTimeoutWithCleanup, setSuccessMessage])
-  
-  const handlePermanentDeleteDevice = useCallback(async (device) => {
-    setDeleting(true)
-    try {
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${device.id}?permanent=true`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      
-      if (response.success) {
-        logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`)
-        appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`, 'dashboard')
-        setSuccessMessage('✅ Dispositif supprimé définitivement')
-        // Debounce pour éviter les refetch multiples rapides
-        invalidateCache()
-        createTimeoutWithCleanup(() => {
-          refetchDevices()
-        }, 300)
-        createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
-      } else {
-        logger.error('Erreur suppression dispositif:', response.error)
-        appendUsbStreamLog(`❌ Erreur suppression: ${response.error}`, 'dashboard')
-      }
-    } catch (err) {
-      logger.error('Erreur suppression dispositif:', err)
-      appendUsbStreamLog(`❌ Erreur suppression: ${err.message || err}`, 'dashboard')
-    } finally {
-      setDeleting(false)
-    }
-  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog, createTimeoutWithCleanup, setSuccessMessage])
+  // Les fonctions handleArchiveDevice et handlePermanentDeleteDevice sont maintenant fournies par les hooks useEntityArchive et useEntityPermanentDelete
   
   // Plus de modal - actions directes
   
@@ -1784,34 +1806,84 @@ export default function DebugTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {/* AFFICHER LE DISPOSITIF VIRTUEL USB temporairement (pendant l'enregistrement) */}
-                    {usbVirtualDevice && !allDevices.find(d => 
-                      d.sim_iccid === usbVirtualDevice.sim_iccid || 
-                      d.device_serial === usbVirtualDevice.device_serial
-                    ) && (
-                      <tr key={usbVirtualDevice.id} className="table-row bg-blue-50 dark:bg-blue-900/20 animate-pulse hover:bg-blue-100 dark:hover:bg-blue-900/30">
+                    {/* AFFICHER LE DISPOSITIF VIRTUEL USB (non enregistré en base) - Afficher dès qu'il existe */}
+                    {usbVirtualDevice && (() => {
+                      // Si pas d'identifiants (dispositif temporaire), toujours afficher
+                      if (!usbVirtualDevice.sim_iccid && !usbVirtualDevice.device_serial) {
+                        return true
+                      }
+                      
+                      // Vérifier si le dispositif existe déjà en base
+                      const existsInDb = allDevices.find(d => 
+                        (d.sim_iccid && usbVirtualDevice.sim_iccid && d.sim_iccid === usbVirtualDevice.sim_iccid) || 
+                        (d.device_serial && usbVirtualDevice.device_serial && d.device_serial === usbVirtualDevice.device_serial)
+                      )
+                      
+                      // Si le dispositif existe en base, ne pas l'afficher ici (il sera dans allDevices)
+                      // Afficher seulement si pas en base
+                      return !existsInDb
+                    })() && (
+                      <tr key={usbVirtualDevice.id} className="table-row bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border-l-4 border-blue-500">
                         <td className="table-cell px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
                           <div className="flex items-center gap-2">
-                            <span className="text-blue-500 text-lg animate-spin">⏳</span>
+                            <span className="text-blue-500 text-lg">🔌</span>
                             <span className="font-medium">{usbVirtualDevice.device_name}</span>
-                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">Enregistrement automatique...</span>
+                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">USB Connecté</span>
+                            <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded">Non enregistré</span>
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            ICCID: {usbVirtualDevice.sim_iccid || 'N/A'}
+                            {usbVirtualDevice.sim_iccid ? `ICCID: ${usbVirtualDevice.sim_iccid}` : ''}
+                            {usbVirtualDevice.device_serial ? `Serial: ${usbVirtualDevice.device_serial}` : ''}
                           </div>
                         </td>
                         <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">-</td>
                         <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbVirtualDevice.firmware_version || 'N/A'}</td>
-                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">Temps réel</td>
                         <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
-                          <span className="text-xs text-gray-500 italic">Auto...</span>
+                          {usbVirtualDevice?.last_seen 
+                            ? new Date(usbVirtualDevice.last_seen).toLocaleString('fr-FR') 
+                            : (usbDeviceInfo?.last_seen 
+                              ? new Date(usbDeviceInfo.last_seen).toLocaleString('fr-FR') 
+                              : 'Temps réel')}
+                        </td>
+                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                // Créer un dispositif avec un nom par défaut si nécessaire
+                                const deviceToEdit = {
+                                  ...usbVirtualDevice,
+                                  device_name: usbVirtualDevice.device_name || 'USB-Device',
+                                  // S'assurer que les champs requis sont présents
+                                  sim_iccid: usbVirtualDevice.sim_iccid || '',
+                                  device_serial: usbVirtualDevice.device_serial || '',
+                                  firmware_version: usbVirtualDevice.firmware_version || ''
+                                }
+                                setEditingDevice(deviceToEdit)
+                                setShowDeviceModal(true)
+                              }}
+                              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                              title="Configurer le dispositif USB"
+                            >
+                              ⚙️ Configurer
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )}
                     
                     {(() => {
-                      // Cas 1: Aucun dispositif enregistré du tout
+                      // Debug: logger l'état pour diagnostiquer
+                      logger.debug('[UsbStreamingTab] Affichage message "Aucun dispositif":', {
+                        allDevicesLength: allDevices.length,
+                        hasUsbVirtualDevice: !!usbVirtualDevice,
+                        usbVirtualDeviceName: usbVirtualDevice?.device_name || 'N/A',
+                        isConnected: isConnected,
+                        usbStreamLogsLength: usbStreamLogs.length
+                      })
+                      
+                      // Cas 1: Aucun dispositif enregistré du tout (mais on peut avoir un dispositif USB virtuel)
                       if (allDevices.length === 0 && !usbVirtualDevice) {
+                        logger.debug('[UsbStreamingTab] Affichage message "Aucun dispositif enregistré"')
                         return (
                           <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
                             <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
@@ -1819,12 +1891,19 @@ export default function DebugTab() {
                                 <span className="text-4xl">🔌</span>
                                 <p className="text-sm font-medium">Aucun dispositif enregistré</p>
                                 <p className="text-xs text-gray-400 dark:text-gray-500">
-                                  Connectez un dispositif USB pour l&apos;enregistrer automatiquement
+                                  Connectez un dispositif USB pour le configurer (il sera ajouté à la base par OTA)
                                 </p>
                               </div>
                             </td>
                           </tr>
                         )
+                      }
+                      
+                      // Si on a un dispositif virtuel mais pas de dispositifs en base, ne pas afficher le message
+                      // Le dispositif virtuel sera affiché juste au-dessus
+                      if (allDevices.length === 0 && usbVirtualDevice) {
+                        logger.debug('[UsbStreamingTab] Dispositif virtuel existe, ne pas afficher le message')
+                        return null // Ne pas afficher le message, le dispositif virtuel sera affiché
                       }
                       
                       // Cas 2: Afficher les archives mais aucun dispositif archivé
@@ -1844,8 +1923,9 @@ export default function DebugTab() {
                         }
                       }
                       
-                      // Cas 3: Afficher les dispositifs actifs mais aucun à afficher
-                      if (!showArchived && devicesToDisplay.length === 0) {
+                      // Cas 3: Afficher les dispositifs actifs mais aucun à afficher (sauf si dispositif USB virtuel existe)
+                      // Ne pas afficher ce message si on a un dispositif USB virtuel (il sera affiché au-dessus)
+                      if (!showArchived && devicesToDisplay.length === 0 && !usbVirtualDevice && allDevices.length === 0) {
                         return (
                           <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
                             <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
@@ -1856,6 +1936,12 @@ export default function DebugTab() {
                             </td>
                           </tr>
                         )
+                      }
+                      
+                      // Si on a un dispositif virtuel mais pas de dispositifs en base, ne pas afficher de message
+                      // Le dispositif virtuel sera affiché juste au-dessus
+                      if (!showArchived && devicesToDisplay.length === 0 && usbVirtualDevice) {
+                        return null // Ne pas afficher le message, le dispositif virtuel sera affiché
                       }
                       
                       // Cas 4: Afficher les dispositifs
@@ -2084,30 +2170,30 @@ export default function DebugTab() {
                               <>
                                 <button
                                   onClick={() => handleArchiveDevice(device)}
-                                  disabled={deleting}
+                                  disabled={archivingDevice === device.id || deletingDevice === device.id}
                                   className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Archiver le dispositif"
                                 >
-                                  <span className="text-lg">{deleting ? '⏳' : '🗄️'}</span>
+                                  <span className="text-lg">{archivingDevice === device.id ? '⏳' : '🗄️'}</span>
                                 </button>
                                 <button
                                   onClick={() => handlePermanentDeleteDevice(device)}
-                                  disabled={deleting}
+                                  disabled={archivingDevice === device.id || deletingDevice === device.id}
                                   className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Supprimer définitivement le dispositif"
                                 >
-                                  <span className="text-lg">{deleting ? '⏳' : '🗑️'}</span>
+                                  <span className="text-lg">{deletingDevice === device.id ? '⏳' : '🗑️'}</span>
                                 </button>
                               </>
                             ) : (
                               /* Non-administrateurs : Archive uniquement (pas de suppression définitive) */
                               <button
                                 onClick={() => handleArchiveDevice(device)}
-                                disabled={deleting}
+                                disabled={archivingDevice === device.id || deletingDevice === device.id}
                                 className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="Archiver le dispositif"
                               >
-                                <span className="text-lg">{deleting ? '⏳' : '🗄️'}</span>
+                                <span className="text-lg">{archivingDevice === device.id ? '⏳' : '🗄️'}</span>
                               </button>
                             )}
                           </>
@@ -2127,7 +2213,7 @@ export default function DebugTab() {
           </div>
         </div>
 
-        {/* Statuts GPS, Réseau et Envoi de données */}
+        {/* Statut Système (regroupé: Firmware, Réseau, GPS, OTA) */}
         {isConnected && (
           <div className="mb-6">
             <div className="card">
@@ -2135,7 +2221,21 @@ export default function DebugTab() {
                 📊 Statut Système
               </h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Informations Firmware */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">🔧</span>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Firmware</h3>
+                  </div>
+                  <FirmwareInteractiveTest 
+                    compact={true}
+                    onTestComplete={(results) => {
+                      logger.log('[FirmwareTest] Résultats:', results)
+                      appendUsbStreamLog(`🔧 Tests firmware: ${results.commandsSupported.length} commande(s) supportée(s)`, 'dashboard')
+                    }}
+                  />
+                </div>
                 {/* Statut Réseau */}
                 <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div className="flex items-center gap-2 mb-2">
@@ -2361,6 +2461,65 @@ export default function DebugTab() {
             
             {/* Boutons d'action console */}
             <div className="flex items-center gap-2">
+              {/* Bouton pour sélectionner un port USB si non connecté */}
+              {!isConnected && isSupported && (
+                <button
+                  onClick={async () => {
+                    try {
+                      appendUsbStreamLog('🔍 Sélection du port USB...', 'dashboard')
+                      const selectedPort = await requestPort()
+                      if (selectedPort) {
+                        // Afficher les informations du port sélectionné
+                        const portInfo = selectedPort.getInfo?.()
+                        const deviceLabel = getUsbDeviceLabel(portInfo)
+                        const portPath = portInfo?.path || 'Port inconnu'
+                        const portLabel = deviceLabel ? `${deviceLabel} (${portPath})` : portPath
+                        appendUsbStreamLog(`✅ Port sélectionné: ${portLabel}`, 'dashboard')
+                        logger.log(`[USB] Port sélectionné: ${portLabel}`, portInfo)
+                        
+                        appendUsbStreamLog('🔌 Connexion au port en cours...', 'dashboard')
+                        const connected = await connect(selectedPort, 115200)
+                        if (connected) {
+                          appendUsbStreamLog(`✅ Connexion USB établie sur ${portLabel} !`, 'dashboard')
+                          logger.log(`[USB] Connexion établie sur ${portLabel}`)
+                          
+                          // Démarrer automatiquement le streaming après connexion
+                          setTimeout(async () => {
+                            try {
+                              appendUsbStreamLog('🚀 Démarrage du streaming USB...', 'dashboard')
+                              logger.log('[USB] Démarrage streaming après connexion manuelle')
+                              await startUsbStreaming(selectedPort)
+                              appendUsbStreamLog('✅ Streaming USB démarré - En attente de données...', 'dashboard')
+                            } catch (streamErr) {
+                              logger.error('❌ Erreur démarrage streaming:', streamErr)
+                              appendUsbStreamLog(`❌ Erreur démarrage streaming: ${streamErr.message || streamErr}`, 'dashboard')
+                            }
+                          }, 500)
+                        } else {
+                          appendUsbStreamLog(`❌ Échec de la connexion au port ${portLabel}`, 'dashboard')
+                          logger.error(`[USB] Échec connexion au port ${portLabel}`)
+                        }
+                      } else {
+                        // requestPort() a retourné null sans lever d'erreur
+                        // Cela peut arriver si l'API n'est pas supportée ou si l'utilisateur a annulé silencieusement
+                        appendUsbStreamLog('ℹ️ Aucun port sélectionné. Vérifiez que votre navigateur supporte l\'API Web Serial (Chrome/Edge) et qu\'un périphérique USB est connecté.', 'dashboard')
+                        logger.warn('[USB] requestPort() a retourné null sans erreur')
+                      }
+                    } catch (err) {
+                      if (err.name === 'NotFoundError') {
+                        appendUsbStreamLog('ℹ️ Aucun port sélectionné (utilisateur a annulé)', 'dashboard')
+                      } else {
+                        logger.error('❌ Erreur sélection port:', err)
+                        appendUsbStreamLog(`❌ Erreur: ${err.message || err}`, 'dashboard')
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
+                  title="Autoriser COM3 (une seule fois nécessaire) - Après autorisation, la connexion sera automatique"
+                >
+                  🔌 Autoriser COM3 (automatique après)
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (usbStreamStatus === 'running') {

@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/bootstrap/env_loader.php';
 require_once __DIR__ . '/bootstrap/database.php';
+require_once __DIR__ . '/bootstrap/notifications.php';
 require_once __DIR__ . '/api/helpers.php';
 require_once __DIR__ . '/api/helpers_sql.php';
 require_once __DIR__ . '/api/validators.php';

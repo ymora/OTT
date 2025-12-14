@@ -178,7 +178,11 @@ NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 | `JWT_SECRET` | Clé HMAC pour signer les tokens | générer via `openssl rand -hex 32` |
 | `AUTH_DISABLED` | Bypass login (demo) | `false` en prod |
 | `ENABLE_DEMO_RESET` | Autoriser `/admin/reset-demo` | `false` |
-| `SENDGRID_*`, `TWILIO_*` | Clés notification | laisser vide si non utilisées |
+| `SENDGRID_API_KEY` | Clé API SendGrid pour emails | Obtenir sur https://app.sendgrid.com/settings/api_keys |
+| `SENDGRID_FROM_EMAIL` | Email d'envoi SendGrid (vérifié) | `noreply@votredomaine.com` |
+| `TWILIO_ACCOUNT_SID` | Account SID Twilio pour SMS | Obtenir sur https://console.twilio.com/ |
+| `TWILIO_AUTH_TOKEN` | Auth Token Twilio | Obtenir sur https://console.twilio.com/ |
+| `TWILIO_FROM_NUMBER` | Numéro d'envoi Twilio (E.164) | `+33123456789` |
 | `CORS_ALLOWED_ORIGINS` | Origines additionnelles autorisées (CSV) | `https://mon-dashboard.com,https://foo.app` |
 
 > Astuce : le healthcheck et l'API partagent désormais la même résolution de configuration. Renseignez au minimum `DB_HOST/DB_NAME/DB_USER/DB_PASS` (et `DB_PORT` si besoin). `DATABASE_URL` reste utile pour les scripts (`scripts/db/db_migrate.sh`) ou pour forcer une configuration complète, mais n'est plus obligatoire pour obtenir `database: "connected"`. Pour autoriser la réinitialisation complète depuis le dashboard admin, définissez `ENABLE_DEMO_RESET=true` côté backend et `NEXT_PUBLIC_ENABLE_DEMO_RESET=true` côté frontend.

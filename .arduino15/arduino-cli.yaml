@@ -1,0 +1,22 @@
+# Configuration Arduino-cli pour le projet OTT
+# Les tools restent dans %LOCALAPPDATA%\Arduino15 (pas de copie)
+# Seul le core est dans .arduino15/ (committé dans Git)
+
+board_manager:
+  additional_urls:
+    - https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
+directories:
+  # Data : utilise .arduino15/ (core pré-installé)
+  data: .arduino15
+  # Downloads : utilise le cache local
+  downloads: C:\Users\ymora\AppData\Local\Arduino15\staging
+  # User : utilise le projet
+  user: .arduino15
+
+library:
+  enable_unsafe_install: false
+
+logging:
+  level: info
+  format: text

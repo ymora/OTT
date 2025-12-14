@@ -61,7 +61,8 @@ export default function DeviceModal({
     port, 
     write: usbWrite,
     usbConnectedDevice,
-    usbVirtualDevice
+    usbVirtualDevice,
+    usbDeviceInfo // Données reçues du dispositif USB (inclut config)
   } = useUsb()
   const [formData, setFormData] = useState({
     device_name: '',
@@ -88,6 +89,7 @@ export default function DeviceModal({
     network_attach_timeout_ms: null,
     modem_max_reboots: null,
     // Réseau
+    operator: '', // Opérateur sélectionné (Orange, Free, SFR, Bouygues, ou vide pour automatique)
     apn: '',
     sim_pin: '',
     // OTA
@@ -99,7 +101,7 @@ export default function DeviceModal({
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [loadingConfig, setLoadingConfig] = useState(false)
-  const [configTab, setConfigTab] = useState('basic') // basic, advanced, expert
+  const [configTab, setConfigTab] = useState('basic') // basic, advanced
 
   // Initialiser le formulaire UNIQUEMENT lors de l'ouverture du modal
   // Utiliser un ref pour éviter les réinitialisations lors de changements
@@ -155,34 +157,95 @@ export default function DeviceModal({
         // Charger la configuration si disponible (mettra à jour initialFormDataRef après)
         loadDeviceConfig(editingItem.id)
       } else {
-        // Mode création OU dispositif virtuel - FORMULAIRE TOUJOURS VIDE
-        // Ne JAMAIS pré-remplir avec les données USB
+        // Mode création OU dispositif virtuel - Pré-remplir avec les données USB si disponibles
+        // Générer un nom intelligent depuis les identifiants disponibles
+        let defaultDeviceName = ''
+        if (editingItem) {
+          // Si c'est un dispositif virtuel, utiliser son nom ou générer un nom depuis les identifiants
+          if (editingItem.device_name && editingItem.device_name !== 'USB-En attente...' && editingItem.device_name !== 'USB-Device') {
+            defaultDeviceName = editingItem.device_name
+          } else if (editingItem.sim_iccid) {
+            // Utiliser les 4 derniers chiffres de l'ICCID pour générer un nom
+            defaultDeviceName = `OTT-${editingItem.sim_iccid.slice(-4)}`
+          } else if (editingItem.device_serial) {
+            defaultDeviceName = editingItem.device_serial
+          } else {
+            // Si aucun identifiant, utiliser un nom générique mais avec timestamp pour éviter les doublons
+            defaultDeviceName = `USB-Device-${Date.now().toString().slice(-4)}`
+          }
+        } else {
+          // Mode création sans dispositif virtuel - nom par défaut
+          defaultDeviceName = 'USB-Device'
+        }
+        
+        // Récupérer la configuration USB si disponible (depuis editingItem, usbVirtualDevice ou usbDeviceInfo)
+        const usbConfig = editingItem?.config || usbVirtualDevice?.config || usbDeviceInfo?.config || null
+        
+        // Logger pour debug
+        if (usbConfig) {
+          logger.log('[DeviceModal] ✅ Configuration USB trouvée, pré-remplissage automatique:', {
+            sleep_minutes: usbConfig.sleep_minutes,
+            measurement_duration_ms: usbConfig.measurement_duration_ms,
+            calibration: usbConfig.calibration_coefficients,
+            airflow_passes: usbConfig.airflow_passes,
+            airflow_samples: usbConfig.airflow_samples_per_pass,
+            airflow_delay: usbConfig.airflow_delay_ms,
+            gps_enabled: usbConfig.gps_enabled,
+            roaming_enabled: usbConfig.roaming_enabled,
+            apn: usbConfig.apn,
+            sim_pin: usbConfig.sim_pin ? '***' : null
+          })
+        } else {
+          logger.debug('[DeviceModal] ⚠️ Aucune configuration USB disponible - formulaire vide')
+        }
+        
+        // Pré-remplir avec les données USB disponibles
         setFormData({
-          device_name: '',
-          sim_iccid: '',
-          device_serial: '',
-          firmware_version: '',
+          device_name: defaultDeviceName,
+          sim_iccid: editingItem?.sim_iccid || '',
+          device_serial: editingItem?.device_serial || '',
+          firmware_version: editingItem?.firmware_version || '',
           status: 'inactive',
           patient_id: null,
-          sleep_minutes: null,
-          measurement_duration_ms: null,
-          send_every_n_wakeups: 1,
-          calibration_coefficients: [0, 1, 0],
-          gps_enabled: false,
-          roaming_enabled: true,
-          airflow_passes: null,
-          airflow_samples_per_pass: null,
-          airflow_delay_ms: null,
-          watchdog_seconds: null,
-          modem_boot_timeout_ms: null,
-          sim_ready_timeout_ms: null,
-          network_attach_timeout_ms: null,
-          modem_max_reboots: null,
-          apn: '',
-          sim_pin: '',
-          ota_primary_url: '',
-          ota_fallback_url: '',
-          ota_md5: ''
+          // Configuration depuis USB (convertir ms → sec pour l'affichage)
+          sleep_minutes: usbConfig?.sleep_minutes ?? null,
+          measurement_duration_ms: usbConfig?.measurement_duration_ms != null 
+            ? parseFloat((usbConfig.measurement_duration_ms / 1000).toFixed(1))
+            : null,
+          send_every_n_wakeups: usbConfig?.send_every_n_wakeups ?? 1,
+          calibration_coefficients: usbConfig?.calibration_coefficients && Array.isArray(usbConfig.calibration_coefficients)
+            ? usbConfig.calibration_coefficients
+            : [0, 1, 0],
+          gps_enabled: usbConfig?.gps_enabled ?? false,
+          roaming_enabled: usbConfig?.roaming_enabled !== undefined ? usbConfig.roaming_enabled : true,
+          // Airflow depuis USB (convertir ms → sec pour l'affichage)
+          airflow_passes: usbConfig?.airflow_passes ?? null,
+          airflow_samples_per_pass: usbConfig?.airflow_samples_per_pass ?? null,
+          airflow_delay_ms: usbConfig?.airflow_delay_ms != null
+            ? parseFloat((usbConfig.airflow_delay_ms / 1000).toFixed(3))
+            : null,
+          // Modem depuis USB (convertir sec → min pour watchdog, ms → sec pour les autres)
+          watchdog_seconds: usbConfig?.watchdog_seconds != null
+            ? parseFloat((usbConfig.watchdog_seconds / 60).toFixed(1))
+            : null,
+          modem_boot_timeout_ms: usbConfig?.modem_boot_timeout_ms != null
+            ? parseFloat((usbConfig.modem_boot_timeout_ms / 1000).toFixed(1))
+            : null,
+          sim_ready_timeout_ms: usbConfig?.sim_ready_timeout_ms != null
+            ? parseFloat((usbConfig.sim_ready_timeout_ms / 1000).toFixed(1))
+            : null,
+          network_attach_timeout_ms: usbConfig?.network_attach_timeout_ms != null
+            ? parseFloat((usbConfig.network_attach_timeout_ms / 1000).toFixed(1))
+            : null,
+          modem_max_reboots: usbConfig?.modem_max_reboots ?? null,
+          // Réseau depuis USB
+          operator: usbConfig?.apn ? detectOperatorFromApn(usbConfig.apn) : '',
+          apn: usbConfig?.apn || '',
+          sim_pin: usbConfig?.sim_pin || '',
+          // OTA depuis USB
+          ota_primary_url: usbConfig?.ota_primary_url || '',
+          ota_fallback_url: usbConfig?.ota_fallback_url || '',
+          ota_md5: usbConfig?.ota_md5 || ''
         })
         // En mode création, pas de valeurs initiales (toujours considéré comme modifié)
         initialFormDataRef.current = null
@@ -198,6 +261,25 @@ export default function DeviceModal({
     // Si le modal est déjà ouvert, ne rien faire (pas de réinitialisation)
     // NE JAMAIS réinitialiser le formulaire après l'ouverture, même si editingItem change
   }, [isOpen]) // SEULEMENT déclencher quand isOpen change - pas editingItem !
+
+  // Mapping opérateur → APN (selon le firmware)
+  const operatorApnMap = {
+    'Orange': 'orange',
+    'Free': 'free',
+    'SFR': 'sl2sfr',
+    'Bouygues': 'mmsbouygtel'
+  }
+
+  // Détecter l'opérateur depuis l'APN
+  const detectOperatorFromApn = (apn) => {
+    if (!apn) return ''
+    const apnLower = apn.toLowerCase()
+    if (apnLower === 'orange' || apnLower === 'orange.fr') return 'Orange'
+    if (apnLower === 'free' || apnLower === 'mmsfree') return 'Free'
+    if (apnLower === 'sl2sfr' || apnLower === 'sfr') return 'SFR'
+    if (apnLower === 'mmsbouygtel' || apnLower === 'bouygues') return 'Bouygues'
+    return ''
+  }
 
   const loadDeviceConfig = async (deviceId) => {
     if (!deviceId) return
@@ -279,6 +361,22 @@ export default function DeviceModal({
       ...formData,
       [name]: type === 'checkbox' ? checked : (type === 'number' ? (value === '' ? null : parseFloat(value)) : value)
     }
+
+    // Si l'opérateur change, mettre à jour l'APN automatiquement
+    if (name === 'operator' && value && operatorApnMap[value]) {
+      newFormData.apn = operatorApnMap[value]
+    }
+    // Si l'APN change manuellement, détecter l'opérateur si possible
+    else if (name === 'apn') {
+      const detectedOperator = detectOperatorFromApn(value)
+      if (detectedOperator && !newFormData.operator) {
+        newFormData.operator = detectedOperator
+      } else if (!value && !detectedOperator) {
+        // Si l'APN est vidé, réinitialiser l'opérateur aussi
+        newFormData.operator = ''
+      }
+    }
+
     setFormData(newFormData)
 
     // Effacer l'erreur du champ modifié
@@ -370,6 +468,11 @@ export default function DeviceModal({
     const currentUsbDevice = usbConnectedDevice || usbVirtualDevice
     if (!currentUsbDevice) return false
     
+    // Si le dispositif est virtuel (pas encore enregistré), considérer qu'il est connecté si USB est connecté
+    if (editingItem.isVirtual || editingItem.isTemporary) {
+      return true
+    }
+    
     // Vérifier si l'ICCID ou le serial correspond
     return (
       (editingItem.sim_iccid && currentUsbDevice.sim_iccid === editingItem.sim_iccid) ||
@@ -454,6 +557,13 @@ export default function DeviceModal({
         return { success: true, method: 'OTA' }
       } catch (err) {
         logger.error('Erreur envoi config OTA:', err)
+        // Si l'erreur indique que le dispositif n'existe pas, ne pas bloquer
+        // (peut arriver si le dispositif est en cours de création)
+        if (err.message?.includes('not found') || err.message?.includes('n\'existe pas') || err.message?.includes('does not exist')) {
+          logger.warn('⚠️ Dispositif non trouvé en base, configuration sera envoyée lors de la prochaine connexion OTA')
+          // Retourner un succès partiel pour ne pas bloquer le processus
+          return { success: true, method: 'OTA', pending: true }
+        }
         throw err
       }
     }
@@ -474,8 +584,11 @@ export default function DeviceModal({
 
   const validateForm = () => {
     const errors = {}
-
-    if (!formData.device_name || formData.device_name.trim().length === 0) {
+    
+    // Si le dispositif est un dispositif virtuel USB sans nom, utiliser un nom par défaut
+    const deviceName = formData.device_name?.trim() || (editingItem?.isVirtual || editingItem?.isTemporary ? 'USB-Device' : '')
+    
+    if (!deviceName || deviceName.length === 0) {
       errors.device_name = 'Le nom du dispositif est requis'
     }
 
@@ -510,8 +623,10 @@ export default function DeviceModal({
 
     try {
       // Préparer les données du dispositif
+      // Utiliser un nom par défaut si le dispositif est virtuel USB sans nom
+      const deviceName = formData.device_name?.trim() || (editingItem?.isVirtual || editingItem?.isTemporary ? 'USB-Device' : '')
       const devicePayload = {
-        device_name: formData.device_name.trim(),
+        device_name: deviceName,
         // SIM ICCID ne peut pas être modifié - il vient de la SIM
         // En création, on peut le fournir s'il est disponible (ex: depuis USB)
         // En modification, on ne l'envoie pas pour ne pas le modifier
@@ -1002,7 +1117,7 @@ export default function DeviceModal({
           {formError && <ErrorMessage message={formError} />}
 
           {/* Première ligne : Nom et Statut */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${!usbVirtualDevice ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {/* Nom du dispositif */}
             <div>
               <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
@@ -1022,83 +1137,140 @@ export default function DeviceModal({
               )}
             </div>
 
-            {/* Statut */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Statut
-              </label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleInputChange}
-                className="input w-full"
-              >
-                <option value="inactive">⏸️ Inactif</option>
-                <option value="active">✅ Actif</option>
-              </select>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Le statut USB est détecté automatiquement lors de la connexion
-              </p>
-            </div>
+            {/* Statut - Masqué pour les dispositifs USB virtuels (non enregistrés) */}
+            {!usbVirtualDevice && (
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                  Statut
+                </label>
+                <select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleInputChange}
+                  className="input w-full"
+                >
+                  <option value="inactive">⏸️ Inactif</option>
+                  <option value="active">✅ Actif</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Statut du dispositif enregistré (actif = reçoit les commandes OTA)
+                </p>
+              </div>
+            )}
+            {usbVirtualDevice && (
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  🔌 <strong>Dispositif connecté en USB</strong>
+                </p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                  Ce dispositif n&apos;est pas encore enregistré en base. Il sera ajouté automatiquement lors de la première connexion OTA.
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Deuxième ligne : SIM ICCID et Numéro de série */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* SIM ICCID - Lecture seule (vient de la SIM) */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                SIM ICCID
-              </label>
-              <input
-                type="text"
-                name="sim_iccid"
-                value={formData.sim_iccid || 'N/A'}
-                readOnly
-                disabled
-                className="input w-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
-                placeholder="Ex: 89314404000012345678"
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Lecture seule (vient de la SIM)</p>
-            </div>
-
-            {/* Numéro de série */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Numéro de série {editingItem?.id && <span className="text-xs text-gray-500">(non modifiable)</span>}
-              </label>
-              <input
-                type="text"
-                name="device_serial"
-                value={formData.device_serial || 'OTT-XXX (auto-généré)'}
-                onChange={handleInputChange}
-                disabled={!!editingItem?.id}
-                className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''} ${editingItem?.id ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' : ''}`}
-                placeholder="Auto-généré (OTT-001, OTT-002, etc.)"
-                title={editingItem?.id ? 'Le numéro de série ne peut pas être modifié (traçabilité médicale)' : 'Sera généré automatiquement'}
-              />
-              {formErrors.device_serial && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_serial}</p>
-              )}
-            </div>
+          {/* Numéro de série */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+              Numéro de série {editingItem?.id && <span className="text-xs text-gray-500">(non modifiable)</span>}
+            </label>
+            <input
+              type="text"
+              name="device_serial"
+              value={formData.device_serial || 'OTT-XXX (auto-généré)'}
+              onChange={handleInputChange}
+              disabled={!!editingItem?.id}
+              className={`input w-full ${formErrors.device_serial ? 'border-red-500' : ''} ${editingItem?.id ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' : ''}`}
+              placeholder="Auto-généré (OTT-001, OTT-002, etc.)"
+              title={editingItem?.id ? 'Le numéro de série ne peut pas être modifié (traçabilité médicale)' : 'Sera généré automatiquement'}
+            />
+            {formErrors.device_serial && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{formErrors.device_serial}</p>
+            )}
           </div>
 
-          {/* Troisième ligne : Version firmware (lecture seule) */}
-          <div className="grid grid-cols-1 gap-3">
-            {/* Version du firmware - Lecture seule */}
-            <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                Version du firmware
-              </label>
-              <input
-                type="text"
-                name="firmware_version"
-                value={formData.firmware_version || 'N/A'}
-                readOnly
-                disabled
-                className="input w-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed"
-                placeholder="Ex: 3.8-unified"
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Lecture seule</p>
+          {/* Section Informations SIM et Firmware */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+              📱 Informations SIM et Firmware
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              {/* SIM ICCID */}
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">
+                  SIM ICCID
+                </label>
+                <div className="text-sm font-mono text-gray-900 dark:text-gray-100 bg-white dark:bg-slate-700 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
+                  {formData.sim_iccid || 'N/A'}
+                </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Identifiant unique de la carte SIM
+                </p>
+              </div>
+              
+              {/* Version du firmware */}
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">
+                  Version firmware
+                </label>
+                <div className="text-sm font-mono text-gray-900 dark:text-gray-100 bg-white dark:bg-slate-700 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
+                  {formData.firmware_version || 'N/A'}
+                </div>
+              </div>
+              
+              {/* Numéro de téléphone SIM (si disponible) */}
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">
+                  Numéro SIM
+                </label>
+                <div className="text-sm font-mono text-gray-900 dark:text-gray-100 bg-white dark:bg-slate-700 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
+                  {usbDeviceInfo?.sim_phone_number || editingItem?.sim_phone_number || 'N/A'}
+                </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {!usbDeviceInfo?.sim_phone_number && !editingItem?.sim_phone_number && 'Non disponible (carte SIM sans numéro)'}
+                </p>
+              </div>
+              
+              {/* État SIM */}
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">
+                  État SIM
+                </label>
+                <div className="text-sm font-mono text-gray-900 dark:text-gray-100 bg-white dark:bg-slate-700 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
+                  {(() => {
+                    // Priorité: USB (temps réel) > editingItem (base de données)
+                    const simStatus = usbDeviceInfo?.sim_status || editingItem?.sim_status
+                    if (!simStatus) return 'N/A'
+                    const statusMap = {
+                      'READY': '✅ Prête',
+                      'LOCKED': '🔒 Verrouillée',
+                      'ANTITHEFT_LOCKED': '🔐 Anti-vol',
+                      'ERROR': '❌ Erreur',
+                      'MODEM_NOT_READY': '⏳ Modem non prêt'
+                    }
+                    return statusMap[simStatus] || simStatus
+                  })()}
+                </div>
+              </div>
+              
+              {/* État réseau */}
+              <div>
+                <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">
+                  État réseau
+                </label>
+                <div className="text-sm font-mono text-gray-900 dark:text-gray-100 bg-white dark:bg-slate-700 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
+                  {(() => {
+                    // Priorité: USB (temps réel) > editingItem (base de données)
+                    const networkConnected = usbDeviceInfo?.network_connected !== undefined ? usbDeviceInfo.network_connected : editingItem?.network_connected
+                    const gprsConnected = usbDeviceInfo?.gprs_connected !== undefined ? usbDeviceInfo.gprs_connected : editingItem?.gprs_connected
+                    const modemReady = usbDeviceInfo?.modem_ready !== undefined ? usbDeviceInfo.modem_ready : editingItem?.modem_ready
+                    if (networkConnected && gprsConnected) return '✅ Connecté (GPRS)'
+                    if (networkConnected) return '📡 Réseau OK'
+                    if (modemReady) return '⏳ En attente'
+                    return '❌ Non connecté'
+                  })()}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1127,17 +1299,6 @@ export default function DeviceModal({
                   }`}
                 >
                   ⚙️ Avancé
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfigTab('expert')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    configTab === 'expert'
-                      ? 'border-yellow-500 text-yellow-600 dark:text-yellow-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
-                >
-                  ⚠️ Expert
                 </button>
               </div>
             </div>
@@ -1312,8 +1473,8 @@ export default function DeviceModal({
               </div>
             </Accordion>
 
-            {/* Réseau - Accordéon */}
-            <Accordion title="🌐 Réseau" defaultOpen={false}>
+            {/* Modem - Accordéon */}
+            <Accordion title="📡 Modem" defaultOpen={false}>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Tooltip content="Timeout du watchdog en minutes.\n\nSi le système ne répond pas pendant ce délai, le dispositif redémarre automatiquement pour éviter les blocages.\n\nRecommandé: 3-10 minutes">
@@ -1412,6 +1573,36 @@ export default function DeviceModal({
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
+                    <Tooltip content="Sélectionnez votre opérateur mobile pour configurer automatiquement l'APN.\n\n✅ Opérateurs supportés :\n• Orange France\n• Free Mobile\n• SFR\n• Bouygues Telecom\n\n💡 Si vous sélectionnez un opérateur, l'APN sera configuré automatiquement.\n💡 Laissez sur 'Automatique' pour que le firmware détecte l'opérateur via la carte SIM.">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Opérateur mobile
+                      </label>
+                    </Tooltip>
+                    <select
+                      name="operator"
+                      value={formData.operator || ''}
+                      onChange={handleInputChange}
+                      className="input w-full text-sm py-1.5"
+                      title="Sélectionnez votre opérateur pour configurer automatiquement l'APN"
+                    >
+                      <option value="">🔍 Automatique (détection par firmware)</option>
+                      <option value="Orange">🟠 Orange France</option>
+                      <option value="Free">🟣 Free Mobile</option>
+                      <option value="SFR">🔴 SFR</option>
+                      <option value="Bouygues">🔵 Bouygues Telecom</option>
+                    </select>
+                    {formData.operator && (
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                        ✅ APN configuré automatiquement : <strong>{operatorApnMap[formData.operator]}</strong>
+                      </p>
+                    )}
+                    {!formData.operator && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        💡 Le firmware détectera automatiquement l&apos;opérateur via la carte SIM
+                      </p>
+                    )}
+                  </div>
+                  <div>
                     <Tooltip content="Point d'accès réseau (APN) : identifiant qui permet au dispositif de se connecter à Internet via le réseau mobile.\n\n✅ DÉTECTION AUTOMATIQUE : Le firmware détecte automatiquement l'opérateur (Orange, Free, SFR, Bouygues) et configure l'APN correct.\n\n💡 CONFIGURATION MANUELLE : Nécessaire uniquement pour :\n• Opérateurs étrangers non reconnus\n• MVNO (opérateurs virtuels)\n• APN personnalisés (entreprise)\n• Tests et débogage\n\nExemples:\n• Free: 'free'\n• Orange: 'orange'\n• SFR: 'sl2sfr'\n• Bouygues: 'mmsbouygtel'">
                       <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
                         APN <span className="text-gray-400 dark:text-gray-500">(optionnel)</span>
@@ -1426,15 +1617,12 @@ export default function DeviceModal({
                       placeholder="Détection automatique (Orange, Free, SFR, Bouygues)..."
                       title="APN optionnel. Le firmware détecte automatiquement l'opérateur et configure l'APN. À configurer manuellement uniquement pour opérateurs étrangers, MVNO ou APN personnalisés."
                     />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      <span className="text-green-600 dark:text-green-400">✅ Détection automatique</span> pour Orange, Free, SFR, Bouygues
-                    </p>
-                    {formData.apn && (
+                    {formData.operator && (
                       <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                        💡 APN manuel configuré : sera utilisé si l&apos;opérateur n&apos;est pas reconnu automatiquement
+                        💡 Modifiable manuellement si nécessaire (opérateur étranger, MVNO, etc.)
                       </p>
                     )}
-                    {!formData.apn && (
+                    {!formData.operator && !formData.apn && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         💡 L&apos;APN sera détecté automatiquement selon l&apos;opérateur détecté
                       </p>
@@ -1543,103 +1731,6 @@ export default function DeviceModal({
               </div>
             )}
 
-            {/* Onglet Expert */}
-            {configTab === 'expert' && (
-              <div className="space-y-2">
-                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 mb-3">
-                  <div className="flex items-start">
-                    <span className="text-yellow-600 dark:text-yellow-400 text-xl mr-2">⚠️</span>
-                    <div>
-                      <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-300">Configuration Expert</p>
-                      <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-                        Ces paramètres avancés affectent le comportement bas-niveau du dispositif.
-                        <br/>Ne modifier que si vous comprenez leur impact. Des valeurs incorrectes peuvent bloquer le dispositif.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Modem - Accordéon principal dans Expert */}
-                <Accordion title="📡 Modem (Timeouts & Watchdog)" defaultOpen={true}>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
-                        Watchdog (min)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        name="watchdog_seconds"
-                        value={formData.watchdog_seconds || ''}
-                        onChange={handleInputChangeWithConversion}
-                        className="input w-full text-sm py-1.5"
-                        placeholder="0.5 (30s)"
-                        min="0.1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
-                        Boot modem timeout (sec)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        name="modem_boot_timeout_ms"
-                        value={formData.modem_boot_timeout_ms || ''}
-                        onChange={handleInputChangeWithConversion}
-                        className="input w-full text-sm py-1.5"
-                        placeholder="20"
-                        min="1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
-                        SIM ready timeout (sec)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        name="sim_ready_timeout_ms"
-                        value={formData.sim_ready_timeout_ms || ''}
-                        onChange={handleInputChangeWithConversion}
-                        className="input w-full text-sm py-1.5"
-                        placeholder="45"
-                        min="1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
-                        Network attach timeout (sec)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        name="network_attach_timeout_ms"
-                        value={formData.network_attach_timeout_ms || ''}
-                        onChange={handleInputChangeWithConversion}
-                        className="input w-full text-sm py-1.5"
-                        placeholder="120"
-                        min="10"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
-                        Max reboots modem
-                      </label>
-                      <input
-                        type="number"
-                        name="modem_max_reboots"
-                        value={formData.modem_max_reboots || ''}
-                        onChange={handleInputChange}
-                        className="input w-full text-sm py-1.5"
-                        placeholder="3"
-                        min="1"
-                      />
-                    </div>
-                  </div>
-                </Accordion>
-              </div>
-            )}
           </div>
 
           {/* Boutons */}

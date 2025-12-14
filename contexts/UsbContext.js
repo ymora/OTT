@@ -466,7 +466,13 @@ export function UsbProvider({ children }) {
     
     // Toujours ajouter les logs - TOUJOURS, même pour les lignes brutes
     appendUsbStreamLog(trimmed)
-    logger.debug('✅ Log ajouté via appendUsbStreamLog:', trimmed.substring(0, 50))
+    // Log uniquement en debug pour éviter le spam
+    if (process.env.NODE_ENV === 'development') {
+      logger.debug('✅ Log ajouté via appendUsbStreamLog:', trimmed.substring(0, 50))
+    }
+
+    // Note: Le dispositif virtuel temporaire est maintenant créé via useEffect qui surveille usbStreamLogs
+    // Cela permet de créer le dispositif dès qu'il y a des logs, même si isConnected est temporairement false
 
     // Parser les messages JSON du firmware
     // Le format unifié envoie un JSON complet avec TOUT : identifiants + mesures + configuration
@@ -696,6 +702,12 @@ export function UsbProvider({ children }) {
               device_serial: payload.device_serial || null,
               firmware_version: payload.firmware_version || null,
               device_name: payload.device_name || null,
+              // Informations SIM et réseau
+              sim_phone_number: payload.sim_phone_number || null,
+              sim_status: payload.sim_status || null,
+              network_connected: payload.network_connected !== undefined ? payload.network_connected : null,
+              gprs_connected: payload.gprs_connected !== undefined ? payload.gprs_connected : null,
+              modem_ready: payload.modem_ready !== undefined ? payload.modem_ready : null,
               last_seen: now
             }
             
@@ -706,6 +718,12 @@ export function UsbProvider({ children }) {
                 device_serial: deviceInfoFromUsb.device_serial || prev?.device_serial || null,
                 firmware_version: deviceInfoFromUsb.firmware_version || prev?.firmware_version || null,
                 device_name: deviceInfoFromUsb.device_name || prev?.device_name || null,
+                // Informations SIM et réseau (mettre à jour si disponibles)
+                sim_phone_number: deviceInfoFromUsb.sim_phone_number || prev?.sim_phone_number || null,
+                sim_status: deviceInfoFromUsb.sim_status || prev?.sim_status || null,
+                network_connected: deviceInfoFromUsb.network_connected !== undefined ? deviceInfoFromUsb.network_connected : (prev?.network_connected || null),
+                gprs_connected: deviceInfoFromUsb.gprs_connected !== undefined ? deviceInfoFromUsb.gprs_connected : (prev?.gprs_connected || null),
+                modem_ready: deviceInfoFromUsb.modem_ready !== undefined ? deviceInfoFromUsb.modem_ready : (prev?.modem_ready || null),
                 last_seen: now
               }
               
@@ -731,9 +749,21 @@ export function UsbProvider({ children }) {
             })
             
             // Créer ou mettre à jour un dispositif virtuel
+            // Générer un nom intelligent depuis les identifiants disponibles
+            let deviceName = payload.device_name
+            if (!deviceName || deviceName === 'USB-En attente...' || deviceName === 'USB-Device') {
+              if (payload.sim_iccid) {
+                deviceName = `OTT-${payload.sim_iccid.slice(-4)}`
+              } else if (payload.device_serial) {
+                deviceName = payload.device_serial
+              } else {
+                deviceName = `USB-${payload.sim_iccid?.slice(-4) || payload.device_serial?.slice(-4) || 'XXXX'}`
+              }
+            }
+            
             const deviceInfo = {
               id: `usb_info_${Date.now()}`,
-              device_name: payload.device_name || `USB-${payload.sim_iccid?.slice(-4) || payload.device_serial?.slice(-4) || 'XXXX'}`,
+              device_name: deviceName,
               sim_iccid: payload.sim_iccid || null,
               device_serial: payload.device_serial || null,
               firmware_version: payload.firmware_version || null,
@@ -745,33 +775,12 @@ export function UsbProvider({ children }) {
             
             if (!usbConnectedDevice && !usbVirtualDevice) {
               setUsbVirtualDevice(deviceInfo)
+              logger.log('✅ [USB] Dispositif virtuel créé:', deviceInfo.device_name)
+              appendUsbStreamLog(`✅ Dispositif USB détecté: ${deviceInfo.device_name} (ICCID: ${deviceInfo.sim_iccid?.slice(-10) || 'N/A'}, Serial: ${deviceInfo.device_serial || 'N/A'})`, 'dashboard')
               
-              // Enregistrement automatique : créer le dispositif dans la base de données
-              if (autoCreateOrUpdateDeviceRef.current && (deviceInfo.sim_iccid || deviceInfo.device_serial)) {
-                logger.log('🔄 [AUTO-CREATE] Tentative enregistrement automatique...', {
-                  sim_iccid: deviceInfo.sim_iccid,
-                  device_serial: deviceInfo.device_serial,
-                  device_name: deviceInfo.device_name
-                })
-                
-                // Appeler de manière asynchrone pour ne pas bloquer
-                autoCreateOrUpdateDeviceRef.current(deviceInfo)
-                  .then(createdDevice => {
-                    if (createdDevice) {
-                      logger.log('✅ [AUTO-CREATE] Dispositif enregistré avec succès:', createdDevice)
-                      // Remplacer le dispositif virtuel par le dispositif réel
-                      setUsbVirtualDevice(null)
-                      setUsbConnectedDevice(createdDevice)
-                    } else {
-                      logger.warn('⚠️ [AUTO-CREATE] Échec enregistrement automatique')
-                    }
-                  })
-                  .catch(error => {
-                    logger.error('❌ [AUTO-CREATE] Erreur enregistrement automatique:', error)
-                  })
-              } else {
-                logger.debug('⚠️ [AUTO-CREATE] Pas d\'identifiant disponible ou callback non défini')
-              }
+              // ⚠️ AUTO-CRÉATION DÉSACTIVÉE: Ne pas créer automatiquement pour éviter les conflits
+              // Le dispositif apparaîtra dans le tableau via usbVirtualDevice mais ne sera pas enregistré en base
+              // L'utilisateur devra l'enregistrer manuellement s'il le souhaite
             } else if (usbConnectedDevice) {
               setUsbConnectedDevice(prev => ({
                 ...prev,
@@ -784,7 +793,13 @@ export function UsbProvider({ children }) {
                 ...prev,
                 ...deviceInfo,
                 firmware_version: deviceInfo.firmware_version || prev.firmware_version,
-                last_seen: now
+                last_seen: now,
+                // Conserver les autres propriétés existantes
+                sim_iccid: deviceInfo.sim_iccid || prev.sim_iccid,
+                device_serial: deviceInfo.device_serial || prev.device_serial,
+                device_name: deviceInfo.device_name || prev.device_name,
+                // Conserver la configuration si elle existe déjà
+                config: prev.config || null
               }))
             }
             
@@ -802,24 +817,121 @@ export function UsbProvider({ children }) {
           }
           
           // 2. Extraire et stocker la configuration
-          if (payload.sleep_minutes != null || payload.measurement_duration_ms != null || payload.calibration_coefficients) {
-            const deviceConfigFromUsb = {
-              sleep_minutes: payload.sleep_minutes ?? null,
-              measurement_duration_ms: payload.measurement_duration_ms ?? null,
-              calibration_coefficients: payload.calibration_coefficients 
-                ? (Array.isArray(payload.calibration_coefficients) 
-                    ? payload.calibration_coefficients 
-                    : [payload.calibration_coefficients[0] || 0, payload.calibration_coefficients[1] || 1, payload.calibration_coefficients[2] || 0])
-                : [0, 1, 0]
-            }
+          // Détecter si c'est une réponse GET_CONFIG/GET_STATUS (contient type: "config_response")
+          const isConfigResponse = payload.type === 'config_response' || 
+                                   (payload.mode === 'usb_stream' && payload.type === 'config_response')
+          
+          // Log de débogage pour config_response
+          if (isConfigResponse) {
+            logger.log('🔍🔍🔍 [USB] CONFIG_RESPONSE DÉTECTÉ:', {
+              type: payload.type,
+              mode: payload.mode,
+              has_sleep_minutes: payload.sleep_minutes != null,
+              has_firmware_version: !!payload.firmware_version,
+              has_device_serial: !!payload.device_serial,
+              has_sim_iccid: !!payload.sim_iccid
+            })
+            appendUsbStreamLog('🔍 CONFIG_RESPONSE détecté - Configuration complète reçue', 'dashboard')
+          }
+          
+          // Si c'est une réponse GET_CONFIG, elle contient TOUTE la configuration
+          // Sinon, on extrait seulement les champs essentiels des messages de streaming
+          const hasConfigData = isConfigResponse || // Réponse GET_CONFIG contient toujours toute la config
+                                payload.sleep_minutes != null || payload.measurement_duration_ms != null || 
+                                payload.calibration_coefficients // Champs essentiels seulement dans le streaming
+          
+          if (hasConfigData) {
+            // Si c'est une réponse GET_CONFIG, utiliser directement toutes les valeurs
+            // Sinon (message de streaming), fusionner seulement les champs essentiels avec la config existante
+            const existingConfig = usbDeviceInfo?.config || usbVirtualDevice?.config || {}
             
-            logger.log('✅ Configuration extraite du format unifié:', deviceConfigFromUsb)
-            appendUsbStreamLog(`⚙️ Configuration reçue: Sleep=${deviceConfigFromUsb.sleep_minutes ?? 'N/A'} min | Durée=${deviceConfigFromUsb.measurement_duration_ms ?? 'N/A'} ms | Calibration=[${deviceConfigFromUsb.calibration_coefficients?.join(', ') || 'N/A'}]`)
+            const deviceConfigFromUsb = isConfigResponse 
+              ? {
+                  // Réponse GET_CONFIG : utiliser toutes les valeurs directement (config complète)
+                  sleep_minutes: payload.sleep_minutes ?? null,
+                  measurement_duration_ms: payload.measurement_duration_ms ?? null,
+                  calibration_coefficients: payload.calibration_coefficients 
+                    ? (Array.isArray(payload.calibration_coefficients) 
+                        ? payload.calibration_coefficients 
+                        : [payload.calibration_coefficients[0] || 0, payload.calibration_coefficients[1] || 1, payload.calibration_coefficients[2] || 0])
+                    : [0, 1, 0],
+                  airflow_passes: payload.airflow_passes ?? null,
+                  airflow_samples_per_pass: payload.airflow_samples_per_pass ?? null,
+                  airflow_delay_ms: payload.airflow_delay_ms ?? null,
+                  send_every_n_wakeups: payload.send_every_n_wakeups ?? null,
+                  gps_enabled: payload.gps_enabled !== undefined ? payload.gps_enabled : null,
+                  roaming_enabled: payload.roaming_enabled !== undefined ? payload.roaming_enabled : null,
+                  watchdog_seconds: payload.watchdog_seconds ?? null,
+                  modem_boot_timeout_ms: payload.modem_boot_timeout_ms ?? null,
+                  sim_ready_timeout_ms: payload.sim_ready_timeout_ms ?? null,
+                  network_attach_timeout_ms: payload.network_attach_timeout_ms ?? null,
+                  modem_max_reboots: payload.modem_max_reboots ?? null,
+                  apn: payload.apn || null,
+                  sim_pin: payload.sim_pin || null,
+                  ota_primary_url: payload.ota_primary_url || null,
+                  ota_fallback_url: payload.ota_fallback_url || null,
+                  ota_md5: payload.ota_md5 || null
+                }
+              : {
+                  // Message de streaming : fusionner seulement les champs essentiels avec la config existante
+                  ...existingConfig,
+                  sleep_minutes: payload.sleep_minutes !== undefined ? payload.sleep_minutes : (existingConfig.sleep_minutes ?? null),
+                  measurement_duration_ms: payload.measurement_duration_ms !== undefined ? payload.measurement_duration_ms : (existingConfig.measurement_duration_ms ?? null),
+                  calibration_coefficients: payload.calibration_coefficients 
+                    ? (Array.isArray(payload.calibration_coefficients) 
+                        ? payload.calibration_coefficients 
+                        : [payload.calibration_coefficients[0] || 0, payload.calibration_coefficients[1] || 1, payload.calibration_coefficients[2] || 0])
+                    : (existingConfig.calibration_coefficients || [0, 1, 0])
+                }
+            
+            if (isConfigResponse) {
+              logger.log('✅✅✅ Configuration COMPLÈTE reçue via GET_CONFIG:', JSON.stringify(deviceConfigFromUsb, null, 2))
+              appendUsbStreamLog('✅ Configuration complète reçue du dispositif (GET_CONFIG)', 'dashboard')
+              
+              // Mettre à jour aussi firmware_version et device_serial depuis config_response
+              if (payload.firmware_version) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  firmware_version: payload.firmware_version
+                }))
+              }
+              if (payload.device_serial) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  device_serial: payload.device_serial
+                }))
+              }
+              if (payload.sim_iccid) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  sim_iccid: payload.sim_iccid
+                }))
+              }
+            } else {
+              logger.log('✅ Configuration extraite du format unifié:', JSON.stringify(deviceConfigFromUsb, null, 2))
+              const configSummary = [
+                deviceConfigFromUsb.sleep_minutes != null ? `Sleep=${deviceConfigFromUsb.sleep_minutes}min` : null,
+                deviceConfigFromUsb.measurement_duration_ms != null ? `Durée=${deviceConfigFromUsb.measurement_duration_ms}ms` : null,
+                deviceConfigFromUsb.calibration_coefficients ? `Cal=[${deviceConfigFromUsb.calibration_coefficients.join(',')}]` : null,
+                deviceConfigFromUsb.airflow_passes != null ? `Passes=${deviceConfigFromUsb.airflow_passes}` : null,
+                deviceConfigFromUsb.airflow_samples_per_pass != null ? `Samples=${deviceConfigFromUsb.airflow_samples_per_pass}` : null,
+                deviceConfigFromUsb.airflow_delay_ms != null ? `Délai=${deviceConfigFromUsb.airflow_delay_ms}ms` : null
+              ].filter(Boolean).join(' | ')
+              appendUsbStreamLog(`⚙️ Configuration reçue: ${configSummary || 'N/A'}`)
+            }
             
             setUsbDeviceInfo(prev => ({
               ...prev,
               config: deviceConfigFromUsb
             }))
+            
+            // Mettre à jour aussi usbVirtualDevice avec la configuration si elle existe
+            if (usbVirtualDevice) {
+              setUsbVirtualDevice(prev => ({
+                ...prev,
+                config: deviceConfigFromUsb
+              }))
+            }
             
             // Émettre l'événement pour DeviceConfigSection
             if (typeof window !== 'undefined') {
@@ -1130,6 +1242,30 @@ export function UsbProvider({ children }) {
     }
   }, [appendUsbStreamLog, sendMeasurementToApi, usbConnectedDevice, usbVirtualDevice, usbDeviceInfo])
 
+  // Créer le dispositif virtuel temporaire dès qu'il y a des logs USB
+  useEffect(() => {
+    // Si on a des logs mais pas de dispositif virtuel, créer un dispositif temporaire
+    // Cela permet d'afficher le dispositif dans le tableau même avant de recevoir les identifiants
+    if (usbStreamLogs.length > 0 && !usbVirtualDevice && !usbConnectedDevice) {
+      // Générer un nom intelligent pour le dispositif temporaire
+      // Le nom sera mis à jour quand les identifiants arriveront
+      const tempDevice = {
+        id: `usb_temp_${Date.now()}`,
+        device_name: 'USB-En attente...', // Sera mis à jour quand les identifiants arriveront
+        sim_iccid: null,
+        device_serial: null,
+        firmware_version: null,
+        status: 'usb_connected',
+        last_seen: new Date().toISOString(),
+        isVirtual: true,
+        isTemporary: true // Flag pour indiquer que c'est temporaire
+      }
+      setUsbVirtualDevice(tempDevice)
+      logger.log('✅ [USB] Dispositif virtuel temporaire créé (dès qu\'il y a des logs):', tempDevice)
+      appendUsbStreamLog('ℹ️ Dispositif USB détecté - En attente des identifiants...', 'dashboard')
+    }
+  }, [usbStreamLogs.length, usbVirtualDevice, usbConnectedDevice, appendUsbStreamLog])
+
   // Gestion des chunks de streaming
   const handleUsbStreamChunk = useCallback((chunk) => {
     if (!chunk) {
@@ -1299,6 +1435,21 @@ export function UsbProvider({ children }) {
       logger.log('✅ USB streaming démarré')
       appendUsbStreamLog('✅ Streaming USB démarré - En attente de données...', 'dashboard')
       
+      // Demander la configuration complète au démarrage
+      // Cela permet de récupérer TOUS les paramètres en une seule fois
+      try {
+        await new Promise(resolve => setTimeout(resolve, 500)) // Attendre que le streaming soit stable
+        if (write && port) {
+          const getConfigCommand = JSON.stringify({ command: 'GET_CONFIG' }) + '\n'
+          await write(getConfigCommand)
+          logger.log('📤 [USB] Commande GET_CONFIG envoyée pour récupérer toute la configuration')
+          appendUsbStreamLog('📤 Demande de configuration complète...', 'dashboard')
+        }
+      } catch (configErr) {
+        logger.warn('⚠️ [USB] Erreur envoi GET_CONFIG:', configErr)
+        // Ne pas bloquer si la commande échoue, on récupérera la config progressivement
+      }
+      
       // Plus besoin d'envoyer les commandes "usb" et "start" :
       // - Le firmware détecte automatiquement la connexion série et entre en mode debug
       // - Le streaming est maintenant actif par défaut (streamingActive = true)
@@ -1411,8 +1562,12 @@ export function UsbProvider({ children }) {
         // Récupérer les ports déjà autorisés
         const ports = await navigator.serial.getPorts()
         
+        // Log uniquement en debug, pas dans la console utilisateur (trop verbeux)
+        logger.debug(`[USB] attemptAutoConnect: ${ports.length} port(s) autorisé(s) trouvé(s)`)
+        
         if (ports.length === 0) {
           // Pas de ports autorisés - c'est normal, l'utilisateur devra autoriser manuellement
+          // Ne pas spammer avec des messages, la détection automatique fonctionnera une fois qu'un port sera autorisé
           connectionAttemptInProgress = false
           return
         }
@@ -1445,13 +1600,23 @@ export function UsbProvider({ children }) {
                 
                 // Démarrer automatiquement le streaming après connexion
                 const streamTimeoutId = setTimeout(async () => {
-                  if (isMounted && !usbStreamStopRef.current) {
+                  if (isMounted) {
+                    // Vérifier si un streaming est déjà en cours
+                    if (usbStreamStopRef.current) {
+                      logger.log('📡 [USB] Streaming déjà en cours, pas besoin de redémarrer')
+                      appendUsbStreamLog('ℹ️ Streaming déjà actif', 'dashboard')
+                      return
+                    }
                     try {
                       logger.log('📡 [USB] Démarrage automatique du streaming...')
+                      appendUsbStreamLog('🚀 Démarrage automatique du streaming USB...', 'dashboard')
                       await startUsbStreaming(availablePort)
                     } catch (streamErr) {
                       logger.warn('⚠️ [USB] Erreur démarrage streaming automatique:', streamErr)
+                      appendUsbStreamLog(`❌ Erreur démarrage streaming: ${streamErr.message || streamErr}`, 'dashboard')
                     }
+                  } else {
+                    logger.warn('⚠️ [USB] Composant démonté avant démarrage streaming')
                   }
                 }, 500)
                 // Stocker dans une référence pour cleanup si nécessaire
@@ -1476,13 +1641,23 @@ export function UsbProvider({ children }) {
                 
                 // Démarrer automatiquement le streaming après connexion
                 const streamTimeoutId = setTimeout(async () => {
-                  if (isMounted && !usbStreamStopRef.current) {
+                  if (isMounted) {
+                    // Vérifier si un streaming est déjà en cours
+                    if (usbStreamStopRef.current) {
+                      logger.log('📡 [USB] Streaming déjà en cours, pas besoin de redémarrer')
+                      appendUsbStreamLog('ℹ️ Streaming déjà actif', 'dashboard')
+                      return
+                    }
                     try {
                       logger.log('📡 [USB] Démarrage automatique du streaming...')
+                      appendUsbStreamLog('🚀 Démarrage automatique du streaming USB...', 'dashboard')
                       await startUsbStreaming(availablePort)
                     } catch (streamErr) {
                       logger.warn('⚠️ [USB] Erreur démarrage streaming automatique:', streamErr)
+                      appendUsbStreamLog(`❌ Erreur démarrage streaming: ${streamErr.message || streamErr}`, 'dashboard')
                     }
+                  } else {
+                    logger.warn('⚠️ [USB] Composant démonté avant démarrage streaming')
                   }
                 }, 500)
                 // Stocker dans une référence pour cleanup si nécessaire
@@ -1506,6 +1681,7 @@ export function UsbProvider({ children }) {
       }
     }
 
+    // Tentative immédiate au montage
     // Tentative immédiate au montage
     attemptAutoConnect()
 
