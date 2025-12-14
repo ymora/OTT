@@ -1,13 +1,53 @@
-# Workflow de Collaboration Git - Projet OTT
+# 🤝 Guide de Collaboration Git - Projet OTT
+
+**Date de création** : Décembre 2024  
+**Dernière mise à jour** : Décembre 2024  
+**Mainteneur** : Yannick Mora
 
 ## 🎯 Objectif
+
 Permettre à Maxime Berriot de travailler sur le projet tout en sécurisant la branche `main` avec validation obligatoire.
 
 ---
 
-## 📝 Étape 1 : Ajouter Maxime comme collaborateur sur GitHub
+## ⚡ Configuration Rapide (Pour Yannick)
 
-### Sur GitHub (interface web) :
+### 1. Configuration GitHub (5 minutes)
+
+#### Ajouter Maxime Berriot :
+🔗 https://github.com/ymora/OTT/settings/access
+- Cliquer "Invite a collaborator"
+- Entrer l'email/username de Maxime
+- Rôle : **Write**
+
+#### Protéger la branche main :
+🔗 https://github.com/ymora/OTT/settings/branches
+- Cliquer "Add branch protection rule"
+- Branch pattern : `main`
+- Cocher :
+  - ✅ Require pull request (1 approval)
+  - ✅ Require conversation resolution
+  - ✅ Do not allow bypassing ⚠️
+  - ❌ Allow force pushes
+  - ❌ Allow deletions
+
+### 2. Pousser les fichiers de configuration
+
+```powershell
+git add .
+git commit -m "docs: configuration workflow collaboration Git"
+git push origin main
+```
+
+⚠️ **Après la protection, vous ne pourrez plus push directement sur main !**
+
+---
+
+## 📝 Configuration Détaillée
+
+### Étape 1 : Ajouter Maxime comme collaborateur sur GitHub
+
+#### Sur GitHub (interface web) :
 1. Aller sur : https://github.com/ymora/OTT
 2. Cliquer sur **Settings** (Paramètres)
 3. Dans le menu de gauche, cliquer sur **Collaborators** (Collaborateurs)
@@ -16,23 +56,23 @@ Permettre à Maxime Berriot de travailler sur le projet tout en sécurisant la b
 6. Sélectionner le niveau d'accès : **Write** (Écriture)
 7. Envoyer l'invitation
 
-### Maxime recevra :
+#### Maxime recevra :
 - Un email d'invitation
 - Il devra accepter l'invitation pour avoir accès au dépôt
 
 ---
 
-## 🔒 Étape 2 : Protéger la branche `main`
+### Étape 2 : Protéger la branche `main`
 
-### Configuration de la protection de branche :
+#### Configuration de la protection de branche :
 
 1. Sur GitHub, aller dans **Settings** > **Branches**
 2. Cliquer sur **Add branch protection rule** (Ajouter une règle de protection)
 3. Dans **Branch name pattern**, entrer : `main`
 
-### Règles recommandées à activer :
+#### Règles recommandées à activer :
 
-#### ✅ Règles obligatoires :
+##### ✅ Règles obligatoires :
 - **Require a pull request before merging** ✓
   - **Require approvals** : 1 (vous devez approuver)
   - **Dismiss stale pull request approvals when new commits are pushed** ✓
@@ -47,7 +87,7 @@ Permettre à Maxime Berriot de travailler sur le projet tout en sécurisant la b
 
 - **Do not allow bypassing the above settings** ✓ (même pour les admins - IMPORTANT)
 
-#### ⚠️ Règles de sécurité supplémentaires :
+##### ⚠️ Règles de sécurité supplémentaires :
 - **Restrict who can push to matching branches** : Limiter aux admins uniquement
 - **Allow force pushes** : ❌ DÉSACTIVER (empêcher `git push --force`)
 - **Allow deletions** : ❌ DÉSACTIVER (empêcher la suppression de `main`)
@@ -56,9 +96,7 @@ Permettre à Maxime Berriot de travailler sur le projet tout en sécurisant la b
 
 ---
 
-## 🌳 Étape 3 : Workflow de branches recommandé
-
-### Structure des branches :
+## 🌳 Structure des branches
 
 ```
 main (protégée)
@@ -186,6 +224,48 @@ Une fois approuvée :
 
 ---
 
+## ✅ Workflow en 3 étapes
+
+### Pour Maxime (développement)
+1. **Créer une branche** : `feature/ma-fonctionnalite`
+2. **Développer et pousser** : `git push origin feature/ma-fonctionnalite`
+3. **Créer une Pull Request** sur GitHub
+
+### Pour vous (validation)
+1. **Recevoir la notification** de PR
+2. **Examiner le code** sur GitHub (onglet "Files changed")
+3. **Approuver et merger** (ou demander des modifications)
+
+### Après fusion
+- **Maxime** : `git checkout main && git pull origin main`
+- **Vous** : Votre main est déjà à jour
+
+---
+
+## 🛠️ Commandes rapides
+
+### Créer une nouvelle branche
+```powershell
+.\scripts\git-workflow-helper.ps1 -Action create-branch -BranchType feature -BranchName "ma-fonctionnalite"
+```
+
+### Vérifier l'état
+```powershell
+.\scripts\git-workflow-helper.ps1 -Action check-status
+```
+
+### Synchroniser avec main
+```powershell
+.\scripts\git-workflow-helper.ps1 -Action sync-main
+```
+
+### Nettoyer les branches fusionnées
+```powershell
+.\scripts\git-workflow-helper.ps1 -Action cleanup
+```
+
+---
+
 ## 🚨 Cas particuliers
 
 ### Maxime a besoin de vos dernières modifications
@@ -227,45 +307,15 @@ git push origin feature/sa-branche
 
 ## 📋 Template de Pull Request
 
-Créer un fichier `.github/pull_request_template.md` avec :
+Le template est disponible dans `.github/pull_request_template.md` :
 
-```markdown
-## Description
-<!-- Décrivez les modifications apportées -->
-
-## Type de changement
-- [ ] Nouvelle fonctionnalité (feature)
-- [ ] Correction de bug (fix)
-- [ ] Refactoring
-- [ ] Documentation
-- [ ] Autre (préciser)
-
-## Modifications principales
-<!-- Liste des principaux changements -->
-- 
-- 
-
-## Comment tester
-<!-- Étapes pour tester les modifications -->
-1. 
-2. 
-
-## Checklist
-- [ ] Le code compile sans erreurs (`npm run build`)
-- [ ] Les tests passent (`npm test`)
-- [ ] Le linting passe (`npm run lint`)
-- [ ] L'audit de sécurité passe (si applicable)
-- [ ] La documentation est à jour
-- [ ] Les commentaires de code sont clairs
-- [ ] Pas de code dupliqué ou mort introduit
-- [ ] Les règles `.cursorrules` ont été respectées
-
-## Screenshots (si applicable)
-<!-- Ajouter des captures d'écran si pertinent -->
-
-## Notes supplémentaires
-<!-- Informations complémentaires pour le reviewer -->
-```
+- Description des modifications
+- Type de changement
+- Modifications principales
+- Comment tester
+- Checklist de validation
+- Screenshots (si applicable)
+- Notes supplémentaires
 
 ---
 
@@ -313,6 +363,37 @@ git blame fichier.js
 
 ---
 
+## 📧 Message pour Maxime
+
+Une fois qu'il a accepté l'invitation :
+
+```
+Salut Maxime,
+
+Le dépôt est prêt : https://github.com/ymora/OTT
+
+Pour commencer :
+1. git clone https://github.com/ymora/OTT.git
+2. Lire WORKFLOW_COLLABORATION.md
+3. Utiliser .\scripts\git-workflow-helper.ps1 pour créer des branches
+4. Créer des Pull Requests sur GitHub pour validation
+
+Toutes les modifications doivent passer par des PR avant fusion dans main.
+
+Yannick
+```
+
+---
+
+## 🔗 Liens rapides
+
+- **Dépôt** : https://github.com/ymora/OTT
+- **Pull Requests** : https://github.com/ymora/OTT/pulls
+- **Paramètres** : https://github.com/ymora/OTT/settings
+- **Branches** : https://github.com/ymora/OTT/branches
+
+---
+
 ## 📊 Outils recommandés
 
 ### Extensions VS Code / Cursor
@@ -357,8 +438,4 @@ Automatiser les vérifications à chaque PR :
 
 ---
 
-**Date de création** : Décembre 2024  
-**Dernière mise à jour** : Décembre 2024  
-**Mainteneur** : Yannick Mora
-
-
+**Configuration estimée : 10 minutes** ⏱️

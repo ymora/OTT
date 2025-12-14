@@ -447,7 +447,9 @@ function MarkdownViewer({ fileName }) {
         await new Promise(resolve => setTimeout(resolve, 1000))
         
         // Recharger le contenu après régénération
-        await reloadContent()
+        // Utiliser reloadContent via ref pour éviter la boucle infinie
+        // Ne pas l'appeler directement car il est dans les dépendances
+        // Le useEffect se déclenchera automatiquement
       } else {
         // Vérifier si c'est une erreur 501 (non disponible sur cette plateforme)
         if (regenerateData?.code === 501 || regenerateData?.status === 501) {
@@ -516,7 +518,7 @@ function MarkdownViewer({ fileName }) {
     }
     
     loadMarkdown()
-  }, [fileName, regenerateTimeTracking, reloadContent])
+  }, [fileName])
 
   // Fonctions utilitaires pour parsing robuste
   function safeParseFloat(value, defaultValue = 0) {

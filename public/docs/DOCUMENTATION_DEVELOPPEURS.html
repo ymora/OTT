@@ -1246,6 +1246,11 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <h4>Hooks & Utilitaires</h4>
     <ul>
         <li><strong><code>hooks/useTimer.js</code></strong> : Gestion timers avec cleanup automatique (<code>useTimeout</code>, <code>useInterval</code>, <code>useTimers</code>)</li>
+        <li><strong><code>hooks/useApiCall.js</code></strong> : Hook pour simplifier les appels API avec gestion automatique des états (loading, error, success). Élimine la duplication de try/catch et useState. Options : <code>requiresAuth</code>, <code>autoReset</code>, <code>resetDelay</code></li>
+        <li><strong><code>hooks/useModalState.js</code></strong> : Hook pour gérer les états des modals (ouverture, fermeture, données). Élimine la duplication de useState pour les modals. Retourne : <code>isOpen</code>, <code>open</code>, <code>close</code>, <code>toggle</code>, <code>data</code>, <code>setData</code></li>
+        <li><strong><code>hooks/useEntityArchive.js</code></strong> : Hook pour archiver des entités (patients, users, devices). Élimine la duplication de code pour l'archivage. Gère automatiquement les permissions et la mise à jour du cache</li>
+        <li><strong><code>hooks/useEntityPermanentDelete.js</code></strong> : Hook pour supprimer définitivement des entités. Gère les permissions admin et la confirmation avant suppression</li>
+        <li><strong><code>hooks/useEntityRestore.js</code></strong> : Hook pour restaurer des entités archivées. Gère automatiquement la mise à jour du cache et les notifications</li>
         <li><strong><code>lib/apiHelpers.js</code></strong> : Wrappers API (<code>safeApiCall</code>, <code>apiCallWithRetry</code>, <code>batchApiCalls</code>)</li>
         <li><strong><code>lib/errorHandler.js</code></strong> : Gestion d'erreurs standardisée (<code>withErrorHandling</code>, <code>createErrorHandler</code>)</li>
     </ul>
