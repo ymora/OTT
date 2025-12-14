@@ -15,7 +15,6 @@ import FlashModal from '@/components/FlashModal'
 import DeviceModal from '@/components/DeviceModal'
 import DeviceMeasurementsModal from '@/components/DeviceMeasurementsModal'
 import SuccessMessage from '@/components/SuccessMessage'
-import FirmwareInteractiveTest from '@/components/audit/FirmwareInteractiveTest'
 
 export default function DebugTab() {
   const usbContext = useUsb()
@@ -48,10 +47,9 @@ export default function DebugTab() {
   }
   
   const {
-    usbConnectedDevice,
-    setUsbConnectedDevice,
-    usbVirtualDevice,
-    setUsbVirtualDevice,
+    usbDevice,
+    setUsbDevice,
+    isUsbDeviceRegistered,
     usbDeviceInfo, // Données reçues du dispositif USB en temps réel (uniquement depuis le dispositif)
     isSupported,
     isConnected,
@@ -91,8 +89,20 @@ export default function DebugTab() {
       usbStreamStatus,
       usbStreamLogsLength: usbStreamLogs.length,
       usbStreamError,
-      usbVirtualDevice: usbVirtualDevice ? usbVirtualDevice.device_name : 'null',
-      usbDeviceInfo: usbDeviceInfo ? 'présent' : 'null'
+      usbDevice: usbDevice ? {
+        name: usbDevice.device_name,
+        id: usbDevice.id,
+        isVirtual: usbDevice.isVirtual,
+        isTemporary: usbDevice.isTemporary,
+        sim_iccid: usbDevice.sim_iccid?.slice(-10),
+        device_serial: usbDevice.device_serial,
+        isRegistered: isUsbDeviceRegistered()
+      } : 'null',
+      usbDeviceInfo: usbDeviceInfo ? {
+        sim_iccid: usbDeviceInfo.sim_iccid?.slice(-10),
+        device_serial: usbDeviceInfo.device_serial,
+        device_name: usbDeviceInfo.device_name
+      } : 'null'
     })
     
     // Ajouter un log de test au montage pour vérifier que les logs fonctionnent (une seule fois)
@@ -112,7 +122,7 @@ export default function DebugTab() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, port, usbStreamStatus, usbStreamError, usbVirtualDevice, usbDeviceInfo])
+  }, [isConnected, port, usbStreamStatus, usbStreamError, usbDevice, usbDeviceInfo])
   
   // Log contexte USB uniquement si changement important
   useEffect(() => {
@@ -270,7 +280,7 @@ export default function DebugTab() {
   // - Événements déclenchent un refetch avec debounce de 2 secondes
   // - Évite les refetch redondants si plusieurs événements arrivent rapidement
   useSmartDeviceRefresh(refetchDevices, {
-    isUsbConnected: isConnected || !!usbVirtualDevice,
+    isUsbConnected: isConnected || !!usbDevice,
     enabled: !!user,
     pollingIntervalUsb: 30000, // 30 secondes si USB connecté (réduit pour éviter rafraîchissement excessif)
     pollingIntervalWeb: 60000, // 60 secondes si web seulement (les dispositifs sont en deep sleep)
@@ -374,14 +384,77 @@ export default function DebugTab() {
   
   // Dispositifs à afficher selon le toggle
   const devicesToDisplay = useMemo(() => {
+    // Normaliser les identifiants pour comparaison
+    const normalizeId = (val) => val ? String(val).trim().replace(/\s+/g, '') : ''
+    
+    let displayList = []
+    
     if (showArchived) {
       // Afficher uniquement les dispositifs archivés
-      return archivedDevices
+      displayList = archivedDevices
     } else {
-      // Afficher uniquement les dispositifs actifs
-      return devices
+      // Afficher les dispositifs actifs + le dispositif virtuel USB s'il n'existe pas en base
+      displayList = [...devices]
+      
+      // Ajouter le dispositif USB s'il n'est pas déjà dans la liste (non enregistré)
+      if (usbDevice && !isUsbDeviceRegistered()) {
+        const hasIdentifiers = usbDevice.sim_iccid || usbDevice.device_serial
+        
+        logger.debug('[devicesToDisplay] USB Device trouvé:', {
+          deviceName: usbDevice.device_name,
+          hasIdentifiers,
+          sim_iccid: usbDevice.sim_iccid?.slice(-10),
+          device_serial: usbDevice.device_serial,
+          isVirtual: usbDevice.isVirtual,
+          isTemporary: usbDevice.isTemporary
+        })
+        
+        if (!hasIdentifiers) {
+          // Dispositif temporaire sans identifiants : toujours ajouter
+          logger.debug('[devicesToDisplay] Ajout dispositif temporaire sans identifiants')
+          displayList = [usbDevice, ...displayList]
+        } else {
+          // Vérifier si le dispositif existe déjà en base
+          const usbIccid = normalizeId(usbDevice.sim_iccid)
+          const usbSerial = normalizeId(usbDevice.device_serial)
+          
+          const exists = allDevices.some(d => {
+            const dbIccid = normalizeId(d.sim_iccid)
+            const dbSerial = normalizeId(d.device_serial)
+            return (usbIccid && dbIccid && usbIccid === dbIccid) ||
+                   (usbSerial && dbSerial && usbSerial === dbSerial)
+          })
+          
+          logger.debug('[devicesToDisplay] Vérification existence en base:', {
+            exists,
+            usbIccid: usbIccid?.slice(-10),
+            usbSerial,
+            allDevicesCount: allDevices.length
+          })
+          
+          if (!exists) {
+            // Ajouter le dispositif USB en premier
+            logger.debug('[devicesToDisplay] Ajout dispositif USB virtuel')
+            displayList = [usbDevice, ...displayList]
+          } else {
+            logger.debug('[devicesToDisplay] Dispositif existe déjà en base, non ajouté')
+          }
+        }
+      } else {
+        logger.debug('[devicesToDisplay] Pas de dispositif USB à ajouter:', {
+          hasUsbDevice: !!usbDevice,
+          isRegistered: usbDevice ? isUsbDeviceRegistered() : 'N/A'
+        })
+      }
     }
-  }, [showArchived, allDevices, devices, archivedDevices])
+    
+    logger.debug('[devicesToDisplay] Liste finale:', {
+      count: displayList.length,
+      deviceNames: displayList.map(d => d.device_name)
+    })
+    
+    return displayList
+  }, [showArchived, devices, archivedDevices, usbDevice, isUsbDeviceRegistered, allDevices])
   
   // ========== STREAMING LOGS EN TEMPS RÉEL (pour admin à distance) ==========
   const [remoteLogs, setRemoteLogs] = useState([])
@@ -445,7 +518,7 @@ export default function DebugTab() {
   
   // AUTO-SÉLECTION du device avec badge ● LIVE pour admin distant
   useEffect(() => {
-    if (user?.role_name !== 'admin' || isConnected || usbVirtualDevice || allDevices.length === 0) {
+    if (user?.role_name !== 'admin' || isConnected || usbDevice || allDevices.length === 0) {
       return
     }
     
@@ -474,7 +547,7 @@ export default function DebugTab() {
             // Si le dernier log a moins de 30s = device est LIVE (USB connecté ailleurs)
             if (lastLogTime > thirtySecondsAgo) {
               logger.log(`🔴 [AUTO-SELECT] Device LIVE détecté: ${device.device_name} (logs < 30s)`)
-              setUsbVirtualDevice({ ...device, isVirtual: true })
+              setUsbDevice({ ...device, isVirtual: true })
               break // On prend le premier trouvé
             }
           }
@@ -485,10 +558,10 @@ export default function DebugTab() {
     }
     
     checkLiveDevices()
-  }, [user, isConnected, usbVirtualDevice, allDevices, setUsbVirtualDevice, fetchWithAuth, API_URL])
+  }, [user, isConnected, usbDevice, allDevices, setUsbDevice, fetchWithAuth, API_URL])
   
   // Déterminer si on doit utiliser les logs distants (admin sans USB local)
-  const currentDevice = usbConnectedDevice || usbVirtualDevice
+  const currentDevice = usbDevice
   const shouldUseRemoteLogs = useMemo(() => {
     return user?.role_name === 'admin' && !isConnected && currentDevice
   }, [user, isConnected, currentDevice])
@@ -798,11 +871,11 @@ export default function DebugTab() {
   
   // Monitoring OTA : vérifier périodiquement si les mesures arrivent via OTA
   useEffect(() => {
-    if (!isStreaming || (!usbConnectedDevice && !usbVirtualDevice)) {
+    if (!isStreaming || !usbDevice) {
       return
     }
     
-    const device = usbConnectedDevice || usbVirtualDevice
+    const device = usbDevice
     const identifier = device.sim_iccid || device.device_serial
     // ID du dispositif dans la BDD si disponible (uniquement si numérique)
     // Les IDs temporaires comme "usb_info_123456" ne sont pas valides pour l'API
@@ -821,7 +894,7 @@ export default function DebugTab() {
     }, 10000)
     
     return () => clearInterval(interval)
-  }, [isStreaming, usbConnectedDevice, usbVirtualDevice, checkOtaSync])
+  }, [isStreaming, usbDevice, checkOtaSync])
   const isPaused = useMemo(() => usbStreamStatus === 'paused', [usbStreamStatus])
   const isReady = useMemo(() => isConnected || isStreaming || isPaused || dbDeviceData, [isConnected, isStreaming, isPaused, dbDeviceData])
   // isDisabled : seulement pour les actions (pas pour l'affichage des données)
@@ -831,91 +904,139 @@ export default function DebugTab() {
   // Créer un dispositif virtuel temporaire pour que les callbacks soient appelés
   // La création en base se fait automatiquement via callbacks → /api.php/devices/measurements
   useEffect(() => {
-    if (!usbDeviceInfo || !isConnected) {
-      logger.debug('🔵 [SYNC] Pas de sync - usbDeviceInfo ou isConnected manquant')
+    logger.debug('[SYNC] useEffect déclenché:', {
+      isConnected,
+      hasUsbDeviceInfo: !!usbDeviceInfo,
+      hasUsbDevice: !!usbDevice,
+      usbDeviceName: usbDevice?.device_name,
+      usbDeviceId: usbDevice?.id,
+      isRegistered: usbDevice ? isUsbDeviceRegistered() : false,
+      allDevicesCount: allDevices.length
+    })
+    
+    // Si pas connecté, ne rien faire
+    if (!isConnected) {
+      // Si on était connecté avant et qu'on se déconnecte, ne pas supprimer usbDevice
+      // car il pourrait se reconnecter rapidement
+      logger.debug('[SYNC] Pas connecté, arrêt')
       return
     }
     
-    const simIccid = usbDeviceInfo.sim_iccid
-    const deviceSerial = usbDeviceInfo.device_serial
+    // Normaliser les identifiants pour comparaison
+    const normalizeId = (val) => val ? String(val).trim().replace(/\s+/g, '') : ''
     
-    logger.log('🔍 [SYNC] Recherche device:', { 
-      iccid: simIccid?.slice(-10), 
-      serial: deviceSerial,
-      allDevicesCount: allDevices.length 
-    })
+    const simIccid = usbDeviceInfo?.sim_iccid
+    const deviceSerial = usbDeviceInfo?.device_serial
+    const normalizedIccid = normalizeId(simIccid)
+    const normalizedSerial = normalizeId(deviceSerial)
     
-    // Chercher si le dispositif existe déjà en base (recherche simple et efficace)
-    const existingDevice = allDevices.find(d => 
-      d.sim_iccid === simIccid || d.device_serial === deviceSerial
-    )
-    
-    logger.log(existingDevice 
-      ? `✅ [SYNC] Trouvé: ${existingDevice.device_name}`
-      : `📝 [SYNC] NOUVEAU → Création auto...`
-    )
-    
-    if (existingDevice) {
-      // Dispositif trouvé → lier au contexte (simple et direct)
-      if (!usbConnectedDevice || usbConnectedDevice.id !== existingDevice.id) {
-        setUsbConnectedDevice({ ...existingDevice, isVirtual: false })
-        setUsbVirtualDevice(null)
+    // Si pas encore d'identifiants mais connecté, créer un dispositif temporaire
+    if (!normalizedIccid && !normalizedSerial && !usbDevice) {
+      logger.log('📝 [SYNC] Connexion USB détectée - Création dispositif temporaire en attente d\'identifiants')
+      const tempDevice = {
+        id: `usb_virtual_${Date.now()}`,
+        device_name: 'USB-En attente...',
+        sim_iccid: null,
+        device_serial: null,
+        firmware_version: null,
+        status: 'usb_connected',
+        last_seen: new Date().toISOString(),
+        isVirtual: true,
+        isTemporary: true
       }
-    } else {
-      // Dispositif pas en base → AUTO-SYNC (création ou restauration)
-      logger.log('📝 [AUTO-SYNC] Création device:', { iccid: simIccid?.slice(-10), serial: deviceSerial })
-      
-      const deviceName = usbDeviceInfo.device_name || `USB-${simIccid?.slice(-4) || deviceSerial?.slice(-4) || 'XXXX'}`
-      
-      // Fonction simplifiée d'auto-sync (une seule tentative, UPSERT backend)
-      const autoSyncDevice = async () => {
-        try {
-          const response = await fetchWithAuth(
-            `${API_URL}/api.php/devices`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                device_name: deviceName,
-                sim_iccid: simIccid || null,
-                device_serial: deviceSerial || null,
-                firmware_version: usbDeviceInfo.firmware_version || null,
-                status: 'active',
-                last_seen: new Date().toISOString()
-              })
-            },
-            { requiresAuth: true }
-          )
-          
-          if (response.ok) {
-            const data = await response.json()
-            if (data.success && data.device) {
-              const action = data.was_created ? 'créé' : 'restauré'
-              logger.log(`✅ [AUTO-SYNC] Dispositif ${action}:`, data.device.device_name)
-              
-              // Définir comme dispositif connecté
-              setUsbConnectedDevice({ ...data.device, isVirtual: false })
-              setUsbVirtualDevice(null)
-              
-              // Recharger UNE SEULE FOIS après un délai (laisser le temps à la base)
-              createTimeoutWithCleanup(() => {
-                refetchDevices()
-                invalidateCache()
-              }, 1000)
-            }
-          } else {
-            logger.warn('⚠️ [AUTO-SYNC] Échec, dispositif affiché comme virtuel')
-          }
-        } catch (err) {
-          logger.error('❌ [AUTO-SYNC] Erreur:', err.message)
-        }
-      }
-      
-      autoSyncDevice()
+      setUsbDevice(tempDevice)
+      logger.debug('[SYNC] Dispositif temporaire créé:', tempDevice)
+      return
     }
-  }, [usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, isConnected])
+    
+    // Si on a un dispositif temporaire mais toujours pas d'identifiants, ne rien faire
+    if (!normalizedIccid && !normalizedSerial && usbDevice && usbDevice.isTemporary) {
+      logger.debug('[SYNC] Dispositif temporaire existe déjà, en attente d\'identifiants')
+      return
+    }
+    
+    // Si on a des identifiants, chercher en base
+    if (normalizedIccid || normalizedSerial) {
+      logger.log('🔍 [SYNC] Recherche device:', { 
+        iccid: simIccid?.slice(-10), 
+        serial: deviceSerial,
+        allDevicesCount: allDevices.length 
+      })
+      
+      // Chercher si le dispositif existe déjà en base (recherche simple et efficace)
+      const existingDevice = allDevices.find(d => {
+        const dbIccid = normalizeId(d.sim_iccid)
+        const dbSerial = normalizeId(d.device_serial)
+        return (normalizedIccid && dbIccid && normalizedIccid === dbIccid) ||
+               (normalizedSerial && dbSerial && normalizedSerial === dbSerial)
+      })
+      
+      logger.log(existingDevice 
+        ? `✅ [SYNC] Trouvé: ${existingDevice.device_name}`
+        : `📝 [SYNC] Dispositif non enregistré - Affichage comme virtuel`
+      )
+      
+      if (existingDevice) {
+        // Dispositif trouvé → lier au contexte (simple et direct)
+        if (!usbDevice || !isUsbDeviceRegistered() || usbDevice.id !== existingDevice.id) {
+          setUsbDevice({ ...existingDevice, isVirtual: false })
+        }
+        return
+      }
+    }
+    
+    // Dispositif pas en base OU pas encore d'identifiants → Créer/mettre à jour dispositif virtuel
+    // Vérifier si le dispositif USB actuel existe toujours en base (si on a des identifiants)
+    let currentDeviceStillExists = false
+    if (usbDevice && isUsbDeviceRegistered() && (normalizedIccid || normalizedSerial)) {
+      currentDeviceStillExists = allDevices.some(d => {
+        const dbIccid = normalizeId(d.sim_iccid)
+        const dbSerial = normalizeId(d.device_serial)
+        const usbIccid = normalizeId(usbDevice.sim_iccid)
+        const usbSerial = normalizeId(usbDevice.device_serial)
+        return (usbIccid && dbIccid && usbIccid === dbIccid) ||
+               (usbSerial && dbSerial && usbSerial === dbSerial)
+      })
+    }
+    
+    // Mettre à jour si :
+    // - Pas de dispositif USB actuel
+    // - Le dispositif USB actuel était enregistré mais n'existe plus en base (supprimé)
+    // - Les identifiants ont changé ou sont maintenant disponibles
+    // - On est connecté mais pas encore de dispositif virtuel (même sans identifiants)
+    const shouldUpdate = !usbDevice || 
+                        currentDeviceStillExists === false ||
+                        (normalizedIccid && normalizeId(usbDevice.sim_iccid) !== normalizedIccid) ||
+                        (normalizedSerial && normalizeId(usbDevice.device_serial) !== normalizedSerial) ||
+                        (!normalizedIccid && !normalizedSerial && (!usbDevice.isVirtual || usbDevice.device_name === 'USB-En attente...'))
+    
+    if (shouldUpdate) {
+      logger.log('📝 [SYNC] Création/mise à jour dispositif virtuel (enregistrement manuel requis)')
+      const deviceName = usbDeviceInfo?.device_name || 
+                       (simIccid ? `USB-${simIccid.slice(-4)}` : 
+                        deviceSerial ? `USB-${deviceSerial.slice(-4)}` : 
+                        'USB-En attente...')
+      const newDevice = {
+        id: `usb_virtual_${Date.now()}`,
+        device_name: deviceName,
+        sim_iccid: simIccid || null,
+        device_serial: deviceSerial || null,
+        firmware_version: usbDeviceInfo?.firmware_version || null,
+        status: 'usb_connected',
+        last_seen: new Date().toISOString(),
+        isVirtual: true,
+        isTemporary: !normalizedIccid && !normalizedSerial // Temporaire si pas d'identifiants
+      }
+      logger.debug('[SYNC] Création dispositif virtuel:', {
+        ...newDevice,
+        sim_iccid: newDevice.sim_iccid?.slice(-10),
+        isRegistered: false // Doit être false car ID commence par 'usb-'
+      })
+      setUsbDevice(newDevice)
+    }
+  }, [isConnected, usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, usbDeviceInfo?.device_name, usbDeviceInfo?.firmware_version, allDevices, usbDevice, isUsbDeviceRegistered])
   // IMPORTANT: Ne surveiller QUE les identifiants USB (ICCID, Serial) et la connexion
-  // PAS allDevices, pas usbConnectedDevice, pas usbVirtualDevice (causerait boucle infinie)
+  // PAS allDevices, pas usbDevice (causerait boucle infinie)
   // Les setters sont stables et n'ont pas besoin d'être dans les dépendances
   // ========== FIN SYNCHRONISATION USB ==========
   
@@ -1021,7 +1142,7 @@ export default function DebugTab() {
     const interval = setInterval(loadAvailablePorts, 5000)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSupported, port, usbConnectedDevice, usbVirtualDevice])
+  }, [isSupported, port, usbDevice])
 
   // La connexion automatique est maintenant gérée par UsbContext.js en permanence
   // Ce useEffect synchronise uniquement le port sélectionné avec le port connecté
@@ -1788,105 +1909,55 @@ export default function DebugTab() {
               </label>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            {devicesLoading ? (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                Chargement des dispositifs...
-              </div>
-            ) : (
-              <>
-                <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          {/* Fonctions helpers pour fusionner les données (définies une seule fois) */}
+          {(() => {
+            // Normaliser un identifiant (supprime espaces)
+            const normalizeId = (val) => val ? String(val).trim().replace(/\s+/g, '') : ''
+            
+            // Fusionner valeurs : USB en priorité, puis DB
+            const getValue = (usbVal, dbVal) => usbVal ?? dbVal
+            
+            return (
+              <div className="overflow-x-auto">
+                {devicesLoading ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    Chargement des dispositifs...
+                  </div>
+                ) : (
+                  <>
+                    <table className="w-full border-collapse bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-gray-700">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Identifiant</th>
-                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Patient</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Nom</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">SIM ICCID</th>
                       <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Firmware</th>
-                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Dernière mise à jour</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Numéro SIM</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État SIM</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Opérateur/APN</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Itinérance</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Code PIN SIM</th>
+                      <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">État Réseau</th>
+                      <th className="px-3 py-1.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">En base</th>
                       <th className="px-3 py-1.5 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {/* AFFICHER LE DISPOSITIF VIRTUEL USB (non enregistré en base) - Afficher dès qu'il existe */}
-                    {usbVirtualDevice && (() => {
-                      // Si pas d'identifiants (dispositif temporaire), toujours afficher
-                      if (!usbVirtualDevice.sim_iccid && !usbVirtualDevice.device_serial) {
-                        return true
-                      }
-                      
-                      // Vérifier si le dispositif existe déjà en base
-                      const existsInDb = allDevices.find(d => 
-                        (d.sim_iccid && usbVirtualDevice.sim_iccid && d.sim_iccid === usbVirtualDevice.sim_iccid) || 
-                        (d.device_serial && usbVirtualDevice.device_serial && d.device_serial === usbVirtualDevice.device_serial)
-                      )
-                      
-                      // Si le dispositif existe en base, ne pas l'afficher ici (il sera dans allDevices)
-                      // Afficher seulement si pas en base
-                      return !existsInDb
-                    })() && (
-                      <tr key={usbVirtualDevice.id} className="table-row bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border-l-4 border-blue-500">
-                        <td className="table-cell px-3 py-3 text-sm text-gray-900 dark:text-gray-100">
-                          <div className="flex items-center gap-2">
-                            <span className="text-blue-500 text-lg">🔌</span>
-                            <span className="font-medium">{usbVirtualDevice.device_name}</span>
-                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">USB Connecté</span>
-                            <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded">Non enregistré</span>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {usbVirtualDevice.sim_iccid ? `ICCID: ${usbVirtualDevice.sim_iccid}` : ''}
-                            {usbVirtualDevice.device_serial ? `Serial: ${usbVirtualDevice.device_serial}` : ''}
-                          </div>
-                        </td>
-                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">-</td>
-                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{usbVirtualDevice.firmware_version || 'N/A'}</td>
-                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
-                          {usbVirtualDevice?.last_seen 
-                            ? new Date(usbVirtualDevice.last_seen).toLocaleString('fr-FR') 
-                            : (usbDeviceInfo?.last_seen 
-                              ? new Date(usbDeviceInfo.last_seen).toLocaleString('fr-FR') 
-                              : 'Temps réel')}
-                        </td>
-                        <td className="table-cell px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                // Créer un dispositif avec un nom par défaut si nécessaire
-                                const deviceToEdit = {
-                                  ...usbVirtualDevice,
-                                  device_name: usbVirtualDevice.device_name || 'USB-Device',
-                                  // S'assurer que les champs requis sont présents
-                                  sim_iccid: usbVirtualDevice.sim_iccid || '',
-                                  device_serial: usbVirtualDevice.device_serial || '',
-                                  firmware_version: usbVirtualDevice.firmware_version || ''
-                                }
-                                setEditingDevice(deviceToEdit)
-                                setShowDeviceModal(true)
-                              }}
-                              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
-                              title="Configurer le dispositif USB"
-                            >
-                              ⚙️ Configurer
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    
                     {(() => {
                       // Debug: logger l'état pour diagnostiquer
                       logger.debug('[UsbStreamingTab] Affichage message "Aucun dispositif":', {
                         allDevicesLength: allDevices.length,
-                        hasUsbVirtualDevice: !!usbVirtualDevice,
-                        usbVirtualDeviceName: usbVirtualDevice?.device_name || 'N/A',
+                        hasUsbDevice: !!usbDevice,
+                        usbDeviceName: usbDevice?.device_name || 'N/A',
                         isConnected: isConnected,
                         usbStreamLogsLength: usbStreamLogs.length
                       })
                       
                       // Cas 1: Aucun dispositif enregistré du tout (mais on peut avoir un dispositif USB virtuel)
-                      if (allDevices.length === 0 && !usbVirtualDevice) {
+                      if (allDevices.length === 0 && !usbDevice) {
                         logger.debug('[UsbStreamingTab] Affichage message "Aucun dispositif enregistré"')
                         return (
                           <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                            <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                               <div className="flex flex-col items-center gap-3">
                                 <span className="text-4xl">🔌</span>
                                 <p className="text-sm font-medium">Aucun dispositif enregistré</p>
@@ -1901,7 +1972,7 @@ export default function DebugTab() {
                       
                       // Si on a un dispositif virtuel mais pas de dispositifs en base, ne pas afficher le message
                       // Le dispositif virtuel sera affiché juste au-dessus
-                      if (allDevices.length === 0 && usbVirtualDevice) {
+                      if (allDevices.length === 0 && usbDevice) {
                         logger.debug('[UsbStreamingTab] Dispositif virtuel existe, ne pas afficher le message')
                         return null // Ne pas afficher le message, le dispositif virtuel sera affiché
                       }
@@ -1912,7 +1983,7 @@ export default function DebugTab() {
                         if (archivedDevices.length === 0) {
                           return (
                             <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
-                              <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                              <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                                 <div className="flex flex-col items-center gap-3">
                                   <span className="text-4xl">🗄️</span>
                                   <p className="text-sm font-medium">Aucun dispositif archivé</p>
@@ -1925,10 +1996,10 @@ export default function DebugTab() {
                       
                       // Cas 3: Afficher les dispositifs actifs mais aucun à afficher (sauf si dispositif USB virtuel existe)
                       // Ne pas afficher ce message si on a un dispositif USB virtuel (il sera affiché au-dessus)
-                      if (!showArchived && devicesToDisplay.length === 0 && !usbVirtualDevice && allDevices.length === 0) {
+                      if (!showArchived && devicesToDisplay.length === 0 && !usbDevice && allDevices.length === 0) {
                         return (
                           <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td colSpan="5" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                            <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
                               <div className="flex flex-col items-center gap-3">
                                 <span className="text-4xl">📱</span>
                                 <p className="text-sm font-medium">Aucun dispositif actif</p>
@@ -1940,107 +2011,140 @@ export default function DebugTab() {
                       
                       // Si on a un dispositif virtuel mais pas de dispositifs en base, ne pas afficher de message
                       // Le dispositif virtuel sera affiché juste au-dessus
-                      if (!showArchived && devicesToDisplay.length === 0 && usbVirtualDevice) {
+                      if (!showArchived && devicesToDisplay.length === 0 && usbDevice) {
                         return null // Ne pas afficher le message, le dispositif virtuel sera affiché
                       }
                       
                       // Cas 4: Afficher les dispositifs
                       return null
                     })()}
+                    {(() => {
+                      // Log de debug pour voir ce qui est affiché
+                      logger.debug('[RENDER] Affichage tableau:', {
+                        devicesToDisplayCount: devicesToDisplay.length,
+                        hasUsbDevice: !!usbDevice,
+                        usbDeviceInList: devicesToDisplay.some(d => d.id === usbDevice?.id),
+                        allDeviceIds: devicesToDisplay.map(d => ({ id: d.id, name: d.device_name }))
+                      })
+                      return null
+                    })()}
                     {devicesToDisplay.length > 0 && (
                       devicesToDisplay.map((device) => {
                   const deviceIsArchived = isArchived(device)
-                  // Vérifier si ce dispositif est connecté en USB (données temps réel)
+                  const deviceDbData = device
+                  const deviceConfig = deviceDbData?.config || {}
+                  
+                  // Vérifier si le dispositif est enregistré en base (a un ID de base de données)
+                  // Un vrai ID de base de données est un nombre ou une string qui ne commence pas par "usb-"
+                  const hasRealId = device?.id && 
+                    (typeof device.id === 'number' || 
+                     (typeof device.id === 'string' && !device.id.startsWith('usb-')))
+                  // Un dispositif est non enregistré s'il n'a pas de vrai ID, ou s'il est marqué comme virtuel/temporaire
+                  const isNotRegistered = !hasRealId || device?.isVirtual || device?.isTemporary
+                  
+                  // Normaliser les identifiants pour comparaison
+                  const deviceIccid = normalizeId(device.sim_iccid)
+                  const deviceSerial = normalizeId(device.device_serial)
+                  
+                  // Vérifier si ce dispositif est connecté en USB (enregistré)
                   const isDeviceUsbConnected = isConnected && (
-                    usbDeviceInfo?.sim_iccid === device.sim_iccid ||
-                    usbDeviceInfo?.device_serial === device.device_serial ||
-                    usbConnectedDevice?.id === device.id
-                  )
-                  const isDeviceUsbVirtual = usbVirtualDevice && (
-                    usbVirtualDevice.sim_iccid === device.sim_iccid ||
-                    usbVirtualDevice.device_serial === device.device_serial
+                    (usbDeviceInfo?.sim_iccid && normalizeId(usbDeviceInfo.sim_iccid) === deviceIccid) ||
+                    (usbDeviceInfo?.device_serial && normalizeId(usbDeviceInfo.device_serial) === deviceSerial) ||
+                    isUsbDeviceRegistered() && usbDevice.id === device.id
                   )
                   
-                  // OPTION A : Utiliser UNIQUEMENT les données de la BDD
-                  // L'indicateur LIVE reste visible mais ne fusionne pas les données
-                  const deviceDbData = device
+                  // Vérifier si ce dispositif est un dispositif USB virtuel (non enregistré)
+                  const isDeviceUsbVirtual = usbDevice && !isUsbDeviceRegistered() && (
+                    (usbDevice.sim_iccid && normalizeId(usbDevice.sim_iccid) === deviceIccid) ||
+                    (usbDevice.device_serial && normalizeId(usbDevice.device_serial) === deviceSerial)
+                  )
+                  
+                  // Source de données USB (priorité : usbDeviceInfo > usbDevice)
+                  const usbInfo = isDeviceUsbConnected ? usbDeviceInfo : (isDeviceUsbVirtual ? usbDevice : null)
+                  const usbConfig = usbInfo?.config || {}
+                  
+                  // Fusionner toutes les données : USB en priorité, puis DB
+                  const deviceName = deviceDbData?.device_name || usbInfo?.device_name
+                  const simIccid = getValue(usbInfo?.sim_iccid, deviceDbData?.sim_iccid)
+                  const firmwareVersion = getValue(usbInfo?.firmware_version, deviceDbData?.firmware_version)
+                  const simPhoneNumber = getValue(usbInfo?.sim_phone_number, deviceDbData?.sim_phone_number)
+                  const simStatus = getValue(usbInfo?.sim_status, deviceDbData?.sim_status)
+                  
+                  // Config : USB si valeur présente, sinon DB
+                  const operator = (usbConfig.operator && usbConfig.operator !== '') ? usbConfig.operator : (deviceConfig.operator || '')
+                  const apn = (usbConfig.apn && usbConfig.apn !== '') ? usbConfig.apn : (deviceConfig.apn || '')
+                  const roaming = getValue(usbConfig.roaming_enabled, deviceConfig.roaming_enabled)
+                  const simPin = (usbConfig.sim_pin && usbConfig.sim_pin !== '') ? usbConfig.sim_pin : (deviceConfig.sim_pin || '')
+                  
+                  // État réseau : USB en priorité, puis DB
+                  const networkConnected = getValue(usbInfo?.network_connected, deviceDbData?.network_connected)
+                  const gprsConnected = getValue(usbInfo?.gprs_connected, deviceDbData?.gprs_connected)
+                  const modemReady = getValue(usbInfo?.modem_ready, deviceDbData?.modem_ready)
+                  
+                  // Formater les affichages
+                  const simStatusDisplay = !simStatus ? 'N/A' : 
+                    simStatus === 'READY' ? '✅ Prête' :
+                    simStatus === 'LOCKED' ? '🔒 Verrouillée' :
+                    simStatus === 'ANTITHEFT_LOCKED' ? '🔐 Anti-vol' :
+                    simStatus === 'ERROR' ? '❌ Erreur' :
+                    simStatus === 'MODEM_NOT_READY' ? '⏳ Modem non prêt' : simStatus
+                  
+                  const operatorDisplay = operator ? operator : (apn ? `APN: ${apn}` : '🔍 Auto')
+                  const roamingDisplay = roaming === true ? '✅ Activée' : 
+                    roaming === false ? '❌ Désactivée' : 'N/A'
+                  const simPinDisplay = simPin ? '🔐 ***' : 'N/A'
+                  const networkStatus = networkConnected && gprsConnected ? '✅ Connecté (GPRS)' :
+                    networkConnected ? '📡 Réseau OK' :
+                    modemReady ? '⏳ En attente' : '❌ Non connecté'
                   
                   return (
-                    <tr key={device.id} className={`table-row hover:bg-gray-50 dark:hover:bg-gray-800 ${deviceIsArchived ? 'opacity-60' : ''}`}>
-                {/* Identifiant */}
+                    <tr key={device.id || device.sim_iccid || device.device_serial || `usb-${Date.now()}`} className={`table-row hover:bg-gray-50 dark:hover:bg-gray-800 ${deviceIsArchived ? 'opacity-60' : ''}`}>
+                {/* Nom */}
                 <td className="table-cell px-3 py-1.5">
-                  {(() => {
-                    const deviceName = deviceDbData?.device_name
-                    const identifier = deviceDbData?.sim_iccid || deviceDbData?.device_serial
-                    return (
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-xs font-semibold ${!deviceName ? 'text-gray-400 dark:text-gray-500' : 'text-orange-600 dark:text-orange-400'}`}>
-                            {deviceName || 'N/A'}
-                          </span>
-                          {deviceIsArchived && (
-                            <span className="ml-2 badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
-                          )}
-                          {isDeviceUsbConnected && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-green-500 text-white rounded animate-pulse">
-                              <span className="w-1 h-1 bg-white rounded-full"></span>
-                              LIVE
-                            </span>
-                          )}
-                        </div>
-                        {identifier && (
-                          <span className={`text-xs font-mono text-gray-600 dark:text-gray-400`}>
-                            {identifier}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })()}
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs font-semibold ${!deviceName ? 'text-gray-400 dark:text-gray-500' : 'text-orange-600 dark:text-orange-400'}`}>
+                        {deviceName || 'N/A'}
+                      </span>
+                      {deviceIsArchived && (
+                        <span className="ml-2 badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
+                      )}
+                      {(isDeviceUsbConnected || isDeviceUsbVirtual) && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium bg-green-500 text-white rounded animate-pulse">
+                          <span className="w-1 h-1 bg-white rounded-full"></span>
+                          LIVE
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </td>
                 
-                {/* Patient */}
-                <td className="table-cell px-3 py-1.5">
-                  {(() => {
-                    const patientName = deviceDbData?.first_name && deviceDbData?.last_name 
-                      ? `${deviceDbData.first_name} ${deviceDbData.last_name}` 
-                      : null
-                    const hasPatient = !!patientName
-                    return (
-                      <div className="flex items-center gap-1">
-                        {hasPatient ? (
-                          <span className="badge badge-success text-xs">{patientName}</span>
-                        ) : (
-                          <span className={`badge ${deviceIsArchived ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'} text-xs`}>
-                            Non assigné
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })()}
+                {/* SIM ICCID */}
+                <td className="table-cell px-3 py-1.5 text-xs font-mono text-gray-700 dark:text-gray-300">
+                  {simIccid || 'N/A'}
                 </td>
                 
-                {/* Firmware - BDD uniquement */}
+                {/* Firmware */}
                 <td className="table-cell px-3 py-1.5">
                   {(() => {
-                    const firmwareVersion = deviceDbData?.firmware_version
                     const canFlash = compiledFirmwares.length > 0
                     return (
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1">
                           {deviceIsArchived ? (
-                            <span className={`text-xs font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
+                            <span className={`text-xs font-mono font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
                               {firmwareVersion || 'N/A'}
                             </span>
                           ) : canFlash ? (
                             <button
                               onClick={() => handleOpenFlashModal(device)}
-                              className={`text-xs font-semibold hover:underline transition-colors ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300' : 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 cursor-pointer'}`}
+                              className={`text-xs font-mono font-semibold hover:underline transition-colors ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300' : 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 cursor-pointer'}`}
                               title="Cliquer pour flasher un firmware"
                             >
                               {firmwareVersion || 'N/A'}
                             </button>
                           ) : (
-                            <span className={`text-xs font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
+                            <span className={`text-xs font-mono font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
                               {firmwareVersion || 'N/A'}
                             </span>
                           )}
@@ -2050,42 +2154,47 @@ export default function DebugTab() {
                   })()}
                 </td>
                 
-                {/* Dernière mise à jour */}
-                <td className="table-cell px-3 py-1.5">
-                  {(() => {
-                    // BDD uniquement
-                    const timestamp = deviceDbData?.last_seen
-                    
-                    if (!timestamp) {
-                      return (
-                        <span className="text-xs text-gray-400 dark:text-gray-500">Jamais</span>
-                      )
-                    }
-                    
-                    // Vérifier si timestamp est valide
-                    const date = new Date(timestamp)
-                    const isValidDate = !isNaN(date.getTime())
-                    
-                    if (!isValidDate) {
-                      return (
-                        <span className="text-xs text-gray-400 dark:text-gray-500">Date invalide</span>
-                      )
-                    }
-                    
-                    // Afficher la date/heure complète avec secondes
-                    return (
-                      <span className="text-xs text-gray-700 dark:text-gray-300">
-                        {date.toLocaleString('fr-FR', { 
-                          day: '2-digit', 
-                          month: '2-digit', 
-                          year: 'numeric',
-                          hour: '2-digit', 
-                          minute: '2-digit',
-                          second: '2-digit'
-                        })}
-                      </span>
-                    )
-                  })()}
+                {/* Numéro SIM */}
+                <td className="table-cell px-3 py-1.5 text-xs font-mono text-gray-700 dark:text-gray-300">
+                  {simPhoneNumber || 'N/A'}
+                </td>
+                
+                {/* État SIM */}
+                <td className="table-cell px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300">
+                  {simStatusDisplay}
+                </td>
+                
+                {/* Opérateur/APN */}
+                <td className="table-cell px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300">
+                  {operatorDisplay}
+                </td>
+                
+                {/* Itinérance */}
+                <td className="table-cell px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300">
+                  {roamingDisplay}
+                </td>
+                
+                {/* Code PIN SIM */}
+                <td className="table-cell px-3 py-1.5 text-xs font-mono text-gray-700 dark:text-gray-300">
+                  {simPinDisplay}
+                </td>
+                
+                {/* État Réseau */}
+                <td className="table-cell px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300">
+                  {networkStatus}
+                </td>
+                
+                {/* En base */}
+                <td className="table-cell px-3 py-1.5 text-center">
+                  {isNotRegistered ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">
+                      ❌ Non
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">
+                      ✅ Oui
+                    </span>
+                  )}
                 </td>
                 
                 {/* Actions */}
@@ -2116,14 +2225,16 @@ export default function DebugTab() {
                         </button>
                         {(() => {
                           const hasPatient = !!deviceDbData?.patient_id
+                          // Utiliser isNotRegistered défini au début de la boucle map
+                          
                           if (hasPatient) {
                             // Dispositif assigné : bouton désassigner
                             return (
                               <button
-                                className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
+                                className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 onClick={() => handleOpenUnassignPatientModal(device)}
-                                disabled={unassigningPatient}
-                                title="Désassigner le patient du dispositif"
+                                disabled={unassigningPatient || isNotRegistered}
+                                title={isNotRegistered ? "Enregistrez d'abord le dispositif" : "Désassigner le patient du dispositif"}
                               >
                                 <span className="text-lg">{unassigningPatient ? '⏳' : '🔓'}</span>
                               </button>
@@ -2132,10 +2243,10 @@ export default function DebugTab() {
                             // Pas de patient : bouton assigner
                             return (
                               <button
-                                className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+                                className="p-2 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 onClick={() => handleOpenAssignPatientModal(device)}
-                                disabled={availablePatients.length === 0 || assigningPatient}
-                                title={availablePatients.length === 0 ? "Aucun patient libre disponible" : "Assigner un patient au dispositif"}
+                                disabled={isNotRegistered || availablePatients.length === 0 || assigningPatient}
+                                title={isNotRegistered ? "Enregistrez d'abord le dispositif" : (availablePatients.length === 0 ? "Aucun patient libre disponible" : "Assigner un patient au dispositif")}
                               >
                                 <span className="text-lg">🔗</span>
                               </button>
@@ -2144,9 +2255,9 @@ export default function DebugTab() {
                         })()}
                         <button
                           onClick={() => handleOpenFlashModal(device)}
-                          disabled={compiledFirmwares.length === 0}
+                          disabled={compiledFirmwares.length === 0 || isNotRegistered}
                           className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={compiledFirmwares.length === 0 ? 'Aucun firmware compilé disponible. Compilez d\'abord un firmware dans l\'onglet "Upload INO".' : 'Flasher le firmware'}
+                          title={isNotRegistered ? "Enregistrez d'abord le dispositif" : (compiledFirmwares.length === 0 ? 'Aucun firmware compilé disponible. Compilez d\'abord un firmware dans l\'onglet "Upload INO".' : 'Flasher le firmware')}
                         >
                           <span className="text-lg">🚀</span>
                         </button>
@@ -2157,9 +2268,9 @@ export default function DebugTab() {
                               setShowMeasurementsModal(true)
                             }
                           }}
-                          disabled={!deviceDbData?.measurement_count || deviceDbData.measurement_count === 0}
-                          className="p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                          title={deviceDbData?.measurement_count ? `Voir l'historique des mesures (${deviceDbData.measurement_count} mesure${deviceDbData.measurement_count > 1 ? 's' : ''})` : 'Aucune mesure enregistrée'}
+                          disabled={isNotRegistered || !deviceDbData?.measurement_count || deviceDbData.measurement_count === 0}
+                          className="p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={isNotRegistered ? "Enregistrez d'abord le dispositif" : (deviceDbData?.measurement_count ? `Voir l'historique des mesures (${deviceDbData.measurement_count} mesure${deviceDbData.measurement_count > 1 ? 's' : ''})` : 'Aucune mesure enregistrée')}
                         >
                           <span className="text-lg">📊</span>
                         </button>
@@ -2170,17 +2281,17 @@ export default function DebugTab() {
                               <>
                                 <button
                                   onClick={() => handleArchiveDevice(device)}
-                                  disabled={archivingDevice === device.id || deletingDevice === device.id}
+                                  disabled={isNotRegistered || archivingDevice === device.id || deletingDevice === device.id}
                                   className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="Archiver le dispositif"
+                                  title={isNotRegistered ? "Enregistrez d'abord le dispositif" : "Archiver le dispositif"}
                                 >
                                   <span className="text-lg">{archivingDevice === device.id ? '⏳' : '🗄️'}</span>
                                 </button>
                                 <button
                                   onClick={() => handlePermanentDeleteDevice(device)}
-                                  disabled={archivingDevice === device.id || deletingDevice === device.id}
+                                  disabled={isNotRegistered || archivingDevice === device.id || deletingDevice === device.id}
                                   className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="Supprimer définitivement le dispositif"
+                                  title={isNotRegistered ? "Enregistrez d'abord le dispositif" : "Supprimer définitivement le dispositif"}
                                 >
                                   <span className="text-lg">{deletingDevice === device.id ? '⏳' : '🗑️'}</span>
                                 </button>
@@ -2189,9 +2300,9 @@ export default function DebugTab() {
                               /* Non-administrateurs : Archive uniquement (pas de suppression définitive) */
                               <button
                                 onClick={() => handleArchiveDevice(device)}
-                                disabled={archivingDevice === device.id || deletingDevice === device.id}
+                                disabled={isNotRegistered || archivingDevice === device.id || deletingDevice === device.id}
                                 className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Archiver le dispositif"
+                                title={isNotRegistered ? "Enregistrez d'abord le dispositif" : "Archiver le dispositif"}
                               >
                                 <span className="text-lg">{archivingDevice === device.id ? '⏳' : '🗄️'}</span>
                               </button>
@@ -2207,235 +2318,13 @@ export default function DebugTab() {
             })
             )}
                   </tbody>
-                </table>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Statut Système (regroupé: Firmware, Réseau, GPS, OTA) */}
-        {isConnected && (
-          <div className="mb-6">
-            <div className="card">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-                📊 Statut Système
-              </h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Informations Firmware */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">🔧</span>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Firmware</h3>
-                  </div>
-                  <FirmwareInteractiveTest 
-                    compact={true}
-                    onTestComplete={(results) => {
-                      logger.log('[FirmwareTest] Résultats:', results)
-                      appendUsbStreamLog(`🔧 Tests firmware: ${results.commandsSupported.length} commande(s) supportée(s)`, 'dashboard')
-                    }}
-                  />
-                </div>
-                {/* Statut Réseau */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">📡</span>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Réseau</h3>
-                  </div>
-                  {(() => {
-                    // Extraire TOUS les statuts réseau des logs récents (ordre chronologique inverse)
-                    const networkLogs = [...allLogs]
-                      .reverse()
-                      .filter(log => 
-                        log.line.includes('État connexion') || 
-                        log.line.includes('Réseau=') || 
-                        log.line.includes('GPRS=')
-                      )
-                    
-                    // Prendre le log le plus récent (premier dans la liste inversée = le dernier chronologiquement)
-                    const latestNetworkLog = networkLogs[0]
-                    
-                    if (latestNetworkLog) {
-                      const line = latestNetworkLog.line
-                      // Pattern amélioré pour capturer OK ou KO (pas juste OK|KO littéral)
-                      const reseauMatch = line.match(/Réseau=([OKKO]+)/i)
-                      const gprsMatch = line.match(/GPRS=([OKKO]+)/i)
-                      const reseau = reseauMatch ? reseauMatch[1].toUpperCase() : null
-                      const gprs = gprsMatch ? gprsMatch[1].toUpperCase() : null
-                      
-                      // Calculer le temps écoulé depuis ce log
-                      const timeAgo = Math.floor((Date.now() - new Date(latestNetworkLog.timestamp).getTime()) / 1000)
-                      
-                      return (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-medium px-2 py-1 rounded ${
-                              reseau === 'OK' 
-                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                                : reseau === 'KO'
-                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'
-                            }`}>
-                              Réseau: {reseau || 'N/A'}
-                            </span>
-                            {timeAgo < 60 && (
-                              <span className="text-xs text-gray-500 dark:text-gray-500">
-                                ({timeAgo}s)
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs font-medium px-2 py-1 rounded ${
-                              gprs === 'OK' 
-                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                                : gprs === 'KO'
-                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'
-                            }`}>
-                              GPRS: {gprs || 'N/A'}
-                            </span>
-                          </div>
-                          {usbStreamLastMeasurement?.rssi != null && (
-                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                              RSSI: {usbStreamLastMeasurement.rssi} dBm
-                            </div>
-                          )}
-                          {/* Afficher un indicateur si le statut a changé récemment */}
-                          {networkLogs.length > 1 && (() => {
-                            const previousLog = networkLogs[1]
-                            const prevLine = previousLog.line
-                            const prevReseauMatch = prevLine.match(/Réseau=([OKKO]+)/i)
-                            const prevGprsMatch = prevLine.match(/GPRS=([OKKO]+)/i)
-                            const prevReseau = prevReseauMatch ? prevReseauMatch[1].toUpperCase() : null
-                            const prevGprs = prevGprsMatch ? prevGprsMatch[1].toUpperCase() : null
-                            
-                            const hasChanged = (reseau !== prevReseau || gprs !== prevGprs) && timeAgo < 30
-                            
-                            if (hasChanged) {
-                              return (
-                                <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-                                  ⚠️ Changement récent
-                                </div>
-                              )
-                            }
-                            return null
-                          })()}
-                        </div>
-                      )
-                    }
-                    
-                    // Fallback si pas de log réseau mais RSSI disponible
-                    if (usbStreamLastMeasurement?.rssi != null) {
-                      return (
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
-                          RSSI: {usbStreamLastMeasurement.rssi} dBm
-                        </div>
-                      )
-                    }
-                    
-                    return (
-                      <div className="text-sm text-gray-500 dark:text-gray-500">
-                        En attente...
-                      </div>
-                    )
-                  })()}
-                </div>
-                
-                {/* Statut GPS */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">📍</span>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">GPS</h3>
-                  </div>
-                  {(() => {
-                    const hasGps = usbStreamLastMeasurement?.latitude != null && 
-                                   usbStreamLastMeasurement?.longitude != null
-                    
-                    if (hasGps) {
-                      return (
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium text-green-700 dark:text-green-400">
-                            ✅ Actif
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            {usbStreamLastMeasurement.latitude.toFixed(4)}, {usbStreamLastMeasurement.longitude.toFixed(4)}
-                          </div>
-                        </div>
-                      )
-                    }
-                    
-                    // Vérifier dans les logs si GPS est mentionné
-                    const gpsLog = [...allLogs].reverse().find(log => 
-                      log.line.includes('GPS') || log.line.includes('latitude')
-                    )
-                    
-                    if (gpsLog && gpsLog.line.includes('GPS=null')) {
-                      return (
-                        <div className="text-xs text-gray-500 dark:text-gray-500">
-                          ❌ Désactivé
-                        </div>
-                      )
-                    }
-                    
-                    return (
-                      <div className="text-sm text-gray-500 dark:text-gray-500">
-                        Non disponible
-                      </div>
-                    )
-                  })()}
-                </div>
-                
-                {/* Confirmation Envoi de Données */}
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">✅</span>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Envoi OTA</h3>
-                  </div>
-                  {(() => {
-                    // Chercher la dernière confirmation d'envoi
-                    const sendLog = [...allLogs].reverse().find(log => 
-                      log.line.includes('Envoi des données effectué') ||
-                      log.line.includes('[MODEM] ✅ Envoi des données effectué')
-                    )
-                    
-                    if (sendLog) {
-                      const timeAgo = Math.floor((Date.now() - new Date(sendLog.timestamp).getTime()) / 1000)
-                      return (
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium text-green-700 dark:text-green-400">
-                            ✅ Données envoyées
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            Il y a {timeAgo < 60 ? `${timeAgo}s` : `${Math.floor(timeAgo / 60)}min`}
-                          </div>
-                        </div>
-                      )
-                    }
-                    
-                    // Chercher "Prêt pour envoi"
-                    const readyLog = [...allLogs].reverse().find(log => 
-                      log.line.includes('Prêt pour envoi de données')
-                    )
-                    
-                    if (readyLog) {
-                      return (
-                        <div className="text-xs text-yellow-700 dark:text-yellow-400">
-                          ⏳ Prêt pour envoi...
-                        </div>
-                      )
-                    }
-                    
-                    return (
-                      <div className="text-sm text-gray-500 dark:text-gray-500">
-                        En attente...
-                      </div>
-                    )
-                  })()}
-                </div>
+                    </table>
+                  </>
+                )}
               </div>
-            </div>
-          </div>
-        )}
+            )
+          })()}
+        </div>
 
         {/* Console de logs USB */}
         <div className="mb-6">

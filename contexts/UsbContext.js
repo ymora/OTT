@@ -12,9 +12,21 @@ export function UsbProvider({ children }) {
   const { port, isConnected, isSupported, requestPort, connect, disconnect, startReading, write } = useSerialPort()
   const { fetchWithAuth, API_URL } = useAuth()
   
-  // État USB global
-  const [usbConnectedDevice, setUsbConnectedDevice] = useState(null)
-  const [usbVirtualDevice, setUsbVirtualDevice] = useState(null)
+  // État USB global - UN SEUL état pour tous les dispositifs USB connectés
+  // Si le dispositif a un `id` numérique, il est enregistré en base
+  // Sinon, c'est un dispositif virtuel (non enregistré)
+  const [usbDevice, setUsbDevice] = useState(null)
+  
+  // Fonction helper pour obtenir le dispositif USB connecté (compatibilité)
+  const getUsbDevice = useCallback(() => usbDevice, [usbDevice])
+  
+  // Fonction helper pour vérifier si le dispositif est enregistré (a un vrai ID)
+  const isUsbDeviceRegistered = useCallback(() => {
+    if (!usbDevice?.id) return false
+    // Vrai ID = nombre ou string qui ne commence pas par 'usb-'
+    return typeof usbDevice.id === 'number' || 
+           (typeof usbDevice.id === 'string' && !usbDevice.id.startsWith('usb-'))
+  }, [usbDevice])
   const [usbPortInfo, setUsbPortInfo] = useState(null)
   const [autoDetecting, setAutoDetecting] = useState(true)
   const [checkingUSB, setCheckingUSB] = useState(false)
@@ -36,6 +48,7 @@ export function UsbProvider({ children }) {
   const updateDeviceFirmwareRef = useRef(null) // Callback pour mettre à jour les informations du dispositif dans la base (firmware_version, last_battery, last_seen, status)
   const portSharingRef = useRef(null)
   const streamTimeoutRefs = useRef([]) // Références pour les timeouts de streaming
+  const usbGetConfigSentRef = useRef(false) // Flag pour éviter d'envoyer GET_CONFIG plusieurs fois (évite boucle infinie)
   
   // Batch des logs pour envoi au serveur (pour monitoring à distance)
   const logsToSendRef = useRef([])
@@ -69,54 +82,41 @@ export function UsbProvider({ children }) {
     }
   }, [])
 
-  // Fonction pour ajouter un log USB
+  // Fonction pour ajouter un log USB (UNIQUEMENT local, pas d'envoi au serveur)
   // source: 'device' pour les logs venant du dispositif, 'dashboard' pour les logs du dashboard
   const appendUsbStreamLog = useCallback((line, source = 'device') => {
     if (!line) return
     
     const timestamp = Date.now()
     
-    // Ajouter au state local pour affichage immédiat
+    // Ajouter au state local pour affichage immédiat uniquement
+    // DÉSACTIVÉ: Les logs ne sont plus envoyés au serveur (affichage local uniquement)
     setUsbStreamLogs(prev => {
       const next = [...prev, { id: `${timestamp}-${Math.random()}`, line, timestamp, source }]
-      // Augmenté de 80 à 500 pour capturer plus de logs (notamment les logs OTA périodiques)
+      // Limiter à 500 logs en mémoire pour éviter la surcharge
       return next.slice(-500)
     })
     
-    // Ajouter au batch pour envoi au serveur (pour monitoring à distance)
-    // TOUJOURS ajouter, même sans device connecté, pour que les logs soient visibles localement
-    logsToSendRef.current.push({
-      log_line: line,
-      log_source: source,
-      timestamp: timestamp
-    })
-    
-    // Limiter la taille du buffer (éviter la surcharge mémoire)
-    if (logsToSendRef.current.length > 200) {
-      logsToSendRef.current = logsToSendRef.current.slice(-200)
-    }
+    // DÉSACTIVÉ: Les logs ne sont plus ajoutés au batch pour envoi au serveur
+    // logsToSendRef.current.push({
+    //   log_line: line,
+    //   log_source: source,
+    //   timestamp: timestamp
+    // })
+    // 
+    // // Limiter la taille du buffer (éviter la surcharge mémoire)
+    // if (logsToSendRef.current.length > 200) {
+    //   logsToSendRef.current = logsToSendRef.current.slice(-200)
+    // }
   }, [])
   
-  // Fonction pour effacer les logs
+  // Fonction pour effacer les logs (RAZ console - uniquement local, rien en base)
   const clearUsbStreamLogs = useCallback(() => {
-    setUsbStreamLogs([])
-    logger.log('🗑️ Console USB effacée')
-    
-    // Ajouter au batch pour envoi au serveur (si on a un dispositif connecté)
-    const currentDevice = usbConnectedDevice || usbVirtualDevice
-    if (currentDevice && sendMeasurementToApiRef.current) {
-      logsToSendRef.current.push({
-        log_line: line,
-        log_source: source,
-        timestamp: timestamp
-      })
-      
-      // Limiter la taille du buffer (éviter la surcharge mémoire)
-      if (logsToSendRef.current.length > 200) {
-        logsToSendRef.current = logsToSendRef.current.slice(-200)
-      }
-    }
-  }, [usbConnectedDevice, usbVirtualDevice])
+    setUsbStreamLogs([]) // Vider uniquement la console locale
+    logsToSendRef.current = [] // Vider aussi le buffer (même s'il n'est plus utilisé pour envoi serveur)
+    logger.log('🗑️ Console USB effacée (local uniquement, rien en base de données)')
+    // DÉSACTIVÉ: Les logs ne sont plus envoyés au serveur - RAZ vide seulement l'affichage local
+  }, [])
 
   // Fonction pour préparer le port
   const ensurePortReady = useCallback(async () => {
@@ -151,7 +151,7 @@ export function UsbProvider({ children }) {
       return
     }
     
-    const currentDevice = usbConnectedDevice || usbVirtualDevice
+    const currentDevice = usbDevice
     if (!currentDevice) {
       // Même sans device, on peut envoyer les logs pour qu'ils soient visibles sur le web
       // Ne pas bloquer l'envoi des logs
@@ -238,31 +238,32 @@ export function UsbProvider({ children }) {
       // En cas d'erreur, remettre les logs dans le buffer
       logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
     }
-  }, [usbConnectedDevice, usbVirtualDevice, API_URL])
+  }, [usbDevice, API_URL])
   
-  // Timer pour envoyer les logs toutes les 5 secondes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      sendLogsToServer()
-    }, 5000) // Envoyer toutes les 5 secondes
-    
-    return () => {
-      clearInterval(interval)
-      // Envoyer les derniers logs avant de démonter
-      if (logsToSendRef.current.length > 0) {
-        sendLogsToServer()
-      }
-    }
-  }, [sendLogsToServer])
+  // DÉSACTIVÉ: Les logs USB ne sont plus envoyés en base de données
+  // Les logs sont uniquement affichés localement dans la console
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     sendLogsToServer()
+  //   }, 5000) // Envoyer toutes les 5 secondes
+  //   
+  //   return () => {
+  //     clearInterval(interval)
+  //     // Envoyer les derniers logs avant de démonter
+  //     if (logsToSendRef.current.length > 0) {
+  //       sendLogsToServer()
+  //     }
+  //   }
+  // }, [sendLogsToServer])
   
   // Vérifier et envoyer les commandes UPDATE_CONFIG via USB
   useEffect(() => {
-    if (!isConnected || !usbConnectedDevice || !write || !fetchWithAuth || !API_URL) return
+    if (!isConnected || !usbDevice || !write || !fetchWithAuth || !API_URL) return
     
     const checkAndSendCommands = async () => {
       try {
         // Récupérer l'ICCID ou serial pour identifier le device
-        const device = usbConnectedDevice.sim_iccid || usbConnectedDevice.device_serial
+        const device = usbDevice?.sim_iccid || usbDevice?.device_serial
         if (!device) return
         
         // Récupérer les commandes en attente via ICCID (comme le firmware)
@@ -364,7 +365,7 @@ export function UsbProvider({ children }) {
     return () => {
       clearInterval(interval)
     }
-  }, [isConnected, usbConnectedDevice, write, fetchWithAuth, API_URL])
+  }, [isConnected, usbDevice, write, fetchWithAuth, API_URL])
   
   // Stockage des mesures USB locales pour comparaison avec OTA
   const usbMeasurementsLocalRef = useRef([])
@@ -463,8 +464,13 @@ export function UsbProvider({ children }) {
     }
 
     logger.debug('processUsbStreamLine:', trimmed.substring(0, Math.min(100, trimmed.length)))
+
+    // Si en pause, ne pas ajouter les logs à l'affichage (mais continuer à traiter les JSON pour les mesures)
+    // Note: Cette fonction est déjà protégée par handleUsbStreamChunk qui vérifie usbStreamStatus === 'paused'
+    // Mais ajoutons une vérification supplémentaire pour être sûr
+    // appendUsbStreamLog sera appelé seulement si on n'est pas en pause (protégé par handleUsbStreamChunk)
     
-    // Toujours ajouter les logs - TOUJOURS, même pour les lignes brutes
+    // Toujours ajouter les logs pour affichage (sauf si en pause, ce qui est géré par handleUsbStreamChunk)
     appendUsbStreamLog(trimmed)
     // Log uniquement en debug pour éviter le spam
     if (process.env.NODE_ENV === 'development') {
@@ -574,26 +580,20 @@ export function UsbProvider({ children }) {
             fromUsbInfo: true // Flag pour indiquer que c'est depuis device_info
           }
           
-          // Si on n'a pas encore de dispositif USB connecté, utiliser ces infos
-          if (!usbConnectedDevice && !usbVirtualDevice) {
-            setUsbVirtualDevice(deviceInfo)
-              if (process.env.NODE_ENV === 'development') {
-                logger.debug('✅ Dispositif USB créé:', deviceInfo.device_name)
-              }
-          } else if (usbConnectedDevice) {
-            setUsbConnectedDevice(prev => ({
+          // Mettre à jour le dispositif USB (qu'il soit enregistré ou non)
+          setUsbDevice(prev => {
+            if (!prev) {
+              return deviceInfo
+            }
+            return {
               ...prev,
               ...deviceInfo,
               firmware_version: deviceInfo.firmware_version || prev.firmware_version,
               last_seen: now
-            }))
-          } else if (usbVirtualDevice) {
-            setUsbVirtualDevice(prev => ({
-              ...prev,
-              ...deviceInfo,
-              firmware_version: deviceInfo.firmware_version || prev.firmware_version,
-              last_seen: now
-            }))
+            }
+          })
+          if (process.env.NODE_ENV === 'development') {
+            logger.debug('✅ Dispositif USB créé/mis à jour:', deviceInfo.device_name)
           }
           
           // Mettre à jour automatiquement les informations du dispositif dans la base de données
@@ -773,23 +773,14 @@ export function UsbProvider({ children }) {
               fromUsbInfo: true
             }
             
-            if (!usbConnectedDevice && !usbVirtualDevice) {
-              setUsbVirtualDevice(deviceInfo)
-              logger.log('✅ [USB] Dispositif virtuel créé:', deviceInfo.device_name)
-              appendUsbStreamLog(`✅ Dispositif USB détecté: ${deviceInfo.device_name} (ICCID: ${deviceInfo.sim_iccid?.slice(-10) || 'N/A'}, Serial: ${deviceInfo.device_serial || 'N/A'})`, 'dashboard')
-              
-              // ⚠️ AUTO-CRÉATION DÉSACTIVÉE: Ne pas créer automatiquement pour éviter les conflits
-              // Le dispositif apparaîtra dans le tableau via usbVirtualDevice mais ne sera pas enregistré en base
-              // L'utilisateur devra l'enregistrer manuellement s'il le souhaite
-            } else if (usbConnectedDevice) {
-              setUsbConnectedDevice(prev => ({
-                ...prev,
-                ...deviceInfo,
-                firmware_version: deviceInfo.firmware_version || prev.firmware_version,
-                last_seen: now
-              }))
-            } else if (usbVirtualDevice) {
-              setUsbVirtualDevice(prev => ({
+            // Mettre à jour le dispositif USB (qu'il soit enregistré ou non)
+            setUsbDevice(prev => {
+              if (!prev) {
+                logger.log('✅ [USB] Dispositif USB créé:', deviceInfo.device_name)
+                appendUsbStreamLog(`✅ Dispositif USB détecté: ${deviceInfo.device_name} (ICCID: ${deviceInfo.sim_iccid?.slice(-10) || 'N/A'}, Serial: ${deviceInfo.device_serial || 'N/A'})`, 'dashboard')
+                return deviceInfo
+              }
+              return {
                 ...prev,
                 ...deviceInfo,
                 firmware_version: deviceInfo.firmware_version || prev.firmware_version,
@@ -800,8 +791,8 @@ export function UsbProvider({ children }) {
                 device_name: deviceInfo.device_name || prev.device_name,
                 // Conserver la configuration si elle existe déjà
                 config: prev.config || null
-              }))
-            }
+              }
+            })
             
             // Mettre à jour la base de données
             if (updateDeviceFirmwareRef.current) {
@@ -843,7 +834,7 @@ export function UsbProvider({ children }) {
           if (hasConfigData) {
             // Si c'est une réponse GET_CONFIG, utiliser directement toutes les valeurs
             // Sinon (message de streaming), fusionner seulement les champs essentiels avec la config existante
-            const existingConfig = usbDeviceInfo?.config || usbVirtualDevice?.config || {}
+            const existingConfig = usbDeviceInfo?.config || usbDevice?.config || {}
             
             const deviceConfigFromUsb = isConfigResponse 
               ? {
@@ -925,9 +916,9 @@ export function UsbProvider({ children }) {
               config: deviceConfigFromUsb
             }))
             
-            // Mettre à jour aussi usbVirtualDevice avec la configuration si elle existe
-            if (usbVirtualDevice) {
-              setUsbVirtualDevice(prev => ({
+            // Mettre à jour aussi usbDevice avec la configuration si elle existe
+            if (usbDevice) {
+              setUsbDevice(prev => ({
                 ...prev,
                 config: deviceConfigFromUsb
               }))
@@ -1036,12 +1027,11 @@ export function UsbProvider({ children }) {
             }))
             
             // Envoyer la mesure à l'API si un dispositif USB est connecté
-            const currentDevice = usbConnectedDevice || usbVirtualDevice
+            const currentDevice = usbDevice
             logger.log('🔍 [USB-CONTEXT] Check envoi mesure:', {
               hasCurrentDevice: !!currentDevice,
               currentDevice: currentDevice ? currentDevice.device_name : 'AUCUN',
-              usbConnectedDevice: usbConnectedDevice ? usbConnectedDevice.device_name : 'null',
-              usbVirtualDevice: usbVirtualDevice ? usbVirtualDevice.device_name : 'null',
+              usbDevice: usbDevice ? usbDevice.device_name : 'null',
               hasCallback: !!sendMeasurementToApiRef.current
             })
             if (currentDevice) {
@@ -1171,7 +1161,7 @@ export function UsbProvider({ children }) {
           }))
           
           // Envoyer la mesure à l'API si un dispositif USB est connecté
-          const currentDevice = usbConnectedDevice || usbVirtualDevice
+          const currentDevice = usbDevice
           logger.log('🔍 [USB-CONTEXT-OLD] Check envoi mesure:', {
             hasCurrentDevice: !!currentDevice,
             currentDevice: currentDevice ? currentDevice.device_name : 'AUCUN',
@@ -1240,13 +1230,13 @@ export function UsbProvider({ children }) {
         return
       }
     }
-  }, [appendUsbStreamLog, sendMeasurementToApi, usbConnectedDevice, usbVirtualDevice, usbDeviceInfo])
+  }, [appendUsbStreamLog, sendMeasurementToApi, usbDevice, usbDeviceInfo])
 
   // Créer le dispositif virtuel temporaire dès qu'il y a des logs USB
   useEffect(() => {
     // Si on a des logs mais pas de dispositif virtuel, créer un dispositif temporaire
     // Cela permet d'afficher le dispositif dans le tableau même avant de recevoir les identifiants
-    if (usbStreamLogs.length > 0 && !usbVirtualDevice && !usbConnectedDevice) {
+    if (usbStreamLogs.length > 0 && !usbDevice) {
       // Générer un nom intelligent pour le dispositif temporaire
       // Le nom sera mis à jour quand les identifiants arriveront
       const tempDevice = {
@@ -1260,11 +1250,11 @@ export function UsbProvider({ children }) {
         isVirtual: true,
         isTemporary: true // Flag pour indiquer que c'est temporaire
       }
-      setUsbVirtualDevice(tempDevice)
+      setUsbDevice(tempDevice)
       logger.log('✅ [USB] Dispositif virtuel temporaire créé (dès qu\'il y a des logs):', tempDevice)
       appendUsbStreamLog('ℹ️ Dispositif USB détecté - En attente des identifiants...', 'dashboard')
     }
-  }, [usbStreamLogs.length, usbVirtualDevice, usbConnectedDevice, appendUsbStreamLog])
+  }, [usbStreamLogs.length, usbDevice, appendUsbStreamLog])
 
   // Gestion des chunks de streaming
   const handleUsbStreamChunk = useCallback((chunk) => {
@@ -1272,7 +1262,13 @@ export function UsbProvider({ children }) {
       logger.debug('⚠️ handleUsbStreamChunk: chunk vide ou null')
       return
     }
-    
+
+    // Si le streaming est en pause, ne pas traiter les données (arrêt de l'affichage des logs)
+    if (usbStreamStatus === 'paused') {
+      logger.debug('⏸️ [USB] Streaming en pause - données ignorées')
+      return
+    }
+
     logger.debug('📥 [USB] Chunk reçu, longueur:', chunk.length)
     
     // Accumuler les chunks dans le buffer jusqu'à avoir une ligne complète (terminée par \n)
@@ -1339,6 +1335,7 @@ export function UsbProvider({ children }) {
       logger.debug(`📥 ${parts.length} ligne(s) de log du firmware traitée(s)`)
     }
     
+    // Ne mettre à jour le status que si on n'est pas en pause
     if (usbStreamStatus === 'waiting') {
       logger.log('✅ Premier chunk reçu, passage à running')
       setUsbStreamStatus('running')
@@ -1435,19 +1432,23 @@ export function UsbProvider({ children }) {
       logger.log('✅ USB streaming démarré')
       appendUsbStreamLog('✅ Streaming USB démarré - En attente de données...', 'dashboard')
       
-      // Demander la configuration complète au démarrage
+      // Demander la configuration complète au démarrage (SEULEMENT si on démarre, pas si on reprend)
       // Cela permet de récupérer TOUS les paramètres en une seule fois
-      try {
-        await new Promise(resolve => setTimeout(resolve, 500)) // Attendre que le streaming soit stable
-        if (write && port) {
-          const getConfigCommand = JSON.stringify({ command: 'GET_CONFIG' }) + '\n'
-          await write(getConfigCommand)
-          logger.log('📤 [USB] Commande GET_CONFIG envoyée pour récupérer toute la configuration')
-          appendUsbStreamLog('📤 Demande de configuration complète...', 'dashboard')
+      // CRITIQUE: Ne pas envoyer GET_CONFIG si on reprend depuis une pause (évite boucle infinie)
+      if (!isResuming) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500)) // Attendre que le streaming soit stable
+          if (write && port && !usbGetConfigSentRef.current) {
+            const getConfigCommand = JSON.stringify({ command: 'GET_CONFIG' }) + '\n'
+            await write(getConfigCommand)
+            usbGetConfigSentRef.current = true // Marquer comme envoyé pour éviter répétition
+            logger.log('📤 [USB] Commande GET_CONFIG envoyée pour récupérer toute la configuration')
+            appendUsbStreamLog('📤 Demande de configuration complète...', 'dashboard')
+          }
+        } catch (configErr) {
+          logger.warn('⚠️ [USB] Erreur envoi GET_CONFIG:', configErr)
+          // Ne pas bloquer si la commande échoue, on récupérera la config progressivement
         }
-      } catch (configErr) {
-        logger.warn('⚠️ [USB] Erreur envoi GET_CONFIG:', configErr)
-        // Ne pas bloquer si la commande échoue, on récupérera la config progressivement
       }
       
       // Plus besoin d'envoyer les commandes "usb" et "start" :
@@ -1461,7 +1462,7 @@ export function UsbProvider({ children }) {
       setUsbStreamStatus('idle')
       appendUsbStreamLog(`❌ Erreur: ${errorMsg}`, 'dashboard')
     }
-    }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger, port, isConnected, write, usbStreamStatus])
+    }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger, port, isConnected, write])
 
   // Fonction interne pour arrêter le streaming (sans logs, réutilisable)
   const stopStreamingInternal = useCallback((silent = false) => {
@@ -1506,6 +1507,7 @@ export function UsbProvider({ children }) {
     setUsbStreamLastMeasurement(null)
     setUsbStreamLastUpdate(null)
     setUsbStreamStatus('idle')
+    usbGetConfigSentRef.current = false // Réinitialiser le flag GET_CONFIG à l'arrêt complet
       logger.debug('[USB] Streaming stopped')
   }, [stopStreamingInternal])
 
@@ -1720,140 +1722,9 @@ export function UsbProvider({ children }) {
   }, [])
 
   // ============================================================================
-  // AUTO-CRÉATION/MISE À JOUR INTELLIGENTE DES DISPOSITIFS USB
+  // NOTE: Auto-création désactivée
+  // Les dispositifs USB doivent être enregistrés manuellement via le modal
   // ============================================================================
-  
-  /**
-   * Fonction pour auto-créer ou mettre à jour un dispositif USB en base de données
-   * Cette fonction est appelée automatiquement quand un dispositif USB est détecté
-   * 
-   * @param {Object} deviceInfo - Informations du dispositif USB détecté
-   * @returns {Promise<Object|null>} - Le dispositif créé/mis à jour ou null en cas d'erreur
-   */
-  const autoCreateOrUpdateDevice = useCallback(async (deviceInfo) => {
-    if (!deviceInfo) {
-      logger.warn('autoCreateOrUpdateDevice: deviceInfo vide')
-      return null
-    }
-
-    if (!fetchWithAuth || !API_URL) {
-      logger.warn('autoCreateOrUpdateDevice: fetchWithAuth ou API_URL non disponible')
-      return null
-    }
-
-    const identifier = deviceInfo.sim_iccid || deviceInfo.device_serial
-    
-    if (!identifier) {
-      logger.warn('autoCreateOrUpdateDevice: aucun identifiant (ICCID ou serial)', deviceInfo)
-      return null
-    }
-
-    try {
-      logger.log(`🔍 [AUTO-CREATE] Vérification dispositif: ${identifier}`)
-      
-      // Importer fetchJson
-      const { fetchJson } = await import('@/lib/api')
-      
-      // Utiliser API_URL du contexte avec fallback
-      const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
-      
-      // 1. Vérifier si le dispositif existe déjà en BDD
-      const devicesResponse = await fetchJson(fetchWithAuth, apiUrl, '/api.php/devices', {}, { requiresAuth: true })
-      
-      if (!devicesResponse.success) {
-        logger.error('❌ Échec récupération dispositifs:', devicesResponse.message)
-        return null
-      }
-
-      const allDevices = devicesResponse.devices || []
-      
-      // Chercher le dispositif par ICCID ou serial
-      const existingDevice = allDevices.find(d => 
-        (deviceInfo.sim_iccid && d.sim_iccid === deviceInfo.sim_iccid) ||
-        (deviceInfo.device_serial && d.device_serial === deviceInfo.device_serial)
-      )
-
-      if (existingDevice) {
-        // 2a. DISPOSITIF EXISTE → Mise à jour
-        logger.log(`✅ [AUTO-CREATE] Dispositif trouvé (ID: ${existingDevice.id}), mise à jour...`)
-        
-        const updateData = {
-          last_seen: new Date().toISOString()
-          // Ne pas mettre à jour le status car la contrainte SQL n'accepte que 'active' ou 'inactive'
-          // Le status 'usb_connected' n'est utilisé que pour l'affichage local (isVirtual)
-        }
-        
-        // Mettre à jour firmware si disponible
-        if (deviceInfo.firmware_version) {
-          updateData.firmware_version = deviceInfo.firmware_version
-        }
-        
-        // Mettre à jour les identifiants si manquants
-        if (deviceInfo.sim_iccid && !existingDevice.sim_iccid) {
-          updateData.sim_iccid = deviceInfo.sim_iccid
-        }
-        if (deviceInfo.device_serial && !existingDevice.device_serial) {
-          updateData.device_serial = deviceInfo.device_serial
-        }
-
-        const updateResponse = await fetchJson(
-          fetchWithAuth, 
-          apiUrl, 
-          `/api.php/devices/${existingDevice.id}`, 
-          { method: 'PATCH', body: JSON.stringify(updateData) },
-          { requiresAuth: true }
-        )
-
-        if (updateResponse.success) {
-          logger.log('✅ [AUTO-CREATE] Dispositif mis à jour avec succès')
-          return { ...existingDevice, ...updateData }
-        } else {
-          logger.error('❌ [AUTO-CREATE] Échec mise à jour:', updateResponse.message)
-          return existingDevice // Retourner quand même le dispositif existant
-        }
-
-      } else {
-        // 2b. DISPOSITIF N'EXISTE PAS → Création automatique
-        logger.log(`🆕 [AUTO-CREATE] Nouveau dispositif détecté, création automatique...`)
-        
-        const newDeviceData = {
-          device_name: deviceInfo.device_name || `USB-${identifier.slice(-4)}`,
-          sim_iccid: deviceInfo.sim_iccid || null,
-          device_serial: deviceInfo.device_serial || null,
-          firmware_version: deviceInfo.firmware_version || null,
-          status: 'active', // Utiliser 'active' car la contrainte SQL n'accepte que 'active' ou 'inactive'
-          last_seen: new Date().toISOString()
-        }
-
-        const createResponse = await fetchJson(
-          fetchWithAuth,
-          apiUrl,
-          '/api.php/devices',
-          { method: 'POST', body: JSON.stringify(newDeviceData) },
-          { requiresAuth: true }
-        )
-
-        if (createResponse.success) {
-          logger.log('✅ [AUTO-CREATE] Nouveau dispositif créé avec succès:', createResponse.device)
-          return createResponse.device
-        } else {
-          logger.error('❌ [AUTO-CREATE] Échec création:', createResponse.message)
-          return null
-        }
-      }
-
-    } catch (error) {
-      logger.error('❌ [AUTO-CREATE] Erreur:', error)
-      return null
-    }
-  }, [fetchWithAuth, API_URL])
-
-  // Référence pour la fonction auto-create (accessible dans les callbacks)
-  const autoCreateOrUpdateDeviceRef = useRef(autoCreateOrUpdateDevice)
-  
-  useEffect(() => {
-    autoCreateOrUpdateDeviceRef.current = autoCreateOrUpdateDevice
-  }, [autoCreateOrUpdateDevice])
 
   // Fonction pour vérifier si les mesures OTA arrivent dans la base de données
   const checkOtaSync = useCallback(async (deviceIdentifier, deviceId = null) => {
@@ -2002,11 +1873,11 @@ export function UsbProvider({ children }) {
   }, [fetchWithAuth, API_URL])
 
   const value = {
-    // État USB
-    usbConnectedDevice,
-    setUsbConnectedDevice,
-    usbVirtualDevice,
-    setUsbVirtualDevice,
+    // État USB - UN SEUL état pour tous les dispositifs USB connectés
+    usbDevice,
+    setUsbDevice,
+    getUsbDevice,
+    isUsbDeviceRegistered,
     usbDeviceInfo, // Données reçues du dispositif USB en temps réel (uniquement depuis le dispositif)
     usbPortInfo,
     setUsbPortInfo,
