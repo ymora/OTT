@@ -29,4 +29,5 @@ export { useToggleState } from './useToggleState'
 export { useSmartDeviceRefresh } from './useSmartDeviceRefresh'
 export { useApiCall } from './useApiCall'
 export { useModalState } from './useModalState'
+export { useGeolocation } from './useGeolocation'
 

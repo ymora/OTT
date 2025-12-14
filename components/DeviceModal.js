@@ -230,7 +230,7 @@ export default function DeviceModal({
         
         // Pour les dispositifs USB/virtuels, toujours essayer de charger la config USB même si vide
         // Cela garantit que tous les champs sont disponibles pour configuration
-        if (isVirtualOrUsbConnected) {
+        if (isUsbConnectedOrNotRegistered) {
           // Pré-remplir avec les données USB disponibles (même logique pour virtuel et base connecté)
           // Si usbConfig est null, on initialise avec des valeurs vides/null pour permettre la configuration
           const usbFormData = {

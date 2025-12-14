@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useMemo, useEffect, useState, useRef } from 'react'
+import { useGeolocation } from '@/hooks/useGeolocation'
 
 const statusColors = {
   online: '#22c55e',
@@ -162,6 +163,9 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
   const map = useMap()
   const [hoveredDeviceId, setHoveredDeviceId] = useState(null)
   const hoverTimeoutRef = useRef(null)
+  
+  // Obtenir la géolocalisation du PC (GPS ou IP)
+  const { latitude: pcLatitude, longitude: pcLongitude, loading: geoLoading } = useGeolocation()
 
   // Cleanup du timeout au démontage du composant
   useEffect(() => {
@@ -220,7 +224,7 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
           batteryStatus: battery.status
         }
       }),
-    [devices]
+    [devices, pcLatitude, pcLongitude, geoLoading]
   )
 
   // Mémoriser les icônes pour éviter les re-renders
@@ -235,10 +239,22 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
   return (
     <>
       {enrichedDevices.map(device => {
+        // Vérification finale pour éviter NaN
+        const finalLat = typeof device.latitude === 'number' && !isNaN(device.latitude) && isFinite(device.latitude)
+          ? device.latitude
+          : (pcLatitude && !isNaN(pcLatitude) ? pcLatitude : 46.2276)
+        const finalLng = typeof device.longitude === 'number' && !isNaN(device.longitude) && isFinite(device.longitude)
+          ? device.longitude
+          : (pcLongitude && !isNaN(pcLongitude) ? pcLongitude : 2.2137)
+        
+        // S'assurer que les coordonnées sont dans les limites valides
+        const safeLat = Math.max(-90, Math.min(90, finalLat))
+        const safeLng = Math.max(-180, Math.min(180, finalLng))
+        
         return (
         <Marker
           key={device.id}
-          position={[device.latitude, device.longitude]}
+          position={[safeLat, safeLng]}
           icon={deviceIcons[device.id]}
           eventHandlers={{
             click: () => onSelect?.(device),
@@ -279,7 +295,9 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
               
               {!device.hasRealCoordinates && (
                 <div className="bg-amber-50 border border-amber-200 rounded p-2 mb-2">
-                  <p className="text-xs text-amber-800 font-medium">⚠️ Position estimée (pas de coordonnées GPS)</p>
+                  <p className="text-xs text-amber-800 font-medium">
+                    ⚠️ Position estimée {!geoLoading && pcLatitude && pcLongitude ? '(basée sur votre localisation)' : '(pas de coordonnées GPS)'}
+                  </p>
                 </div>
               )}
               
@@ -366,9 +384,17 @@ function DeviceMarkers({ devices, focusDeviceId, onSelect }) {
 }
 
 export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
+  // Obtenir la géolocalisation du PC (GPS ou IP) pour le centre de la carte
+  const { latitude: pcLatitude, longitude: pcLongitude, loading: geoLoading } = useGeolocation()
   
   const center = useMemo(() => {
     if (devices.length === 0) {
+      // Si pas de dispositifs, utiliser les coordonnées du PC si disponibles
+      if (!geoLoading && pcLatitude && pcLongitude && 
+          !isNaN(pcLatitude) && !isNaN(pcLongitude) &&
+          isFinite(pcLatitude) && isFinite(pcLongitude)) {
+        return [pcLatitude, pcLongitude]
+      }
       return [46.2276, 2.2137] // Centre de la France par défaut
     }
     // Calculer le centre en incluant tous les dispositifs avec coordonnées valides
@@ -396,13 +422,19 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
         const avgLng = validLngs.reduce((sum, lng) => sum + lng, 0) / validLngs.length
         // Vérifier que les valeurs finales sont valides
         if (!isNaN(avgLat) && !isNaN(avgLng) && isFinite(avgLat) && isFinite(avgLng)) {
-    return [avgLat, avgLng]
+          return [avgLat, avgLng]
         }
       }
     }
+    // Si aucun dispositif n'a de coordonnées valides, utiliser les coordonnées du PC si disponibles
+    if (!geoLoading && pcLatitude && pcLongitude && 
+        !isNaN(pcLatitude) && !isNaN(pcLongitude) &&
+        isFinite(pcLatitude) && isFinite(pcLongitude)) {
+      return [pcLatitude, pcLongitude]
+    }
     // Sinon, centre de la France (où seront positionnés les dispositifs sans coordonnées)
     return [46.2276, 2.2137]
-  }, [devices])
+  }, [devices, pcLatitude, pcLongitude, geoLoading])
   
   const zoom = useMemo(() => {
     const devicesWithCoords = devices.filter(d => {

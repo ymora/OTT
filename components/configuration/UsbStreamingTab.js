@@ -67,6 +67,7 @@ export default function DebugTab() {
     startUsbStreaming,
     pauseUsbStreaming,
     appendUsbStreamLog,
+    clearUsbStreamLogs,
     setSendMeasurementCallback,
     setUpdateDeviceFirmwareCallback,
     otaMonitoringStatus,
@@ -179,57 +180,79 @@ export default function DebugTab() {
     
     const line = logLine.toUpperCase()
     
-    // Erreurs (priorité haute)
+    // Erreurs (priorité haute) - Rouge
     const errorPatterns = [
       'ERROR', '❌', 'ÉCHEC', 'FAIL', 'FATAL', 'EXCEPTION',
-      'ERREUR JSON', 'ERREUR PARSING', 'DATABASE ERROR'
+      'ERREUR JSON', 'ERREUR PARSING', 'DATABASE ERROR', 'ACCÈS REFUSÉ'
     ]
     if (errorPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
       return 'error'
     }
     
-    // Avertissements
+    // Avertissements - Rouge/Orange
     const warningPatterns = [
       'WARN', '⚠️', 'WARNING', 'ATTENTION', 'TIMEOUT',
-      'COMMANDE INCONNUE', 'NON DISPONIBLE'
+      'COMMANDE INCONNUE', 'NON DISPONIBLE', 'VÉRIFIER'
     ]
     if (warningPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
       return 'warning'
     }
     
-    // GPS (doit venir avant Sensor car Sensor peut contenir d'autres mots)
+    // Commandes envoyées - Violet
+    const commandPatterns = [
+      '📤', 'ENVOI', 'COMMANDE', 'SEND', 'REQUEST', 'DEMANDE',
+      'UPDATE_CONFIG', 'GET_CONFIG', 'RESET_CONFIG', 'FLASH'
+    ]
+    if (commandPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
+      return 'command'
+    }
+    
+    // Confirmations d'exécution - Vert
+    const successPatterns = [
+      '✅', 'SUCCESS', 'SUCCÈS', 'RÉUSSI', 'CONFIGURÉ', 'CONNECTÉ',
+      'ATTACHÉ', 'DÉMARRÉ', 'TERMINÉ', 'COMPLÉTÉ'
+    ]
+    if (successPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
+      return 'success'
+    }
+    
+    // Logs du dispositif (MODEM, SENSOR, GPS, etc.) - Bleu
+    // Détecter la provenance entre crochets
+    const provenanceMatch = logLine.match(/^\[([^\]]+)\]/)
+    if (provenanceMatch) {
+      const provenance = provenanceMatch[1].toUpperCase()
+      if (provenance.includes('MODEM') || provenance.includes('SENSOR') || 
+          provenance.includes('GPS') || provenance.includes('USB') ||
+          provenance.includes('CFG') || provenance.includes('NETWORK')) {
+        return 'device'
+      }
+    }
+    
+    // Modem (sans crochets)
+    const modemPatterns = [
+      'MODEM', 'SIM', 'CSQ', 'RSSI', 'SIGNAL',
+      'OPÉRATEUR', 'ATTACHÉ', 'ENREGISTREMENT', 'APN', 'GPRS', '4G', 'LTE'
+    ]
+    if (modemPatterns.some(pattern => line.includes(pattern))) {
+      return 'device'
+    }
+    
+    // GPS
     const gpsPatterns = [
-      '[GPS]', 'GPS', 'LATITUDE', 'LONGITUDE', 'SATELLITE',
+      'GPS', 'LATITUDE', 'LONGITUDE', 'SATELLITE',
       'FIX', 'COORDONNÉES', 'GÉOLOCALISATION'
     ]
     if (gpsPatterns.some(pattern => line.includes(pattern))) {
-      return 'gps'
-    }
-    
-    // Modem
-    const modemPatterns = [
-      '[MODEM]', 'MODEM', 'SIM', 'CSQ', 'RSSI', 'SIGNAL',
-      'OPÉRATEUR', 'ATTACHÉ', 'ENREGISTREMENT', 'APN'
-    ]
-    if (modemPatterns.some(pattern => line.includes(pattern))) {
-      return 'modem'
+      return 'device'
     }
     
     // Sensor
     const sensorPatterns = [
-      '[SENSOR]', 'AIRFLOW', 'FLOW', 'BATTERY', 'BATTERIE',
+      'AIRFLOW', 'FLOW', 'BATTERY', 'BATTERIE',
       'MESURE', 'CAPTURE', 'ADC', 'V_ADC', 'V_BATT'
     ]
     if (sensorPatterns.some(pattern => line.includes(pattern))) {
-      return 'sensor'
-    }
-    
-    // USB
-    const usbPatterns = [
-      'USB_STREAM', 'USB STREAM', 'USB', 'SERIAL', 'SÉRIE'
-    ]
-    if (usbPatterns.some(pattern => line.includes(pattern))) {
-      return 'usb'
+      return 'device'
     }
     
     return 'default'
@@ -238,22 +261,31 @@ export default function DebugTab() {
   // Fonction pour obtenir la classe CSS selon la catégorie
   const getLogColorClass = useCallback((category, isDashboard) => {
     if (isDashboard) {
-      return 'text-blue-400 dark:text-blue-300' // Logs du dashboard en bleu
+      // Logs du dashboard : différencier commandes, confirmations, etc.
+      if (category === 'command') {
+        return 'text-purple-400 dark:text-purple-300' // Violet pour commandes
+      }
+      if (category === 'success') {
+        return 'text-green-400 dark:text-green-300' // Vert pour confirmations
+      }
+      if (category === 'error' || category === 'warning') {
+        return 'text-red-400 dark:text-red-300' // Rouge pour erreurs/warnings
+      }
+      return 'text-blue-400 dark:text-blue-300' // Bleu par défaut pour dashboard
     }
     
+    // Logs du dispositif
     switch (category) {
       case 'error':
-        return 'text-red-400 dark:text-red-300'
+        return 'text-red-400 dark:text-red-300' // Rouge pour erreurs
       case 'warning':
-        return 'text-yellow-400 dark:text-yellow-300'
-      case 'gps':
-        return 'text-cyan-400 dark:text-cyan-300'
-      case 'modem':
-        return 'text-purple-400 dark:text-purple-300'
-      case 'sensor':
-        return 'text-green-400 dark:text-green-300'
-      case 'usb':
-        return 'text-blue-400 dark:text-blue-300'
+        return 'text-orange-400 dark:text-orange-300' // Orange pour warnings
+      case 'command':
+        return 'text-purple-400 dark:text-purple-300' // Violet pour commandes
+      case 'success':
+        return 'text-green-400 dark:text-green-300' // Vert pour confirmations
+      case 'device':
+        return 'text-blue-400 dark:text-blue-300' // Bleu pour logs dispositif
       default:
         return 'text-gray-300 dark:text-gray-400'
     }
@@ -566,31 +598,37 @@ export default function DebugTab() {
     return user?.role_name === 'admin' && !isConnected && currentDevice
   }, [user, isConnected, currentDevice])
   
-  // Fusionner les logs locaux et distants
+  // Fusionner les logs locaux et distants et filtrer les logs trop verbeux
   const allLogs = useMemo(() => {
-    // Debug: logger l'état pour diagnostiquer
-    logger.debug('[UsbStreamingTab] allLogs calculation:', {
-      isConnected,
-      usbStreamLogsLength: usbStreamLogs.length,
-      shouldUseRemoteLogs,
-      remoteLogsLength: remoteLogs.length,
-      usbStreamStatus
+    let logs = []
+    
+    // Si on a une connexion USB locale ET des logs locaux, utiliser uniquement les logs locaux
+    if ((isConnected || usbStreamLogs.length > 0) && usbStreamLogs.length > 0) {
+      logs = usbStreamLogs
+    }
+    // Sinon, utiliser les logs distants (pour admin) s'il y en a
+    else if (shouldUseRemoteLogs && remoteLogs.length > 0) {
+      logs = remoteLogs
+    }
+    
+    // Filtrer les logs trop verbeux (tableaux ASCII, logs répétitifs, etc.)
+    const filteredLogs = logs.filter(log => {
+      const line = log.line || ''
+      
+      // Ignorer les tableaux ASCII (contiennent des caractères de bordure)
+      if (line.includes('─') && line.includes('│') && (line.includes('┐') || line.includes('└'))) {
+        return false // Ignorer les tableaux ASCII
+      }
+      
+      // Ignorer les logs de debug trop verbeux
+      if (line.includes('🔍🔍🔍') || line.includes('[DEBUG]')) {
+        return false
+      }
+      
+      return true
     })
     
-    // Si on a une connexion USB locale, utiliser uniquement les logs locaux
-    if (isConnected || usbStreamLogs.length > 0) {
-      logger.debug('[UsbStreamingTab] Using local USB logs:', usbStreamLogs.length)
-      return usbStreamLogs
-    }
-    
-    // Sinon, utiliser les logs distants (pour admin)
-    if (shouldUseRemoteLogs) {
-      logger.debug('[UsbStreamingTab] Using remote logs:', remoteLogs.length)
-      return remoteLogs
-    }
-    
-    logger.debug('[UsbStreamingTab] No logs available')
-    return []
+    return filteredLogs
   }, [usbStreamLogs, remoteLogs, isConnected, shouldUseRemoteLogs, usbStreamStatus])
   
   // STREAMING AUTOMATIQUE en temps réel pour les admins
@@ -710,7 +748,7 @@ export default function DebugTab() {
             sim_iccid: updateData.sim_iccid || (identifier.startsWith('89') ? identifier : null),
             device_serial: updateData.device_serial || (!identifier.startsWith('89') ? identifier : null),
             firmware_version: firmwareVersion || null,
-            status: updateData.status || 'usb_connected',
+            status: updateData.status || 'active',
             last_seen: updateData.last_seen || new Date().toISOString()
           }
           
@@ -944,7 +982,7 @@ export default function DebugTab() {
         sim_iccid: null,
         device_serial: null,
         firmware_version: null,
-        status: 'usb_connected',
+        status: 'active',
         last_seen: new Date().toISOString(),
         isVirtual: true,
         isTemporary: true
@@ -1009,10 +1047,12 @@ export default function DebugTab() {
     // - Le dispositif USB actuel était enregistré mais n'existe plus en base (supprimé)
     // - Les identifiants ont changé ou sont maintenant disponibles
     // - On est connecté mais pas encore de dispositif virtuel (même sans identifiants)
+    // - Le nom est "USB-En attente..." et des identifiants sont maintenant disponibles
     const shouldUpdate = !usbDevice || 
                         currentDeviceStillExists === false ||
                         (normalizedIccid && normalizeId(usbDevice.sim_iccid) !== normalizedIccid) ||
                         (normalizedSerial && normalizeId(usbDevice.device_serial) !== normalizedSerial) ||
+                        (usbDevice.device_name === 'USB-En attente...' && (normalizedIccid || normalizedSerial)) ||
                         (!normalizedIccid && !normalizedSerial && (!usbDevice.isVirtual || usbDevice.device_name === 'USB-En attente...'))
     
     if (shouldUpdate) {
@@ -1027,7 +1067,7 @@ export default function DebugTab() {
         sim_iccid: simIccid || null,
         device_serial: deviceSerial || null,
         firmware_version: usbDeviceInfo?.firmware_version || null,
-        status: 'usb_connected',
+        status: 'active',
         last_seen: new Date().toISOString(),
         isVirtual: true,
         isTemporary: !normalizedIccid && !normalizedSerial // Temporaire si pas d'identifiants
@@ -2049,28 +2089,47 @@ export default function DebugTab() {
                   
                   // Normaliser les identifiants pour comparaison
                   const deviceIccid = normalizeId(device.sim_iccid)
-                  const deviceSerial = normalizeId(device.device_serial)
+                  const normalizedDeviceSerial = normalizeId(device.device_serial)
                   
-                  // Vérifier si ce dispositif est connecté en USB (enregistré)
+                  // Vérifier si ce dispositif est connecté en USB (enregistré ou virtuel)
                   const isDeviceUsbConnected = isConnected && (
                     (usbDeviceInfo?.sim_iccid && normalizeId(usbDeviceInfo.sim_iccid) === deviceIccid) ||
-                    (usbDeviceInfo?.device_serial && normalizeId(usbDeviceInfo.device_serial) === deviceSerial) ||
+                    (usbDeviceInfo?.device_serial && normalizeId(usbDeviceInfo.device_serial) === normalizedDeviceSerial) ||
                     isUsbDeviceRegistered() && usbDevice.id === device.id
                   )
                   
                   // Vérifier si ce dispositif est un dispositif USB virtuel (non enregistré)
                   const isDeviceUsbVirtual = usbDevice && !isUsbDeviceRegistered() && (
                     (usbDevice.sim_iccid && normalizeId(usbDevice.sim_iccid) === deviceIccid) ||
-                    (usbDevice.device_serial && normalizeId(usbDevice.device_serial) === deviceSerial)
+                    (usbDevice.device_serial && normalizeId(usbDevice.device_serial) === normalizedDeviceSerial) ||
+                    // Si le dispositif est temporaire (sans identifiants) et qu'on est connecté, utiliser usbDeviceInfo
+                    (isConnected && device.isTemporary && !deviceIccid && !normalizedDeviceSerial && usbDeviceInfo)
                   )
                   
-                  // Source de données USB (priorité : usbDeviceInfo > usbDevice)
-                  const usbInfo = isDeviceUsbConnected ? usbDeviceInfo : (isDeviceUsbVirtual ? usbDevice : null)
+                  // Source de données USB : TOUJOURS utiliser usbDeviceInfo en priorité si disponible
+                  // car c'est là que sont stockées toutes les informations parsées depuis les logs
+                  // (sim_phone_number, sim_status, operator, apn, network_connected, etc.)
+                  // Si le dispositif est temporaire (USB-En attente...) et connecté, utiliser usbDeviceInfo même sans correspondance d'identifiants
+                  const usbInfo = (isDeviceUsbConnected || isDeviceUsbVirtual) && usbDeviceInfo ? usbDeviceInfo : 
+                                  (isDeviceUsbVirtual ? usbDevice : null)
                   const usbConfig = usbInfo?.config || {}
                   
                   // Fusionner toutes les données : USB en priorité, puis DB
-                  const deviceName = deviceDbData?.device_name || usbInfo?.device_name
                   const simIccid = getValue(usbInfo?.sim_iccid, deviceDbData?.sim_iccid)
+                  const deviceSerial = getValue(usbInfo?.device_serial, deviceDbData?.device_serial)
+                  
+                  // Générer un nom intelligent : utiliser le nom USB si disponible, sinon générer depuis les identifiants
+                  // Si le nom actuel est "USB-En attente..." et qu'on a des identifiants, générer un nouveau nom
+                  let deviceName = deviceDbData?.device_name || usbInfo?.device_name
+                  if ((!deviceName || deviceName === 'USB-En attente...') && (simIccid || deviceSerial)) {
+                    // Générer un nom depuis les identifiants disponibles
+                    if (simIccid) {
+                      deviceName = `USB-${simIccid.slice(-4)}`
+                    } else if (deviceSerial) {
+                      deviceName = `USB-${deviceSerial.slice(-4)}`
+                    }
+                  }
+                  
                   const firmwareVersion = getValue(usbInfo?.firmware_version, deviceDbData?.firmware_version)
                   const simPhoneNumber = getValue(usbInfo?.sim_phone_number, deviceDbData?.sim_phone_number)
                   const simStatus = getValue(usbInfo?.sim_status, deviceDbData?.sim_status)
@@ -2086,6 +2145,21 @@ export default function DebugTab() {
                   const gprsConnected = getValue(usbInfo?.gprs_connected, deviceDbData?.gprs_connected)
                   const modemReady = getValue(usbInfo?.modem_ready, deviceDbData?.modem_ready)
                   
+                  // Fonction pour convertir le code MCC/MNC en nom d'opérateur
+                  const getOperatorName = (operatorCode) => {
+                    if (!operatorCode) return null
+                    const codeStr = String(operatorCode)
+                    // Codes MCC/MNC pour la France (208 = MCC France)
+                    if (codeStr.includes('20801') || codeStr.includes('20802')) return 'Orange'
+                    if (codeStr.includes('20810') || codeStr.includes('20811')) return 'SFR'
+                    if (codeStr.includes('20815') || codeStr.includes('20816')) return 'Free'
+                    if (codeStr.includes('20820')) return 'Bouygues'
+                    // Si c'est déjà un nom d'opérateur (Orange, SFR, Free, Bouygues), le retourner tel quel
+                    if (['Orange', 'SFR', 'Free', 'Bouygues'].includes(codeStr)) return codeStr
+                    // Sinon, retourner null pour afficher autre chose
+                    return null
+                  }
+                  
                   // Formater les affichages
                   const simStatusDisplay = !simStatus ? 'N/A' : 
                     simStatus === 'READY' ? '✅ Prête' :
@@ -2094,7 +2168,9 @@ export default function DebugTab() {
                     simStatus === 'ERROR' ? '❌ Erreur' :
                     simStatus === 'MODEM_NOT_READY' ? '⏳ Modem non prêt' : simStatus
                   
-                  const operatorDisplay = operator ? operator : (apn ? `APN: ${apn}` : '🔍 Auto')
+                  // Convertir le code opérateur en nom si c'est un code MCC/MNC
+                  const operatorName = getOperatorName(operator)
+                  const operatorDisplay = operatorName || (operator ? operator : (apn ? `APN: ${apn}` : '🔍 Auto'))
                   const roamingDisplay = roaming === true ? '✅ Activée' : 
                     roaming === false ? '❌ Désactivée' : 'N/A'
                   const simPinDisplay = simPin ? '🔐 ***' : 'N/A'
@@ -2432,12 +2508,25 @@ export default function DebugTab() {
                 title={usbStreamStatus === 'paused' ? 'Reprendre les logs' : 'Mettre en pause les logs'}
                 disabled={!isConnected}
               >
-                {usbStreamStatus === 'paused' ? '▶️' : '⏸️'}
+                {usbStreamStatus === 'paused' ? (
+                  <>
+                    <span>▶️</span>
+                    <span>Reprendre</span>
+                  </>
+                ) : (
+                  <>
+                    <span>⏸️</span>
+                    <span>Pause</span>
+                  </>
+                )}
               </button>
               <button
                 onClick={() => {
-                  const logs = [...usbStreamLogs, ...remoteLogs].join('\n')
-                  navigator.clipboard.writeText(logs)
+                  // Extraire le texte de chaque log (propriété 'line') et les joindre
+                  const allLogsText = [...usbStreamLogs, ...remoteLogs]
+                    .map(log => log.line || String(log))
+                    .join('\n')
+                  navigator.clipboard.writeText(allLogsText)
                     .then(() => {
                       logger.log('📋 Logs copiés dans le presse-papiers')
                     })
@@ -2491,22 +2580,74 @@ export default function DebugTab() {
               </div>
             ) : (
               <div className="space-y-1 font-mono text-sm tracking-tight">
-                {[...allLogs].reverse().map((log) => {
+                {allLogs.map((log) => {
                   const isDashboard = log.source === 'dashboard'
                   const isRemote = log.isRemote
                   
                   // Essayer de formater le JSON si c'est un USB stream
                   const formattedJson = formatJsonLog(log.line)
-                  const displayLine = formattedJson || log.line
+                  let displayLine = formattedJson || log.line
+                  
+                  // Filtrer les logs trop verbeux (tableaux ASCII, etc.)
+                  if (displayLine.includes('─') && displayLine.includes('│') && displayLine.includes('┐')) {
+                    // C'est un tableau ASCII, on peut le simplifier ou le sauter
+                    // Pour l'instant, on le garde mais on pourrait le filtrer
+                  }
+                  
+                  // Extraire ou déterminer la provenance entre crochets
+                  let provenance = null
+                  let cleanLine = displayLine
+                  
+                  // Chercher si une provenance existe déjà dans le log
+                  const provenanceMatch = displayLine.match(/^(\[[^\]]+\])/)
+                  if (provenanceMatch) {
+                    provenance = provenanceMatch[1]
+                    cleanLine = displayLine.replace(/^\[[^\]]+\]\s*/, '')
+                  } else {
+                    // Si pas de provenance, en ajouter une selon le contexte
+                    if (isDashboard) {
+                      // Logs du dashboard : déterminer le type
+                      if (displayLine.includes('📤') || displayLine.includes('ENVOI') || displayLine.includes('COMMANDE')) {
+                        provenance = '[CMD]'
+                      } else if (displayLine.includes('✅') || displayLine.includes('SUCCESS') || displayLine.includes('RÉUSSI')) {
+                        provenance = '[OK]'
+                      } else if (displayLine.includes('❌') || displayLine.includes('ERROR') || displayLine.includes('ÉCHEC')) {
+                        provenance = '[ERR]'
+                      } else if (displayLine.includes('⚠️') || displayLine.includes('WARN') || displayLine.includes('ATTENTION')) {
+                        provenance = '[WARN]'
+                      } else {
+                        provenance = '[DASHBOARD]'
+                      }
+                    } else {
+                      // Logs du dispositif : essayer de détecter le type
+                      if (displayLine.includes('MODEM') || displayLine.includes('SIM') || displayLine.includes('APN') || displayLine.includes('RSSI')) {
+                        provenance = '[MODEM]'
+                      } else if (displayLine.includes('SENSOR') || displayLine.includes('AIRFLOW') || displayLine.includes('FLOW') || displayLine.includes('BATTERY')) {
+                        provenance = '[SENSOR]'
+                      } else if (displayLine.includes('GPS') || displayLine.includes('LATITUDE') || displayLine.includes('LONGITUDE')) {
+                        provenance = '[GPS]'
+                      } else if (displayLine.includes('CFG') || displayLine.includes('CONFIG')) {
+                        provenance = '[CFG]'
+                      } else if (displayLine.includes('USB') || displayLine.includes('STREAM')) {
+                        provenance = '[USB]'
+                      } else {
+                        provenance = '[DEVICE]'
+                      }
+                    }
+                  }
                   
                   const category = analyzeLogCategory(displayLine)
                   const colorClass = getLogColorClass(category, isDashboard)
+                  
                   return (
                   <div key={log.id} className="whitespace-pre-wrap">
                     <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
                     {isRemote && <span className="text-purple-400 text-xs mr-2">📡</span>}
+                    <span className="text-gray-400 dark:text-gray-500 font-semibold mr-2">
+                      {provenance}
+                    </span>
                     <span className={colorClass}>
-                      {displayLine}
+                      {cleanLine}
                     </span>
                   </div>
                   )
@@ -2533,7 +2674,6 @@ export default function DebugTab() {
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
                     Cette action supprimera tous les logs affichés dans la console USB.
-                    Les logs ne seront pas supprimés de la base de données.
                   </p>
                 </div>
               </div>
@@ -2547,9 +2687,8 @@ export default function DebugTab() {
                 </button>
                 <button
                   onClick={() => {
-                    if (typeof clearUsbStreamLogs === 'function') {
-                      clearUsbStreamLogs()
-                    }
+                    // Effacer tous les logs (locaux et distants)
+                    clearUsbStreamLogs()
                     setRemoteLogs([])
                     setShowClearLogsModal(false)
                     logger.log('🗑️ Console effacée')

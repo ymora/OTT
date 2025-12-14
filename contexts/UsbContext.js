@@ -575,7 +575,7 @@ export function UsbProvider({ children }) {
             sim_iccid: payload.iccid || null,
             device_serial: payload.serial || null,
             firmware_version: payload.firmware_version || null,
-            status: 'usb_connected',
+            status: 'active',
             last_seen: now,
             isVirtual: true,
             fromUsbInfo: true // Flag pour indiquer que c'est depuis device_info
@@ -769,7 +769,7 @@ export function UsbProvider({ children }) {
               sim_iccid: payload.sim_iccid || null,
               device_serial: payload.device_serial || null,
               firmware_version: payload.firmware_version || null,
-              status: 'usb_connected',
+              status: 'active',
               last_seen: now,
               isVirtual: true,
               fromUsbInfo: true
@@ -860,6 +860,7 @@ export function UsbProvider({ children }) {
                   network_attach_timeout_ms: payload.network_attach_timeout_ms ?? null,
                   modem_max_reboots: payload.modem_max_reboots ?? null,
                   apn: payload.apn || null,
+                  operator: payload.operator || null,
                   sim_pin: payload.sim_pin || null,
                   ota_primary_url: payload.ota_primary_url || null,
                   ota_fallback_url: payload.ota_fallback_url || null,
@@ -1248,7 +1249,7 @@ export function UsbProvider({ children }) {
         sim_iccid: null,
         device_serial: null,
         firmware_version: null,
-        status: 'usb_connected',
+        status: 'active',
         last_seen: new Date().toISOString(),
         isVirtual: true,
         isTemporary: true // Flag pour indiquer que c'est temporaire

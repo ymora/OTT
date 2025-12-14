@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUsb } from '@/contexts/UsbContext'
-import { useUsbAutoDetection, useApiData } from '@/hooks'
+import { useUsbAutoDetection, useApiData, useEntityArchive } from '@/hooks'
 import { fetchJson } from '@/lib/api'
 import logger from '@/lib/logger'
 import InoEditorTab from '@/components/configuration/InoEditorTab'
@@ -172,8 +172,26 @@ export default function OutilsPage() {
   const [showArchiveModal, setShowArchiveModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState(null)
-  const [archiving, setArchiving] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  
+  // Utiliser le hook unifié pour l'archivage
+  const { archive: handleArchive, archiving } = useEntityArchive({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'devices',
+    refetch: refetchDevices,
+    onSuccess: (device) => {
+      logger.log(`✅ Dispositif "${device.device_name}" archivé`)
+      setShowArchiveModal(false)
+      setSelectedDevice(null)
+    },
+    onError: (error) => {
+      logger.error('Erreur archivage dispositif:', error)
+    },
+    onCloseModal: () => setShowArchiveModal(false),
+    editingItem: selectedDevice,
+    currentUser: user
+  })
   
   const openDeviceModal = (device) => {
     setSelectedDevice(device)
@@ -184,27 +202,6 @@ export default function OutilsPage() {
     setSelectedDevice(null)
     setShowDeviceModal(false)
     refetchDevices()
-  }
-  
-  const handleArchive = async (device) => {
-    if (!device.id) return
-    setArchiving(device.id)
-    try {
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${device.id}`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      await refetchDevices()
-      logger.log(`✅ Dispositif "${device.device_name}" archivé`)
-    } catch (err) {
-      logger.error('Erreur archivage dispositif:', err)
-    } finally {
-      setArchiving(null)
-      setShowArchiveModal(false)
-    }
   }
   
   const handleDelete = async (device) => {

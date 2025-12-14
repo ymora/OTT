@@ -38,6 +38,8 @@ export default function RootLayout({ children }) {
         <link rel="icon" href={icon192} />
         <link rel="apple-touch-icon" href={icon192} />
         <link rel="apple-touch-icon" sizes="512x512" href={icon512} />
+        {/* Meta tag pour passer le chemin du service worker au script externe (évite dangerouslySetInnerHTML) */}
+        {isProduction && <meta name="sw-path" content={swPath} />}
       </head>
       <body className={inter.className}>
         <AuthProvider>
@@ -46,26 +48,22 @@ export default function RootLayout({ children }) {
         
         {/* Script de monitoring désactivé temporairement pour éviter les conflits */}
 
+        {/* 
+          Service Worker Management
+          =========================
+          SÉCURITÉ: Les scripts sont chargés depuis des fichiers externes (public/scripts/)
+          au lieu d'utiliser dangerouslySetInnerHTML, éliminant tout risque XSS.
+          
+          - En développement local: Désactive les service workers pour éviter les conflits
+          - En production: Enregistre et gère le service worker (actuellement désactivé)
+        */}
+        
         {/* Local (port 3000) : Désactiver le service worker */}
-        {/* Production (en ligne) : Service worker activé automatiquement ci-dessous */}
         {!isProduction && (
           <Script
             id="disable-service-worker"
             strategy="afterInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                (function() {
-                  if ('serviceWorker' in navigator) {
-                    // Désenregistrer tous les service workers en local (port 3000)
-                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                      for(let registration of registrations) {
-                        registration.unregister();
-                      }
-                    });
-                  }
-                })();
-              `
-            }}
+            src={withBasePath('/scripts/disable-service-worker.js')}
           />
         )}
 
@@ -75,59 +73,7 @@ export default function RootLayout({ children }) {
           <Script
             id="register-service-worker"
             strategy="afterInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                (function() {
-                  if ('serviceWorker' in navigator) {
-                    // DÉSINSCRIRE TOUS LES SERVICE WORKERS EXISTANTS
-                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                      for(let registration of registrations) {
-                        registration.unregister();
-                      }
-                    });
-                    
-                    const swPath = ${JSON.stringify(swPath || '/sw.js')};
-                    
-                    // Enregistrer le service worker uniquement en production (version en ligne)
-                    window.addEventListener('load', () => {
-                      navigator.serviceWorker.register(swPath, { updateViaCache: 'none' })
-                        .then(function(registration) {
-                          // Vérifier les mises à jour du service worker régulièrement
-                          setInterval(function() {
-                            registration.update();
-                          }, 30 * 60 * 1000); // Toutes les 30 minutes
-                          
-                          // Écouter les mises à jour disponibles
-                          registration.addEventListener('updatefound', function() {
-                            const newWorker = registration.installing;
-                            if (newWorker) {
-                              newWorker.addEventListener('statechange', function() {
-                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                  // Nouvelle version disponible - forcer la mise à jour
-                                  newWorker.postMessage({ type: 'SKIP_WAITING' });
-                                  // Recharger après un court délai pour permettre l'activation
-                                  setTimeout(function() {
-                                    window.location.reload();
-                                  }, 1000);
-                                }
-                              });
-                            }
-                          });
-                        })
-                        .catch(function(err) {
-                          // Logger l'erreur sans polluer la console en production
-                          // Note: logger n'est pas disponible dans ce contexte (script inline)
-                          // Le warning est conditionnel à NODE_ENV === 'development'
-                          if (process.env.NODE_ENV === 'development') {
-                            // Utilisation de console.warn acceptable ici (script inline, pas de logger disponible)
-                            console.warn('[SW] Échec enregistrement:', err);
-                          }
-                        });
-                    });
-                  }
-                })();
-              `
-            }}
+            src={withBasePath('/scripts/register-service-worker.js')}
           />
         )}
       </body>
