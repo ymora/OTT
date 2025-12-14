@@ -1,17 +1,48 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiCall } from '@/hooks'
 import logger from '@/lib/logger'
+import { fetchJson } from '@/lib/api'
 
 export default function AdminMigrationsPage() {
-  const { user } = useAuth()
+  const { user, fetchWithAuth, API_URL } = useAuth()
   const [result, setResult] = useState(null)
+  const [migrationHistory, setMigrationHistory] = useState([])
+  const [showHidden, setShowHidden] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(true)
   // Utiliser useApiCall pour simplifier la gestion des appels API
   const { loading, error, call, setError } = useApiCall({ requiresAuth: true, autoReset: false })
 
   const isAdmin = user?.role_name === 'admin' || user?.role === 'admin' || user?.roles?.includes('admin')
+
+  // Charger l'historique des migrations
+  useEffect(() => {
+    if (!isAdmin) return
+    
+    const loadHistory = async () => {
+      try {
+        setLoadingHistory(true)
+        const data = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          '/api.php/migrations/history',
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        if (data.success) {
+          setMigrationHistory(data.history || [])
+        }
+      } catch (err) {
+        logger.error('Erreur chargement historique migrations:', err)
+      } finally {
+        setLoadingHistory(false)
+      }
+    }
+    
+    loadHistory()
+  }, [isAdmin, fetchWithAuth, API_URL])
 
   const runMigration = async (migrationFile) => {
     if (!isAdmin) {
@@ -37,6 +68,18 @@ export default function AdminMigrationsPage() {
           logs: data.logs || []
         })
         logger.log(`✅ Migration ${migrationFile} exécutée avec succès`)
+        
+        // Recharger l'historique après succès
+        const historyData = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          '/api.php/migrations/history',
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        if (historyData.success) {
+          setMigrationHistory(historyData.history || [])
+        }
       } else {
         // Construire un message d'erreur détaillé
         const errorParts = []
@@ -137,7 +180,8 @@ export default function AdminMigrationsPage() {
     )
   }
 
-  const migrations = [
+  // Liste des migrations disponibles
+  const migrationsList = [
     {
       id: 'migration_fix_users_with_roles_view.sql',
       name: '🔥 URGENT: Corriger VIEW users (ERREURS 500)',
@@ -155,17 +199,83 @@ export default function AdminMigrationsPage() {
       name: '📱 Mettre à jour sim_pin (VARCHAR 8→16)',
       description: '✅ Augmente la limite de sim_pin de VARCHAR(8) à VARCHAR(16). Corrige l\'erreur "value too long for type character varying(8)" lors de la configuration des dispositifs. Validation applicative reste à 4-8 chiffres (standard 3GPP).',
       variant: 'success'
+    },
+    {
+      id: 'migration_create_migration_history.sql',
+      name: '📊 Créer table migration_history',
+      description: '✅ Crée la table pour tracker les migrations exécutées. Permet d\'afficher le statut et de masquer les migrations déjà exécutées.',
+      variant: 'success'
     }
   ]
+
+  // Enrichir les migrations avec l'historique
+  const migrations = useMemo(() => {
+    return migrationsList.map(migration => {
+      const history = migrationHistory.find(h => h.migration_file === migration.id)
+      return {
+        ...migration,
+        executed: !!history && history.status === 'success',
+        executedAt: history?.executed_at,
+        executedBy: history?.executed_by_email,
+        duration: history?.duration_ms,
+        historyId: history?.id,
+        hidden: history?.hidden || false
+      }
+    }).filter(m => showHidden || !m.hidden)
+  }, [migrationHistory, showHidden])
+
+  const hideMigration = async (historyId) => {
+    if (!isAdmin) return
+    
+    try {
+      const data = await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/migrations/history/${historyId}/hide`,
+        { method: 'POST' },
+        { requiresAuth: true }
+      )
+      
+      if (data.success) {
+        // Recharger l'historique
+        const historyData = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          '/api.php/migrations/history',
+          { method: 'GET' },
+          { requiresAuth: true }
+        )
+        if (historyData.success) {
+          setMigrationHistory(historyData.history || [])
+        }
+        logger.log('✅ Migration masquée avec succès')
+      }
+    } catch (err) {
+      logger.error('Erreur masquage migration:', err)
+    }
+  }
 
   return (
     <div className="space-y-6">
       <div className="card">
-        <h1 className="text-2xl font-bold mb-2">🛠️ Migrations Base de Données</h1>
-        <p className="text-gray-600 dark:text-gray-400 mb-6">
-          Exécutez des scripts SQL pour mettre à jour la base de données. 
-          <strong className="text-red-600 dark:text-red-400"> Utilisez avec précaution !</strong>
-        </p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">🛠️ Migrations Base de Données</h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Exécutez des scripts SQL pour mettre à jour la base de données. 
+              <strong className="text-red-600 dark:text-red-400"> Utilisez avec précaution !</strong>
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showHidden}
+              onChange={(e) => setShowHidden(e.target.checked)}
+              className="rounded"
+            />
+            Afficher les migrations masquées
+          </label>
+        </div>
 
         {error && (
           <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -198,39 +308,82 @@ export default function AdminMigrationsPage() {
           </div>
         )}
 
-        <div className="space-y-4">
-          {migrations.map((migration) => (
-            <div 
-              key={migration.id}
-              className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg mb-1">{migration.name}</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    {migration.description}
-                  </p>
-                  <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                    {migration.id}
-                  </code>
-                </div>
-                <button
-                  onClick={() => runMigration(migration.id)}
-                  disabled={loading}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    migration.variant === 'success'
-                      ? 'bg-green-600 hover:bg-green-700 text-white'
-                      : migration.variant === 'warning'
-                      ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+        {loadingHistory ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            ⏳ Chargement de l'historique...
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {migrations.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                {showHidden ? 'Aucune migration (masquée ou non)' : 'Aucune migration disponible'}
+              </div>
+            ) : (
+              migrations.map((migration) => (
+                <div 
+                  key={migration.id}
+                  className={`p-4 border rounded-lg ${
+                    migration.executed 
+                      ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10' 
+                      : 'border-gray-200 dark:border-gray-700'
                   }`}
                 >
-                  {loading ? '⏳ Exécution...' : migration.variant === 'success' ? '🔧 Réparer' : '🚀 Exécuter'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-lg">{migration.name}</h3>
+                        {migration.executed && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded">
+                            ✅ Exécutée
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        {migration.description}
+                      </p>
+                      {migration.executed && migration.executedAt && (
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mb-2">
+                          Exécutée le {new Date(migration.executedAt).toLocaleString('fr-FR')}
+                          {migration.executedBy && ` par ${migration.executedBy}`}
+                          {migration.duration && ` (${parseFloat(migration.duration).toFixed(0)}ms)`}
+                        </p>
+                      )}
+                      <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                        {migration.id}
+                      </code>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {migration.executed && migration.historyId && (
+                        <button
+                          onClick={() => hideMigration(migration.historyId)}
+                          className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                          title="Masquer cette migration du dashboard"
+                        >
+                          👁️ Masquer
+                        </button>
+                      )}
+                      <button
+                        onClick={() => runMigration(migration.id)}
+                        disabled={loading || migration.executed}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          migration.executed
+                            ? 'bg-gray-400 cursor-not-allowed text-white'
+                            : migration.variant === 'success'
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : migration.variant === 'warning'
+                            ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                      >
+                        {loading ? '⏳ Exécution...' : migration.executed ? '✅ Déjà exécutée' : migration.variant === 'success' ? '🔧 Réparer' : '🚀 Exécuter'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

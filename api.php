@@ -372,6 +372,65 @@ function handleRunMigration() {
             $duration = round((microtime(true) - $startTime) * 1000, 2);
             error_log("[handleRunMigration] ✅ Migration réussie en {$duration}ms");
             
+            // Enregistrer la migration dans l'historique (si la table existe)
+            try {
+                $currentUser = getCurrentUser();
+                $userId = $currentUser ? $currentUser['id'] : null;
+                
+                // Vérifier si la table existe avant d'insérer
+                $tableExists = $pdo->query("
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'migration_history'
+                    )
+                ")->fetchColumn();
+                
+                if ($tableExists) {
+                    // Vérifier si une entrée existe déjà (non masquée)
+                    $checkStmt = $pdo->prepare("
+                        SELECT id FROM migration_history 
+                        WHERE migration_file = :migration_file AND hidden = FALSE
+                        LIMIT 1
+                    ");
+                    $checkStmt->execute(['migration_file' => $migrationFile]);
+                    $existing = $checkStmt->fetch();
+                    
+                    if ($existing) {
+                        // Mettre à jour l'entrée existante
+                        $updateStmt = $pdo->prepare("
+                            UPDATE migration_history 
+                            SET executed_at = NOW(),
+                                executed_by = :executed_by,
+                                duration_ms = :duration_ms,
+                                status = 'success',
+                                error_message = NULL,
+                                hidden = FALSE
+                            WHERE id = :id
+                        ");
+                        $updateStmt->execute([
+                            'id' => $existing['id'],
+                            'executed_by' => $userId,
+                            'duration_ms' => $duration
+                        ]);
+                    } else {
+                        // Créer une nouvelle entrée
+                        $insertStmt = $pdo->prepare("
+                            INSERT INTO migration_history (migration_file, executed_by, duration_ms, status)
+                            VALUES (:migration_file, :executed_by, :duration_ms, 'success')
+                        ");
+                        $insertStmt->execute([
+                            'migration_file' => $migrationFile,
+                            'executed_by' => $userId,
+                            'duration_ms' => $duration
+                        ]);
+                    }
+                    error_log("[handleRunMigration] Migration enregistrée dans l'historique");
+                }
+            } catch (Exception $historyErr) {
+                // Ne pas faire échouer la migration si l'enregistrement de l'historique échoue
+                error_log("[handleRunMigration] ⚠️ Erreur enregistrement historique (non bloquant): " . $historyErr->getMessage());
+            }
+            
             echo json_encode([
                 'success' => true, 
                 'message' => 'Migration executed',
@@ -477,6 +536,109 @@ function handleRunMigration() {
         if (isset($oldDisplayErrors)) {
             ini_set('display_errors', $oldDisplayErrors);
         }
+    }
+}
+
+/**
+ * GET /api.php/migrations/history
+ * Récupérer l'historique des migrations exécutées
+ */
+function handleGetMigrationHistory() {
+    global $pdo;
+    
+    // Nettoyer le buffer de sortie
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    
+    requireAdmin();
+    
+    try {
+        // Vérifier si la table existe
+        $tableExists = $pdo->query("
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'migration_history'
+            )
+        ")->fetchColumn();
+        
+        if (!$tableExists) {
+            echo json_encode([
+                'success' => true,
+                'history' => []
+            ]);
+            return;
+        }
+        
+        $stmt = $pdo->query("
+            SELECT 
+                mh.*,
+                u.email as executed_by_email
+            FROM migration_history mh
+            LEFT JOIN users u ON mh.executed_by = u.id
+            ORDER BY mh.executed_at DESC
+        ");
+        $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo json_encode([
+            'success' => true,
+            'history' => $history
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
+    } catch (Exception $e) {
+        error_log('[handleGetMigrationHistory] Erreur: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Erreur lors de la récupération de l\'historique'
+        ]);
+    }
+}
+
+/**
+ * POST /api.php/migrations/history/:id/hide
+ * Masquer une migration du dashboard (mais la garder dans l'historique)
+ */
+function handleHideMigration($historyId) {
+    global $pdo;
+    
+    // Nettoyer le buffer de sortie
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    
+    requireAdmin();
+    
+    try {
+        $stmt = $pdo->prepare("
+            UPDATE migration_history 
+            SET hidden = TRUE 
+            WHERE id = :id
+        ");
+        $stmt->execute(['id' => $historyId]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Migration masquée avec succès'
+            ]);
+        } else {
+            http_response_code(404);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Migration non trouvée'
+            ]);
+        }
+        
+    } catch (Exception $e) {
+        error_log('[handleHideMigration] Erreur: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Erreur lors du masquage de la migration'
+        ]);
     }
 }
 
@@ -1649,6 +1811,11 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleGetReportsOverview();
 
 // Migration & Admin (endpoints de maintenance - admin uniquement)
+// IMPORTANT: Routes migrations AVANT /migrate pour éviter les conflits
+} elseif($method === 'GET' && ($path === '/migrations/history' || preg_match('#^/migrations/history/?$#', $path))) {
+    handleGetMigrationHistory();
+} elseif($method === 'POST' && preg_match('#^/migrations/history/(\d+)/hide/?$#', $path, $m)) {
+    handleHideMigration($m[1]);
 } elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {
     // Nettoyer le buffer AVANT d'appeler handleRunMigration pour éviter que les warnings polluent la réponse
     while (ob_get_level() > 0) {
