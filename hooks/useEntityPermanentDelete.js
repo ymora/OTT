@@ -42,8 +42,15 @@ export function useEntityPermanentDelete({
   }, [refetch, onSuccess, onError, invalidateCache, onCloseModal, editingItem])
 
   const permanentDelete = useCallback(async (entity) => {
-    if (!entity?.id) {
-      setError('Entité invalide')
+    // Vérifier que l'entité a un ID valide (numérique, pas un ID temporaire)
+    const hasValidId = entity?.id && 
+      (typeof entity.id === 'number' || 
+       (typeof entity.id === 'string' && /^\d+$/.test(entity.id) && !entity.id.startsWith('usb-'))) &&
+      !entity?.isVirtual &&
+      !entity?.isTemporary
+    
+    if (!hasValidId) {
+      setError('Entité invalide ou non enregistrée')
       return
     }
 

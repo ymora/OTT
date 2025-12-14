@@ -358,6 +358,17 @@ switch ($fileExt) {
             $supportedCommands += "UPDATE_CALIBRATION"
         }
         
+        # Vérifier RESET_CONFIG et autres commandes
+        if ($content -match 'RESET_CONFIG|resetConfig|cmd\.verb\s*==\s*["'']RESET_CONFIG["'']') {
+            $supportedCommands += "RESET_CONFIG"
+        }
+        if ($content -match 'OTA_REQUEST|otaRequest|handleCommand.*OTA_REQUEST') {
+            $supportedCommands += "OTA_REQUEST"
+        }
+        if ($content -match 'SET_SLEEP_SECONDS|setSleepSeconds|handleCommand.*SET_SLEEP_SECONDS') {
+            $supportedCommands += "SET_SLEEP_SECONDS"
+        }
+        
         if ($supportedCommands.Count -gt 0) {
             Write-OK "Commandes supportées détectées dans le code: $($supportedCommands -join ', ')"
             if (-not $results.Statistics) {
@@ -368,6 +379,127 @@ switch ($fileExt) {
         } else {
             Write-Warn "Aucune commande supportée détectée dans le code"
             $results.Warnings += "Aucune commande supportée détectée"
+        }
+        
+        # ===============================================================================
+        # VÉRIFICATIONS SÉCURITÉ AVANCÉES FIRMWARE
+        # ===============================================================================
+        Write-Section "Sécurité Avancée Firmware"
+        
+        # Vérifier fonctions dangereuses (buffer overflow)
+        $dangerousFunctions = @("strcpy", "strcat", "sprintf", "gets", "scanf")
+        $dangerousCount = 0
+        foreach ($func in $dangerousFunctions) {
+            $matches = [regex]::Matches($content, "\b$func\s*\(")
+            if ($matches.Count -gt 0) {
+                $dangerousCount += $matches.Count
+                Write-Warn "Fonction non sécurisée: $func ($($matches.Count) occurrence(s)) - Risque buffer overflow"
+                $results.Warnings += "Sécurité: $func détecté ($($matches.Count)x) - Risque buffer overflow"
+                $results.Score -= 0.5
+            }
+        }
+        if ($dangerousCount -eq 0) {
+            Write-OK "Aucune fonction dangereuse (strcpy, strcat, sprintf, gets, scanf) détectée"
+        }
+        
+        # Vérifier fonctions sécurisées
+        $safeFunctions = @()
+        if ($content -match 'strncpy\s*\(') { $safeFunctions += "strncpy" }
+        if ($content -match 'snprintf\s*\(') { $safeFunctions += "snprintf" }
+        if ($safeFunctions.Count -gt 0) {
+            Write-OK "Fonctions sécurisées utilisées: $($safeFunctions -join ', ')"
+        }
+        
+        # Vérifier gestion mémoire (malloc/free)
+        $mallocCount = ([regex]::Matches($content, '\bmalloc\s*\(')).Count
+        $freeCount = ([regex]::Matches($content, '\bfree\s*\(')).Count
+        if ($mallocCount -gt 0) {
+            if ($mallocCount -ne $freeCount) {
+                Write-Warn "Déséquilibre malloc/free: $mallocCount malloc vs $freeCount free - Risque fuite mémoire"
+                $results.Warnings += "Sécurité: Déséquilibre malloc/free ($mallocCount/$freeCount) - Risque fuite mémoire"
+                $results.Score -= 1
+            } else {
+                Write-OK "Gestion mémoire équilibrée: $mallocCount malloc/free"
+            }
+        } else {
+            Write-OK "Pas d'allocation dynamique (malloc) - Gestion mémoire statique"
+        }
+        
+        # ===============================================================================
+        # VÉRIFICATIONS ROBUSTESSE ET PERFORMANCE
+        # ===============================================================================
+        Write-Section "Robustesse et Performance"
+        
+        # Vérifier timeouts et retry logic
+        $hasTimeout = $content -match 'timeout|TIMEOUT|Timeout'
+        $hasRetry = $content -match 'retry|Retry|RETRY|maxRetries|max.*retries|retryCount'
+        if ($hasTimeout) {
+            Write-OK "Gestion des timeouts détectée"
+        } else {
+            Write-Info "Aucun timeout explicite détecté (peut être géré autrement)"
+        }
+        if ($hasRetry) {
+            Write-OK "Logique de retry détectée"
+        } else {
+            Write-Info "Pas de logique de retry explicite détectée"
+        }
+        
+        # Vérifier watchdog
+        $hasWatchdog = $content -match 'watchdog|Watchdog|WATCHDOG|feedWatchdog|enableWatchdog'
+        if ($hasWatchdog) {
+            Write-OK "Watchdog détecté - Protection contre blocages"
+        } else {
+            Write-Info "Watchdog non détecté explicitement (peut être géré par ESP32)"
+        }
+        
+        # Vérifier gestion d'erreurs
+        $hasErrorHandling = $content -match 'try\s*\{|catch\s*\(|if\s*\(.*==\s*nullptr|if\s*\(.*==\s*NULL|if\s*\(.*!\s*=|error|Error|ERROR|failed|Failed|FAILED'
+        if ($hasErrorHandling) {
+            Write-OK "Gestion d'erreurs détectée"
+        } else {
+            Write-Info "Gestion d'erreurs limitée détectée"
+        }
+        
+        # Vérifier taille des buffers
+        $bufferMatches = [regex]::Matches($content, '(?:char|uint8_t|byte)\s+\w+\[(\d+)\]|buffer\[(\d+)\]')
+        if ($bufferMatches.Count -gt 0) {
+            $largeBuffers = @()
+            foreach ($match in $bufferMatches) {
+                $size = if ($match.Groups[1].Value) { [int]$match.Groups[1].Value } else { if ($match.Groups[2].Value) { [int]$match.Groups[2].Value } else { 0 } }
+                if ($size -gt 1024) {
+                    $largeBuffers += $size
+                }
+            }
+            if ($largeBuffers.Count -gt 0) {
+                Write-Info "$($largeBuffers.Count) buffer(s) > 1KB détecté(s) - Utilisation RAM: ~$($largeBuffers | Measure-Object -Sum | Select-Object -ExpandProperty Sum) bytes"
+            } else {
+                Write-OK "Taille des buffers raisonnable (< 1KB)"
+            }
+        }
+        
+        # Vérifier utilisation PROGMEM/F() pour optimisations Flash/RAM
+        $progmemCount = ([regex]::Matches($content, 'PROGMEM|__FlashStringHelper')).Count
+        $fMacroCount = ([regex]::Matches($content, '\bF\s*\(')).Count
+        if ($progmemCount -gt 0 -or $fMacroCount -gt 0) {
+            Write-OK "Optimisations Flash/RAM: $fMacroCount utilisation(s) de F(), $progmemCount PROGMEM"
+        } else {
+            Write-Info "Pas d'optimisation PROGMEM/F() détectée (peut être amélioré)"
+        }
+        
+        # Ratio d'optimisation String() avec F()
+        # Compter String("...") qui ne sont PAS String(F(...))
+        $stringAllocsWithStringLiteral = ([regex]::Matches($content, 'String\s*\(\s*["''][^F]')).Count
+        $stringAllocsWithF = ([regex]::Matches($content, 'String\s*\(\s*F\s*\(')).Count
+        $stringAllocsTotal = $stringAllocsWithStringLiteral + $stringAllocsWithF
+        if ($stringAllocsTotal -gt 0) {
+            $optimizationRatio = [math]::Round(($stringAllocsWithF / $stringAllocsTotal) * 100, 1)
+            $remaining = $stringAllocsTotal - $stringAllocsWithF
+            if ($optimizationRatio -lt 50 -and $stringAllocsTotal -gt 10) {
+                Write-Warn "$($stringAllocsTotal) allocations String() dont seulement $optimizationRatio% utilisent F() ($remaining restantes)"
+                $results.Recommendations += "Optimiser davantage les allocations String() avec F() ($remaining opportunités restantes)"
+            } else {
+                Write-OK "$($stringAllocsTotal) allocations String() dont $optimizationRatio% optimisées avec F() ($stringAllocsWithF/$stringAllocsTotal)"
+            }
         }
         
         # Modules pertinents pour firmware

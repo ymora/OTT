@@ -60,3 +60,4 @@ C'est normal et attendu ! Cela confirme que les règles de protection fonctionne
 - **Write** : ✅ **RECOMMANDÉ** - Peut pusher sur ses branches, doit créer des PRs pour `main`
 - **Maintain** : Similaire à Write, avec quelques permissions supplémentaires (acceptable)
 - **Admin** : ❌ **À ÉVITER** - Peut bypasser les règles de protection
+

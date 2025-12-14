@@ -3,13 +3,21 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUsb } from '@/contexts/UsbContext'
-import { useUsbAutoDetection } from '@/hooks'
+import { useUsbAutoDetection, useApiData } from '@/hooks'
+import { fetchJson } from '@/lib/api'
 import logger from '@/lib/logger'
 import InoEditorTab from '@/components/configuration/InoEditorTab'
 import UsbStreamingTab from '@/components/configuration/UsbStreamingTab'
+import LoadingSpinner from '@/components/LoadingSpinner'
+import ErrorMessage from '@/components/ErrorMessage'
+import DeviceModal from '@/components/DeviceModal'
+import FlashModal from '@/components/FlashModal'
+import DeviceMeasurementsModal from '@/components/DeviceMeasurementsModal'
+import ConfirmModal from '@/components/ConfirmModal'
+import Modal from '@/components/Modal'
 
 export default function OutilsPage() {
   const { user, fetchWithAuth, API_URL } = useAuth()
@@ -17,14 +25,14 @@ export default function OutilsPage() {
     isSupported, 
     autoDetecting, 
     setAutoDetecting, 
-    usbConnectedDevice, 
-    usbVirtualDevice,
+    usbDevice,
+    usbDeviceInfo,
     setSendMeasurementCallback,
     setUpdateDeviceFirmwareCallback
   } = useUsb()
   
   // Activer la détection automatique USB
-  useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting, usbConnectedDevice, usbVirtualDevice)
+  useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting, usbDevice)
 
   // Cleanup au démontage
   useEffect(() => {
@@ -83,10 +91,10 @@ export default function OutilsPage() {
         )
         
         // ⚠️ AUTO-CRÉATION DÉSACTIVÉE: Ne pas créer automatiquement pour éviter les conflits
-        // Le dispositif apparaîtra dans le tableau via usbVirtualDevice mais ne sera pas enregistré en base
+        // Le dispositif apparaîtra dans le tableau via usbDevice mais ne sera pas enregistré en base
         // L'utilisateur devra l'enregistrer manuellement s'il le souhaite
         if (!device) {
-          // Ne pas créer automatiquement - le dispositif apparaîtra via usbVirtualDevice
+          // Ne pas créer automatiquement - le dispositif apparaîtra via usbDevice
           // Ne pas logger pour éviter le spam, mais ne pas bloquer non plus
           return
         }
@@ -141,8 +149,87 @@ export default function OutilsPage() {
     )
   }
 
+  // Charger les dispositifs pour le tableau
+  const { data: devicesData, loading: devicesLoading, error: devicesError, refetch: refetchDevices } = useApiData(
+    ['/api.php/devices'],
+    { requiresAuth: true }
+  )
+  
+  // Charger les patients pour le modal d'assignation
+  const { data: patientsData } = useApiData(
+    ['/api.php/patients'],
+    { requiresAuth: true }
+  )
+  
+  const allPatients = patientsData?.patients?.patients || []
+  const allDevices = devicesData?.devices?.devices || []
+  
+  // États pour les modals
+  const [showDeviceModal, setShowDeviceModal] = useState(false)
+  const [showFlashModal, setShowFlashModal] = useState(false)
+  const [showMeasurementsModal, setShowMeasurementsModal] = useState(false)
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [showArchiveModal, setShowArchiveModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [selectedDevice, setSelectedDevice] = useState(null)
+  const [archiving, setArchiving] = useState(null)
+  const [deleting, setDeleting] = useState(null)
+  
+  const openDeviceModal = (device) => {
+    setSelectedDevice(device)
+    setShowDeviceModal(true)
+  }
+  
+  const closeDeviceModal = () => {
+    setSelectedDevice(null)
+    setShowDeviceModal(false)
+    refetchDevices()
+  }
+  
+  const handleArchive = async (device) => {
+    if (!device.id) return
+    setArchiving(device.id)
+    try {
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${device.id}`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      await refetchDevices()
+      logger.log(`✅ Dispositif "${device.device_name}" archivé`)
+    } catch (err) {
+      logger.error('Erreur archivage dispositif:', err)
+    } finally {
+      setArchiving(null)
+      setShowArchiveModal(false)
+    }
+  }
+  
+  const handleDelete = async (device) => {
+    if (!device.id) return
+    setDeleting(device.id)
+    try {
+      await fetchJson(
+        fetchWithAuth,
+        API_URL,
+        `/api.php/devices/${device.id}?permanent=true`,
+        { method: 'DELETE' },
+        { requiresAuth: true }
+      )
+      await refetchDevices()
+      logger.log(`✅ Dispositif "${device.device_name}" supprimé définitivement`)
+    } catch (err) {
+      logger.error('Erreur suppression dispositif:', err)
+    } finally {
+      setDeleting(null)
+      setShowDeleteModal(false)
+    }
+  }
+
   const tabs = [
-    { id: 'streaming', label: 'Dispositifs', icon: '🔧' },
+    { id: 'streaming', label: 'Streaming', icon: '🔧' },
     { id: 'ino', label: 'Upload INO', icon: '📝' }
   ]
 
@@ -180,6 +267,128 @@ export default function OutilsPage() {
           <UsbStreamingTab />
         </div>
       </div>
+      
+      {/* Modal de dispositif */}
+      {showDeviceModal && (
+        <DeviceModal
+          isOpen={showDeviceModal}
+          onClose={closeDeviceModal}
+          editingItem={selectedDevice}
+          onSave={() => {
+            closeDeviceModal()
+            refetchDevices()
+          }}
+          fetchWithAuth={fetchWithAuth}
+          API_URL={API_URL}
+          patients={allPatients}
+          allDevices={allDevices}
+        />
+      )}
+      
+      {/* Modal Flash */}
+      {showFlashModal && selectedDevice && (
+        <FlashModal
+          isOpen={showFlashModal}
+          onClose={() => {
+            setShowFlashModal(false)
+            setSelectedDevice(null)
+          }}
+          device={selectedDevice}
+        />
+      )}
+      
+      {/* Modal Mesures */}
+      {showMeasurementsModal && selectedDevice && (
+        <DeviceMeasurementsModal
+          isOpen={showMeasurementsModal}
+          onClose={() => {
+            setShowMeasurementsModal(false)
+            setSelectedDevice(null)
+          }}
+          device={selectedDevice}
+        />
+      )}
+      
+      {/* Modal Assignation Patient */}
+      {showAssignModal && selectedDevice && (
+        <Modal
+          isOpen={showAssignModal}
+          onClose={() => {
+            setShowAssignModal(false)
+            setSelectedDevice(null)
+          }}
+          title={`🔗 Assigner le dispositif ${selectedDevice.device_name || selectedDevice.sim_iccid}`}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Sélectionnez un patient pour assigner ce dispositif :
+            </p>
+            <select
+              className="input w-full"
+              onChange={async (e) => {
+                const patientId = e.target.value ? parseInt(e.target.value) : null
+                try {
+                  await fetchJson(
+                    fetchWithAuth,
+                    API_URL,
+                    `/api.php/devices/${selectedDevice.id}`,
+                    {
+                      method: 'PUT',
+                      body: JSON.stringify({ patient_id: patientId })
+                    },
+                    { requiresAuth: true }
+                  )
+                  await refetchDevices()
+                  setShowAssignModal(false)
+                  setSelectedDevice(null)
+                  logger.log(`✅ Dispositif assigné au patient`)
+                } catch (err) {
+                  logger.error('Erreur assignation:', err)
+                }
+              }}
+            >
+              <option value="">Non assigné</option>
+              {allPatients.filter(p => !p.deleted_at).map(patient => (
+                <option key={patient.id} value={patient.id} selected={selectedDevice.patient_id === patient.id}>
+                  {patient.first_name} {patient.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </Modal>
+      )}
+      
+      {/* Modal Archive */}
+      {showArchiveModal && selectedDevice && (
+        <ConfirmModal
+          isOpen={showArchiveModal}
+          onClose={() => {
+            setShowArchiveModal(false)
+            setSelectedDevice(null)
+          }}
+          onConfirm={() => handleArchive(selectedDevice)}
+          title="🗄️ Archiver le dispositif"
+          message={`Êtes-vous sûr de vouloir archiver le dispositif "${selectedDevice.device_name || selectedDevice.sim_iccid}" ?`}
+          confirmText="Archiver"
+          confirmVariant="warning"
+        />
+      )}
+      
+      {/* Modal Suppression */}
+      {showDeleteModal && selectedDevice && (
+        <ConfirmModal
+          isOpen={showDeleteModal}
+          onClose={() => {
+            setShowDeleteModal(false)
+            setSelectedDevice(null)
+          }}
+          onConfirm={() => handleDelete(selectedDevice)}
+          title="🗑️ Supprimer définitivement"
+          message={`Êtes-vous sûr de vouloir supprimer définitivement le dispositif "${selectedDevice.device_name || selectedDevice.sim_iccid}" ? Cette action est irréversible.`}
+          confirmText="Supprimer"
+          confirmVariant="danger"
+        />
+      )}
 
     </div>
   )

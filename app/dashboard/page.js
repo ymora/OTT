@@ -14,7 +14,7 @@ import ErrorMessage from '@/components/ErrorMessage'
 const LeafletMap = dynamicImport(() => import('@/components/LeafletMap'), { ssr: false })
 
 export default function DashboardPage() {
-  const { isConnected, usbVirtualDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
+  const { isConnected, usbDevice, usbDeviceInfo, usbStreamLastMeasurement } = useUsb()
   
   // Charger les données avec useApiData
   const { data, loading, error, refetch } = useApiData(
@@ -62,19 +62,19 @@ export default function DashboardPage() {
   
   // Ajouter le dispositif USB virtuel s'il existe et n'est pas déjà dans la liste
   const devices = useMemo(() => {
-    if (!usbVirtualDevice) return devicesFromDb
+    if (!usbDevice) return devicesFromDb
     
     // Vérifier si le dispositif USB est déjà dans la liste
     const alreadyInList = devicesFromDb.find(d => 
-      d.sim_iccid === usbVirtualDevice.sim_iccid || 
-      d.device_serial === usbVirtualDevice.device_serial
+      d.sim_iccid === usbDevice.sim_iccid || 
+      d.device_serial === usbDevice.device_serial
     )
     
     if (alreadyInList) return devicesFromDb
     
     // Ajouter le dispositif virtuel au début de la liste
-    return [usbVirtualDevice, ...devicesFromDb]
-  }, [devicesFromDb, usbVirtualDevice])
+    return [usbDevice, ...devicesFromDb]
+  }, [devicesFromDb, usbDevice])
   const alerts = useMemo(() => {
     return (data?.alerts?.alerts || []).filter(a => a.status === 'unresolved')
   }, [data?.alerts])

@@ -5425,184 +5425,184 @@ if ($script:apiAuthFailed) {
             # Compléter Phase 6 : Endpoints API (seulement si phase 6 sélectionnée)
             if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 6) {
                 Write-Host "`n  === Tests Endpoints API ===" -ForegroundColor Yellow
-            $endpointsTotal = 0
-            $endpointsOK = 0
-            
-            if ($script:Config.Api.Endpoints) {
-                $endpoints = $script:Config.Api.Endpoints
-            } else {
-                $endpoints = @(
-                    @{Path="/api.php/devices"; Name="Dispositifs"},
-                    @{Path="/api.php/patients"; Name="Patients"},
-                    @{Path="/api.php/users"; Name="Utilisateurs"},
-                    @{Path="/api.php/alerts"; Name="Alertes"},
-                    @{Path="/api.php/firmwares"; Name="Firmwares"},
-                    @{Path="/api.php/roles"; Name="Roles"},
-                    @{Path="/api.php/permissions"; Name="Permissions"},
-                    @{Path="/api.php/health"; Name="Healthcheck"}
-                )
-            }
-            
-            foreach ($endpoint in $endpoints) {
-                $endpointsTotal++
-                try {
-                    $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 10
-                    Write-OK "  $($endpoint.Name)"
-                    $endpointsOK++
-                } catch {
-                    Write-Err "  $($endpoint.Name) - Erreur"
+                $endpointsTotal = 0
+                $endpointsOK = 0
+                
+                if ($script:Config.Api.Endpoints) {
+                    $endpoints = $script:Config.Api.Endpoints
+                } else {
+                    $endpoints = @(
+                        @{Path="/api.php/devices"; Name="Dispositifs"},
+                        @{Path="/api.php/patients"; Name="Patients"},
+                        @{Path="/api.php/users"; Name="Utilisateurs"},
+                        @{Path="/api.php/alerts"; Name="Alertes"},
+                        @{Path="/api.php/firmwares"; Name="Firmwares"},
+                        @{Path="/api.php/roles"; Name="Roles"},
+                        @{Path="/api.php/permissions"; Name="Permissions"},
+                        @{Path="/api.php/health"; Name="Healthcheck"}
+                    )
                 }
-            }
-            
-            if ($endpointsTotal -gt 0) {
-                $apiScore = [math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
-                $auditResults.Scores["API"] = $apiScore
-                Write-Host "  Score API mis à jour: $apiScore/10" -ForegroundColor $(if ($apiScore -ge 8) { "Green" } elseif ($apiScore -ge 6) { "Yellow" } else { "Red" })
-            }
+                
+                foreach ($endpoint in $endpoints) {
+                    $endpointsTotal++
+                    try {
+                        $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 10
+                        Write-OK "  $($endpoint.Name)"
+                        $endpointsOK++
+                    } catch {
+                        Write-Err "  $($endpoint.Name) - Erreur"
+                    }
+                }
+                
+                if ($endpointsTotal -gt 0) {
+                    $apiScore = [math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
+                    $auditResults.Scores["API"] = $apiScore
+                    Write-Host "  Score API mis à jour: $apiScore/10" -ForegroundColor $(if ($apiScore -ge 8) { "Green" } elseif ($apiScore -ge 6) { "Yellow" } else { "Red" })
+                }
             }  # Fin if phase 6 sélectionnée
             
             # Compléter Phase 14 : Base de Données (seulement si phase 14 sélectionnée)
             if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 14) {
                 Write-Host "`n  === Analyse Base de Données ===" -ForegroundColor Yellow
                 try {
-                # 1. Audit complet du schéma via API (vérifie code vs base en ligne)
-                Write-Host "  🔍 Exécution audit complet du schéma (code vs base en ligne)..." -ForegroundColor Cyan
-                try {
-                    $auditResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/admin/database-audit" -Headers $script:authHeaders -TimeoutSec 30
-                    
-                    if ($auditResponse.success -and $auditResponse.results) {
-                        $dbAudit = $auditResponse.results
-                        $dbScore = $dbAudit.score
+                    # 1. Audit complet du schéma via API (vérifie code vs base en ligne)
+                    Write-Host "  🔍 Exécution audit complet du schéma (code vs base en ligne)..." -ForegroundColor Cyan
+                    try {
+                        $auditResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/admin/database-audit" -Headers $script:authHeaders -TimeoutSec 30
                         
-                        # Afficher le statut de connexion
-                        if ($dbAudit.connection) {
-                            if ($dbAudit.connection.status -eq 'ok') {
-                                Write-OK "  Connexion BDD: OK"
-                                if ($dbAudit.connection.version) {
-                                    Write-Info "    Version: $($dbAudit.connection.version)"
+                        if ($auditResponse.success -and $auditResponse.results) {
+                            $dbAudit = $auditResponse.results
+                            $dbScore = $dbAudit.score
+                            
+                            # Afficher le statut de connexion
+                            if ($dbAudit.connection) {
+                                if ($dbAudit.connection.status -eq 'ok') {
+                                    Write-OK "  Connexion BDD: OK"
+                                    if ($dbAudit.connection.version) {
+                                        Write-Info "    Version: $($dbAudit.connection.version)"
+                                    }
+                                } else {
+                                    Write-Err "  Connexion BDD: ÉCHEC - $($dbAudit.connection.message)"
                                 }
-                            } else {
-                                Write-Err "  Connexion BDD: ÉCHEC - $($dbAudit.connection.message)"
                             }
+                            
+                            # Afficher le résumé des tables
+                            if ($dbAudit.tables -and $dbAudit.tables.Count -gt 0) {
+                                $tablesOk = ($dbAudit.tables | Where-Object { $_.exists }).Count
+                                $tablesMissing = ($dbAudit.tables | Where-Object { -not $_.exists }).Count
+                                Write-Host "  Tables: $tablesOk/$($dbAudit.tables.Count) OK" -ForegroundColor $(if ($tablesMissing -eq 0) { "Green" } else { "Yellow" })
+                                if ($tablesMissing -gt 0) {
+                                    Write-Warn "    $tablesMissing table(s) manquante(s)"
+                                }
+                            }
+                            
+                            # Afficher les problèmes détectés
+                            if ($dbAudit.issues -and $dbAudit.issues.Count -gt 0) {
+                                Write-Err "  ❌ Problèmes critiques: $($dbAudit.issues.Count)"
+                                foreach ($issue in $dbAudit.issues) {
+                                    Write-Err "    - $issue"
+                                    $auditResults.Issues += "BDD: $issue"
+                                }
+                            }
+                            
+                            # Afficher les doublons
+                            if ($dbAudit.duplicates -and $dbAudit.duplicates.Count -gt 0) {
+                                Write-Err "  ⚠️  Colonnes en double détectées: $($dbAudit.duplicates.Count)"
+                                foreach ($dup in $dbAudit.duplicates) {
+                                    Write-Err "    - $($dup.table): $($dup.columns -join ', ')"
+                                    Write-Err "      → $($dup.issue)"
+                                    $auditResults.Issues += "BDD DOUBLON: $($dup.table) - $($dup.columns -join ', ')"
+                                }
+                            }
+                            
+                            # Afficher les avertissements
+                            if ($dbAudit.warnings -and $dbAudit.warnings.Count -gt 0) {
+                                Write-Warn "  ⚠️  Avertissements: $($dbAudit.warnings.Count)"
+                                foreach ($warning in $dbAudit.warnings) {
+                                    Write-Warn "    - $warning"
+                                    $auditResults.Warnings += "BDD: $warning"
+                                }
+                            }
+                            
+                            # Tables orphelines
+                            if ($dbAudit.orphans -and $dbAudit.orphans.Count -gt 0) {
+                                Write-Warn "  📋 Tables orphelines: $($dbAudit.orphans.Count) (existent en DB mais pas dans schema.sql)"
+                                foreach ($orphan in $dbAudit.orphans) {
+                                    Write-Warn "    - $orphan"
+                                }
+                            }
+                            
+                            # Index critiques
+                            if ($dbAudit.indexes -and $dbAudit.indexes.Count -gt 0) {
+                                $indexesOk = ($dbAudit.indexes | Where-Object { $_.exists }).Count
+                                $indexesMissing = ($dbAudit.indexes | Where-Object { -not $_.exists }).Count
+                                if ($indexesMissing -gt 0) {
+                                    Write-Warn "  Index critiques: $indexesOk/$($dbAudit.indexes.Count) OK, $indexesMissing manquant(s)"
+                                } else {
+                                    Write-OK "  Index critiques: $indexesOk/$($dbAudit.indexes.Count) OK"
+                                }
+                            }
+                            
+                            # Tables manquantes
+                            if ($dbAudit.missing -and $dbAudit.missing.Count -gt 0) {
+                                Write-Err "  Tables manquantes: $($dbAudit.missing.Count)"
+                                foreach ($missing in $dbAudit.missing) {
+                                    Write-Err "    - $missing"
+                                }
+                            }
+                            
+                            $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
+                            Write-Host ""
+                            Write-Host "  ✅ Audit schéma terminé - Score: $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
+                        } else {
+                            Write-Warn "  Audit schéma non disponible, utilisation méthode alternative"
+                            throw "Audit schéma échoué"
+                        }
+                    } catch {
+                        Write-Warn "  Erreur audit schéma: $($_.Exception.Message), utilisation méthode alternative"
+                        
+                        # Méthode alternative : vérifier les entités
+                        if ($script:Config.Database -and $script:Config.Database.Entities) {
+                            $entities = $script:Config.Database.Entities
+                        } else {
+                            $entities = @(
+                                @{ Name = "devices"; Field = "devices"; CountField = "Count"; UnassignedField = "patient_id"; UnassignedMessage = "dispositifs non assignes" }
+                                @{ Name = "patients"; Field = "patients"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                                @{ Name = "users"; Field = "users"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                                @{ Name = "alerts"; Field = "alerts"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                            )
                         }
                         
-                        # Afficher le résumé des tables
-                        if ($dbAudit.tables -and $dbAudit.tables.Count -gt 0) {
-                            $tablesOk = ($dbAudit.tables | Where-Object { $_.exists }).Count
-                            $tablesMissing = ($dbAudit.tables | Where-Object { -not $_.exists }).Count
-                            Write-Host "  Tables: $tablesOk/$($dbAudit.tables.Count) OK" -ForegroundColor $(if ($tablesMissing -eq 0) { "Green" } else { "Yellow" })
-                            if ($tablesMissing -gt 0) {
-                                Write-Warn "    $tablesMissing table(s) manquante(s)"
-                            }
-                        }
-                        
-                        # Afficher les problèmes détectés
-                        if ($dbAudit.issues -and $dbAudit.issues.Count -gt 0) {
-                            Write-Err "  ❌ Problèmes critiques: $($dbAudit.issues.Count)"
-                            foreach ($issue in $dbAudit.issues) {
-                                Write-Err "    - $issue"
-                                $auditResults.Issues += "BDD: $issue"
-                            }
-                        }
-                        
-                        # Afficher les doublons
-                        if ($dbAudit.duplicates -and $dbAudit.duplicates.Count -gt 0) {
-                            Write-Err "  ⚠️  Colonnes en double détectées: $($dbAudit.duplicates.Count)"
-                            foreach ($dup in $dbAudit.duplicates) {
-                                Write-Err "    - $($dup.table): $($dup.columns -join ', ')"
-                                Write-Err "      → $($dup.issue)"
-                                $auditResults.Issues += "BDD DOUBLON: $($dup.table) - $($dup.columns -join ', ')"
-                            }
-                        }
-                        
-                        # Afficher les avertissements
-                        if ($dbAudit.warnings -and $dbAudit.warnings.Count -gt 0) {
-                            Write-Warn "  ⚠️  Avertissements: $($dbAudit.warnings.Count)"
-                            foreach ($warning in $dbAudit.warnings) {
-                                Write-Warn "    - $warning"
-                                $auditResults.Warnings += "BDD: $warning"
-                            }
-                        }
-                        
-                        # Tables orphelines
-                        if ($dbAudit.orphans -and $dbAudit.orphans.Count -gt 0) {
-                            Write-Warn "  📋 Tables orphelines: $($dbAudit.orphans.Count) (existent en DB mais pas dans schema.sql)"
-                            foreach ($orphan in $dbAudit.orphans) {
-                                Write-Warn "    - $orphan"
-                            }
-                        }
-                        
-                        # Index critiques
-                        if ($dbAudit.indexes -and $dbAudit.indexes.Count -gt 0) {
-                            $indexesOk = ($dbAudit.indexes | Where-Object { $_.exists }).Count
-                            $indexesMissing = ($dbAudit.indexes | Where-Object { -not $_.exists }).Count
-                            if ($indexesMissing -gt 0) {
-                                Write-Warn "  Index critiques: $indexesOk/$($dbAudit.indexes.Count) OK, $indexesMissing manquant(s)"
-                            } else {
-                                Write-OK "  Index critiques: $indexesOk/$($dbAudit.indexes.Count) OK"
-                            }
-                        }
-                        
-                        # Tables manquantes
-                        if ($dbAudit.missing -and $dbAudit.missing.Count -gt 0) {
-                            Write-Err "  Tables manquantes: $($dbAudit.missing.Count)"
-                            foreach ($missing in $dbAudit.missing) {
-                                Write-Err "    - $missing"
+                        $dbScore = 10
+                        foreach ($entity in $entities) {
+                            try {
+                                $endpointPath = "/api.php/$($entity.Name)"
+                                $response = Invoke-RestMethod -Uri "$ApiUrl$endpointPath" -Headers $script:authHeaders -TimeoutSec 10
+                                
+                                $data = Get-ArrayFromApiResponse -data $response -propertyName $entity.Field
+                                $count = if ($data) { $data.Count } else { 0 }
+                                
+                                Write-OK "  $($entity.Name): $count élément(s)"
+                                
+                                # Vérifier les éléments non assignés si applicable
+                                if ($entity.UnassignedField -and $count -gt 0) {
+                                    $unassigned = @($data | Where-Object { -not $_.$($entity.UnassignedField) }).Count
+                                    if ($unassigned -gt 0) {
+                                        Write-Info "    $unassigned $($entity.UnassignedMessage)"
+                                    }
+                                }
+                            } catch {
+                                Write-Err "  Erreur récupération $($entity.Name): $($_.Exception.Message)"
+                                $dbScore -= 1
                             }
                         }
                         
                         $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
-                        Write-Host ""
-                        Write-Host "  ✅ Audit schéma terminé - Score: $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
-                    } else {
-                        Write-Warn "  Audit schéma non disponible, utilisation méthode alternative"
-                        throw "Audit schéma échoué"
-                    }
-                } catch {
-                    Write-Warn "  Erreur audit schéma: $($_.Exception.Message), utilisation méthode alternative"
-                    
-                    # Méthode alternative : vérifier les entités
-                    if ($script:Config.Database -and $script:Config.Database.Entities) {
-                        $entities = $script:Config.Database.Entities
-                    } else {
-                        $entities = @(
-                            @{ Name = "devices"; Field = "devices"; CountField = "Count"; UnassignedField = "patient_id"; UnassignedMessage = "dispositifs non assignes" }
-                            @{ Name = "patients"; Field = "patients"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
-                            @{ Name = "users"; Field = "users"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
-                            @{ Name = "alerts"; Field = "alerts"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
-                        )
-                    }
-                    
-                    $dbScore = 10
-                    foreach ($entity in $entities) {
-                        try {
-                            $endpointPath = "/api.php/$($entity.Name)"
-                            $response = Invoke-RestMethod -Uri "$ApiUrl$endpointPath" -Headers $script:authHeaders -TimeoutSec 10
-                            
-                            $data = Get-ArrayFromApiResponse -data $response -propertyName $entity.Field
-                            $count = if ($data) { $data.Count } else { 0 }
-                            
-                            Write-OK "  $($entity.Name): $count élément(s)"
-                            
-                            # Vérifier les éléments non assignés si applicable
-                            if ($entity.UnassignedField -and $count -gt 0) {
-                                $unassigned = @($data | Where-Object { -not $_.$($entity.UnassignedField) }).Count
-                                if ($unassigned -gt 0) {
-                                    Write-Info "    $unassigned $($entity.UnassignedMessage)"
-                                }
-                            }
-                        } catch {
-                            Write-Err "  Erreur récupération $($entity.Name): $($_.Exception.Message)"
-                            $dbScore -= 1
-                        }
-                    }
-                    
-                    $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
-                    Write-Host "  Score BDD (méthode alternative): $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
-                }
+                        Write-Host "  Score BDD (méthode alternative): $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
+                    }  # Fin catch audit schéma (ferme le try de 5470)
                 } catch {
                     Write-Err "  Erreur analyse BDD: $($_.Exception.Message)"
-                }
+                }  # Fin catch analyse BDD (ferme le try de 5467)
             }  # Fin if phase 14 sélectionnée
             
             break  # Sortir de la boucle si l'authentification réussit

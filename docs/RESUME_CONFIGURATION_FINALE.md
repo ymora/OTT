@@ -68,3 +68,4 @@ git push origin maxime  # ✅ Fonctionne
 - ✅ Même si "Do not allow bypassing" est décoché, Maxime (non-admin) ne peut PAS bypasser
 - ✅ Seuls les admins peuvent bypasser (vous uniquement)
 - ⚠️ **IMPORTANT** : Si Maxime devient Admin, il pourra bypasser → Ne lui donnez PAS les droits Admin !
+

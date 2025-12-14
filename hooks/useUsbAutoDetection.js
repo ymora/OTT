@@ -7,7 +7,7 @@ import logger from '@/lib/logger'
  * Hook pour activer la détection automatique USB
  * Utilisé par les pages qui ont besoin de détecter les dispositifs USB
  */
-export function useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting, usbConnectedDevice, usbVirtualDevice) {
+export function useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting, usbDevice) {
   useEffect(() => {
     if (!isSupported) {
       setAutoDetecting(false)
@@ -15,7 +15,7 @@ export function useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting
     }
 
     // Si un dispositif USB est déjà connecté, pas besoin de détecter
-    if (usbConnectedDevice || usbVirtualDevice) {
+    if (usbDevice) {
       return
     }
 
@@ -25,6 +25,6 @@ export function useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting
       setAutoDetecting(true)
       logger.log('🔄 Activation de la détection automatique USB')
     }
-  }, [isSupported, autoDetecting, setAutoDetecting, usbConnectedDevice, usbVirtualDevice])
+  }, [isSupported, autoDetecting, setAutoDetecting, usbDevice])
 }
 
