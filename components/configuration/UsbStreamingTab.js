@@ -2035,10 +2035,10 @@ export default function DebugTab() {
                   const deviceConfig = deviceDbData?.config || {}
                   
                   // Vérifier si le dispositif est enregistré en base (a un ID de base de données)
-                  // Un vrai ID de base de données est un nombre ou une string qui ne commence pas par "usb-"
+                  // Un vrai ID de base de données est un nombre ou une string qui ne commence pas par "usb" (usb_info_, usb_temp_, usb-, etc.)
                   const hasRealId = device?.id && 
                     (typeof device.id === 'number' || 
-                     (typeof device.id === 'string' && !device.id.startsWith('usb-')))
+                     (typeof device.id === 'string' && !device.id.startsWith('usb')))
                   // Un dispositif est non enregistré s'il n'a pas de vrai ID, ou s'il est marqué comme virtuel/temporaire
                   const isNotRegistered = !hasRealId || device?.isVirtual || device?.isTemporary
                   

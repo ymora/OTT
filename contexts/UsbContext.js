@@ -23,9 +23,10 @@ export function UsbProvider({ children }) {
   // Fonction helper pour vérifier si le dispositif est enregistré (a un vrai ID)
   const isUsbDeviceRegistered = useCallback(() => {
     if (!usbDevice?.id) return false
-    // Vrai ID = nombre ou string qui ne commence pas par 'usb-'
+    // Vrai ID = nombre ou string qui ne commence pas par 'usb' (usb_info_, usb_temp_, usb-, etc.)
+    // Un ID de base de données est soit un nombre, soit une string qui ne commence pas par 'usb'
     return typeof usbDevice.id === 'number' || 
-           (typeof usbDevice.id === 'string' && !usbDevice.id.startsWith('usb-'))
+           (typeof usbDevice.id === 'string' && !usbDevice.id.startsWith('usb'))
   }, [usbDevice])
   const [usbPortInfo, setUsbPortInfo] = useState(null)
   const [autoDetecting, setAutoDetecting] = useState(true)
