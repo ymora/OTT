@@ -20,10 +20,14 @@ Si Maxime est **admin** du dépôt, il peut bypasser les règles de protection d
 
 ### Étape 3 : Si Maxime a une invitation en attente
 1. Trouvez l'invitation pour `maxime@happlyzmedical.com`
-2. Si l'invitation propose le rôle **Admin** :
-   - Annulez l'invitation
-   - Créez une nouvelle invitation avec le rôle **Write** ou **Maintain**
+2. **Modifiez le rôle de l'invitation** :
+   - Cliquez sur le menu (3 points) à côté de l'invitation
+   - Sélectionnez "Change role" ou "Edit role"
+   - Choisissez **"Write"** (PAS Admin)
+   - Sauvegardez
 3. Si l'invitation propose déjà **Write** ou **Maintain** : ✅ C'est bon !
+
+**Note** : Si GitHub ne demande pas le rôle lors de l'invitation, modifiez-le immédiatement après via le menu de l'invitation.
 
 ### Étape 3 : Vérifier la configuration
 - **Maxime avec rôle "Write"** : 
