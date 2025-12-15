@@ -628,7 +628,7 @@
     <ul>
         <li><strong>Montant (device → cloud)</strong> : le firmware mesure (débit, batterie) toutes les 5 min, propage via HTTPS/JSON vers <code>/api.php/devices/measurements</code> et <code>/logs</code>.</li>
         <li><strong>USB streaming</strong> : En mode USB, envoi toutes les secondes via Web Serial API, parsing JSON côté React, affichage temps réel dans terminal. <strong>⚠️ Important</strong> : Le mode USB sert uniquement à visualiser ce qui se passe en live. Le firmware continue de fonctionner normalement et d'envoyer en OTA. Aucun envoi séparé n'est effectué depuis le dashboard pour éviter les doublons.</li>
-        <li><strong>Persisté</strong> : l'API Docker (Render) écrit en PostgreSQL (tables <code>devices</code>, <code>measurements</code>, <code>alerts</code>, <code>audit_logs</code>…), via PDO.</li>
+        <li><strong>Persisté</strong> : l'API PHP (Render.com) écrit en PostgreSQL (tables <code>devices</code>, <code>measurements</code>, <code>alerts</code>, <code>audit_logs</code>…), via PDO.</li>
         <li><strong>Descendant</strong> : le Dashboard Next.js (GitHub Pages) appelle l'API (<code>NEXT_PUBLIC_API_URL</code>) pour stats, cartes, notifications, OTA.</li>
         <li><strong>Auth</strong> : Next.js poste sur <code>/api.php/auth/login</code>, stocke le JWT (LocalStorage) et <code>fetchWithAuth</code> ajoute <code>Authorization: Bearer ...</code> à chaque requête.</li>
     </ul>
@@ -656,7 +656,7 @@ maxime/
 ├── 🔌 BACKEND (PHP)
 │   ├── api.php                   # API REST complète
 │   ├── sql/schema.sql            # Base PostgreSQL (14 tables)
-│   └── Dockerfile                # Container pour Render
+│   └── Dockerfile                # Configuration build pour Render (optionnel)
 │
 ├── 🔧 hardware/                  # Matériel & Firmware
 │   ├── firmware/                 # Firmwares compilés et uploadés (par version)
@@ -1302,7 +1302,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     <ol>
         <li>Créer un nouveau service Web sur Render</li>
         <li>Connecter le repository GitHub</li>
-        <li>Configurer avec Dockerfile (déjà présent)</li>
+        <li>Configurer avec render.yaml pour l'API et GitHub Actions pour le frontend</li>
         <li>Définir les variables d'environnement :
             <ul>
                 <li><code>DB_HOST</code>, <code>DB_NAME</code>, <code>DB_USER</code>, <code>DB_PASS</code></li>

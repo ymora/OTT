@@ -2,10 +2,9 @@
 # Usage: .\audit\test-api-auth.ps1 -Email "ymora@free.fr" -Password "Ym120879" -ApiUrl "http://localhost:8000"
 
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$Email,
-    [Parameter(Mandatory=$true)]
-    [string]$Password,
+    [string]$Email = "",
+    [string]$Password = "",
+    [string]$Token = "",
     [string]$ApiUrl = "http://localhost:8000"
 )
 
@@ -14,17 +13,35 @@ Write-Host "API URL: $ApiUrl" -ForegroundColor Gray
 Write-Host ""
 
 # Authentification
-Write-Host "🔐 Authentification..." -ForegroundColor Yellow
-try {
-    $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
-    $authResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/auth/login" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
-    $token = $authResponse.token
+$token = $null
+if (-not [string]::IsNullOrEmpty($Token)) {
+    # Utiliser le token fourni
+    Write-Host "🔑 Utilisation du token fourni..." -ForegroundColor Yellow
+    $token = $Token
     $authHeaders = @{Authorization = "Bearer $token"}
-    Write-Host "✅ Authentification réussie" -ForegroundColor Green
-    Write-Host "Token: $($token.Substring(0, 20))..." -ForegroundColor Gray
+    Write-Host "✅ Token chargé" -ForegroundColor Green
+    Write-Host "Token: $($token.Substring(0, [Math]::Min(20, $token.Length)))..." -ForegroundColor Gray
     Write-Host ""
-} catch {
-    Write-Host "❌ Erreur d'authentification: $($_.Exception.Message)" -ForegroundColor Red
+} elseif (-not [string]::IsNullOrEmpty($Email) -and -not [string]::IsNullOrEmpty($Password)) {
+    # Authentification avec email/password
+    Write-Host "🔐 Authentification..." -ForegroundColor Yellow
+    try {
+        $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
+        $authResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/auth/login" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
+        $token = $authResponse.token
+        $authHeaders = @{Authorization = "Bearer $token"}
+        Write-Host "✅ Authentification réussie" -ForegroundColor Green
+        Write-Host "Token: $($token.Substring(0, [Math]::Min(20, $token.Length)))..." -ForegroundColor Gray
+        Write-Host ""
+    } catch {
+        Write-Host "❌ Erreur d'authentification: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+} else {
+    Write-Host "❌ Erreur: Vous devez fournir soit un Token, soit Email+Password" -ForegroundColor Red
+    Write-Host "Usage:" -ForegroundColor Yellow
+    Write-Host "  .\audit\test-api-auth.ps1 -Token `"<token>`"" -ForegroundColor White
+    Write-Host "  .\audit\test-api-auth.ps1 -Email `"<email>`" -Password `"<password>`"" -ForegroundColor White
     exit 1
 }
 

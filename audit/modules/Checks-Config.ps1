@@ -17,7 +17,7 @@ function Invoke-Check-Config {
         [string]$ProjectPath
     )
     
-    Write-Section "[14/18] Configuration - Docker, Next.js, Déploiement"
+    Write-Section "[14/18] Configuration - Render, GitHub Pages, Next.js, Déploiement"
     
     try {
         $configScore = 10.0
@@ -55,16 +55,57 @@ function Invoke-Check-Config {
             }
         }
         
-        # Vérifications Docker (si applicable)
-        if ($ProjectInfo.Type -match "React|Next") {
-            if ($dockerCompose) {
-                if ($dockerCompose -match "dashboard:" -or $dockerCompose -match "ott-dashboard" -or $dockerCompose -match "next") {
-                    Write-OK "Service dashboard présent dans docker-compose.yml"
+        # Vérifications Render (API Backend)
+        if ($ProjectInfo.Type -match "PHP|API") {
+            if ($renderYaml) {
+                if ($renderYaml -match "ott-api" -or $renderYaml -match "type: web") {
+                    Write-OK "Service API configuré dans render.yaml"
                 } else {
-                    Write-Warn "Service dashboard potentiellement manquant"
-                    $configWarnings += "Service dashboard non détecté dans docker-compose.yml"
+                    Write-Warn "Service API potentiellement manquant"
+                    $configWarnings += "Service API non détecté dans render.yaml"
                     $configScore -= 1.0
                 }
+                
+                if ($renderYaml -match "DATABASE_URL") {
+                    Write-OK "Variable DATABASE_URL documentée"
+                } else {
+                    Write-Warn "DATABASE_URL non documentée"
+                    $configWarnings += "DATABASE_URL non documentée dans render.yaml"
+                    $configScore -= 0.5
+                }
+                
+                if ($renderYaml -match "JWT_SECRET") {
+                    Write-OK "Variable JWT_SECRET documentée"
+                } else {
+                    Write-Warn "JWT_SECRET non documentée"
+                    $configWarnings += "JWT_SECRET non documentée dans render.yaml"
+                    $configScore -= 0.5
+                }
+            } else {
+                Write-Warn "render.yaml introuvable (optionnel si déploiement manuel)"
+                $configWarnings += "render.yaml manquant (peut être configuré directement sur Render)"
+                $configScore -= 0.5
+            }
+        }
+        
+        # Vérifications GitHub Pages (Frontend)
+        if ($ProjectInfo.Type -match "React|Next") {
+            $githubWorkflow = $null
+            if (Test-Path (Join-Path $ProjectPath ".github/workflows/deploy.yml")) {
+                $githubWorkflow = Get-Content (Join-Path $ProjectPath ".github/workflows/deploy.yml") -Raw -ErrorAction SilentlyContinue
+                Write-OK "Workflow GitHub Actions présent"
+                
+                if ($githubWorkflow -match "NEXT_STATIC_EXPORT.*true") {
+                    Write-OK "NEXT_STATIC_EXPORT=true configuré (export statique)"
+                } else {
+                    Write-Warn "NEXT_STATIC_EXPORT peut ne pas être configuré"
+                    $configWarnings += "NEXT_STATIC_EXPORT peut ne pas être configuré pour GitHub Pages"
+                    $configScore -= 0.5
+                }
+            } else {
+                Write-Warn "Workflow GitHub Actions introuvable"
+                $configWarnings += "Workflow GitHub Actions manquant (déploiement GitHub Pages)"
+                $configScore -= 1.0
             }
         }
         

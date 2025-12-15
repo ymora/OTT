@@ -2628,79 +2628,78 @@ if (Test-Path "package.json") {
     $packageJson = Get-Content "package.json" -Raw | ConvertFrom-Json
 }
 
-# 1. Vérifier service dashboard Docker (serveur 3000)
-Write-Host "`n1. Configuration Serveur 3000 (Docker):" -ForegroundColor Yellow
-if ($dockerCompose) {
-    # Détecter les services Docker (générique)
-    if ($dockerCompose -match "dashboard:" -or $dockerCompose -match "frontend:" -or $dockerCompose -match "web:") {
-        Write-OK "  Service dashboard présent dans docker-compose.yml"
-        
-        if ($dockerCompose -match "3000:3000" -or $dockerCompose -match '"3000"') {
-            Write-OK "    Port 3000 configuré"
-        } else {
-            Write-Err "    Port 3000 manquant"
-            $configIssues += "Port 3000 manquant dans docker-compose.yml"
-            $configScore -= 2.0
-        }
-        
-        if ($dockerCompose -match "Dockerfile.dashboard") {
-            Write-OK "    Dockerfile.dashboard référencé"
-        } else {
-            Write-Err "    Dockerfile.dashboard non référencé"
-            $configIssues += "Dockerfile.dashboard non référencé"
-            $configScore -= 2.0
-        }
-        
-        if ($dockerCompose -match "NEXT_PUBLIC_API_URL") {
-            Write-OK "    NEXT_PUBLIC_API_URL configurée"
-        } else {
-            Write-Warn "    NEXT_PUBLIC_API_URL manquante"
-            $configWarnings += "NEXT_PUBLIC_API_URL manquante dans docker-compose.yml"
-            $configScore -= 0.5
-        }
-        
-        if ($dockerCompose -match "CORS_ALLOWED_ORIGINS.*3000" -or $dockerCompose -match "localhost:3000") {
-            Write-OK "    CORS_ALLOWED_ORIGINS inclut localhost:3000"
-        } else {
-            Write-Warn "    CORS_ALLOWED_ORIGINS peut ne pas inclure localhost:3000"
-            $configWarnings += "CORS_ALLOWED_ORIGINS peut ne pas autoriser localhost:3000"
-            $configScore -= 0.5
-        }
+# 1. Vérifier configuration Render (API Backend)
+Write-Host "`n1. Configuration Render (API Backend):" -ForegroundColor Yellow
+if ($renderYaml) {
+    Write-OK "  render.yaml présent"
+    
+    if ($renderYaml -match "ott-api" -or $renderYaml -match "type: web") {
+        Write-OK "    Service API configuré dans render.yaml"
     } else {
-        Write-Err "  Service dashboard MANQUANT dans docker-compose.yml"
-        $configIssues += "Service dashboard absent de docker-compose.yml"
-        $configScore -= 3.0
+        Write-Warn "    Service API potentiellement manquant"
+        $configWarnings += "Service API non détecté dans render.yaml"
+        $configScore -= 1.0
+    }
+    
+    if ($renderYaml -match "DATABASE_URL") {
+        Write-OK "    Variable DATABASE_URL documentée"
+    } else {
+        Write-Warn "    DATABASE_URL non documentée"
+        $configWarnings += "DATABASE_URL non documentée dans render.yaml"
+        $configScore -= 0.5
+    }
+    
+    if ($renderYaml -match "JWT_SECRET") {
+        Write-OK "    Variable JWT_SECRET documentée"
+    } else {
+        Write-Warn "    JWT_SECRET non documentée"
+        $configWarnings += "JWT_SECRET non documentée dans render.yaml"
+        $configScore -= 0.5
+    }
+    
+    if ($renderYaml -match "php -S" -or $renderYaml -match "startCommand") {
+        Write-OK "    Commande de démarrage configurée"
+    } else {
+        Write-Warn "    Commande de démarrage potentiellement manquante"
+        $configWarnings += "startCommand peut être manquant dans render.yaml"
+        $configScore -= 0.5
     }
 } else {
-    Write-Warn "  docker-compose.yml introuvable"
-    $configWarnings += "docker-compose.yml manquant"
+    Write-Warn "  render.yaml introuvable (optionnel si déploiement manuel)"
+    $configWarnings += "render.yaml manquant (peut être configuré directement sur Render)"
+    $configScore -= 0.5
+}
+
+# 2. Vérifier configuration GitHub Pages (Frontend)
+Write-Host "`n2. Configuration GitHub Pages (Frontend):" -ForegroundColor Yellow
+$githubWorkflow = $null
+if (Test-Path ".github/workflows/deploy.yml") {
+    $githubWorkflow = Get-Content ".github/workflows/deploy.yml" -Raw -ErrorAction SilentlyContinue
+    Write-OK "  Workflow GitHub Actions présent"
+    
+    if ($githubWorkflow -match "NEXT_STATIC_EXPORT.*true") {
+        Write-OK "    NEXT_STATIC_EXPORT=true configuré (export statique)"
+    } else {
+        Write-Warn "    NEXT_STATIC_EXPORT peut ne pas être configuré"
+        $configWarnings += "NEXT_STATIC_EXPORT peut ne pas être configuré pour GitHub Pages"
+        $configScore -= 0.5
+    }
+    
+    if ($githubWorkflow -match "export_static" -or $githubWorkflow -match "export_static.sh") {
+        Write-OK "    Script export_static.sh référencé"
+    } else {
+        Write-Warn "    Script export_static.sh peut ne pas être référencé"
+        $configWarnings += "export_static.sh peut ne pas être appelé dans le workflow"
+        $configScore -= 0.5
+    }
+} else {
+    Write-Warn "  Workflow GitHub Actions introuvable"
+    $configWarnings += "Workflow GitHub Actions manquant (déploiement GitHub Pages)"
     $configScore -= 1.0
 }
 
-# 2. Vérifier Dockerfile.dashboard
-if ($dockerfileDashboard) {
-    Write-OK "  Dockerfile.dashboard présent"
-    if ($dockerfileDashboard -match "EXPOSE 3000" -or $dockerfileDashboard -match "PORT=3000") {
-        Write-OK "    Port 3000 configuré"
-    } else {
-        Write-Err "    Port 3000 manquant"
-        $configIssues += "Port 3000 manquant dans Dockerfile.dashboard"
-        $configScore -= 1.5
-    }
-    if ($dockerfileDashboard -match "NEXT_STATIC_EXPORT.*false" -or $dockerfileDashboard -match "ENV NEXT_STATIC_EXPORT=false") {
-        Write-OK "    NEXT_STATIC_EXPORT=false (mode serveur)"
-    }
-    if ($dockerfileDashboard -match "standalone") {
-        Write-OK "    Mode standalone configuré"
-    }
-} else {
-    Write-Err "  Dockerfile.dashboard introuvable"
-    $configIssues += "Dockerfile.dashboard manquant"
-    $configScore -= 3.0
-}
-
-# 3. Vérifier next.config.js (cohérence serveur 3000)
-Write-Host "`n2. Configuration Next.js:" -ForegroundColor Yellow
+# 3. Vérifier next.config.js (cohérence déploiement)
+Write-Host "`n3. Configuration Next.js:" -ForegroundColor Yellow
 if ($nextConfig) {
     Write-OK "  next.config.js présent"
     
@@ -2732,7 +2731,7 @@ if ($nextConfig) {
 }
 
 # 4. Vérifier scripts de déploiement
-Write-Host "`n3. Scripts de déploiement:" -ForegroundColor Yellow
+Write-Host "`n4. Scripts de déploiement:" -ForegroundColor Yellow
 if (Test-Path "scripts/deploy/export_static.sh") {
     Write-OK "  export_static.sh présent (GitHub Actions)"
 } else {
@@ -2741,12 +2740,11 @@ if (Test-Path "scripts/deploy/export_static.sh") {
     $configScore -= 1.5
 }
 
-# 4.1. Vérifier workflow GitHub Actions
-Write-Host "`n3.1. Workflow GitHub Actions:" -ForegroundColor Yellow
-$workflowPath = ".github/workflows/deploy.yml"
-if (Test-Path $workflowPath) {
+# 4.1. Vérifier workflow GitHub Actions (déjà vérifié ci-dessus)
+Write-Host "`n4.1. Détails Workflow GitHub Actions:" -ForegroundColor Yellow
+if ($githubWorkflow) {
     Write-OK "  deploy.yml présent"
-    $workflowContent = Get-Content $workflowPath -Raw -ErrorAction SilentlyContinue
+    $workflowContent = $githubWorkflow
     
     if ($workflowContent) {
         # Vérifier que le workflow utilise Node.js
@@ -2823,27 +2821,7 @@ if ($packageJson) {
     }
 }
 
-# 5. Vérifier render.yaml (production)
-Write-Host "`n4. Configuration Production (Render):" -ForegroundColor Yellow
-if ($renderYaml) {
-    Write-OK "  render.yaml présent"
-    $requiredVars = @("DATABASE_URL", "JWT_SECRET")
-    foreach ($var in $requiredVars) {
-        if ($renderYaml -match "key:\s*$var") {
-            Write-OK "    Variable $var documentée"
-        } else {
-            Write-Warn "    Variable $var manquante"
-            $configWarnings += "Variable $var non documentée dans render.yaml"
-            $configScore -= 0.2
-        }
-    }
-} else {
-    Write-Warn "  render.yaml manquant"
-    $configWarnings += "render.yaml manquant"
-    $configScore -= 1.0
-}
-
-# 6. Vérifier env.example
+# 5. Vérifier env.example
 Write-Host "`n5. Variables d'environnement:" -ForegroundColor Yellow
 if ($envExample) {
     Write-OK "  env.example présent"
@@ -2866,9 +2844,9 @@ if ($envExample) {
 # 7. Vérifier cohérence API_URL entre toutes les configs
 Write-Host "`n6. Cohérence API_URL:" -ForegroundColor Yellow
 $apiUrls = @{}
-if ($dockerCompose) {
-    $match = [regex]::Match($dockerCompose, 'NEXT_PUBLIC_API_URL[:\s]+([^\s\n"]+)')
-    if ($match.Success) { $apiUrls["docker-compose"] = $match.Groups[1].Value.Trim() }
+if ($renderYaml) {
+    $match = [regex]::Match($renderYaml, 'NEXT_PUBLIC_API_URL[:\s]+([^\s\n"]+)')
+    if ($match.Success) { $apiUrls["render.yaml"] = $match.Groups[1].Value.Trim() }
 }
 if ($nextConfig) {
     $match = [regex]::Match($nextConfig, 'NEXT_PUBLIC_API_URL["'']?\s*[:=]\s*["'']?([^"'']+)')
@@ -2886,8 +2864,9 @@ if ($apiUrls.Count -gt 1) {
     } else {
         $apiUrlDetails = $apiUrls.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
         Write-Warn "    API_URL incohérente: $($apiUrlDetails -join ', ')"
-        $configWarnings += "API_URL incohérente entre configs"
-        $configScore -= 0.5
+        Write-Info "    Note: Normal si env.example=prod (Render) et config locale=dev (localhost:8000)"
+        $configWarnings += "API_URL incohérente entre configs (normal: prod vs dev)"
+        $configScore -= 0.2  # Réduire la pénalité car c'est normal
     }
 } else {
     if ($apiUrls.Count -eq 1) {

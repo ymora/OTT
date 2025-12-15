@@ -25,12 +25,12 @@ const CACHE_TTL = 30000 // 30 secondes par défaut
  */
 export function useApiData(endpoints, options = {}) {
   const { fetchWithAuth, API_URL, user } = useAuth()
-  const { autoLoad = true, requiresAuth = false, fetchOptions = {}, cacheTTL = CACHE_TTL } = options
+  const { autoLoad = true, requiresAuth = false, fetchOptions = {}, cacheTTL = CACHE_TTL, skip = false } = options
   const cacheKeyRef = useRef(null)
 
   const isMultiple = Array.isArray(endpoints)
   const [data, setData] = useState(isMultiple ? {} : null)
-  const [loading, setLoading] = useState(autoLoad)
+  const [loading, setLoading] = useState(autoLoad && !skip)
   const [error, setError] = useState(null)
 
   // Mémoriser les endpoints pour éviter les re-renders inutiles
@@ -44,6 +44,13 @@ export function useApiData(endpoints, options = {}) {
   const memoizedFetchOptions = useMemo(() => fetchOptions, [])
 
   const loadData = useCallback(async (forceRefresh = false) => {
+    // Ne pas charger si skip est true
+    if (skip) {
+      logger.debug('[useApiData] Chargement ignoré (skip=true)')
+      setLoading(false)
+      return
+    }
+    
     // Ne pas charger si l'utilisateur n'est pas authentifié et que l'auth est requise
     if (requiresAuth && !user) {
       logger.debug('[useApiData] Utilisateur non authentifié, arrêt du chargement')
@@ -179,7 +186,7 @@ export function useApiData(endpoints, options = {}) {
   }, [endpoints, fetchWithAuth, API_URL, requiresAuth, isMultiple, memoizedFetchOptions, cacheTTL, user])
 
   useEffect(() => {
-    if (autoLoad) {
+    if (autoLoad && !skip) {
       loadData()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

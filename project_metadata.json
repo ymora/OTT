@@ -1,18 +1,68 @@
 {
-  "hasApi": true,
   "project": {
     "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
+    "name": "ott-dashboard",
     "company": "",
-    "version": "3.1.0",
-    "name": "ott-dashboard"
+    "version": "3.1.0"
   },
   "hasFirmware": true,
-  "technologies": [
-    "PHP API"
-  ],
-  "detectedAt": "2025-12-15 07:42:09",
+  "hasApi": true,
+  "firmware": {
+    "version": "2.5",
+    "directory": "/hardware/firmware",
+    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino"
+  },
+  "projectType": "nextjs",
+  "github": {
+    "basePath": "/OTT",
+    "baseUrl": "https://ymora.github.io/OTT",
+    "repo": "ymora/OTT"
+  },
+  "frontend": {
+    "buildTool": "",
+    "framework": "Next.js",
+    "routes": [
+      {
+        "name": "C:\\",
+        "route": "/",
+        "file": "/app/page.js"
+      },
+      {
+        "name": "dashboard",
+        "route": "/dashboard",
+        "file": "/app/dashboard/page.js"
+      },
+      {
+        "name": "admin-migrations",
+        "route": "/dashboard/admin-migrations",
+        "file": "/app/dashboard/admin-migrations/page.js"
+      },
+      {
+        "name": "dispositifs",
+        "route": "/dashboard/dispositifs",
+        "file": "/app/dashboard/dispositifs/page.js"
+      },
+      {
+        "name": "documentation",
+        "route": "/dashboard/documentation",
+        "file": "/app/dashboard/documentation/page.js"
+      },
+      {
+        "name": "patients",
+        "route": "/dashboard/patients",
+        "file": "/app/dashboard/patients/page.js"
+      },
+      {
+        "name": "users",
+        "route": "/dashboard/users",
+        "file": "/app/dashboard/users/page.js"
+      }
+    ]
+  },
+  "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
+  "detectedAt": "2025-12-15 08:35:02",
   "api": {
-    "authEndpoint": "/api.php/auth/login",
+    "baseUrl": "",
     "endpoints": [
       "/bootstrap/env_loader.php",
       "/bootstrap/database.php",
@@ -68,10 +118,11 @@
       "/migrations/history",
       "/api/openapi.json"
     ],
-    "baseUrl": ""
+    "authEndpoint": "/api.php/auth/login"
   },
-  "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
   "database": {
+    "schemaFile": "/sql/schema.sql",
+    "type": "PostgreSQL",
     "expectedTables": [
       "roles",
       "permissions",
@@ -90,62 +141,11 @@
       "audit_logs",
       "device_commands",
       "usb_logs"
-    ],
-    "type": "PostgreSQL",
-    "schemaFile": "/sql/schema.sql"
-  },
-  "frontend": {
-    "routes": [
-      {
-        "file": "/app/page.js",
-        "route": "/",
-        "name": "C:\\"
-      },
-      {
-        "file": "/app/dashboard/page.js",
-        "route": "/dashboard",
-        "name": "dashboard"
-      },
-      {
-        "file": "/app/dashboard/admin-migrations/page.js",
-        "route": "/dashboard/admin-migrations",
-        "name": "admin-migrations"
-      },
-      {
-        "file": "/app/dashboard/dispositifs/page.js",
-        "route": "/dashboard/dispositifs",
-        "name": "dispositifs"
-      },
-      {
-        "file": "/app/dashboard/documentation/page.js",
-        "route": "/dashboard/documentation",
-        "name": "documentation"
-      },
-      {
-        "file": "/app/dashboard/patients/page.js",
-        "route": "/dashboard/patients",
-        "name": "patients"
-      },
-      {
-        "file": "/app/dashboard/users/page.js",
-        "route": "/dashboard/users",
-        "name": "users"
-      }
-    ],
-    "buildTool": "",
-    "framework": "Next.js"
+    ]
   },
   "hasDatabase": true,
-  "firmware": {
-    "version": "2.5",
-    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino",
-    "directory": "/hardware/firmware"
-  },
-  "github": {
-    "basePath": "/OTT",
-    "repo": "ymora/OTT",
-    "baseUrl": "https://ymora.github.io/OTT"
-  },
-  "projectType": "nextjs",
-  "hasFrontend": true
+  "hasFrontend": true,
+  "technologies": [
+    "PHP API"
+  ]
 }

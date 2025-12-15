@@ -833,12 +833,25 @@ function sendSMS($to, $message) {
  */
 function triggerAlertNotifications($pdo, $device_id, $alert_type, $severity, $message) {
     try {
-        // Récupérer les informations du dispositif et du patient
+        // Récupérer les informations du dispositif, du patient ET les préférences en une seule requête (optimisation N+1)
         $stmt = $pdo->prepare("
-            SELECT d.*, p.id as patient_id, p.first_name as patient_first_name, p.last_name as patient_last_name, 
-                   p.email as patient_email, p.phone as patient_phone
+            SELECT 
+                d.*, 
+                p.id as patient_id, 
+                p.first_name as patient_first_name, 
+                p.last_name as patient_last_name, 
+                p.email as patient_email, 
+                p.phone as patient_phone,
+                pn.email_enabled as patient_email_enabled,
+                pn.sms_enabled as patient_sms_enabled,
+                pn.push_enabled as patient_push_enabled,
+                pn.notify_battery_low,
+                pn.notify_device_offline,
+                pn.notify_abnormal_flow,
+                pn.notify_alert_critical
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id
+            LEFT JOIN patient_notifications_preferences pn ON p.id = pn.patient_id
             WHERE d.id = :device_id
         ");
         $stmt->execute(['device_id' => $device_id]);
@@ -854,17 +867,24 @@ function triggerAlertNotifications($pdo, $device_id, $alert_type, $severity, $me
         
         // Notifications pour le patient (si assigné)
         if ($device['patient_id']) {
-            // Récupérer les préférences du patient
-            $prefsStmt = $pdo->prepare("SELECT * FROM patient_notifications_preferences WHERE patient_id = :patient_id");
-            $prefsStmt->execute(['patient_id' => $device['patient_id']]);
-            $patientPrefs = $prefsStmt->fetch();
+            // Utiliser les préférences récupérées via JOIN (évite requête N+1)
+            $patientPrefs = [
+                'email_enabled' => $device['patient_email_enabled'] ?? false,
+                'sms_enabled' => $device['patient_sms_enabled'] ?? false,
+                'push_enabled' => $device['patient_push_enabled'] ?? false,
+                'notify_battery_low' => $device['notify_battery_low'] ?? false,
+                'notify_device_offline' => $device['notify_device_offline'] ?? false,
+                'notify_abnormal_flow' => $device['notify_abnormal_flow'] ?? false,
+                'notify_alert_critical' => $device['notify_alert_critical'] ?? false
+            ];
             
-            // Si pas de préférences, créer avec valeurs par défaut
-            if (!$patientPrefs) {
+            // Si pas de préférences (tous NULL), créer avec valeurs par défaut
+            if ($device['patient_email_enabled'] === null) {
                 $pdo->prepare("
                     INSERT INTO patient_notifications_preferences (patient_id, email_enabled, sms_enabled, push_enabled, notify_battery_low, notify_device_offline, notify_abnormal_flow, notify_alert_critical)
                     VALUES (:patient_id, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
                 ")->execute(['patient_id' => $device['patient_id']]);
+                // Mettre à jour les préférences locales pour la suite
                 $patientPrefs = ['email_enabled' => false, 'sms_enabled' => false, 'push_enabled' => false, 'notify_battery_low' => false, 'notify_device_offline' => false, 'notify_abnormal_flow' => false, 'notify_alert_critical' => false];
             }
             

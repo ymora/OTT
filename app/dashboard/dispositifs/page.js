@@ -140,32 +140,22 @@ export default function OutilsPage() {
     logger.debug('[OUTILS] Onglet:', activeTab)
   }, [activeTab])
 
-  if (!canAccess) {
-    return (
-      <div className="p-6">
-        <div className="alert alert-warning">
-          Accès refusé. Seuls les administrateurs et techniciens peuvent accéder aux outils.
-        </div>
-      </div>
-    )
-  }
-
-  // Charger les dispositifs pour le tableau
+  // Charger les dispositifs pour le tableau (toujours appeler les hooks, même si canAccess est false)
   const { data: devicesData, loading: devicesLoading, error: devicesError, refetch: refetchDevices } = useApiData(
     ['/api.php/devices'],
-    { requiresAuth: true }
+    { requiresAuth: true, skip: !canAccess, autoLoad: canAccess } // Skip si pas d'accès
   )
   
   // Charger les patients pour le modal d'assignation
   const { data: patientsData } = useApiData(
     ['/api.php/patients'],
-    { requiresAuth: true }
+    { requiresAuth: true, skip: !canAccess, autoLoad: canAccess } // Skip si pas d'accès
   )
   
   const allPatients = patientsData?.patients?.patients || []
   const allDevices = devicesData?.devices?.devices || []
   
-  // États pour les modals
+  // États pour les modals (toujours déclarer, même si canAccess est false)
   const [showDeviceModal, setShowDeviceModal] = useState(false)
   const [showFlashModal, setShowFlashModal] = useState(false)
   const [showMeasurementsModal, setShowMeasurementsModal] = useState(false)
@@ -175,7 +165,7 @@ export default function OutilsPage() {
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [deleting, setDeleting] = useState(null)
   
-  // Utiliser le hook unifié pour l'archivage
+  // Utiliser le hook unifié pour l'archivage (toujours appeler, même si canAccess est false)
   const { archive: handleArchive, archiving } = useEntityArchive({
     fetchWithAuth,
     API_URL,

@@ -450,6 +450,7 @@ function MarkdownViewer({ fileName }) {
         // Mettre à jour le timestamp de dernière régénération
         lastRegenerationTimeRef.current = Date.now()
         // Attendre un peu pour que le fichier soit écrit
+        // Note: setTimeout dans Promise.resolve n'a pas besoin de cleanup car la Promise se résout immédiatement
         await new Promise(resolve => setTimeout(resolve, 1000))
         
         // Recharger le contenu après régénération

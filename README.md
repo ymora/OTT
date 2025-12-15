@@ -77,17 +77,17 @@ git push origin main
                │ HTTPS (POST JSON mesures/logs, OTA GET)
                ▼
  ┌────────────────────────────┐        ┌────────────────────────────┐
- │  API PHP (Render Docker)   │ <────> │  PostgreSQL (Render DB)    │
+ │  API PHP (Render.com)      │ <────> │  PostgreSQL (Render DB)    │
  │  - auth JWT / rôles        │        │  - tables devices, alerts │
  │  - endpoints REST / OTA    │        │  - audit + notifications  │
  └─────────────┬──────────────┘        └─────────────┬──────────────┘
                │ REST (JSON)                         │ via PDO
                ▼                                     │
  ┌────────────────────────────┐                      │
- │  Dashboard Next.js (PWA)   │◀─────────────────────┘
- │  - hébergé sur GitHub Pages│
- │  - AuthContext → JWT       │
- │  - compos Santés, maps…    │
+ │  Dashboard Next.js (PWA)     │◀─────────────────────┘
+ │  - hébergé sur GitHub Pages  │
+ │  - AuthContext → JWT        │
+ │  - composants Santés, maps…  │
  └────────────────────────────┘
 ```
 
@@ -171,11 +171,11 @@ NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
 NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 ```
 
-**Note :** En développement local, utilisez `http://localhost:8000` pour pointer directement vers l'API PHP locale (Docker ou serveur PHP). Le proxy Next.js (`http://localhost:3000`) est utilisé automatiquement si `NEXT_PUBLIC_API_URL` n'est pas défini.
+**Note :** En développement local, utilisez `http://localhost:8000` pour pointer directement vers l'API PHP locale (serveur PHP). Le proxy Next.js (`http://localhost:3000`) est utilisé automatiquement si `NEXT_PUBLIC_API_URL` n'est pas défini.
 
 **Note :** `NEXT_PUBLIC_REQUIRE_AUTH` n'existe plus - l'authentification est toujours requise.
 
-### Backend – variables Render (Docker service)
+### Backend – variables Render (Service web)
 
 | Variable | Rôle | Exemple |
 |----------|------|---------|
@@ -201,7 +201,7 @@ NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 
 ### ✅ Configuration Simple : Utiliser Render pour Tout
 
-**Vous n'avez PAS besoin de Docker !** Utilisez Render pour tout (développement ET production).
+**Déploiement sur Render.com** : L'API backend est déployée automatiquement sur Render via `render.yaml`. Le frontend est déployé sur GitHub Pages via GitHub Actions.
 
 #### 1. Appliquer la migration sur Render (une seule fois)
 
@@ -225,29 +225,29 @@ DATABASE_URL="postgresql://..." ./scripts/db/db_migrate.sh
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
 ```
 
-**Option B : Utiliser l'API locale Docker (développement)**
+**Option B : Utiliser l'API locale (développement)**
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-**C'est tout !** Le frontend local utilisera l'API configurée (Render ou Docker local).
+**C'est tout !** Le frontend local utilisera l'API configurée (Render ou serveur PHP local).
 
-### Base Docker (Optionnel - Seulement si pas d'internet)
+### Base de données locale (Optionnel - Seulement si pas d'internet)
 
-**Docker n'est PAS nécessaire** si vous avez internet. Utilisez-le seulement si :
+**Une base de données locale n'est PAS nécessaire** si vous avez internet. Utilisez-la seulement si :
 - Vous développez sans connexion internet
 - Vous voulez tester des modifications sans affecter Render
 
-Si vous utilisez Docker, vous aurez 2 bases séparées (Docker local ≠ Render production).
+Si vous utilisez une base locale PostgreSQL, vous aurez 2 bases séparées (locale ≠ Render production).
 
-#### Commandes utiles
+#### Commandes utiles (si base locale PostgreSQL)
 
-- Voir les logs : `docker compose logs -f db`
-- Accéder à la base : `docker compose exec db psql -U postgres -d ott_data`
-- Réinitialiser complètement : `docker compose down -v && docker compose up -d db`
-- Visualiser la base (pgweb) : `docker compose up -d pgweb` puis http://localhost:8081
+- Accéder à la base : `psql -U postgres -d ott_data`
+- Réinitialiser complètement : `.\scripts\db\reset_database.ps1 -DATABASE_URL "postgresql://..." -Confirm`
+- Sauvegarder : `.\scripts\db\backup_data.ps1 -DATABASE_URL "postgresql://..."`
+- Restaurer : `.\scripts\db\restore_data.ps1 -DATABASE_URL "postgresql://..." -BackupFile "backups/backup.json"`
 
-**⚠️ Important :** Les scripts Docker préservent vos données. La migration est idempotente (peut être réexécutée sans erreur).
+**⚠️ Important :** Les scripts de gestion DB préservent vos données. La migration est idempotente (peut être réexécutée sans erreur).
 
 > ℹ️ Tous les scripts contenus dans `sql/` sont **100 % anonymisés** (ICCID simulés, e-mails génériques, mots de passe uniquement sous forme de hash bcrypt). Aucun secret de production n’est versionné.
 
@@ -300,7 +300,7 @@ psql $DATABASE_URL -f sql/migration_roles_v3.2.sql
   - `firmwares.php` - Gestion firmwares, compilation, OTA
   - `notifications.php` - Notifications et préférences
 - `sql/schema.sql` - Base PostgreSQL (14 tables, données anonymisées)
-- `Dockerfile` - Container pour Render
+- `Dockerfile` - Configuration build pour Render (optionnel, build via render.yaml)
 
 ### Données & Scripts
 - `sql/` - Scripts SQL (schéma, seeds, migrations)
@@ -400,7 +400,7 @@ grep -r "function " api/ | sort | uniq -d
 
 6. **Installation arduino-cli (requis pour compilation firmware)**  
    - **⚠️ IMPORTANT** : La compilation des firmwares est toujours réelle, jamais simulée. Si `arduino-cli` n'est pas disponible, la compilation est refusée avec une erreur explicite.
-   - **Docker** : `arduino-cli` est automatiquement installé dans le `Dockerfile` lors du build.
+   - **Render** : `arduino-cli` est automatiquement installé via `scripts/hardware/install_arduino_cli.sh` lors du build sur Render.
    - **Render** : Le script `scripts/hardware/install_arduino_cli.sh` est exécuté automatiquement via `render.yaml` lors du déploiement.
    - **Persistent Disk sur Render (RECOMMANDÉ)** : Pour éviter de retélécharger le core ESP32 (~568MB) à chaque déploiement, configurez un Persistent Disk dans le dashboard Render :
      - Service ott-api → Disks → Add Disk
@@ -584,7 +584,7 @@ grep -r "function " api/ | sort | uniq -d
 1. **Backend Render**
    - `DB_HOST/PORT/NAME/USER/PASS` renseignés avec les valeurs Render/Postgres.
    - `JWT_SECRET` renseigné, `AUTH_DISABLED=false`.
-   - Dernier Docker image déployé (`Manual Deploy` si doute).
+   - Dernier déploiement Render vérifié (dashboard Render.com).
 2. **Base de données**
    - `psql $DATABASE_URL -c "SELECT COUNT(*) FROM measurements;"` retourne > 0.
    - `psql ... -c "SELECT * FROM users_with_roles;"` liste les comptes attendus.
