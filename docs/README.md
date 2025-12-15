@@ -1,7 +1,7 @@
 # 📚 Documentation du Projet OTT
 
 **Date de création** : Décembre 2024  
-**Dernière mise à jour** : 2025-12-14
+**Dernière mise à jour** : 2025-12-15
 
 ---
 
@@ -18,12 +18,10 @@ docs/
 │   └── COLLABORATION.md            # Guide de collaboration Git
 ├── scripts/                        # Documentation scripts
 │   └── SCRIPTS.md                  # Documentation des scripts
-├── audit/                          # Documentation audit
-│   └── CONSOLIDATION.md            # Historique de consolidation
+├── SCHEMA_LOGIQUE_APN.md           # Schéma logique APN
 └── archive/                        # Documentation historique
-    ├── STATUS_FIRMWARE_FINAL.md
-    ├── ANALYSE_COHERENCE_SYSTEME.md
-    └── RESUME_ACTIONS_EFFECTUEES.md
+    ├── CONFIGURATION_GITHUB_FACILE.html
+    └── GUIDE_VISUEL_PROTECTION_BRANCHE.html
 ```
 
 ---
@@ -54,25 +52,23 @@ Documentation des scripts disponibles :
 
 ---
 
-## 🔍 Documentation Audit
+## 📐 Documentation Technique
 
-### 📋 Consolidation
-**Fichier** : `audit/CONSOLIDATION.md`
+### 🔄 Schéma Logique APN
+**Fichier** : `SCHEMA_LOGIQUE_APN.md`
 
-Historique complet de la consolidation du système d'audit :
-- Structure finale
-- Évolution du système
-- Fonctionnalités disponibles
-- Historique des consolidations
+Schéma de la logique APN du firmware OTT :
+- Vue d'ensemble de la hiérarchie de décision
+- Diagramme Mermaid de la logique APN
+- Explications détaillées
 
 ---
 
 ## 📦 Documentation Historique
 
 Les fichiers dans `archive/` sont conservés pour référence historique :
-- `STATUS_FIRMWARE_FINAL.md` - Statut firmware final
-- `ANALYSE_COHERENCE_SYSTEME.md` - Analyse de cohérence système
-- `RESUME_ACTIONS_EFFECTUEES.md` - Résumé des actions effectuées
+- `CONFIGURATION_GITHUB_FACILE.html` - Guide visuel de configuration GitHub
+- `GUIDE_VISUEL_PROTECTION_BRANCHE.html` - Guide visuel de protection de branche
 
 ---
 

@@ -628,8 +628,75 @@ export default function DebugTab() {
       return true
     })
     
-    return filteredLogs
+    // Limiter à 300 logs affichés pour éviter le blocage de l'interface
+    return filteredLogs.slice(-300)
   }, [usbStreamLogs, remoteLogs, isConnected, shouldUseRemoteLogs, usbStreamStatus])
+  
+  // Mémoriser les logs formatés pour éviter de refaire le traitement à chaque render
+  const formattedLogs = useMemo(() => {
+    return allLogs.map((log) => {
+      const isDashboard = log.source === 'dashboard'
+      const isRemote = log.isRemote
+      
+      // Essayer de formater le JSON si c'est un USB stream
+      const formattedJson = formatJsonLog(log.line)
+      let displayLine = formattedJson || log.line
+      
+      // Extraire ou déterminer la provenance entre crochets
+      let provenance = null
+      let cleanLine = displayLine
+      
+      // Chercher si une provenance existe déjà dans le log
+      const provenanceMatch = displayLine.match(/^(\[[^\]]+\])/)
+      if (provenanceMatch) {
+        provenance = provenanceMatch[1]
+        cleanLine = displayLine.replace(/^\[[^\]]+\]\s*/, '')
+      } else {
+        // Si pas de provenance, en ajouter une selon le contexte
+        if (isDashboard) {
+          // Logs du dashboard : déterminer le type
+          if (displayLine.includes('📤') || displayLine.includes('ENVOI') || displayLine.includes('COMMANDE')) {
+            provenance = '[CMD]'
+          } else if (displayLine.includes('✅') || displayLine.includes('SUCCESS') || displayLine.includes('RÉUSSI')) {
+            provenance = '[OK]'
+          } else if (displayLine.includes('❌') || displayLine.includes('ERROR') || displayLine.includes('ÉCHEC')) {
+            provenance = '[ERR]'
+          } else if (displayLine.includes('⚠️') || displayLine.includes('WARN') || displayLine.includes('ATTENTION')) {
+            provenance = '[WARN]'
+          } else {
+            provenance = '[DASHBOARD]'
+          }
+        } else {
+          // Logs du dispositif : essayer de détecter le type
+          if (displayLine.includes('MODEM') || displayLine.includes('SIM') || displayLine.includes('APN') || displayLine.includes('RSSI')) {
+            provenance = '[MODEM]'
+          } else if (displayLine.includes('SENSOR') || displayLine.includes('AIRFLOW') || displayLine.includes('FLOW') || displayLine.includes('BATTERY')) {
+            provenance = '[SENSOR]'
+          } else if (displayLine.includes('GPS') || displayLine.includes('LATITUDE') || displayLine.includes('LONGITUDE')) {
+            provenance = '[GPS]'
+          } else if (displayLine.includes('CFG') || displayLine.includes('CONFIG')) {
+            provenance = '[CFG]'
+          } else if (displayLine.includes('USB') || displayLine.includes('STREAM')) {
+            provenance = '[USB]'
+          } else {
+            provenance = '[DEVICE]'
+          }
+        }
+      }
+      
+      const category = analyzeLogCategory(displayLine)
+      const colorClass = getLogColorClass(category, isDashboard)
+      
+      return {
+        ...log,
+        isDashboard,
+        isRemote,
+        provenance,
+        cleanLine,
+        colorClass
+      }
+    })
+  }, [allLogs, formatJsonLog, analyzeLogCategory, getLogColorClass])
   
   // STREAMING AUTOMATIQUE en temps réel pour les admins
   useEffect(() => {
@@ -894,6 +961,13 @@ export default function DebugTab() {
   const [showDeviceModal, setShowDeviceModal] = useState(false)
   const [editingDevice, setEditingDevice] = useState(null) // null = création, objet = modification
   
+  // Debug: logger les changements d'état du modal
+  useEffect(() => {
+    if (showDeviceModal) {
+      logger.debug('[UsbStreamingTab] Modal dispositif ouvert, editingDevice:', editingDevice)
+    }
+  }, [showDeviceModal, editingDevice])
+  
   const [availablePorts, setAvailablePorts] = useState([])
   const [selectedPortId, setSelectedPortId] = useState('')
   const [loadingPorts, setLoadingPorts] = useState(false)
@@ -1056,7 +1130,9 @@ export default function DebugTab() {
                         (!normalizedIccid && !normalizedSerial && (!usbDevice.isVirtual || usbDevice.device_name === 'USB-En attente...'))
     
     if (shouldUpdate) {
-      logger.log('📝 [SYNC] Création/mise à jour dispositif virtuel (enregistrement manuel requis)')
+      // Note: L'enregistrement en base se fera automatiquement via OTA quand le dispositif enverra sa première mesure
+      // Le dispositif virtuel est juste une représentation locale pour l'affichage
+      logger.log('📝 [SYNC] Création/mise à jour dispositif virtuel (enregistrement automatique via OTA à la première mesure)')
       const deviceName = usbDeviceInfo?.device_name || 
                        (simIccid ? `USB-${simIccid.slice(-4)}` : 
                         deviceSerial ? `USB-${deviceSerial.slice(-4)}` : 
@@ -2295,12 +2371,16 @@ export default function DebugTab() {
                       // Dispositifs actifs : toutes les actions disponibles
                       <>
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            logger.debug('[UsbStreamingTab] Ouverture modal dispositif:', device)
                             setEditingDevice(device)
                             setShowDeviceModal(true)
                           }}
                           className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                           title="Modifier le dispositif (données et configuration)"
+                          type="button"
                         >
                           <span className="text-lg">✏️</span>
                         </button>
@@ -2580,78 +2660,18 @@ export default function DebugTab() {
               </div>
             ) : (
               <div className="space-y-1 font-mono text-sm tracking-tight">
-                {allLogs.map((log) => {
-                  const isDashboard = log.source === 'dashboard'
-                  const isRemote = log.isRemote
-                  
-                  // Essayer de formater le JSON si c'est un USB stream
-                  const formattedJson = formatJsonLog(log.line)
-                  let displayLine = formattedJson || log.line
-                  
-                  // Filtrer les logs trop verbeux (tableaux ASCII, etc.)
-                  if (displayLine.includes('─') && displayLine.includes('│') && displayLine.includes('┐')) {
-                    // C'est un tableau ASCII, on peut le simplifier ou le sauter
-                    // Pour l'instant, on le garde mais on pourrait le filtrer
-                  }
-                  
-                  // Extraire ou déterminer la provenance entre crochets
-                  let provenance = null
-                  let cleanLine = displayLine
-                  
-                  // Chercher si une provenance existe déjà dans le log
-                  const provenanceMatch = displayLine.match(/^(\[[^\]]+\])/)
-                  if (provenanceMatch) {
-                    provenance = provenanceMatch[1]
-                    cleanLine = displayLine.replace(/^\[[^\]]+\]\s*/, '')
-                  } else {
-                    // Si pas de provenance, en ajouter une selon le contexte
-                    if (isDashboard) {
-                      // Logs du dashboard : déterminer le type
-                      if (displayLine.includes('📤') || displayLine.includes('ENVOI') || displayLine.includes('COMMANDE')) {
-                        provenance = '[CMD]'
-                      } else if (displayLine.includes('✅') || displayLine.includes('SUCCESS') || displayLine.includes('RÉUSSI')) {
-                        provenance = '[OK]'
-                      } else if (displayLine.includes('❌') || displayLine.includes('ERROR') || displayLine.includes('ÉCHEC')) {
-                        provenance = '[ERR]'
-                      } else if (displayLine.includes('⚠️') || displayLine.includes('WARN') || displayLine.includes('ATTENTION')) {
-                        provenance = '[WARN]'
-                      } else {
-                        provenance = '[DASHBOARD]'
-                      }
-                    } else {
-                      // Logs du dispositif : essayer de détecter le type
-                      if (displayLine.includes('MODEM') || displayLine.includes('SIM') || displayLine.includes('APN') || displayLine.includes('RSSI')) {
-                        provenance = '[MODEM]'
-                      } else if (displayLine.includes('SENSOR') || displayLine.includes('AIRFLOW') || displayLine.includes('FLOW') || displayLine.includes('BATTERY')) {
-                        provenance = '[SENSOR]'
-                      } else if (displayLine.includes('GPS') || displayLine.includes('LATITUDE') || displayLine.includes('LONGITUDE')) {
-                        provenance = '[GPS]'
-                      } else if (displayLine.includes('CFG') || displayLine.includes('CONFIG')) {
-                        provenance = '[CFG]'
-                      } else if (displayLine.includes('USB') || displayLine.includes('STREAM')) {
-                        provenance = '[USB]'
-                      } else {
-                        provenance = '[DEVICE]'
-                      }
-                    }
-                  }
-                  
-                  const category = analyzeLogCategory(displayLine)
-                  const colorClass = getLogColorClass(category, isDashboard)
-                  
-                  return (
+                {formattedLogs.map((log) => (
                   <div key={log.id} className="whitespace-pre-wrap">
                     <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
-                    {isRemote && <span className="text-purple-400 text-xs mr-2">📡</span>}
+                    {log.isRemote && <span className="text-purple-400 text-xs mr-2">📡</span>}
                     <span className="text-gray-400 dark:text-gray-500 font-semibold mr-2">
-                      {provenance}
+                      {log.provenance}
                     </span>
-                    <span className={colorClass}>
-                      {cleanLine}
+                    <span className={log.colorClass}>
+                      {log.cleanLine}
                     </span>
                   </div>
-                  )
-                })}
+                ))}
               </div>
             )}
           </div>

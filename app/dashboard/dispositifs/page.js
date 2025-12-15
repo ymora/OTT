@@ -90,11 +90,12 @@ export default function OutilsPage() {
           d.device_name === identifier
         )
         
-        // ⚠️ AUTO-CRÉATION DÉSACTIVÉE: Ne pas créer automatiquement pour éviter les conflits
-        // Le dispositif apparaîtra dans le tableau via usbDevice mais ne sera pas enregistré en base
-        // L'utilisateur devra l'enregistrer manuellement s'il le souhaite
+        // ⚠️ AUTO-CRÉATION DÉSACTIVÉE via USB: Ne pas créer automatiquement depuis le frontend pour éviter les conflits
+        // L'enregistrement en base se fera automatiquement via OTA quand le dispositif enverra sa première mesure
+        // (voir api/handlers/devices/measurements.php ligne 69 - auto-création lors de POST /devices/measurements)
+        // Le dispositif apparaîtra dans le tableau via usbDevice (virtuel) jusqu'à ce qu'il soit enregistré via OTA
         if (!device) {
-          // Ne pas créer automatiquement - le dispositif apparaîtra via usbDevice
+          // Ne pas créer automatiquement depuis le frontend - l'enregistrement se fera via OTA
           // Ne pas logger pour éviter le spam, mais ne pas bloquer non plus
           return
         }
@@ -275,8 +276,6 @@ export default function OutilsPage() {
             closeDeviceModal()
             refetchDevices()
           }}
-          fetchWithAuth={fetchWithAuth}
-          API_URL={API_URL}
           patients={allPatients}
           allDevices={allDevices}
         />

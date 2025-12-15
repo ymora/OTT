@@ -1,0 +1,29 @@
+{
+  "PartialResults": {
+    "Phase1": {
+      "Warnings": [],
+      "CorrectionPlans": [],
+      "Recommendations": [],
+      "Scores": {
+        "Architecture": 8
+      },
+      "Issues": [
+        "Documentation: 15 fichiers MD a la racine"
+      ]
+    },
+    "Phase0": {
+      "Warnings": [],
+      "CorrectionPlans": [],
+      "Recommendations": [],
+      "Scores": {
+        "Architecture": 8
+      },
+      "Issues": []
+    }
+  },
+  "CompletedPhases": [
+    0,
+    1
+  ],
+  "Timestamp": "2025-12-15 07:42:18"
+}

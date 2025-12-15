@@ -61,22 +61,27 @@
 #define SENSOR_PIN 33
 #define BATTERY_ADC_PIN 35
 
-static constexpr uint32_t DEFAULT_SLEEP_MINUTES = 1440;  // 24 heures (1 envoi par jour pour limiter les coûts réseau)
+// VALEURS PAR DÉFAUT RETIRÉES - Les valeurs par défaut sont maintenant gérées par le frontend
+// et envoyées via USB lors de la configuration UPDATE_CONFIG
+// Ces constantes sont conservées uniquement comme fallback de sécurité si aucune config n'est reçue
+static constexpr uint32_t DEFAULT_SLEEP_MINUTES = 1440;  // 24 heures (fallback uniquement - sera écrasé par config USB)
 static constexpr uint8_t MAX_COMMANDS = 4;
-static constexpr uint32_t MODEM_BOOT_TIMEOUT_DEFAULT_MS = 20000;       // Augmenté de 15s à 20s
-static constexpr uint32_t SIM_READY_TIMEOUT_DEFAULT_MS = 45000;        // Augmenté de 30s à 45s
-static constexpr uint32_t NETWORK_ATTACH_TIMEOUT_DEFAULT_MS = 120000;  // Augmenté de 60s à 120s
-static constexpr uint8_t MODEM_MAX_REBOOTS_DEFAULT = 3;
-static constexpr uint32_t WATCHDOG_TIMEOUT_DEFAULT_SEC = 30;
+static constexpr uint32_t MODEM_BOOT_TIMEOUT_DEFAULT_MS = 20000;       // Fallback uniquement
+static constexpr uint32_t SIM_READY_TIMEOUT_DEFAULT_MS = 45000;        // Fallback uniquement
+static constexpr uint32_t NETWORK_ATTACH_TIMEOUT_DEFAULT_MS = 120000;  // Fallback uniquement
+static constexpr uint8_t MODEM_MAX_REBOOTS_DEFAULT = 3;  // Fallback uniquement
+static constexpr uint32_t WATCHDOG_TIMEOUT_DEFAULT_SEC = 30;  // Fallback uniquement
 static constexpr uint8_t MIN_WATCHDOG_TIMEOUT_SEC = 5;
 static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
 
 // --- Paramètres modifiables localement (puis écrasés via UPDATE_CONFIG) ---
+// VALEURS PAR DÉFAUT RETIRÉES - Les valeurs par défaut sont maintenant gérées par le frontend
+// et envoyées via USB lors de la configuration
 #ifndef OTT_DEFAULT_SIM_PIN
-#define OTT_DEFAULT_SIM_PIN "1234"
+#define OTT_DEFAULT_SIM_PIN ""  // Vide - sera configuré par le frontend
 #endif
 #ifndef OTT_DEFAULT_APN
-#define OTT_DEFAULT_APN "free"
+#define OTT_DEFAULT_APN ""  // Vide - sera configuré par le frontend
 #endif
 #ifndef OTT_DEFAULT_ICCID
 #define OTT_DEFAULT_ICCID "89330123456789012345"
@@ -110,8 +115,8 @@ static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
 // Pas de JWT requis pour l'envoi de mesures (endpoint /devices/measurements).
 // Sécurité : L'ICCID est un identifiant unique de 20 chiffres (ex: 89331508210512788370)
 //            difficilement falsifiable, cryptographiquement sécurisé par l'opérateur SIM.
-String SIM_PIN = OTT_DEFAULT_SIM_PIN;
-String NETWORK_APN = OTT_DEFAULT_APN;
+String SIM_PIN = OTT_DEFAULT_SIM_PIN;  // Vide par défaut - sera configuré par frontend via USB
+String NETWORK_APN = "";  // Vide par défaut - sera configuré par frontend via USB (plus de valeur par défaut "free")
 String DEVICE_ICCID = OTT_DEFAULT_ICCID;
 String DEVICE_SERIAL = OTT_DEFAULT_SERIAL;
 String DETECTED_OPERATOR = "";  // Opérateur détecté (MCC+MNC) - sauvegardé pour réutilisation
@@ -176,18 +181,20 @@ struct PendingLog {
 };
 std::vector<PendingLog> offlineLogs;
 
-static uint32_t modemBootTimeoutMs = MODEM_BOOT_TIMEOUT_DEFAULT_MS;
-static uint32_t simReadyTimeoutMs = SIM_READY_TIMEOUT_DEFAULT_MS;
-static uint32_t networkAttachTimeoutMs = NETWORK_ATTACH_TIMEOUT_DEFAULT_MS;
-static uint8_t modemMaxReboots = MODEM_MAX_REBOOTS_DEFAULT;
-static uint32_t configuredSleepMinutes = DEFAULT_SLEEP_MINUTES;
-static uint8_t sendEveryNWakeups = 1;  // Envoyer une mesure tous les N wakeups (1 = à chaque wakeup)
+// VALEURS PAR DÉFAUT RETIRÉES - Les valeurs par défaut sont maintenant gérées par le frontend
+// Ces variables sont initialisées à 0/vide et doivent être configurées via USB
+static uint32_t modemBootTimeoutMs = 0;  // 0 = non configuré - sera configuré par frontend via USB
+static uint32_t simReadyTimeoutMs = 0;  // 0 = non configuré - sera configuré par frontend via USB
+static uint32_t networkAttachTimeoutMs = 0;  // 0 = non configuré - sera configuré par frontend via USB
+static uint8_t modemMaxReboots = 0;  // 0 = non configuré - sera configuré par frontend via USB
+static uint32_t configuredSleepMinutes = 0;  // 0 = non configuré - sera configuré par frontend via USB
+static uint8_t sendEveryNWakeups = 0;  // 0 = non configuré - sera configuré par frontend via USB
 // Utiliser RTC_DATA_ATTR pour persister le compteur à travers les deep sleeps
 RTC_DATA_ATTR static uint8_t wakeupCounter = 0;  // Compteur de wakeups depuis le dernier envoi (persiste après deep sleep)
-static uint16_t airflowPasses = 2;
-static uint16_t airflowSamplesPerPass = 10;
-static uint16_t airflowSampleDelayMs = 5;
-static uint32_t watchdogTimeoutSeconds = WATCHDOG_TIMEOUT_DEFAULT_SEC;
+static uint16_t airflowPasses = 0;  // 0 = non configuré - sera configuré par frontend via USB
+static uint16_t airflowSamplesPerPass = 0;  // 0 = non configuré - sera configuré par frontend via USB
+static uint16_t airflowSampleDelayMs = 0;  // 0 = non configuré - sera configuré par frontend via USB
+static uint32_t watchdogTimeoutSeconds = 0;  // 0 = non configuré - sera configuré par frontend via USB
 static bool gpsEnabled = false;     // GPS DÉSACTIVÉ par défaut (peut bloquer modem/consommer batterie)
 static bool roamingEnabled = true;  // Itinérance ACTIVÉE par défaut (permet utilisation réseau autre opérateur)
 
@@ -1042,9 +1049,9 @@ bool startModem() {
     } else if (recommendedApn.length() > 0) {
       // APN ne correspond pas - utiliser l'APN recommandé pour cet opérateur
       // MAIS seulement si l'APN actuel est la valeur par défaut ET n'a PAS été chargé depuis NVS
-      // Si l'APN vient de NVS, il a été configuré (même si c'est la valeur par défaut) → le conserver
-      if (NETWORK_APN == String(F(OTT_DEFAULT_APN)) && !apnLoadedFromNVS) {
-        // L'APN est encore à la valeur par défaut ET n'a pas été sauvegardé → utiliser l'APN recommandé
+      // Si l'APN vient de NVS, il a été configuré → le conserver
+      if (NETWORK_APN.length() == 0 && !apnLoadedFromNVS) {
+        // L'APN est vide ET n'a pas été sauvegardé → utiliser l'APN recommandé
         apnToUse = recommendedApn;
         Serial.printf("[MODEM] 💾 Opérateur sauvegardé: %s → APN: %s (remplace défaut non sauvegardé: %s)\n",
                       operatorName.c_str(), recommendedApn.c_str(), NETWORK_APN.c_str());
@@ -1232,12 +1239,15 @@ bool startModem() {
     }
   }
 
-  // CRITIQUE: Vérifier que apnToUse n'est pas vide (protection contre corruption NVS)
+  // CRITIQUE: Vérifier que apnToUse n'est pas vide
+  // Si vide, la configuration doit être envoyée par le frontend via USB
   if (apnToUse.length() == 0) {
-    Serial.println(F("[MODEM] ⚠️ APN vide détecté → Utilisation valeur par défaut"));
-    apnToUse = String(F(OTT_DEFAULT_APN));
-    NETWORK_APN = apnToUse;
-    apnLoadedFromNVS = false;  // Réinitialiser car APN invalide
+    Serial.println(F("[MODEM] ⚠️ APN vide détecté → Attente configuration depuis frontend via USB"));
+    Serial.println(F("[MODEM] 💡 La configuration complète avec valeurs par défaut doit être envoyée via UPDATE_CONFIG"));
+    // Ne pas utiliser de valeur par défaut - attendre la configuration depuis le frontend
+    apnToUse = "";
+    NETWORK_APN = "";
+    apnLoadedFromNVS = false;
   }
 
   // Configurer l'APN détecté/recommandé (ou configuré par défaut si non détecté)
@@ -1245,7 +1255,8 @@ bool startModem() {
   Serial.printf("[MODEM] 📡 Configuration APN: %s (type: IP pour internet)\n", apnToUse.c_str());
   if (!setApn(apnToUse)) {
     Serial.printf("[MODEM] ⚠️ Échec configuration APN \"%s\" → Retry avec APN par défaut\n", apnToUse.c_str());
-    String fallbackApn = String(F(OTT_DEFAULT_APN));
+    // Plus de valeur par défaut - la configuration doit venir du frontend
+    String fallbackApn = "";  // Vide - sera configuré par frontend via USB
     if (setApn(fallbackApn)) {
       apnToUse = fallbackApn;
       NETWORK_APN = fallbackApn;
@@ -3520,10 +3531,11 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes) {
     bool oldRoaming = roamingEnabled;
     uint8_t oldSendEvery = sendEveryNWakeups;
 
-    // Réinitialiser aux valeurs par défaut (sauf Serial et ICCID qui doivent être conservés)
-    NETWORK_APN = String(F(OTT_DEFAULT_APN));
-    SIM_PIN = String(F(OTT_DEFAULT_SIM_PIN));
-    configuredSleepMinutes = DEFAULT_SLEEP_MINUTES;
+    // Réinitialiser (vider les valeurs - seront reconfigurées par frontend via USB)
+    // Plus de valeurs par défaut - la configuration complète doit être envoyée par le frontend
+    NETWORK_APN = "";  // Vide - sera reconfiguré par frontend
+    SIM_PIN = "";  // Vide - sera reconfiguré par frontend
+    configuredSleepMinutes = 0;  // 0 = non configuré - sera reconfiguré par frontend
     gpsEnabled = false;
     roamingEnabled = true;  // Activé par défaut
     sendEveryNWakeups = 1;
@@ -3835,7 +3847,7 @@ void loadConfig() {
       return;
     }
   }
-  // Charger l'APN depuis NVS (ou utiliser valeur par défaut si absent)
+  // Charger l'APN depuis NVS (valeur par défaut vide - sera configurée par frontend via USB)
   String savedApn = prefs.getString("apn", "");
   apnLoadedFromNVS = false;  // Réinitialiser le flag
   if (savedApn.length() > 0) {
@@ -3860,21 +3872,20 @@ void loadConfig() {
     }
     
     if (!isValid) {
-      Serial.printf("[CFG] ⚠️ APN NVS invalide/corrompu → Utilisation valeur par défaut\n");
-      NETWORK_APN = String(F(OTT_DEFAULT_APN));
+      Serial.printf("[CFG] ⚠️ APN NVS invalide/corrompu → Vide (sera configuré par frontend)\n");
+      NETWORK_APN = "";  // Vide - sera configuré par frontend via USB
       apnLoadedFromNVS = false;
       // Effacer la valeur corrompue pour éviter de la recharger au prochain boot
-      // Note: prefs reste ouvert pour continuer à charger les autres paramètres
       prefs.remove("apn");
     } else {
       NETWORK_APN = savedApn;
-      apnLoadedFromNVS = true;  // Marquer que l'APN vient de NVS (donc configuré, même si c'est la valeur par défaut)
+      apnLoadedFromNVS = true;  // Marquer que l'APN vient de NVS (donc configuré)
       Serial.printf("[CFG] 📥 APN chargé depuis NVS: \"%s\" (considéré comme configuré)\n", NETWORK_APN.c_str());
-      Serial.printf("[CFG] ⚠️  Note: Le flash du firmware ne supprime PAS le NVS\n");
-      Serial.printf("[CFG] 💡 Pour réinitialiser: utiliser RESET_CONFIG ou erase complet avant flash\n");
     }
   } else {
-    Serial.printf("[CFG] 📥 APN non trouvé en NVS → Utilisation valeur par défaut: \"%s\"\n", NETWORK_APN.c_str());
+    // APN vide par défaut - sera configuré par frontend via USB
+    NETWORK_APN = "";
+    Serial.printf("[CFG] 📥 APN non trouvé en NVS → Vide (sera configuré par frontend via USB)\n");
   }
   // Note: JWT retiré - authentification par ICCID uniquement
   DEVICE_ICCID = prefs.getString("iccid", DEVICE_ICCID);
@@ -3923,23 +3934,26 @@ void loadConfig() {
     DEVICE_SERIAL = OTT_DEFAULT_SERIAL;
     prefs.putString("serial", DEVICE_SERIAL);
   }
-  SIM_PIN = prefs.getString("sim_pin", SIM_PIN);
+  // SIM_PIN : Charger depuis NVS, mais valeur par défaut vide (sera configurée par frontend via USB)
+  SIM_PIN = prefs.getString("sim_pin", "");  // Vide par défaut - doit être configuré via USB
   CAL_OVERRIDE_A0 = prefs.getFloat("cal_a0", NAN);
   CAL_OVERRIDE_A1 = prefs.getFloat("cal_a1", NAN);
   CAL_OVERRIDE_A2 = prefs.getFloat("cal_a2", NAN);
-  configuredSleepMinutes = prefs.getUInt("sleep_min", configuredSleepMinutes);
-  sendEveryNWakeups = prefs.getUChar("send_n_wake", 1);  // Par défaut: 1 (envoi à chaque wakeup)
+  // Plus de valeurs par défaut - charger depuis NVS uniquement si présent, sinon 0/vide
+  configuredSleepMinutes = prefs.getUInt("sleep_min", 0);  // 0 = non configuré
+  sendEveryNWakeups = prefs.getUChar("send_n_wake", 0);  // 0 = non configuré
   wakeupCounter = 0;                                     // Réinitialiser le compteur au boot
-  airflowPasses = prefs.getUShort("flow_passes", airflowPasses);
-  airflowSamplesPerPass = prefs.getUShort("flow_samples", airflowSamplesPerPass);
-  airflowSampleDelayMs = prefs.getUShort("flow_delay", airflowSampleDelayMs);
-  gpsEnabled = prefs.getBool("gps_enabled", false);
-  roamingEnabled = prefs.getBool("roaming_enabled", true);  // Activé par défaut
-  watchdogTimeoutSeconds = prefs.getUInt("wdt_sec", watchdogTimeoutSeconds);
-  modemBootTimeoutMs = prefs.getUInt("mdm_boot_ms", modemBootTimeoutMs);
-  simReadyTimeoutMs = prefs.getUInt("sim_ready_ms", simReadyTimeoutMs);
-  networkAttachTimeoutMs = prefs.getUInt("net_attach_ms", networkAttachTimeoutMs);
-  modemMaxReboots = prefs.getUChar("mdm_reboots", modemMaxReboots);
+  airflowPasses = prefs.getUShort("flow_passes", 0);  // 0 = non configuré
+  airflowSamplesPerPass = prefs.getUShort("flow_samples", 0);  // 0 = non configuré
+  airflowSampleDelayMs = prefs.getUShort("flow_delay", 0);  // 0 = non configuré
+  gpsEnabled = prefs.getBool("gps_enabled", false);  // false par défaut (peut rester)
+  roamingEnabled = prefs.getBool("roaming_enabled", false);  // false par défaut (sera configuré par frontend)
+  // Plus de valeurs par défaut - charger depuis NVS uniquement si présent, sinon 0
+  watchdogTimeoutSeconds = prefs.getUInt("wdt_sec", 0);  // 0 = non configuré
+  modemBootTimeoutMs = prefs.getUInt("mdm_boot_ms", 0);  // 0 = non configuré
+  simReadyTimeoutMs = prefs.getUInt("sim_ready_ms", 0);  // 0 = non configuré
+  networkAttachTimeoutMs = prefs.getUInt("net_attach_ms", 0);  // 0 = non configuré
+  modemMaxReboots = prefs.getUChar("mdm_reboots", 0);  // 0 = non configuré
   otaPrimaryUrl = prefs.getString("ota_url", otaPrimaryUrl);
   otaFallbackUrl = prefs.getString("ota_fallback", otaFallbackUrl);
   otaExpectedMd5 = prefs.getString("ota_md5", otaExpectedMd5);

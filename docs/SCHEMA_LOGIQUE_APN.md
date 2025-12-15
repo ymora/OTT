@@ -241,3 +241,4 @@ sequenceDiagram
 - **Problème** : Le réseau refuse mais APN est manuel
 - **Solution** : Ne pas corriger automatiquement, seulement logger
 - ✅ **Corrigé**
+

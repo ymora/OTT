@@ -5,28 +5,24 @@
  
  const AuthContext = createContext()
  
-// URL de l'API - utiliser le proxy Next.js en local, Render directement en production
-// En local (port 3000), utiliser le proxy Next.js qui route vers l'API distante (évite CORS)
-// En production (en ligne), utiliser Render directement
-const getDefaultApiUrl = () => {
-  // Si on est en local (pas en production), utiliser le proxy Next.js
-  // Le proxy Next.js route /api.php/* vers l'API distante et gère CORS automatiquement
+// URL de l'API - Priorité: 1) variable d'environnement, 2) proxy Next.js si localhost, 3) défaut Render
+// Si NEXT_PUBLIC_API_URL est défini, l'utiliser directement (même en localhost)
+// Sinon, en localhost, utiliser le proxy Next.js qui route vers l'API distante (évite CORS)
+// En production, utiliser Render directement
+const API_URL = (() => {
+  // Priorité 1: Variable d'environnement (utilisée si définie, même en localhost)
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+  }
+  
+  // Priorité 2: En localhost, utiliser le proxy Next.js (si pas de variable d'environnement)
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     // Utiliser le proxy Next.js (même origine, pas de problème CORS)
     return window.location.origin // http://localhost:3000
   }
-  // Sinon, utiliser Render directement (production)
+  
+  // Priorité 3: Défaut production
   return 'https://ott-jbln.onrender.com'
-}
-
-// Priorité: 1) proxy Next.js si localhost, 2) variable d'environnement, 3) défaut Render
-const API_URL = (() => {
-  // En local, utiliser le proxy Next.js pour éviter les problèmes CORS
-  // En production, utiliser l'URL distante directement
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return window.location.origin
-  }
-  return (process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com')
 })().replace(/\/$/, '')
  const isAbsoluteUrl = url => /^https?:\/\//i.test(url)
  

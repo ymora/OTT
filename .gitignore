@@ -50,6 +50,8 @@ external/
 # Backup
 *.backup
 backup_*.sql
+backups/
+backup_*.json
 *.rej
 *.orig
 *.bak

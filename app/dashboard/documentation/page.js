@@ -170,6 +170,12 @@ export default function DocumentationPage() {
         title="Documentation OTT"
         allow="fullscreen"
         onLoad={() => {
+          // Nettoyer les timeouts précédents
+          if (timeoutRefs.current) {
+            timeoutRefs.current.forEach(timeout => clearTimeout(timeout))
+            timeoutRefs.current = []
+          }
+          
           // Envoyer le thème avec plusieurs tentatives pour s'assurer que le script est prêt
           const sendWithRetry = () => {
             sendThemeToIframe()

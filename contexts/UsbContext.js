@@ -82,21 +82,56 @@ export function UsbProvider({ children }) {
       }
     }
   }, [])
+  
+  // Nettoyer le timeout de logs au démontage
+  useEffect(() => {
+    return () => {
+      if (logUpdateTimeoutRef.current) {
+        clearTimeout(logUpdateTimeoutRef.current)
+        logUpdateTimeoutRef.current = null
+        // Flusher les logs restants avant de démonter
+        if (logBufferRef.current.length > 0) {
+          const logsToAdd = logBufferRef.current
+          logBufferRef.current = []
+          setUsbStreamLogs(prev => {
+            const next = [...prev, ...logsToAdd]
+            return next.slice(-500)
+          })
+        }
+      }
+    }
+  }, [])
 
+  // Buffer pour les logs en attente (throttling)
+  const logBufferRef = useRef([])
+  const logUpdateTimeoutRef = useRef(null)
+  
   // Fonction pour ajouter un log USB (UNIQUEMENT local, pas d'envoi au serveur)
   // source: 'device' pour les logs venant du dispositif, 'dashboard' pour les logs du dashboard
+  // Utilise un throttling pour éviter de bloquer l'interface avec trop de mises à jour
   const appendUsbStreamLog = useCallback((line, source = 'device') => {
     if (!line) return
     
     const timestamp = Date.now()
     
-    // Ajouter au state local pour affichage immédiat uniquement
-    // DÉSACTIVÉ: Les logs ne sont plus envoyés au serveur (affichage local uniquement)
-    setUsbStreamLogs(prev => {
-      const next = [...prev, { id: `${timestamp}-${Math.random()}`, line, timestamp, source }]
-      // Limiter à 500 logs en mémoire pour éviter la surcharge
-      return next.slice(-500)
-    })
+    // Ajouter au buffer
+    logBufferRef.current.push({ id: `${timestamp}-${Math.random()}`, line, timestamp, source })
+    
+    // Throttling : mettre à jour le state toutes les 100ms maximum pour éviter le blocage
+    if (!logUpdateTimeoutRef.current) {
+      logUpdateTimeoutRef.current = setTimeout(() => {
+        const logsToAdd = logBufferRef.current
+        logBufferRef.current = []
+        logUpdateTimeoutRef.current = null
+        
+        // Mettre à jour le state avec tous les logs du buffer en une seule fois
+        setUsbStreamLogs(prev => {
+          const next = [...prev, ...logsToAdd]
+          // Limiter à 500 logs en mémoire pour éviter la surcharge
+          return next.slice(-500)
+        })
+      }, 100) // Mise à jour toutes les 100ms maximum
+    }
     
     // DÉSACTIVÉ: Les logs ne sont plus ajoutés au batch pour envoi au serveur
     // logsToSendRef.current.push({
@@ -1740,6 +1775,65 @@ export function UsbProvider({ children }) {
       // Importer fetchJson
       const { fetchJson } = await import('@/lib/api')
       
+      // Vérifier que l'API est accessible (en local, vérifier que l'API ou Next.js est démarré)
+      const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      if (isLocalhost) {
+        // En local, vérifier que l'API est accessible
+        // Si API_URL pointe vers localhost:8000, vérifier l'API directement
+        // Si API_URL pointe vers localhost:3000, vérifier Next.js (qui proxy vers l'API)
+        try {
+          const healthCheckUrl = API_URL.includes(':8000') 
+            ? `${API_URL}/api.php/health`  // Vérifier l'API directement
+            : `${API_URL}/api.php/health`  // Vérifier via Next.js proxy
+          
+          logger.debug(`[checkOtaSync] Health check vers: ${healthCheckUrl}`)
+          
+          const healthCheck = await fetch(healthCheckUrl, { 
+            method: 'GET', 
+            signal: AbortSignal.timeout(2000),
+            headers: {
+              'Accept': 'application/json'
+            }
+          })
+          
+          if (!healthCheck.ok && healthCheck.status !== 404) {
+            // Si le serveur ne répond pas correctement, ne pas essayer la requête API
+            const serverName = API_URL.includes(':8000') ? 'API' : 'Next.js'
+            logger.warn(`[checkOtaSync] Serveur ${serverName} non accessible (status: ${healthCheck.status}), vérification OTA ignorée`)
+            setOtaMonitoringStatus(prev => ({ 
+              ...prev, 
+              isMonitoring: false,
+              syncStatus: 'unknown',
+              lastError: `Serveur ${serverName} non accessible (${healthCheck.status})`
+            }))
+            return null
+          }
+        } catch (healthError) {
+          // Si le health check échoue, ne pas essayer la requête API
+          const serverName = API_URL.includes(':8000') ? 'API' : 'Next.js'
+          const errorMessage = healthError.message || healthError.toString()
+          logger.warn(`[checkOtaSync] Impossible de contacter le serveur ${serverName} (${API_URL}):`, errorMessage)
+          
+          // Détecter les erreurs spécifiques
+          let userFriendlyError = `Serveur ${serverName} non accessible`
+          if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+            userFriendlyError = `API non démarrée ou inaccessible (${API_URL})`
+          } else if (errorMessage.includes('timeout')) {
+            userFriendlyError = `Timeout lors de la connexion à ${serverName}`
+          } else if (errorMessage.includes('CORS')) {
+            userFriendlyError = `Erreur CORS - Vérifiez la configuration de l'API`
+          }
+          
+          setOtaMonitoringStatus(prev => ({ 
+            ...prev, 
+            isMonitoring: false,
+            syncStatus: 'unknown',
+            lastError: userFriendlyError
+          }))
+          return null
+        }
+      }
+      
       setOtaMonitoringStatus(prev => ({ ...prev, isMonitoring: true, lastCheck: Date.now() }))
       
       let device = null
@@ -1866,11 +1960,22 @@ export function UsbProvider({ children }) {
         }
       }
     } catch (error) {
-      logger.error('❌ Erreur vérification OTA:', error)
+      // Logger l'erreur avec plus de détails
+      logger.error('❌ Erreur vérification OTA:', {
+        error: error.message,
+        apiUrl: API_URL,
+        deviceIdentifier,
+        deviceId,
+        stack: error.stack
+      })
+      
+      // Ne pas afficher d'erreur si c'est juste un problème réseau temporaire
+      // L'utilisateur verra déjà l'erreur dans la console
       setOtaMonitoringStatus(prev => ({ 
         ...prev, 
         isMonitoring: false,
-        syncStatus: 'unknown'
+        syncStatus: 'unknown',
+        lastError: error.message
       }))
       return null
     }

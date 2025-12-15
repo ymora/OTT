@@ -1,9 +1,18 @@
 {
+  "hasApi": true,
+  "project": {
+    "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
+    "company": "",
+    "version": "3.1.0",
+    "name": "ott-dashboard"
+  },
+  "hasFirmware": true,
   "technologies": [
     "PHP API"
   ],
+  "detectedAt": "2025-12-15 07:42:09",
   "api": {
-    "baseUrl": "",
+    "authEndpoint": "/api.php/auth/login",
     "endpoints": [
       "/bootstrap/env_loader.php",
       "/bootstrap/database.php",
@@ -56,61 +65,13 @@
       "/admin/database-audit",
       "/audit",
       "/audit",
+      "/migrations/history",
       "/api/openapi.json"
     ],
-    "authEndpoint": "/api.php/auth/login"
+    "baseUrl": ""
   },
-  "hasFrontend": true,
-  "hasFirmware": true,
-  "hasDatabase": true,
-  "firmware": {
-    "version": "2.5",
-    "directory": "/hardware/firmware",
-    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino"
-  },
-  "frontend": {
-    "routes": [
-      {
-        "route": "/",
-        "name": "C:\\",
-        "file": "/app/page.js"
-      },
-      {
-        "route": "/dashboard",
-        "name": "dashboard",
-        "file": "/app/dashboard/page.js"
-      },
-      {
-        "route": "/dashboard/admin-migrations",
-        "name": "admin-migrations",
-        "file": "/app/dashboard/admin-migrations/page.js"
-      },
-      {
-        "route": "/dashboard/dispositifs",
-        "name": "dispositifs",
-        "file": "/app/dashboard/dispositifs/page.js"
-      },
-      {
-        "route": "/dashboard/documentation",
-        "name": "documentation",
-        "file": "/app/dashboard/documentation/page.js"
-      },
-      {
-        "route": "/dashboard/patients",
-        "name": "patients",
-        "file": "/app/dashboard/patients/page.js"
-      },
-      {
-        "route": "/dashboard/users",
-        "name": "users",
-        "file": "/app/dashboard/users/page.js"
-      }
-    ],
-    "framework": "Next.js",
-    "buildTool": ""
-  },
+  "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
   "database": {
-    "schemaFile": "/sql/schema.sql",
     "expectedTables": [
       "roles",
       "permissions",
@@ -130,21 +91,61 @@
       "device_commands",
       "usb_logs"
     ],
-    "type": "PostgreSQL"
+    "type": "PostgreSQL",
+    "schemaFile": "/sql/schema.sql"
   },
-  "projectType": "nextjs",
-  "detectedAt": "2025-12-13 22:42:51",
-  "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
-  "hasApi": true,
-  "project": {
-    "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
-    "name": "ott-dashboard",
-    "company": "",
-    "version": "3.1.0"
+  "frontend": {
+    "routes": [
+      {
+        "file": "/app/page.js",
+        "route": "/",
+        "name": "C:\\"
+      },
+      {
+        "file": "/app/dashboard/page.js",
+        "route": "/dashboard",
+        "name": "dashboard"
+      },
+      {
+        "file": "/app/dashboard/admin-migrations/page.js",
+        "route": "/dashboard/admin-migrations",
+        "name": "admin-migrations"
+      },
+      {
+        "file": "/app/dashboard/dispositifs/page.js",
+        "route": "/dashboard/dispositifs",
+        "name": "dispositifs"
+      },
+      {
+        "file": "/app/dashboard/documentation/page.js",
+        "route": "/dashboard/documentation",
+        "name": "documentation"
+      },
+      {
+        "file": "/app/dashboard/patients/page.js",
+        "route": "/dashboard/patients",
+        "name": "patients"
+      },
+      {
+        "file": "/app/dashboard/users/page.js",
+        "route": "/dashboard/users",
+        "name": "users"
+      }
+    ],
+    "buildTool": "",
+    "framework": "Next.js"
+  },
+  "hasDatabase": true,
+  "firmware": {
+    "version": "2.5",
+    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino",
+    "directory": "/hardware/firmware"
   },
   "github": {
-    "baseUrl": "https://ymora.github.io/OTT",
     "basePath": "/OTT",
-    "repo": "ymora/OTT"
-  }
+    "repo": "ymora/OTT",
+    "baseUrl": "https://ymora.github.io/OTT"
+  },
+  "projectType": "nextjs",
+  "hasFrontend": true
 }

@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { fetchJson } from '@/lib/api'
 import ErrorMessage from '@/components/ErrorMessage'
 import Tooltip from '@/components/Tooltip'
+import ConfirmModal from '@/components/ConfirmModal'
 import logger from '@/lib/logger'
 import { useUsb } from '@/contexts/UsbContext'
 import { buildUpdateConfigPayload } from '@/lib/deviceCommands'
+import { DEVICE_DEFAULTS } from '@/lib/deviceDefaults'
 
 // Composant Accordéon simple
 function Accordion({ title, children, defaultOpen = false }) {
@@ -49,8 +50,6 @@ export default function DeviceModal({
   onClose,
   editingItem,
   onSave,
-  fetchWithAuth,
-  API_URL,
   patients = [],
   allDevices = [],
   appendLog = null
@@ -100,7 +99,6 @@ export default function DeviceModal({
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [loadingConfig, setLoadingConfig] = useState(false)
-  const [configTab, setConfigTab] = useState('basic') // basic, advanced
 
   // Initialiser le formulaire UNIQUEMENT lors de l'ouverture du modal
   // Utiliser un ref pour éviter les réinitialisations lors de changements
@@ -181,8 +179,7 @@ export default function DeviceModal({
         // Sauvegarder les valeurs initiales pour comparaison
         initialFormDataRef.current = JSON.parse(JSON.stringify(initialFormData))
 
-        // Charger la configuration si disponible (mettra à jour initialFormDataRef après)
-        loadDeviceConfig(editingItem.id)
+        // Plus de chargement depuis la base - configuration chargée uniquement depuis USB (usbDeviceInfo)
       } else {
         // Mode création OU dispositif virtuel OU dispositif en base connecté en USB
         // Pré-remplir avec les données USB si disponibles, sinon depuis la base
@@ -288,44 +285,6 @@ export default function DeviceModal({
           setFormData(usbFormData)
           // Sauvegarder les valeurs initiales pour comparaison (même pour dispositif en base connecté)
           initialFormDataRef.current = JSON.parse(JSON.stringify(usbFormData))
-        } else if (editingItem && editingItem.id && !isNotRegistered) {
-          // Dispositif en base mais NON connecté en USB - charger depuis la base
-          // Ne charger que si c'est un vrai ID de base de données (pas un ID temporaire virtuel)
-          const initialFormData = {
-            device_name: editingItem.device_name || '',
-            sim_iccid: editingItem.sim_iccid || '',
-            device_serial: editingItem.device_serial || '',
-            firmware_version: editingItem.firmware_version || '',
-            status: editingItem.status || 'inactive',
-            patient_id: editingItem.patient_id || null,
-            // Toutes les valeurs de configuration seront chargées depuis la base via loadDeviceConfig
-            sleep_minutes: null,
-            measurement_duration_ms: null,
-            send_every_n_wakeups: null,
-            calibration_coefficients: null,
-            gps_enabled: null,
-            roaming_enabled: null,
-            airflow_passes: null,
-            airflow_samples_per_pass: null,
-            airflow_delay_ms: null,
-            watchdog_seconds: null,
-            modem_boot_timeout_ms: null,
-            sim_ready_timeout_ms: null,
-            network_attach_timeout_ms: null,
-            modem_max_reboots: null,
-            apn: '',
-            operator: '',
-            sim_pin: '',
-            ota_primary_url: '',
-            ota_fallback_url: '',
-            ota_md5: ''
-          }
-          setFormData(initialFormData)
-          initialFormDataRef.current = JSON.parse(JSON.stringify(initialFormData))
-          // Ne charger la config que si c'est un vrai ID numérique (pas un ID temporaire)
-          if (typeof editingItem.id === 'number' || (typeof editingItem.id === 'string' && !editingItem.id.startsWith('usb-'))) {
-            loadDeviceConfig(editingItem.id)
-          }
         } else {
           // Mode création sans USB - formulaire vide
           setFormData({
@@ -445,87 +404,9 @@ export default function DeviceModal({
     return ''
   }
 
-  const loadDeviceConfig = async (deviceId) => {
-    if (!deviceId) return
-
-    try {
-      setLoadingConfig(true)
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${deviceId}/config`,
-        {},
-        { requiresAuth: true }
-      )
-
-      if (data.config) {
-        // Convertir les valeurs pour l'affichage (ms → sec, sec → min)
-        // UTILISER UNIQUEMENT les valeurs de la base - PAS de valeurs par défaut
-        const configData = {
-          sleep_minutes: data.config.sleep_minutes ?? null,
-          // Convertir ms → sec pour l'affichage (garder comme nombre pour les inputs)
-          measurement_duration_ms: data.config.measurement_duration_ms != null 
-            ? parseFloat((data.config.measurement_duration_ms / 1000).toFixed(1))
-            : null,
-          send_every_n_wakeups: data.config.send_every_n_wakeups ?? null,
-          calibration_coefficients: data.config.calibration_coefficients ?? null,
-          gps_enabled: data.config.gps_enabled ?? null,
-          roaming_enabled: data.config.roaming_enabled ?? null,
-          airflow_passes: data.config.airflow_passes || null,
-          airflow_samples_per_pass: data.config.airflow_samples_per_pass || null,
-          // Convertir ms → sec pour l'affichage (garder comme nombre)
-          airflow_delay_ms: data.config.airflow_delay_ms != null 
-            ? parseFloat((data.config.airflow_delay_ms / 1000).toFixed(3))
-            : null,
-          // Convertir sec → min pour l'affichage (garder comme nombre)
-          watchdog_seconds: data.config.watchdog_seconds != null 
-            ? parseFloat((data.config.watchdog_seconds / 60).toFixed(1))
-            : null,
-          // Convertir ms → sec pour l'affichage (garder comme nombre)
-          modem_boot_timeout_ms: data.config.modem_boot_timeout_ms != null 
-            ? parseFloat((data.config.modem_boot_timeout_ms / 1000).toFixed(1))
-            : null,
-          // Convertir ms → sec pour l'affichage (garder comme nombre)
-          sim_ready_timeout_ms: data.config.sim_ready_timeout_ms != null 
-            ? parseFloat((data.config.sim_ready_timeout_ms / 1000).toFixed(1))
-            : null,
-          // Convertir ms → sec pour l'affichage (garder comme nombre)
-          network_attach_timeout_ms: data.config.network_attach_timeout_ms != null 
-            ? parseFloat((data.config.network_attach_timeout_ms / 1000).toFixed(1))
-            : null,
-          modem_max_reboots: data.config.modem_max_reboots ?? null,
-          apn: data.config.apn ?? '',
-          // Si un APN est présent mais pas d'opérateur, vérifier si c'est un APN connu
-          // Si oui, mettre l'opérateur correspondant, sinon mettre 'manual' pour afficher le champ APN
-          operator: data.config.operator 
-            ? data.config.operator 
-            : (data.config.apn 
-              ? (detectOperatorFromApn(data.config.apn) || 'manual')
-              : ''),
-          sim_pin: data.config.sim_pin ?? '',
-          ota_primary_url: data.config.ota_primary_url ?? '',
-          ota_fallback_url: data.config.ota_fallback_url ?? '',
-          ota_md5: data.config.ota_md5 ?? ''
-        }
-        setFormData(prev => ({
-          ...prev,
-          ...configData
-        }))
-        // Mettre à jour les valeurs initiales avec la configuration chargée
-        if (initialFormDataRef.current) {
-          initialFormDataRef.current = JSON.parse(JSON.stringify({
-            ...initialFormDataRef.current,
-            ...configData
-          }))
-        }
-      }
-    } catch (err) {
-      logger.warn('Erreur chargement configuration:', err)
-      // Ne pas bloquer si la config n'existe pas encore
-    } finally {
-      setLoadingConfig(false)
-    }
-  }
+  // Fonction supprimée : loadDeviceConfig
+  // La configuration est maintenant chargée uniquement depuis USB (usbDeviceInfo)
+  // Plus de chargement depuis la base de données
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -677,114 +558,95 @@ export default function DeviceModal({
     )
   }, [editingItem, usbIsConnected, port, usbDevice])
   
-  // Envoyer la configuration via USB (prioritaire) ou OTA
+  // Envoyer la configuration UNIQUEMENT via USB (pas de fallback OTA)
   const sendConfigToDevice = async (configPayload, deviceId) => {
-    if (isDeviceUsbConnected && usbWrite && port) {
-      // Envoi via USB (prioritaire)
-      try {
-        // Mapper les noms de propriétés pour buildUpdateConfigPayload
-        const mappedConfig = {
-          sleepMinutes: configPayload.sleep_minutes,
-          sleep_minutes: configPayload.sleep_minutes, // Support des deux formats
-          measurementDurationMs: configPayload.measurement_duration_ms,
-          measurement_duration_ms: configPayload.measurement_duration_ms,
-          sendEveryNWakeups: configPayload.send_every_n_wakeups,
-          send_every_n_wakeups: configPayload.send_every_n_wakeups,
-          calibration_coefficients: configPayload.calibration_coefficients,
-          gps_enabled: configPayload.gps_enabled,
-          roaming_enabled: configPayload.roaming_enabled,
-          airflowPasses: configPayload.airflow_passes,
-          airflowSamples: configPayload.airflow_samples_per_pass,
-          airflowDelay: configPayload.airflow_delay_ms,
-          watchdogSeconds: configPayload.watchdog_seconds,
-          modemBootTimeout: configPayload.modem_boot_timeout_ms,
-          simReadyTimeout: configPayload.sim_ready_timeout_ms,
-          networkAttachTimeout: configPayload.network_attach_timeout_ms,
-          modemReboots: configPayload.modem_max_reboots,
-          apn: configPayload.apn,
-          operator: configPayload.operator,
-          simPin: configPayload.sim_pin,
-          otaPrimaryUrl: configPayload.ota_primary_url,
-          otaFallbackUrl: configPayload.ota_fallback_url,
-          otaMd5: configPayload.ota_md5
-        }
-        const payload = buildUpdateConfigPayload(mappedConfig)
-        
-        // Log détaillé du payload complet pour debug
-        logger.log(`[USB] Payload UPDATE_CONFIG complet:`, JSON.stringify(payload, null, 2))
-        
-        // Log de debug pour vérifier l'opérateur envoyé
+    // Vérifier que USB est connecté
+    if (!usbIsConnected || !usbWrite || !port) {
+      throw new Error('Dispositif USB non connecté. Veuillez connecter le dispositif en USB pour envoyer la configuration.')
+    }
+
+    // Vérifier que le dispositif est bien connecté en USB
+    if (!isDeviceUsbConnected) {
+      throw new Error('Le dispositif sélectionné n\'est pas connecté en USB. Veuillez connecter le dispositif en USB.')
+    }
+
+    try {
+      // Mapper les noms de propriétés pour buildUpdateConfigPayload
+      const mappedConfig = {
+        sleepMinutes: configPayload.sleep_minutes,
+        sleep_minutes: configPayload.sleep_minutes, // Support des deux formats
+        measurementDurationMs: configPayload.measurement_duration_ms,
+        measurement_duration_ms: configPayload.measurement_duration_ms,
+        sendEveryNWakeups: configPayload.send_every_n_wakeups,
+        send_every_n_wakeups: configPayload.send_every_n_wakeups,
+        calibration_coefficients: configPayload.calibration_coefficients,
+        gps_enabled: configPayload.gps_enabled,
+        roaming_enabled: configPayload.roaming_enabled,
+        airflowPasses: configPayload.airflow_passes,
+        airflowSamples: configPayload.airflow_samples_per_pass,
+        airflowDelay: configPayload.airflow_delay_ms,
+        watchdogSeconds: configPayload.watchdog_seconds,
+        modemBootTimeout: configPayload.modem_boot_timeout_ms,
+        simReadyTimeout: configPayload.sim_ready_timeout_ms,
+        networkAttachTimeout: configPayload.network_attach_timeout_ms,
+        modemReboots: configPayload.modem_max_reboots,
+        apn: configPayload.apn,
+        operator: configPayload.operator,
+        simPin: configPayload.sim_pin,
+        otaPrimaryUrl: configPayload.ota_primary_url,
+        otaFallbackUrl: configPayload.ota_fallback_url,
+        otaMd5: configPayload.ota_md5
+      }
+      // Pour l'envoi USB, inclure les valeurs par défaut pour tous les paramètres
+      const payload = buildUpdateConfigPayload(mappedConfig, true)
+      
+      // Log détaillé du payload complet pour debug
+      logger.log(`[USB] Payload UPDATE_CONFIG complet:`, JSON.stringify(payload, null, 2))
+      
+      // Log de debug pour vérifier l'opérateur envoyé
+      if (payload.operator) {
+        logger.log(`[USB] Opérateur à envoyer: "${payload.operator}" (configPayload.operator: "${configPayload.operator}", mappedConfig.operator: "${mappedConfig.operator}")`)
+      } else {
+        logger.log(`[USB] Aucun opérateur dans le payload (configPayload.operator: "${configPayload.operator}", mappedConfig.operator: "${mappedConfig.operator}")`)
+      }
+      
+      const command = JSON.stringify({
+        command: 'UPDATE_CONFIG',
+        payload: payload
+      })
+      const commandWithNewline = command + '\n'
+      
+      if (appendLog) {
+        appendLog(`📤 [USB] Envoi configuration directement via USB...`, 'dashboard')
+        appendLog(`🔍 [DEBUG] Commande complète: ${command}`, 'dashboard')
         if (payload.operator) {
-          logger.log(`[USB] Opérateur à envoyer: "${payload.operator}" (configPayload.operator: "${configPayload.operator}", mappedConfig.operator: "${mappedConfig.operator}")`)
-        } else {
-          logger.log(`[USB] Aucun opérateur dans le payload (configPayload.operator: "${configPayload.operator}", mappedConfig.operator: "${mappedConfig.operator}")`)
+          appendLog(`🔍 [DEBUG] Opérateur dans payload: "${payload.operator}"`, 'dashboard')
         }
-        
-        const command = JSON.stringify({
-          command: 'UPDATE_CONFIG',
-          payload: payload
-        })
-        const commandWithNewline = command + '\n'
-        
-        if (appendLog) {
-          appendLog(`📤 [USB] Envoi configuration directement via USB...`, 'dashboard')
-          appendLog(`🔍 [DEBUG] Commande complète: ${command}`, 'dashboard')
-          if (payload.operator) {
-            appendLog(`🔍 [DEBUG] Opérateur dans payload: "${payload.operator}"`, 'dashboard')
-          }
-        }
-        
-        await usbWrite(commandWithNewline)
-        
-        if (appendLog) {
-          appendLog(`✅ [USB] Configuration envoyée via USB avec succès`, 'dashboard')
-          appendLog(`✅ [USB] Confirmation: Configuration reçue et appliquée par le dispositif`, 'dashboard')
-        }
-        
-        logger.log('✅ Configuration envoyée au dispositif via USB avec succès')
-        
-        return { success: true, method: 'USB' }
-      } catch (err) {
-        logger.error('Erreur envoi config USB:', err)
-        if (appendLog) {
-          appendLog(`❌ [USB] Erreur envoi: ${err.message}`, 'dashboard')
-        }
-        // Fallback sur OTA en cas d'erreur USB
-        throw err
       }
-    } else {
-      // Envoi via OTA (fallback)
-      try {
-        await fetchJson(
-          fetchWithAuth,
-          API_URL,
-          `/api.php/devices/${deviceId}/config`,
-          {
-            method: 'PUT',
-            body: JSON.stringify(configPayload)
-          },
-          { requiresAuth: true }
-        )
-        
-        if (appendLog) {
-          appendLog(`📡 [OTA] Configuration envoyée via OTA (dispositif non connecté en USB)`, 'dashboard')
-          appendLog(`✅ [OTA] Confirmation: Configuration enregistrée, sera appliquée à la prochaine connexion OTA`, 'dashboard')
-        }
-        
-        logger.log('✅ Configuration envoyée au dispositif via OTA avec succès')
-        
-        return { success: true, method: 'OTA' }
-      } catch (err) {
-        logger.error('Erreur envoi config OTA:', err)
-        // Si l'erreur indique que le dispositif n'existe pas, ne pas bloquer
-        // (peut arriver si le dispositif est en cours de création)
-        if (err.message?.includes('not found') || err.message?.includes('n\'existe pas') || err.message?.includes('does not exist')) {
-          logger.warn('⚠️ Dispositif non trouvé en base, configuration sera envoyée lors de la prochaine connexion OTA')
-          // Retourner un succès partiel pour ne pas bloquer le processus
-          return { success: true, method: 'OTA', pending: true }
-        }
-        throw err
+      
+      await usbWrite(commandWithNewline)
+      
+      if (appendLog) {
+        appendLog(`✅ [USB] Configuration envoyée via USB avec succès`, 'dashboard')
+        appendLog(`✅ [USB] Confirmation: Configuration reçue et appliquée par le dispositif`, 'dashboard')
       }
+      
+      logger.log('✅ Configuration envoyée au dispositif via USB avec succès')
+      
+      return { success: true, method: 'USB' }
+    } catch (err) {
+      logger.error('Erreur envoi config USB:', err)
+      if (appendLog) {
+        appendLog(`❌ [USB] Erreur envoi: ${err.message}`, 'dashboard')
+      }
+      // Si l'erreur indique que le dispositif n'existe pas, ne pas bloquer
+      // (peut arriver si le dispositif est en cours de création)
+      if (err.message?.includes('not found') || err.message?.includes('n\'existe pas') || err.message?.includes('does not exist')) {
+        logger.warn('⚠️ Dispositif non trouvé en base, configuration sera envoyée lors de la prochaine connexion OTA')
+        // Retourner un succès partiel pour ne pas bloquer le processus
+        return { success: true, method: 'OTA', pending: true }
+      }
+      throw err
     }
   }
   
@@ -971,15 +833,15 @@ export default function DeviceModal({
   }
 
   // Réinitialiser la configuration aux valeurs par défaut
-  const handleResetConfig = async () => {
+  const handleResetConfig = () => {
     if (!editingItem || !isDeviceUsbConnected || !usbWrite || !port) {
       return
     }
+    setShowResetConfirm(true)
+  }
 
-    if (!confirm('⚠️ Êtes-vous sûr de vouloir réinitialiser tous les paramètres aux valeurs par défaut ?\n\nCette action va réinitialiser :\n• APN\n• Code PIN SIM\n• Sleep\n• GPS\n• Roaming\n• Calibration\n\n(Serial et ICCID seront conservés)')) {
-      return
-    }
-
+  const confirmResetConfig = async () => {
+    setShowResetConfirm(false)
     setSaving(true)
     setFormError(null)
 
@@ -1014,7 +876,10 @@ export default function DeviceModal({
         }
       }
 
-      setSuccess('Configuration réinitialisée aux valeurs par défaut avec succès')
+      // Message de succès géré par le parent via onSave
+      if (onSave) {
+        onSave()
+      }
     } catch (err) {
       const errorMessage = err?.message || 'Erreur lors de la réinitialisation'
       setFormError(errorMessage)
@@ -1157,335 +1022,95 @@ export default function DeviceModal({
          (typeof editingItem.id === 'string' && !editingItem.id.startsWith('usb-')))
       const isNotRegistered = !hasRealId || editingItem?.isVirtual || editingItem?.isTemporary
       
-      if (editingItem && hasRealId && !isNotRegistered) {
-        // Modification - dispositif enregistré en base avec un vrai ID
-        const endpoint = `/api.php/devices/${editingItem.id}`
-
-        // Mettre à jour le dispositif
-        await fetchJson(
-          fetchWithAuth,
-          API_URL,
-          endpoint,
-          { method: 'PUT', body: JSON.stringify(devicePayload) },
-          { requiresAuth: true }
-        )
-
-        // Mettre à jour la configuration si fournie (uniquement pour dispositifs enregistrés)
-        if (Object.keys(configPayload).length > 0) {
-          try {
-            const result = await sendConfigToDevice(configPayload, editingItem.id)
-            
-            // Comparer les valeurs initiales avec les nouvelles pour détecter les changements
-            const changes = []
-            const initialData = initialFormDataRef.current || {}
-            
-            // Fonction helper pour formater les valeurs
-            const formatValue = (key, val) => {
-              if (key === 'gps_enabled') return val ? 'ON' : 'OFF'
-              if (key === 'sleep_minutes') return `${val}min`
-              if (key === 'measurement_duration_ms') return `${(val/1000).toFixed(1)}s`
-              if (key === 'send_every_n_wakeups') return `${val}`
-              if (key === 'calibration_coefficients') return `[${val.join(',')}]`
-              if (key === 'airflow_passes') return `${val}`
-              if (key === 'airflow_samples_per_pass') return `${val}`
-              if (key === 'airflow_delay_ms') return `${(val/1000).toFixed(3)}s`
-              if (key === 'watchdog_seconds') return `${(val/60).toFixed(1)}min`
-              if (key === 'modem_boot_timeout_ms') return `${(val/1000).toFixed(1)}s`
-              if (key === 'sim_ready_timeout_ms') return `${(val/1000).toFixed(1)}s`
-              if (key === 'network_attach_timeout_ms') return `${(val/1000).toFixed(1)}s`
-              if (key === 'modem_max_reboots') return `${val}`
-              if (key === 'apn') return val
-              if (key === 'operator') return val || '(automatique)'
-              if (key === 'sim_pin') return '***'
-              if (key === 'ota_primary_url') return val.length > 30 ? val.substring(0, 30) + '...' : val
-              if (key === 'ota_fallback_url') return val.length > 30 ? val.substring(0, 30) + '...' : val
-              return String(val)
-            }
-            
-            // Détecter les changements dans TOUS les champs de configuration en utilisant la même logique robuste
-            // Filtrer uniquement les champs de configuration (exclure device_name, device_serial, status qui sont gérés séparément)
-            const configFieldsOnly = CONFIG_FIELDS_TO_COMPARE.filter(key => 
-              !['device_name', 'device_serial', 'status'].includes(key)
-            )
-            
-            configFieldsOnly.forEach((key) => {
-              // Récupérer les valeurs depuis formData et initialData (utiliser les valeurs d'affichage, pas les valeurs converties)
-              // Passer la clé pour une normalisation spécifique (apn en lowercase, etc.)
-              const currentVal = normalizeValue(formData[key], key)
-              const initialVal = normalizeValue(initialData[key], key)
-              
-              // Utiliser la fonction de comparaison robuste
-              if (!areValuesEqual(currentVal, initialVal)) {
-                // Utiliser les valeurs originales pour l'affichage
-                const oldDisplay = initialData[key]
-                const oldFormatted = oldDisplay !== null && oldDisplay !== undefined && oldDisplay !== '' 
-                  ? formatValue(key, oldDisplay) 
-                  : '(vide)'
-                const newDisplay = formData[key]
-                const newFormatted = newDisplay !== null && newDisplay !== undefined && newDisplay !== '' 
-                  ? formatValue(key, newDisplay) 
-                  : '(vide)'
-                
-                changes.push(`${CONFIG_KEY_NAMES[key] || key}: ${oldFormatted} → ${newFormatted}`)
-              }
-            })
-            
-            // Détecter les changements dans les données du dispositif (device_name, device_serial, status)
-            // Utiliser la même logique de comparaison robuste
-            const deviceFields = ['device_name', 'device_serial', 'status']
-            deviceFields.forEach((key) => {
-              // Passer la clé pour une normalisation spécifique
-              const currentVal = normalizeValue(key === 'device_name' ? devicePayload.device_name : formData[key], key)
-              const initialVal = normalizeValue(initialData[key], key)
-              
-              if (!areValuesEqual(currentVal, initialVal)) {
-                const oldDisplay = initialData[key] || '(vide)'
-                const newDisplay = key === 'device_name' ? devicePayload.device_name : (formData[key] || '(vide)')
-                changes.push(`${CONFIG_KEY_NAMES[key] || key}: "${oldDisplay}" → "${newDisplay}"`)
-              }
-            })
-            
-            // Afficher un log bleu dans le terminal pour confirmer
-            if (appendLog) {
-              // Ne pas afficher l'APN si il correspond automatiquement à l'opérateur sélectionné
-              const operatorApnMap = {
-                'Orange': 'orange',
-                'Free': 'free',
-                'SFR': 'sl2sfr',
-                'Bouygues': 'mmsbouygtel'
-              }
-              
-              const configSummary = Object.entries(configPayload)
-                .filter(([key, val]) => {
-                  // Filtrer l'APN si il correspond à l'opérateur sélectionné (éviter la redondance)
-                  if (key === 'apn' && configPayload.operator && operatorApnMap[configPayload.operator]) {
-                    return val?.toLowerCase() !== operatorApnMap[configPayload.operator].toLowerCase()
-                  }
-                  return true
-                })
-                .map(([key, val]) => {
-                  if (key === 'gps_enabled') return `GPS: ${val ? 'ON' : 'OFF'}`
-                  if (key === 'roaming_enabled') return `Roaming: ${val ? 'ON' : 'OFF'}`
-                  if (key === 'sleep_minutes') return `Sleep: ${val}min`
-                  if (key === 'measurement_duration_ms') return `Durée: ${val}ms (${(val/1000).toFixed(1)}s)`
-                  if (key === 'send_every_n_wakeups') return `Envoi: ${val}`
-                  if (key === 'calibration_coefficients') return `Cal: [${val.join(',')}]`
-                  if (key === 'airflow_passes') return `Passes: ${val}`
-                  if (key === 'airflow_samples_per_pass') return `Samples: ${val}`
-                  if (key === 'airflow_delay_ms') return `Délai: ${val}ms (${(val/1000).toFixed(3)}s)`
-                  if (key === 'watchdog_seconds') return `Watchdog: ${val}s (${(val/60).toFixed(1)}min)`
-                  if (key === 'modem_boot_timeout_ms') return `Boot: ${val}ms (${(val/1000).toFixed(1)}s)`
-                  if (key === 'sim_ready_timeout_ms') return `SIM: ${val}ms (${(val/1000).toFixed(1)}s)`
-                  if (key === 'network_attach_timeout_ms') return `Network: ${val}ms (${(val/1000).toFixed(1)}s)`
-                  if (key === 'modem_max_reboots') return `Reboots: ${val}`
-                  if (key === 'apn') return `APN: ${val}`
-                  if (key === 'operator') return `Opérateur: ${val || '(automatique)'}`
-                  if (key === 'sim_pin') return `PIN: ***`
-                  if (key === 'ota_primary_url') return `OTA1: ${val.substring(0, 30)}...`
-                  if (key === 'ota_fallback_url') return `OTA2: ${val.substring(0, 30)}...`
-                  return `${key}: ${val}`
-                })
-                .join(', ')
-              
-              appendLog(`📤 [CONFIG] UPDATE_CONFIG (${result.method}) → ${configSummary}`, 'dashboard')
-            }
-            
-            // Message de succès avec les changements détectés
-            if (changes.length > 0) {
-              const changesText = changes.join(', ')
-              logger.log(`✅ Dispositif "${devicePayload.device_name}" mis à jour: ${changesText}`)
-            } else {
-              logger.log(`✅ Dispositif "${devicePayload.device_name}" mis à jour (aucun changement détecté)`)
-            }
-            
-            // Si envoyé via USB, sauvegarder aussi en base pour cohérence
-            // Mais ne pas créer de commande UPDATE_CONFIG car elle a déjà été envoyée via USB
-            if (result.method === 'USB') {
-              try {
-                await fetchJson(
-                  fetchWithAuth,
-                  API_URL,
-                  `/api.php/devices/${editingItem.id}/config`,
-                  {
-                    method: 'PUT',
-                    body: JSON.stringify({ ...configPayload, via_usb: true })
-                  },
-                  { requiresAuth: true }
-                )
-              } catch (dbErr) {
-                logger.warn('⚠️ Erreur sauvegarde config en base (après envoi USB):', dbErr)
-                // Ne pas bloquer, la config a déjà été envoyée au dispositif
-              }
-            }
-          } catch (configErr) {
-            logger.warn('⚠️ Erreur mise à jour configuration:', configErr)
-            // Ne pas bloquer si la config échoue
-          }
-        }
-
-        // Détecter les changements dans les données du dispositif (sans config)
-        // Utiliser la même logique de comparaison robuste
-        const changes = []
-        const initialData = initialFormDataRef.current || {}
-        
-        const deviceFields = ['device_name', 'device_serial', 'status']
-        deviceFields.forEach((key) => {
-          const currentVal = normalizeValue(key === 'device_name' ? devicePayload.device_name : formData[key])
-          const initialVal = normalizeValue(initialData[key])
-          
-          if (!areValuesEqual(currentVal, initialVal)) {
-            const oldDisplay = initialData[key] || '(vide)'
-            const newDisplay = key === 'device_name' ? devicePayload.device_name : (formData[key] || '(vide)')
-            changes.push(`${CONFIG_KEY_NAMES[key] || key}: "${oldDisplay}" → "${newDisplay}"`)
-          }
-        })
-        
-        if (changes.length > 0) {
-          const changesText = changes.join(', ')
-          logger.log(`✅ Dispositif "${devicePayload.device_name}" modifié: ${changesText}`)
-        } else {
-          logger.log(`✅ Dispositif "${devicePayload.device_name}" modifié (aucun changement détecté)`)
-        }
-      } else {
-        // Création OU dispositif virtuel - vérifier d'abord si le dispositif existe déjà
-        const existingDevice = allDevices.find(d =>
-          (devicePayload.sim_iccid && d.sim_iccid === devicePayload.sim_iccid) ||
-          (devicePayload.device_serial && d.device_serial === devicePayload.device_serial)
-        )
-
-        if (existingDevice) {
-          // Le dispositif existe déjà, faire une mise à jour
-          logger.log('ℹ️ Dispositif existant trouvé, mise à jour au lieu de création')
-          
-          await fetchJson(
-            fetchWithAuth,
-            API_URL,
-            `/api.php/devices/${existingDevice.id}`,
-            { method: 'PUT', body: JSON.stringify(devicePayload) },
-            { requiresAuth: true }
-          )
-
-          // Mettre à jour la configuration
-          if (Object.keys(configPayload).length > 0) {
-            try {
-              await sendConfigToDevice(configPayload, existingDevice.id)
-            } catch (configErr) {
-              logger.warn('⚠️ Erreur mise à jour configuration:', configErr)
-            }
-          }
-
-          // Détecter les changements en utilisant la même logique robuste
-          const changes = []
-          const initialData = initialFormDataRef.current || {}
-          
-          const deviceFields = ['device_name', 'device_serial', 'status']
-          deviceFields.forEach((key) => {
-            // Passer la clé pour une normalisation spécifique
-            const currentVal = normalizeValue(key === 'device_name' ? devicePayload.device_name : formData[key], key)
-            const initialVal = normalizeValue(initialData[key], key)
-            
-            if (!areValuesEqual(currentVal, initialVal)) {
-              const oldDisplay = initialData[key] || '(vide)'
-              const newDisplay = key === 'device_name' ? devicePayload.device_name : (formData[key] || '(vide)')
-              changes.push(`${CONFIG_KEY_NAMES[key] || key}: "${oldDisplay}" → "${newDisplay}"`)
-            }
-          })
-          
-          if (changes.length > 0) {
-            const changesText = changes.join(', ')
-            logger.log(`✅ Dispositif "${devicePayload.device_name}" mis à jour: ${changesText}`)
-          } else {
-            logger.log(`✅ Dispositif "${devicePayload.device_name}" mis à jour (aucun changement détecté)`)
-          }
-        } else {
-          // Créer un nouveau dispositif
-          const endpoint = '/api.php/devices'
-          const response = await fetchWithAuth(
-            `${API_URL}${endpoint}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(devicePayload)
-            },
-            { requiresAuth: true }
-          )
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}))
-            const errorMessage = errorData.error || `Erreur HTTP ${response.status}`
-
-            // Si l'erreur indique que le dispositif existe déjà, forcer un refetch et réessayer
-            if (errorMessage.includes('déjà') || errorMessage.includes('existe') || errorMessage.includes('already') || errorMessage.includes('utilisé')) {
-              logger.log('⚠️ API indique "déjà utilisé", le dispositif devrait apparaître après rafraîchissement')
-              // Attendre que onSave termine le refetch, puis fermer le modal
-              await onSave()
-              onClose()
-              return
-            }
-
-            throw new Error(errorMessage)
-          }
-
-          const data = await response.json()
-          if (!data.success) {
-            throw new Error(data.error || 'Erreur API')
-          }
-
-          // Sauvegarder la configuration si fournie
-          if (data.device && Object.keys(configPayload).length > 0) {
-            try {
-              // Vérifier si le nouveau dispositif est connecté en USB
-              const newDeviceUsbConnected = usbIsConnected && port && (
-                (data.device.sim_iccid && usbDevice?.sim_iccid === data.device.sim_iccid) ||
-                (data.device.device_serial && usbDevice?.device_serial === data.device.device_serial)
-              )
-              
-              if (newDeviceUsbConnected && usbWrite) {
-                // Envoi via USB
-                const payload = buildUpdateConfigPayload(configPayload)
-                const command = JSON.stringify({
-                  command: 'UPDATE_CONFIG',
-                  payload: payload
-                })
-                await usbWrite(command + '\n')
-                logger.log('✅ Configuration envoyée via USB')
-                
-                // Sauvegarder en base mais ne pas créer de commande UPDATE_CONFIG
-                // car elle a déjà été envoyée via USB
-                await fetchJson(
-                  fetchWithAuth,
-                  API_URL,
-                  `/api.php/devices/${data.device.id}/config`,
-                  {
-                    method: 'PUT',
-                    body: JSON.stringify({ ...configPayload, via_usb: true })
-                  },
-                  { requiresAuth: true }
-                )
-              } else {
-                // Pas de connexion USB, sauvegarder en base (créera une commande UPDATE_CONFIG pour OTA)
-                await fetchJson(
-                  fetchWithAuth,
-                  API_URL,
-                  `/api.php/devices/${data.device.id}/config`,
-                  {
-                    method: 'PUT',
-                    body: JSON.stringify(configPayload)
-                  },
-                  { requiresAuth: true }
-                )
-              }
-            } catch (configErr) {
-              logger.warn('⚠️ Erreur sauvegarde configuration:', configErr)
-            }
-          }
-
-          logger.log(`✅ Dispositif créé: ${data.device?.device_name || data.device?.sim_iccid}`)
-        }
+      // Vérifier si le dispositif est connecté en USB (pour création ou modification)
+      const formIccid = formData.sim_iccid?.trim()
+      const formSerial = formData.device_serial?.trim()
+      const normalizeId = (val) => val ? String(val).trim().replace(/\s+/g, '') : ''
+      
+      const isUsbConnectedForCreation = usbIsConnected && port && usbWrite && (
+        isDeviceUsbConnected || // Dispositif en édition connecté
+        (formIccid && usbDeviceInfo?.sim_iccid && normalizeId(formIccid) === normalizeId(usbDeviceInfo.sim_iccid)) || // ICCID correspond
+        (formSerial && usbDeviceInfo?.device_serial && normalizeId(formSerial) === normalizeId(usbDeviceInfo.device_serial)) || // Serial correspond
+        (usbDevice && !isUsbDeviceRegistered() && (
+          (formIccid && usbDevice.sim_iccid && normalizeId(formIccid) === normalizeId(usbDevice.sim_iccid)) ||
+          (formSerial && usbDevice.device_serial && normalizeId(formSerial) === normalizeId(usbDevice.device_serial))
+        )) // Dispositif virtuel USB
+      )
+      
+      // Vérifier que USB est connecté (OBLIGATOIRE - plus de fallback OTA)
+      if (!usbIsConnected || !port || !usbWrite) {
+        throw new Error('Dispositif USB non connecté. Veuillez connecter le dispositif en USB pour envoyer la configuration.')
       }
 
-      // Appeler onSave pour rafraîchir les données et attendre qu'il se termine
-      await onSave()
+      // Vérifier que le dispositif est bien connecté en USB
+      if (!isDeviceUsbConnected && !isUsbConnectedForCreation) {
+        throw new Error('Le dispositif sélectionné n\'est pas connecté en USB. Veuillez connecter le dispositif en USB.')
+      }
+
+      // Envoyer la configuration UNIQUEMENT via USB (plus de sauvegarde en base)
+      // Toujours envoyer la configuration complète avec valeurs par défaut
+      try {
+        // Mapper les noms de propriétés pour buildUpdateConfigPayload
+        const mappedConfig = {
+          sleepMinutes: configPayload.sleep_minutes,
+          sleep_minutes: configPayload.sleep_minutes,
+          measurementDurationMs: configPayload.measurement_duration_ms,
+          measurement_duration_ms: configPayload.measurement_duration_ms,
+          sendEveryNWakeups: configPayload.send_every_n_wakeups,
+          send_every_n_wakeups: configPayload.send_every_n_wakeups,
+          calibration_coefficients: configPayload.calibration_coefficients,
+          gpsEnabled: configPayload.gps_enabled,
+          gps_enabled: configPayload.gps_enabled,
+          roamingEnabled: configPayload.roaming_enabled,
+          roaming_enabled: configPayload.roaming_enabled,
+          airflowPasses: configPayload.airflow_passes,
+          airflow_passes: configPayload.airflow_passes,
+          airflowSamples: configPayload.airflow_samples_per_pass,
+          airflow_samples_per_pass: configPayload.airflow_samples_per_pass,
+          airflowDelay: configPayload.airflow_delay_ms,
+          airflow_delay_ms: configPayload.airflow_delay_ms,
+          watchdogSeconds: configPayload.watchdog_seconds,
+          watchdog_seconds: configPayload.watchdog_seconds,
+          modemBootTimeout: configPayload.modem_boot_timeout_ms,
+          modem_boot_timeout_ms: configPayload.modem_boot_timeout_ms,
+          simReadyTimeout: configPayload.sim_ready_timeout_ms,
+          sim_ready_timeout_ms: configPayload.sim_ready_timeout_ms,
+          networkAttachTimeout: configPayload.network_attach_timeout_ms,
+          network_attach_timeout_ms: configPayload.network_attach_timeout_ms,
+          modemReboots: configPayload.modem_max_reboots,
+          modem_max_reboots: configPayload.modem_max_reboots,
+          apn: configPayload.apn,
+          operator: configPayload.operator,
+          simPin: configPayload.sim_pin,
+          sim_pin: configPayload.sim_pin,
+          otaPrimaryUrl: configPayload.ota_primary_url,
+          ota_primary_url: configPayload.ota_primary_url,
+          otaFallbackUrl: configPayload.ota_fallback_url,
+          ota_fallback_url: configPayload.ota_fallback_url,
+          otaMd5: configPayload.ota_md5,
+          ota_md5: configPayload.ota_md5
+        }
+        // Envoi via USB avec valeurs par défaut incluses (includeDefaults=true)
+        const payload = buildUpdateConfigPayload(mappedConfig, true)
+        const command = JSON.stringify({
+          command: 'UPDATE_CONFIG',
+          payload: payload
+        })
+        await usbWrite(command + '\n')
+        
+        logger.log('✅ Configuration complète envoyée via USB avec valeurs par défaut')
+        
+        if (appendLog) {
+          appendLog(`✅ [USB] Configuration complète envoyée directement au dispositif USB (avec valeurs par défaut)`, 'dashboard')
+          appendLog(`ℹ️ [USB] Configuration appliquée directement - non enregistrée en base`, 'dashboard')
+        }
+
+      } catch (configErr) {
+        logger.error('⚠️ Erreur envoi configuration USB:', configErr)
+        throw configErr
+      }
+
+      // Fermer le modal après envoi réussi
       onClose()
     } catch (err) {
       logger.error('Erreur sauvegarde dispositif:', err)
@@ -1503,16 +1128,16 @@ export default function DeviceModal({
         <div className="sticky top-0 bg-white dark:bg-[rgb(var(--night-surface))] border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              {editingItem ? '✏️ Modifier le dispositif' : '➕ Créer un nouveau dispositif'}
+              ⚙️ Configurer le dispositif
             </h2>
-            {editingItem && isDeviceUsbConnected && (
+            {usbIsConnected && port && usbWrite && (
               <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
-                🔌 Connecté en USB - Configuration envoyée directement
+                🔌 USB connecté - Configuration envoyée directement au dispositif
               </p>
             )}
-            {editingItem && !isDeviceUsbConnected && (
-              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
-                📡 Non connecté - Configuration envoyée via OTA
+            {(!usbIsConnected || !port || !usbWrite) && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
+                ⚠️ USB non connecté - Veuillez connecter le dispositif en USB
               </p>
             )}
           </div>
@@ -1528,7 +1153,7 @@ export default function DeviceModal({
         </div>
 
         <form onSubmit={handleSubmit} autoComplete="off" className="p-4 sm:p-6 space-y-3">
-          {formError && <ErrorMessage message={formError} />}
+          {formError && <ErrorMessage error={formError} />}
 
           {/* Première ligne : Nom et Statut */}
           <div className={`grid gap-3 ${editingItem?.id && !isNotRegistered ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -1573,16 +1198,28 @@ export default function DeviceModal({
                 </p>
               </div>
             )}
-            {/* Message pour dispositif USB virtuel (non enregistré) */}
-            {(!editingItem?.id || isNotRegistered) && (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                <p className="text-sm text-blue-700 dark:text-blue-300">
+            {/* Message pour dispositif USB connecté */}
+            {usbIsConnected && port && usbWrite && (isDeviceUsbConnected || isNotRegistered) && (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                <p className="text-sm text-green-700 dark:text-green-300">
                   🔌 <strong>Dispositif connecté en USB</strong>
                 </p>
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                   {isNotRegistered 
-                    ? "Ce dispositif n'est pas encore enregistré en base. Il sera ajouté automatiquement lors de la première connexion OTA."
-                    : "Dispositif connecté en USB - les données sont chargées en temps réel depuis le dispositif."}
+                    ? "Ce dispositif n'est pas encore enregistré en base. La configuration sera envoyée directement via USB et le dispositif sera ajouté automatiquement lors de la première connexion OTA."
+                    : "Dispositif connecté en USB - la configuration sera envoyée directement au dispositif."}
+                </p>
+              </div>
+            )}
+            
+            {/* Message d'avertissement si USB non connecté */}
+            {(!usbIsConnected || !port || !usbWrite) && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                <p className="text-sm text-red-700 dark:text-red-300">
+                  ⚠️ <strong>Dispositif USB non connecté</strong>
+                </p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  Veuillez connecter le dispositif en USB pour envoyer la configuration. La configuration ne peut être envoyée que via USB.
                 </p>
               </div>
             )}
@@ -1610,39 +1247,11 @@ export default function DeviceModal({
           </div>
 
 
-          {/* Configuration - Onglets par niveau */}
+          {/* Configuration - Accordéons par type logique */}
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-            <div className="mb-4">
-              <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-700">
-                <button
-                  type="button"
-                  onClick={() => setConfigTab('basic')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    configTab === 'basic'
-                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
-                >
-                  📊 Basique
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfigTab('advanced')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    configTab === 'advanced'
-                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
-                >
-                  ⚙️ Avancé
-                </button>
-              </div>
-            </div>
-
-            {/* Onglet Basique */}
-            {configTab === 'basic' && (
-              <div className="space-y-2">
-                <Accordion title="📊 Mesure" defaultOpen={true}>
+            <div className="space-y-2">
+              {/* 1. Mesure */}
+              <Accordion title="📊 Mesure" defaultOpen={true}>
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   <div>
@@ -1658,12 +1267,12 @@ export default function DeviceModal({
                       onChange={handleInputChange}
                       autoComplete="off"
                       className="input w-full text-sm py-1.5"
-                      placeholder="1440 (24h)"
+                      placeholder={`${DEVICE_DEFAULTS.sleep_minutes} (24h)`}
                       min="1"
-                      title="Durée en minutes entre chaque réveil. Exemple: 1440 = 24 heures, 60 = 1 heure"
+                      title="Durée en minutes entre chaque réveil. Par défaut: 1440 min (24h)"
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Par défaut: 1440 min (24h) - Intervalle entre envois OTA
+                      Par défaut: {DEVICE_DEFAULTS.sleep_minutes} min (24h) - Intervalle entre envois OTA
                     </p>
                   </div>
                   <div>
@@ -1680,9 +1289,9 @@ export default function DeviceModal({
                       onChange={handleInputChangeWithConversion}
                       autoComplete="off"
                       className="input w-full text-sm py-1.5"
-                      placeholder="5.0"
+                      placeholder={`${DEVICE_DEFAULTS.measurement_duration_ms / 1000}`}
                       min="0.1"
-                      title="Durée de la mesure en secondes. Plus long = plus précis mais consomme plus de batterie. Recommandé: 3-10 secondes"
+                      title="Durée de la mesure en secondes. Par défaut: 5.0s"
                     />
                   </div>
                   <div>
@@ -1704,7 +1313,7 @@ export default function DeviceModal({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-3">
                     <Tooltip content="Coefficients de calibration pour convertir les valeurs brutes du capteur en débit réel (L/min).\n\nFormule: débit = a2 × valeur² + a1 × valeur + a0\n\nCes valeurs sont déterminées lors de l'étalonnage du dispositif.\nModifier uniquement si vous avez effectué un étalonnage.">
                       <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
@@ -1721,43 +1330,62 @@ export default function DeviceModal({
                           onChange={(e) => handleCalibrationChange(index, e.target.value)}
                           autoComplete="off"
                           className="input w-full text-sm py-1.5"
-                          placeholder={`a${index}`}
-                          title={`Coefficient a${index} de la formule de calibration. Modifier uniquement si vous avez effectué un étalonnage.`}
+                          placeholder={DEVICE_DEFAULTS.calibration_coefficients[index]?.toString() || `a${index}`}
+                          title={`Coefficient a${index} de la formule de calibration. Par défaut: ${DEVICE_DEFAULTS.calibration_coefficients[index]}`}
                         />
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-end">
-                    <div className="w-full">
-                      <Tooltip content="Active la localisation GPS du dispositif.\n\nPermet d'enregistrer la position géographique avec chaque mesure.\n\n⚠️ Consomme plus de batterie\n⚠️ Peut ralentir le démarrage du modem">
-                        <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                          📍 GPS
-                        </label>
-                      </Tooltip>
-                      <label className="relative inline-flex items-center cursor-pointer w-full justify-center" title="Activer/désactiver le GPS">
-                        <input
-                          type="checkbox"
-                          name="gps_enabled"
-                          checked={formData.gps_enabled === true}
-                          onChange={(e) => setFormData(prev => ({ ...prev, gps_enabled: e.target.checked }))}
-                          autoComplete="off"
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Tooltip content="Active la localisation GPS du dispositif.\n\nPermet d'enregistrer la position géographique avec chaque mesure.\n\n⚠️ Consomme plus de batterie\n⚠️ Peut ralentir le démarrage du modem">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        📍 GPS
                       </label>
-                    </div>
+                    </Tooltip>
+                    <label className="relative inline-flex items-center cursor-pointer w-full justify-center" title="Activer/désactiver le GPS">
+                      <input
+                        type="checkbox"
+                        name="gps_enabled"
+                        checked={formData.gps_enabled === true}
+                        onChange={(e) => setFormData(prev => ({ ...prev, gps_enabled: e.target.checked }))}
+                        autoComplete="off"
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
+                      {formData.gps_enabled === true ? '✅ Activé' : formData.gps_enabled === false ? '❌ Désactivé' : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <Tooltip content="Active l'itinérance (roaming) pour permettre la connexion sur les réseaux d'autres opérateurs.\n\nUtile si le dispositif peut se déplacer dans des zones où l'opérateur principal n'a pas de couverture.\n\n⚠️ Peut entraîner des coûts supplémentaires selon votre forfait">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        🌍 Itinérance (Roaming)
+                      </label>
+                    </Tooltip>
+                    <label className="relative inline-flex items-center cursor-pointer w-full justify-center" title="Activer/désactiver l'itinérance">
+                      <input
+                        type="checkbox"
+                        name="roaming_enabled"
+                        checked={formData.roaming_enabled === true}
+                        onChange={(e) => setFormData(prev => ({ ...prev, roaming_enabled: e.target.checked }))}
+                        autoComplete="off"
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
+                      {formData.roaming_enabled === true ? '✅ Activée' : formData.roaming_enabled === false ? '❌ Désactivée' : 'N/A'}
+                    </p>
                   </div>
                 </div>
               </div>
-            </Accordion>
-              </div>
-            )}
+              </Accordion>
 
-            {/* Onglet Avancé */}
-            {configTab === 'advanced' && (
-              <div className="space-y-2">
-                {/* Airflow - Accordéon fermé */}
-                <Accordion title="💨 Airflow" defaultOpen={true}>
+              {/* 2. Airflow */}
+              <Accordion title="💨 Airflow" defaultOpen={false}>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Tooltip content="Nombre de fois que la mesure de débit est répétée.\n\nChaque passe prend plusieurs échantillons.\n\nPlus de passes = mesure plus précise mais plus longue.\n\nRecommandé: 2-5 passes">
@@ -1790,9 +1418,9 @@ export default function DeviceModal({
                     onChange={handleInputChange}
                     autoComplete="off"
                     className="input w-full text-sm py-1.5"
-                    placeholder="10"
+                    placeholder={`${DEVICE_DEFAULTS.airflow_samples_per_pass}`}
                     min="1"
-                    title="Nombre d'échantillons par passe. Recommandé: 5-20 échantillons"
+                    title={`Nombre d'échantillons par passe. Par défaut: ${DEVICE_DEFAULTS.airflow_samples_per_pass}`}
                   />
                 </div>
                 <div>
@@ -1815,110 +1443,10 @@ export default function DeviceModal({
                   />
                 </div>
               </div>
-            </Accordion>
+              </Accordion>
 
-            {/* Modem - Accordéon */}
-            <Accordion title="📡 Modem" defaultOpen={false}>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Tooltip content="Timeout du watchdog en minutes.\n\nSi le système ne répond pas pendant ce délai, le dispositif redémarre automatiquement pour éviter les blocages.\n\nRecommandé: 3-10 minutes">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        Watchdog (min)
-                      </label>
-                    </Tooltip>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="watchdog_seconds"
-                    value={formData.watchdog_seconds || ''}
-                    onChange={handleInputChangeWithConversion}
-                    autoComplete="off"
-                    className="input w-full text-sm py-1.5"
-                    placeholder="5.0"
-                    min="0.1"
-                    title="Timeout en minutes avant redémarrage automatique. Recommandé: 3-10 minutes"
-                  />
-                </div>
-                <div>
-                  <Tooltip content="Temps maximum en secondes pour que le modem démarre.\n\nSi le modem ne démarre pas dans ce délai, le système considère qu'il y a un problème.\n\nRecommandé: 20-60 secondes">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        Boot timeout (sec)
-                      </label>
-                    </Tooltip>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="modem_boot_timeout_ms"
-                    value={formData.modem_boot_timeout_ms ?? ''}
-                    onChange={handleInputChangeWithConversion}
-                    autoComplete="off"
-                    className="input w-full text-sm py-1.5"
-                    placeholder="30.0"
-                    min="0.1"
-                    title="Temps max en secondes pour démarrer le modem. Recommandé: 20-60 secondes"
-                  />
-                </div>
-                <div>
-                  <Tooltip content="Temps maximum en secondes pour que la carte SIM soit prête.\n\nLa SIM doit être déverrouillée et initialisée avant de pouvoir utiliser le réseau.\n\nRecommandé: 5-15 secondes">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        SIM ready timeout (sec)
-                      </label>
-                    </Tooltip>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="sim_ready_timeout_ms"
-                    value={formData.sim_ready_timeout_ms ?? ''}
-                    onChange={handleInputChangeWithConversion}
-                    autoComplete="off"
-                    className="input w-full text-sm py-1.5"
-                    placeholder="10.0"
-                    min="0.1"
-                    title="Temps max en secondes pour que la SIM soit prête. Recommandé: 5-15 secondes"
-                  />
-                </div>
-                <div>
-                  <Tooltip content="Temps maximum en secondes pour s'attacher au réseau mobile (4G/LTE).\n\nLe dispositif doit se connecter au réseau de l'opérateur avant de pouvoir envoyer des données.\n\nRecommandé: 30-120 secondes">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        Network attach timeout (sec)
-                      </label>
-                    </Tooltip>
-                  <input
-                    type="number"
-                    step="0.1"
-                    name="network_attach_timeout_ms"
-                    value={formData.network_attach_timeout_ms || ''}
-                    onChange={handleInputChangeWithConversion}
-                    autoComplete="off"
-                    className="input w-full text-sm py-1.5"
-                    placeholder="60.0"
-                    min="0.1"
-                    title="Temps max en secondes pour s'attacher au réseau. Recommandé: 30-120 secondes"
-                  />
-                </div>
-                <div>
-                  <Tooltip content="Nombre maximum de redémarrages automatiques du modem en cas d'erreur.\n\nSi le modem échoue plusieurs fois, le système arrête de réessayer pour éviter une boucle infinie.\n\nRecommandé: 2-5 redémarrages">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        Max reboots
-                      </label>
-                    </Tooltip>
-                  <input
-                    type="number"
-                    name="modem_max_reboots"
-                    value={formData.modem_max_reboots ?? ''}
-                    onChange={handleInputChange}
-                    autoComplete="off"
-                    className="input w-full text-sm py-1.5"
-                    placeholder="3"
-                    min="0"
-                    title="Nombre max de redémarrages du modem. Recommandé: 2-5 redémarrages"
-                  />
-                </div>
-              </div>
-            </Accordion>
-
-            {/* Réseau - Accordéon */}
-            <Accordion title="📡 Réseau" defaultOpen={false}>
+              {/* 3. Réseau */}
+              <Accordion title="📡 Réseau" defaultOpen={false}>
               <div className="space-y-3">
                 <div>
                   <Tooltip content="Sélectionnez l'opérateur mobile ou configurez manuellement l'APN.\n\n• Automatique : Le firmware détecte automatiquement l'opérateur depuis la SIM\n• Orange, Free, SFR, Bouygues : Configuration automatique de l'APN\n• Configuration manuelle : Saisissez un APN personnalisé">
@@ -1965,61 +1493,138 @@ export default function DeviceModal({
                       onChange={handleInputChange}
                       autoComplete="off"
                       className="input w-full text-sm py-1.5"
-                      placeholder="Ex: orange, free, sl2sfr..."
-                      title="APN pour la connexion mobile. Saisissez uniquement en mode manuel."
+                      placeholder={DEVICE_DEFAULTS.apn || "Ex: orange, free, sl2sfr..."}
+                      title={`APN pour la connexion mobile. Par défaut: ${DEVICE_DEFAULTS.apn || 'free'}`}
                     />
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Tooltip content="Active l'itinérance (roaming) pour permettre la connexion sur les réseaux d'autres opérateurs.\n\nUtile si le dispositif peut se déplacer dans des zones où l'opérateur principal n'a pas de couverture.\n\n⚠️ Peut entraîner des coûts supplémentaires selon votre forfait">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        Itinérance (Roaming)
-                      </label>
-                    </Tooltip>
-                    <label className="relative inline-flex items-center cursor-pointer w-full justify-center" title="Activer/désactiver l'itinérance">
-                      <input
-                        type="checkbox"
-                        name="roaming_enabled"
-                        checked={formData.roaming_enabled === true}
-                        onChange={(e) => setFormData(prev => ({ ...prev, roaming_enabled: e.target.checked }))}
-                        autoComplete="off"
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div>
+                  <Tooltip content="Code PIN de la carte SIM pour la déverrouiller.\n\nLe code PIN est demandé au démarrage du modem si la SIM est verrouillée.\n\n⚠️ Ne pas confondre avec le code PUK (utilisé pour déverrouiller après 3 erreurs de PIN)">
+                    <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                      Code PIN SIM
                     </label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
-                      {formData.roaming_enabled === true ? '✅ Activée' : formData.roaming_enabled === false ? '❌ Désactivée' : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <Tooltip content="Code PIN de la carte SIM pour la déverrouiller.\n\nLe code PIN est demandé au démarrage du modem si la SIM est verrouillée.\n\n⚠️ Ne pas confondre avec le code PUK (utilisé pour déverrouiller après 3 erreurs de PIN)">
-                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        Code PIN SIM
-                      </label>
-                    </Tooltip>
-                    <input
-                      type="text"
-                      name="sim_pin"
-                      value={formData.sim_pin ?? ''}
-                      onChange={handleInputChange}
-                      autoComplete="off"
-                      className="input w-full text-sm py-1.5 font-mono"
-                      placeholder="0000"
-                      maxLength="8"
-                      title="Code PIN de la carte SIM (généralement 4 chiffres, parfois 8)"
-                    />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Code PIN pour déverrouiller la SIM (généralement 4 chiffres)
-                    </p>
-                  </div>
+                  </Tooltip>
+                  <input
+                    type="text"
+                    name="sim_pin"
+                    value={formData.sim_pin ?? ''}
+                    onChange={handleInputChange}
+                    autoComplete="off"
+                    className="input w-full text-sm py-1.5 font-mono"
+                    placeholder={DEVICE_DEFAULTS.sim_pin}
+                    maxLength="8"
+                    title={`Code PIN de la carte SIM. Par défaut: ${DEVICE_DEFAULTS.sim_pin}`}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Code PIN pour déverrouiller la SIM. Par défaut: {DEVICE_DEFAULTS.sim_pin}
+                  </p>
                 </div>
               </div>
-            </Accordion>
+              </Accordion>
 
-            {/* OTA - Accordéon fermé */}
-            <Accordion title="🔄 OTA" defaultOpen={false}>
+              {/* 4. Modem */}
+              <Accordion title="🔧 Modem" defaultOpen={false}>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Tooltip content="Timeout du watchdog en minutes.\n\nSi le système ne répond pas pendant ce délai, le dispositif redémarre automatiquement pour éviter les blocages.\n\nRecommandé: 0.5 minutes (30 secondes)">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Watchdog (min)
+                      </label>
+                    </Tooltip>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="watchdog_seconds"
+                    value={formData.watchdog_seconds || ''}
+                    onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
+                    className="input w-full text-sm py-1.5"
+                    placeholder={`${DEVICE_DEFAULTS.watchdog_seconds / 60}`}
+                    min="0.1"
+                    title="Timeout en minutes avant redémarrage automatique. Par défaut: 0.5 min (30s)"
+                  />
+                </div>
+                <div>
+                  <Tooltip content="Temps maximum en secondes pour que le modem démarre.\n\nSi le modem ne démarre pas dans ce délai, le système considère qu'il y a un problème.\n\nRecommandé: 20 secondes">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Boot timeout (sec)
+                      </label>
+                    </Tooltip>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="modem_boot_timeout_ms"
+                    value={formData.modem_boot_timeout_ms ?? ''}
+                    onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
+                    className="input w-full text-sm py-1.5"
+                    placeholder={`${DEVICE_DEFAULTS.modem_boot_timeout_ms / 1000}`}
+                    min="0.1"
+                    title="Temps max en secondes pour démarrer le modem. Par défaut: 20s"
+                  />
+                </div>
+                <div>
+                  <Tooltip content="Temps maximum en secondes pour que la carte SIM soit prête.\n\nLa SIM doit être déverrouillée et initialisée avant de pouvoir utiliser le réseau.\n\nRecommandé: 45 secondes">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        SIM ready timeout (sec)
+                      </label>
+                    </Tooltip>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="sim_ready_timeout_ms"
+                    value={formData.sim_ready_timeout_ms ?? ''}
+                    onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
+                    className="input w-full text-sm py-1.5"
+                    placeholder={`${DEVICE_DEFAULTS.sim_ready_timeout_ms / 1000}`}
+                    min="0.1"
+                    title="Temps max en secondes pour que la SIM soit prête. Par défaut: 45s"
+                  />
+                </div>
+                <div>
+                  <Tooltip content="Temps maximum en secondes pour s'attacher au réseau mobile (4G/LTE).\n\nLe dispositif doit se connecter au réseau de l'opérateur avant de pouvoir envoyer des données.\n\nRecommandé: 120 secondes (2 minutes)">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Network attach timeout (sec)
+                      </label>
+                    </Tooltip>
+                  <input
+                    type="number"
+                    step="0.1"
+                    name="network_attach_timeout_ms"
+                    value={formData.network_attach_timeout_ms || ''}
+                    onChange={handleInputChangeWithConversion}
+                    autoComplete="off"
+                    className="input w-full text-sm py-1.5"
+                    placeholder={`${DEVICE_DEFAULTS.network_attach_timeout_ms / 1000}`}
+                    min="0.1"
+                    title="Temps max en secondes pour s'attacher au réseau. Par défaut: 120s (2min)"
+                  />
+                </div>
+                <div>
+                  <Tooltip content="Nombre maximum de redémarrages automatiques du modem en cas d'erreur.\n\nSi le modem échoue plusieurs fois, le système arrête de réessayer pour éviter une boucle infinie.\n\nRecommandé: 3 redémarrages">
+                      <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
+                        Max reboots
+                      </label>
+                    </Tooltip>
+                  <input
+                    type="number"
+                    name="modem_max_reboots"
+                    value={formData.modem_max_reboots ?? ''}
+                    onChange={handleInputChange}
+                    autoComplete="off"
+                    className="input w-full text-sm py-1.5"
+                    placeholder={`${DEVICE_DEFAULTS.modem_max_reboots}`}
+                    min="0"
+                    title="Nombre max de redémarrages du modem. Par défaut: 3"
+                  />
+                </div>
+              </div>
+              </Accordion>
+
+              {/* 5. OTA */}
+              <Accordion title="🔄 OTA" defaultOpen={false}>
               <div className="space-y-3">
                 <div>
                   <Tooltip content="URL principale pour télécharger les mises à jour du firmware (OTA - Over The Air).\n\nLe dispositif télécharge le nouveau firmware depuis cette URL quand une mise à jour est disponible.\n\nExemple: https://votre-serveur.com/firmware/latest.bin">
@@ -2056,10 +1661,8 @@ export default function DeviceModal({
                   />
                 </div>
               </div>
-            </Accordion>
-              </div>
-            )}
-
+              </Accordion>
+            </div>
           </div>
 
           {/* Boutons */}
@@ -2091,15 +1694,33 @@ export default function DeviceModal({
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={saving || loadingConfig || (editingItem && !hasChanges)}
-                title={editingItem && !hasChanges ? 'Aucune modification détectée' : undefined}
+                disabled={saving || !usbIsConnected || !port || !usbWrite || (editingItem && !hasChanges)}
+                title={
+                  !usbIsConnected || !port || !usbWrite 
+                    ? 'Dispositif USB non connecté - Veuillez connecter le dispositif en USB'
+                    : editingItem && !hasChanges 
+                      ? 'Aucune modification détectée'
+                      : 'Envoyer la configuration complète au dispositif USB'
+                }
               >
-                {saving ? '⏳ Envoi en cours...' : (editingItem ? '📤 Envoyer au dispositif' : '✅ Créer le dispositif')}
+                {saving ? '⏳ Envoi en cours...' : '📤 Envoyer la configuration au dispositif USB'}
               </button>
             </div>
           </div>
         </form>
       </div>
+      
+      <ConfirmModal
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={confirmResetConfig}
+        title="⚠️ Réinitialiser la configuration"
+        message="Êtes-vous sûr de vouloir réinitialiser tous les paramètres aux valeurs par défaut ?\n\nCette action va réinitialiser :\n• APN\n• Code PIN SIM\n• Sleep\n• GPS\n• Roaming\n• Calibration\n\n(Serial et ICCID seront conservés)"
+        confirmText="Réinitialiser"
+        cancelText="Annuler"
+        variant="warning"
+        loading={saving}
+      />
     </div>
   )
 }

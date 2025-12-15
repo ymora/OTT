@@ -156,14 +156,22 @@ git push origin main
 
 | Variable | Description | Valeur recommandée |
 |----------|-------------|--------------------|
-| `NEXT_PUBLIC_API_URL` | URL de l'API (Render) | `https://ott-jbln.onrender.com` |
+| `NEXT_PUBLIC_API_URL` | URL de l'API | `http://localhost:8000` (dev local) ou `https://ott-jbln.onrender.com` (production) |
 | `NEXT_PUBLIC_ENABLE_DEMO_RESET` | Activer le bouton "Réinitialiser démo" dans l'admin | `false` (ou `true` pour tests) |
 
-**Fichier `.env.local` minimal :**
+**Fichier `.env.local` pour développement local :**
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_ENABLE_DEMO_RESET=false
+```
+
+**Fichier `.env.local` pour production (si vous testez avec l'API distante) :**
 ```bash
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
 NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 ```
+
+**Note :** En développement local, utilisez `http://localhost:8000` pour pointer directement vers l'API PHP locale (Docker ou serveur PHP). Le proxy Next.js (`http://localhost:3000`) est utilisé automatiquement si `NEXT_PUBLIC_API_URL` n'est pas défini.
 
 **Note :** `NEXT_PUBLIC_REQUIRE_AUTH` n'existe plus - l'authentification est toujours requise.
 
@@ -212,11 +220,17 @@ DATABASE_URL="postgresql://..." ./scripts/db/db_migrate.sh
 
 #### 2. Configurer le frontend (`.env.local`)
 
+**Option A : Utiliser l'API Render (production)**
 ```bash
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
 ```
 
-**C'est tout !** Le frontend local utilisera l'API Render qui utilise la base Render.
+**Option B : Utiliser l'API locale Docker (développement)**
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+**C'est tout !** Le frontend local utilisera l'API configurée (Render ou Docker local).
 
 ### Base Docker (Optionnel - Seulement si pas d'internet)
 
@@ -575,7 +589,7 @@ grep -r "function " api/ | sort | uniq -d
    - `psql $DATABASE_URL -c "SELECT COUNT(*) FROM measurements;"` retourne > 0.
    - `psql ... -c "SELECT * FROM users_with_roles;"` liste les comptes attendus.
 3. **Frontend local**
-   - `.env.local` pointe vers `https://ott-jbln.onrender.com`.
+   - `.env.local` pointe vers `http://localhost:8000` (dev local) ou `https://ott-jbln.onrender.com` (production).
    - `npm run lint && npm run build` passent.
 4. **Frontend GitHub Pages**
    - `npm run export` avant `git push`.

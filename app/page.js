@@ -1,7 +1,8 @@
 'use client'
 
-// Désactiver le pré-rendu statique pour cette page
-export const dynamic = 'force-dynamic'
+// En export statique, on ne peut pas utiliser 'force-dynamic'
+// La page sera pré-rendue statiquement mais le contenu sera hydraté côté client
+// export const dynamic = 'force-dynamic' // DÉSACTIVÉ pour export statique
 
 import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
@@ -15,9 +16,11 @@ export default function HomePage() {
 
   // S'assurer qu'on est bien sur la page d'accueil (pas sur une autre route)
   useEffect(() => {
-    if (typeof window !== 'undefined' && pathname && pathname !== '/' && !pathname.startsWith('/dashboard')) {
+    if (typeof window !== 'undefined' && pathname && pathname !== '/' && pathname !== '/OTT' && pathname !== '/OTT/' && !pathname.startsWith('/OTT/dashboard')) {
       // Si on est sur une route inconnue, rediriger vers la page d'accueil
-      router.replace('/')
+      // Gérer le basePath /OTT en production
+      const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+      router.replace(basePath || '/')
     }
   }, [pathname, router])
 
