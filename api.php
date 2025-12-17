@@ -836,6 +836,7 @@ function handleRunSqlDirect() {
             
             // Détecter le début d'un bloc $$ ($$ ou $tag$)
             if ($char === '$' && !$inDollarQuote) {
+                // Vérifier si c'est le début d'un tag dollar ($$ ou $tag$)
                 $tag = '$';
                 $j = $i + 1;
                 // Chercher la fin du tag (jusqu'au prochain $)
@@ -844,7 +845,7 @@ function handleRunSqlDirect() {
                     $j++;
                 }
                 if ($j < $length) {
-                    $tag .= '$';
+                    $tag .= '$'; // Tag complet ($$ ou $tag$)
                     $inDollarQuote = true;
                     $dollarTag = $tag;
                     $currentStatement .= $tag;
@@ -855,18 +856,21 @@ function handleRunSqlDirect() {
             
             // Détecter la fin d'un bloc $$
             if ($inDollarQuote && $char === '$') {
+                // Vérifier si c'est la fin du tag dollar
                 $potentialTag = '$';
                 $j = $i + 1;
-                while ($j < $length && $sql[$j] !== '$' && strlen($potentialTag) < strlen($dollarTag)) {
+                // Construire le tag potentiel jusqu'au prochain $
+                while ($j < $length && $sql[$j] !== '$') {
                     $potentialTag .= $sql[$j];
                     $j++;
                 }
                 if ($j < $length) {
-                    $potentialTag .= '$';
+                    $potentialTag .= '$'; // Tag complet
+                    // Vérifier si c'est le même tag que celui d'ouverture
                     if ($potentialTag === $dollarTag) {
                         $inDollarQuote = false;
                         $currentStatement .= $potentialTag;
-                        $i = $j;
+                        $i = $j; // Avancer jusqu'à la fin du tag de fermeture
                         continue;
                     }
                 }
