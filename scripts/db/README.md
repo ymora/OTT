@@ -4,6 +4,37 @@ Ce répertoire contient les scripts PowerShell pour gérer la base de données P
 
 ## 📋 Scripts disponibles
 
+### 0. Configuration nouvelle base Render (`setup_new_render_db.ps1`)
+
+Guide et script pour créer et initialiser une nouvelle base PostgreSQL sur Render.
+
+**Usage :**
+```powershell
+.\scripts\db\setup_new_render_db.ps1 -DatabaseUrl "postgresql://user:pass@host:port/dbname"
+```
+
+**Options :**
+- `-DatabaseUrl` : URL de connexion PostgreSQL (requis)
+- `-SkipSchema` : Ne pas exécuter le schéma SQL (juste tester la connexion)
+- `-Help` : Afficher le guide complet
+
+**Exemple :**
+```powershell
+.\scripts\db\setup_new_render_db.ps1 -DatabaseUrl "postgresql://ott_user:password@dpg-xxxxx-a.frankfurt-postgres.render.com:5432/ott_data"
+```
+
+**Ce que fait le script :**
+1. Vérifie que `psql` est installé
+2. Teste la connexion à la base de données
+3. Vérifie l'état de la base (vide ou existante)
+4. Applique le schéma SQL (`sql/schema.sql`)
+5. Vérifie les tables créées
+6. Affiche les instructions pour configurer Render
+
+**📖 Guide complet :** Voir `docs/SETUP_NEW_RENDER_DB.md`
+
+---
+
 ### 1. Sauvegarde des données (`backup_data.ps1`)
 
 Sauvegarde toutes les données importantes (utilisateurs, dispositifs, patients, mesures, etc.) dans un fichier JSON.

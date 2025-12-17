@@ -963,8 +963,11 @@ export default function DebugTab() {
   
   // Debug: logger les changements d'état du modal
   useEffect(() => {
+    logger.debug('[UsbStreamingTab] État modal - showDeviceModal:', showDeviceModal, 'editingDevice:', editingDevice)
     if (showDeviceModal) {
-      logger.debug('[UsbStreamingTab] Modal dispositif ouvert, editingDevice:', editingDevice)
+      logger.debug('[UsbStreamingTab] ✅ Modal dispositif OUVERT, editingDevice:', editingDevice)
+    } else {
+      logger.debug('[UsbStreamingTab] ❌ Modal dispositif FERMÉ')
     }
   }, [showDeviceModal, editingDevice])
   
@@ -1314,6 +1317,12 @@ export default function DebugTab() {
       // Si déjà chargé, ne pas recharger
       if (loadingDbData) return
       
+      // Vérifier que fetchWithAuth et API_URL sont disponibles
+      if (!fetchWithAuth || !API_URL) {
+        logger.debug('[DebugTab] fetchWithAuth ou API_URL non disponible, skip chargement DB')
+        return
+      }
+      
       // Si on a un identifiant USB, l'utiliser, sinon charger tous les dispositifs
       const identifier = usbDeviceInfo?.sim_iccid || usbDeviceInfo?.device_serial || usbDeviceInfo?.device_name
       
@@ -1375,15 +1384,22 @@ export default function DebugTab() {
           }
         }
       } catch (err) {
-        logger.error('[DebugTab] Erreur chargement données DB:', err)
+        // Ne logger que si ce n'est pas une erreur réseau/CORS attendue (API non démarrée)
+        if (!err.message?.includes('Impossible de contacter l\'API')) {
+          logger.error('[DebugTab] Erreur chargement données DB:', err)
+        } else {
+          logger.debug('[DebugTab] API non accessible (probablement non démarrée), skip chargement DB')
+        }
       } finally {
         setLoadingDbData(false)
       }
     }
     
-    // Charger immédiatement au montage
-    loadDbDeviceData()
-  }, [fetchWithAuth, API_URL])
+    // Charger immédiatement au montage seulement si fetchWithAuth et API_URL sont disponibles
+    if (fetchWithAuth && API_URL) {
+      loadDbDeviceData()
+    }
+  }, [fetchWithAuth, API_URL, usbDeviceInfo, dbDeviceData, loadingDbData, usbStreamLastMeasurement])
   
   // Recharger si on obtient un identifiant USB qui ne correspond pas aux données DB actuelles
   useEffect(() => {
@@ -1960,6 +1976,7 @@ export default function DebugTab() {
       <DeviceModal
         isOpen={showDeviceModal}
         onClose={() => {
+          logger.debug('[UsbStreamingTab] Fermeture modal dispositif')
           setShowDeviceModal(false)
           setEditingDevice(null)
         }}
@@ -2374,9 +2391,16 @@ export default function DebugTab() {
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            logger.debug('[UsbStreamingTab] Ouverture modal dispositif:', device)
+                            logger.debug('[UsbStreamingTab] Clic bouton modification dispositif')
+                            logger.debug('[UsbStreamingTab] Device:', device)
+                            logger.debug('[UsbStreamingTab] showDeviceModal avant:', showDeviceModal)
                             setEditingDevice(device)
                             setShowDeviceModal(true)
+                            logger.debug('[UsbStreamingTab] showDeviceModal après setShowDeviceModal(true)')
+                            // Forcer un re-render pour debug
+                            setTimeout(() => {
+                              logger.debug('[UsbStreamingTab] showDeviceModal après timeout:', showDeviceModal)
+                            }, 100)
                           }}
                           className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                           title="Modifier le dispositif (données et configuration)"

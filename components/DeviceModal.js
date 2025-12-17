@@ -99,6 +99,7 @@ export default function DeviceModal({
   const [formError, setFormError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [loadingConfig, setLoadingConfig] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   // Initialiser le formulaire UNIQUEMENT lors de l'ouverture du modal
   // Utiliser un ref pour éviter les réinitialisations lors de changements
@@ -1120,7 +1121,19 @@ export default function DeviceModal({
     }
   }
 
-  if (!isOpen) return null
+  // Debug: logger l'état du modal
+  useEffect(() => {
+    if (isOpen) {
+      logger.debug('[DeviceModal] Modal ouvert, editingItem:', editingItem)
+    }
+  }, [isOpen, editingItem])
+
+  if (!isOpen) {
+    logger.debug('[DeviceModal] Modal fermé (isOpen=false), return null')
+    return null
+  }
+
+  logger.debug('[DeviceModal] Rendu du modal avec isOpen=true')
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -1483,7 +1496,7 @@ export default function DeviceModal({
                   <div>
                     <Tooltip content="Point d'accès réseau (APN) pour la connexion mobile.\n\nEn mode automatique ou avec opérateur sélectionné, l'APN est configuré automatiquement.\n\nEn mode manuel, saisissez l'APN fourni par votre opérateur.\n\nExemples:\n• orange (Orange)\n• free (Free)\n• sl2sfr (SFR)\n• mmsbouygtel (Bouygues)">
                       <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300 cursor-help">
-                        APN (Point d'accès)
+                        APN (Point d&apos;accès)
                       </label>
                     </Tooltip>
                     <input
