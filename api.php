@@ -822,11 +822,12 @@ function handleRunSqlDirect() {
         $logs = [];
         $logs[] = "🚀 Début de l'exécution SQL...";
         
-        // Diviser le SQL en instructions en tenant compte des blocs $$ de PostgreSQL
+        // Diviser le SQL en instructions en tenant compte des blocs $$ et des parenthèses
         $statements = [];
         $currentStatement = '';
         $inDollarQuote = false;
         $dollarTag = '';
+        $parenDepth = 0;
         $length = strlen($sql);
         
         for ($i = 0; $i < $length; $i++) {
@@ -871,10 +872,19 @@ function handleRunSqlDirect() {
                 }
             }
             
+            // Compter les parenthèses (pour ne pas diviser dans les CREATE TABLE)
+            if (!$inDollarQuote) {
+                if ($char === '(') {
+                    $parenDepth++;
+                } elseif ($char === ')') {
+                    $parenDepth--;
+                }
+            }
+            
             $currentStatement .= $char;
             
-            // Si on est hors d'un bloc $$ et qu'on rencontre un ;, c'est la fin d'une instruction
-            if (!$inDollarQuote && $char === ';') {
+            // Si on est hors d'un bloc $$, hors des parenthèses, et qu'on rencontre un ;, c'est la fin d'une instruction
+            if (!$inDollarQuote && $parenDepth === 0 && $char === ';') {
                 $trimmed = trim($currentStatement);
                 if (!empty($trimmed) && !preg_match('/^\s*--/', $trimmed)) {
                     $statements[] = $trimmed;
