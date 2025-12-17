@@ -643,6 +643,80 @@ function handleHideMigration($historyId) {
 }
 
 /**
+ * DELETE /api.php/migrations/file/:filename
+ * Supprime un fichier de migration du serveur
+ */
+function handleDeleteMigrationFile($filename) {
+    global $pdo;
+    
+    // Nettoyer le buffer de sortie
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    
+    requireAdmin();
+    
+    // SÉCURITÉ: Validation stricte du nom de fichier
+    // Autoriser uniquement les fichiers migration_*.sql
+    if (!preg_match('/^migration_[a-z0-9_]+\.sql$/', $filename)) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false, 
+            'error' => 'Invalid migration file name. Only migration_*.sql files are allowed.'
+        ]);
+        return;
+    }
+    
+    try {
+        $filePath = SQL_BASE_DIR . '/' . $filename;
+        
+        // Protection contre path traversal: vérifier que le chemin réel est dans SQL_BASE_DIR
+        $realPath = realpath($filePath);
+        $basePath = realpath(SQL_BASE_DIR);
+        if ($realPath === false || $basePath === false || strpos($realPath, $basePath) !== 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Invalid file path']);
+            return;
+        }
+        
+        // Vérifier que le fichier existe
+        if (!file_exists($filePath)) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Migration file not found']);
+            return;
+        }
+        
+        // Supprimer le fichier
+        if (!unlink($filePath)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Failed to delete migration file']);
+            return;
+        }
+        
+        // Supprimer aussi l'entrée de l'historique si elle existe
+        try {
+            $stmt = $pdo->prepare("DELETE FROM migration_history WHERE migration_file = :filename");
+            $stmt->execute(['filename' => $filename]);
+        } catch (PDOException $e) {
+            // Ne pas faire échouer si la table n'existe pas ou si l'entrée n'existe pas
+            error_log('[handleDeleteMigrationFile] Note: Could not delete history entry: ' . $e->getMessage());
+        }
+        
+        auditLog('migration.file_deleted', 'migration', null, null, ['filename' => $filename]);
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Migration file deleted successfully'
+        ]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        error_log('[handleDeleteMigrationFile] Erreur: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+}
+
+/**
  * DELETE /api.php/migrations/history/:id
  * Supprimer définitivement une migration de l'historique (admin uniquement)
  */
@@ -1861,6 +1935,8 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleGetMigrationHistory();
 } elseif($method === 'POST' && preg_match('#^/migrations/history/(\d+)/hide/?$#', $path, $m)) {
     handleHideMigration($m[1]);
+} elseif($method === 'DELETE' && preg_match('#^/migrations/file/([^/]+)$#', $path, $m)) {
+    handleDeleteMigrationFile($m[1]);
 } elseif($method === 'DELETE' && preg_match('#^/migrations/history/(\d+)/?$#', $path, $m)) {
     handleDeleteMigration($m[1]);
 } elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {

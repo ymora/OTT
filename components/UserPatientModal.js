@@ -712,7 +712,7 @@ export default function UserPatientModal({
                     >
                       <option value="">Choisir un rôle…</option>
                       {roles.map(role => (
-                        <option key={role.id} value={role.id}>
+                        <option key={role.id} value={role.id} disabled={false}>
                           {role.name}
                         </option>
                       ))}

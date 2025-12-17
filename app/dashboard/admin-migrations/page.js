@@ -282,39 +282,57 @@ export default function AdminMigrationsPage() {
   const deleteMigration = async () => {
     if (!isAdmin) return
     
-    // Si pas de historyId, il n'y a rien à supprimer
-    if (!migrationToDelete?.historyId) {
-      setActionError('Cette migration n\'a pas d\'entrée dans l\'historique à supprimer')
-      return
-    }
-    
     try {
-      setDeletingMigration(migrationToDelete.historyId)
       setActionError(null)
       
-      const data = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/migrations/history/${migrationToDelete.historyId}`,
-        { method: 'DELETE' },
-        { requiresAuth: true }
-      )
-      
-      if (data.success) {
-        // Recharger l'historique
-        const historyData = await fetchJson(
+      // Si pas de historyId, supprimer le fichier directement
+      if (!migrationToDelete?.historyId) {
+        // Supprimer le fichier SQL du serveur
+        setDeletingMigration('file')
+        
+        const data = await fetchJson(
           fetchWithAuth,
           API_URL,
-          '/api.php/migrations/history',
-          { method: 'GET' },
+          `/api.php/migrations/file/${encodeURIComponent(migrationToDelete.id)}`,
+          { method: 'DELETE' },
           { requiresAuth: true }
         )
-        if (historyData.success) {
-          setMigrationHistory(historyData.history || [])
+        
+        if (data.success) {
+          setSuccess('Fichier de migration supprimé définitivement du serveur')
+          logger.log('✅ Fichier de migration supprimé définitivement')
+          closeDeleteModal()
+          // Recharger la page pour mettre à jour la liste
+          window.location.reload()
         }
-        setSuccess('Migration supprimée définitivement de l\'historique')
-        logger.log('✅ Migration supprimée définitivement')
-        closeDeleteModal()
+      } else {
+        // Supprimer l'entrée de l'historique
+        setDeletingMigration(migrationToDelete.historyId)
+        
+        const data = await fetchJson(
+          fetchWithAuth,
+          API_URL,
+          `/api.php/migrations/history/${migrationToDelete.historyId}`,
+          { method: 'DELETE' },
+          { requiresAuth: true }
+        )
+        
+        if (data.success) {
+          // Recharger l'historique
+          const historyData = await fetchJson(
+            fetchWithAuth,
+            API_URL,
+            '/api.php/migrations/history',
+            { method: 'GET' },
+            { requiresAuth: true }
+          )
+          if (historyData.success) {
+            setMigrationHistory(historyData.history || [])
+          }
+          setSuccess('Migration supprimée définitivement de l\'historique')
+          logger.log('✅ Migration supprimée définitivement')
+          closeDeleteModal()
+        }
       }
     } catch (err) {
       logger.error('Erreur suppression migration:', err)
@@ -459,19 +477,15 @@ export default function AdminMigrationsPage() {
                           )}
                           <button
                             onClick={() => openDeleteModal(migration)}
-                            disabled={deletingMigration === migration.historyId}
-                            className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
-                              migration.historyId 
-                                ? 'hover:bg-red-100 dark:hover:bg-red-900/30' 
-                                : 'opacity-50 cursor-not-allowed'
-                            }`}
+                            disabled={deletingMigration === migration.historyId || deletingMigration === 'file'}
+                            className="p-2 rounded-lg transition-colors disabled:opacity-50 hover:bg-red-100 dark:hover:bg-red-900/30"
                             title={
                               migration.historyId 
                                 ? "Supprimer définitivement cette migration de l'historique" 
-                                : "Cette migration n'a pas d'entrée dans l'historique à supprimer"
+                                : "Supprimer le fichier de migration du serveur"
                             }
                           >
-                            <span className="text-lg">{deletingMigration === migration.historyId ? '⏳' : '🗑️'}</span>
+                            <span className="text-lg">{deletingMigration === migration.historyId || deletingMigration === 'file' ? '⏳' : '🗑️'}</span>
                           </button>
                           <button
                             onClick={() => runMigration(migration.id)}
@@ -537,7 +551,7 @@ export default function AdminMigrationsPage() {
               ) : (
                 <>
                   <p className="text-gray-700 dark:text-gray-300 mb-2">
-                    Cette migration n&apos;a pas d&apos;entrée dans l&apos;historique à supprimer.
+                    Êtes-vous sûr de vouloir supprimer définitivement ce fichier de migration du serveur ?
                   </p>
                   <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
                     <p className="font-medium text-primary">
@@ -547,8 +561,8 @@ export default function AdminMigrationsPage() {
                       {migrationToDelete.id}
                     </p>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
-                    ℹ️ Cette migration n&apos;a jamais été exécutée, il n&apos;y a donc rien à supprimer de l&apos;historique.
+                  <p className="text-sm text-red-600 dark:text-red-400 mt-3">
+                    ⚠️ Cette action est irréversible. Le fichier sera supprimé du serveur.
                   </p>
                 </>
               )}
@@ -558,19 +572,17 @@ export default function AdminMigrationsPage() {
               <button
                 className="btn-secondary"
                 onClick={closeDeleteModal}
-                disabled={deletingMigration === migrationToDelete.historyId}
+                disabled={deletingMigration === migrationToDelete.historyId || deletingMigration === 'file'}
               >
-                Fermer
+                Annuler
               </button>
-              {migrationToDelete.historyId && (
-                <button
-                  className="btn-primary bg-red-600 hover:bg-red-700"
-                  onClick={deleteMigration}
-                  disabled={deletingMigration === migrationToDelete.historyId}
-                >
-                  {deletingMigration === migrationToDelete.historyId ? '⏳ Suppression...' : '🗑️ Supprimer'}
-                </button>
-              )}
+              <button
+                className="btn-primary bg-red-600 hover:bg-red-700"
+                onClick={deleteMigration}
+                disabled={deletingMigration === migrationToDelete.historyId || deletingMigration === 'file'}
+              >
+                {deletingMigration === migrationToDelete.historyId || deletingMigration === 'file' ? '⏳ Suppression...' : '🗑️ Supprimer'}
+              </button>
             </div>
           </>
         )}

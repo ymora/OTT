@@ -6,17 +6,31 @@
 param(
     [string]$ApiUrl = "https://ott-jbln.onrender.com",
     [string]$Token = "",
-    [string]$SchemaFile = "sql/schema.sql"
+    [string]$SchemaFile = "schema.sql"
 )
+
+# Si SchemaFile ne contient pas de chemin, chercher dans sql/
+if ($SchemaFile -notmatch "[/\\]" -and $SchemaFile -ne "schema.sql") {
+    # Pour les fichiers comme "create_admin_user.sql", chercher dans sql/
+    $SchemaFile = $SchemaFile
+}
 
 Write-Host "`n🔧 Application du schéma SQL via l'API Render" -ForegroundColor Cyan
 Write-Host "=" * 70 -ForegroundColor Gray
 Write-Host ""
 
+# Construire le chemin du fichier SQL
+# Si SchemaFile ne contient pas de chemin, chercher dans sql/
+if ($SchemaFile -notmatch "[/\\]") {
+    $fullSchemaPath = Join-Path $PSScriptRoot "..\..\sql\$SchemaFile"
+} else {
+    $fullSchemaPath = Join-Path $PSScriptRoot "..\..\$SchemaFile"
+}
+
 # Vérifier que le fichier existe
-$fullSchemaPath = Join-Path $PSScriptRoot "..\..\$SchemaFile"
 if (-not (Test-Path $fullSchemaPath)) {
     Write-Host "❌ Erreur: Fichier schéma introuvable: $fullSchemaPath" -ForegroundColor Red
+    Write-Host "   Vérifiez que le fichier existe dans sql/" -ForegroundColor Yellow
     exit 1
 }
 
@@ -35,7 +49,7 @@ if ($Token) {
         }
         
         $body = @{
-            file = "schema.sql"
+            file = $SchemaFile
         } | ConvertTo-Json
         
         $response = Invoke-RestMethod -Uri "$ApiUrl/api.php/admin/migrations/run" `
@@ -71,7 +85,7 @@ Write-Host "   (Nécessite que ALLOW_MIGRATION_ENDPOINT=true sur Render)" -Foreg
 
 try {
     $body = @{
-        file = "schema.sql"
+        file = $SchemaFile
     } | ConvertTo-Json
     
     # Utiliser Invoke-WebRequest pour pouvoir lire le body d'erreur
@@ -101,14 +115,25 @@ try {
     
     # Essayer de récupérer le message d'erreur détaillé
     $errorDetails = ""
+    $errorBody = ""
     try {
         $errorStream = $_.Exception.Response.GetResponseStream()
         $reader = New-Object System.IO.StreamReader($errorStream)
         $errorBody = $reader.ReadToEnd()
-        $errorDetails = $errorBody | ConvertFrom-Json -ErrorAction SilentlyContinue
+        $reader.Close()
+        $errorStream.Close()
+        
+        # Essayer de parser le JSON
+        try {
+            $errorDetails = $errorBody | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            # Si ce n'est pas du JSON, utiliser le texte brut
+            $errorDetails = $errorBody
+        }
     } catch {
-        # Si on ne peut pas parser le JSON, utiliser le message brut
+        # Si on ne peut pas lire le stream, utiliser le message d'exception
         $errorDetails = $_.Exception.Message
+        $errorBody = $_.Exception.Message
     }
     
     if ($statusCode -eq 403) {
@@ -123,20 +148,36 @@ try {
         Write-Host ""
         Write-Host "📋 Détails de l'erreur:" -ForegroundColor Yellow
         if ($errorDetails) {
-            if ($errorDetails.error) {
-                Write-Host "   Erreur: $($errorDetails.error)" -ForegroundColor Gray
+            if ($errorDetails.PSObject.Properties.Name -contains 'error') {
+                Write-Host "   Erreur: $($errorDetails.error)" -ForegroundColor Red
             }
-            if ($errorDetails.message) {
-                Write-Host "   Message: $($errorDetails.message)" -ForegroundColor Gray
+            if ($errorDetails.PSObject.Properties.Name -contains 'message') {
+                Write-Host "   Message: $($errorDetails.message)" -ForegroundColor Red
             }
-            if ($errorDetails.logs) {
+            if ($errorDetails.PSObject.Properties.Name -contains 'details') {
+                Write-Host "   Détails: $($errorDetails.details | ConvertTo-Json -Compress)" -ForegroundColor Gray
+            }
+            if ($errorDetails.PSObject.Properties.Name -contains 'logs') {
                 Write-Host "   Logs:" -ForegroundColor Gray
-                $errorDetails.logs | ForEach-Object {
-                    Write-Host "     $_" -ForegroundColor Gray
+                if ($errorDetails.logs -is [Array]) {
+                    $errorDetails.logs | ForEach-Object {
+                        Write-Host "     $_" -ForegroundColor Gray
+                    }
+                } else {
+                    Write-Host "     $($errorDetails.logs)" -ForegroundColor Gray
                 }
+            }
+            # Afficher tout le JSON si disponible
+            if ($errorBody -and $errorBody.Length -lt 2000) {
+                Write-Host ""
+                Write-Host "   Réponse complète:" -ForegroundColor Gray
+                Write-Host "   $errorBody" -ForegroundColor DarkGray
             }
         } else {
             Write-Host "   $($_.Exception.Message)" -ForegroundColor Gray
+            if ($errorBody) {
+                Write-Host "   Réponse: $errorBody" -ForegroundColor DarkGray
+            }
         }
         Write-Host ""
         Write-Host "💡 Vérifications:" -ForegroundColor Yellow
