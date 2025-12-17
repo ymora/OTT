@@ -275,15 +275,30 @@ define('SQL_BASE_DIR', __DIR__ . '/sql');
 // ============================================================================
 
 try {
+    // Log pour diagnostic (sans afficher le mot de passe)
+    error_log('[DB_CONNECTION] Tentative connexion: DSN=' . $dbConfig['dsn'] . ', user=' . $dbConfig['user']);
+    
     $pdo = new PDO(
         $dbConfig['dsn'],
         $dbConfig['user'],
         $dbConfig['pass'],
         ott_pdo_options($dbConfig['type'])
     );
+    
+    error_log('[DB_CONNECTION] ✅ Connexion réussie');
 } catch(PDOException $e) {
+    $errorMsg = $e->getMessage();
+    error_log('[DB_CONNECTION] ❌ Erreur: ' . $errorMsg);
+    error_log('[DB_CONNECTION] DSN: ' . $dbConfig['dsn']);
+    error_log('[DB_CONNECTION] User: ' . $dbConfig['user']);
+    
     http_response_code(500);
-    die(json_encode(['success' => false, 'error' => 'Database connection failed', 'details' => $e->getMessage()]));
+    die(json_encode([
+        'success' => false, 
+        'error' => 'Database connection failed', 
+        'details' => $errorMsg,
+        'hint' => 'Vérifiez que DATABASE_URL est correctement formatée: postgresql://user:password@host:port/database'
+    ]));
 }
 
 // ============================================================================

@@ -458,11 +458,14 @@ SELECT 3, id FROM permissions WHERE code IN (
 )
 ON CONFLICT DO NOTHING;
 
+-- ========================= SEED - Utilisateur admin uniquement =========================
+-- Utilisateur admin réel (créé automatiquement à l'initialisation)
+-- Email: ymora@free.fr
+-- Password: Ym120879
+-- Hash bcrypt généré avec: password_hash('Ym120879', PASSWORD_BCRYPT)
 INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role_id, is_active)
 VALUES
-  (1, 'admin@example.com', '$2y$10$w1K9P0IJhES2YwwHGwEk2Oq91Fv2R9DyCPr6Z0SqnX5nGooy2cS3m', 'Admin', 'Demo', '+33612345678', 1, TRUE),
-  (2, 'tech@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Tech', 'Demo', '+33612345679', 3, TRUE),
-  (3, 'medecin@example.com', '$2y$10$H8i5XbXwG0p4Az/cdXCMYOyNXadK1EzWLKQEiC5EvhczHxVh9Yx4C', 'Dr', 'Girard', '+33698765432', 2, TRUE)
+  (1, 'ymora@free.fr', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Yann', 'Mora', NULL, 1, TRUE)
 ON CONFLICT (id) DO UPDATE SET 
   email = EXCLUDED.email,
   phone = EXCLUDED.phone,
@@ -470,83 +473,11 @@ ON CONFLICT (id) DO UPDATE SET
 
 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled, phone_number)
 VALUES
-  (1, TRUE, TRUE, FALSE, '+33612345678'),
-  (2, TRUE, TRUE, FALSE, '+33612345679'),
-  (3, TRUE, TRUE, FALSE, '+33698765432')
+  (1, TRUE, TRUE, FALSE, NULL)  -- ymora@free.fr
 ON CONFLICT (user_id) DO UPDATE SET 
   email_enabled = EXCLUDED.email_enabled,
   sms_enabled = EXCLUDED.sms_enabled,
   push_enabled = EXCLUDED.push_enabled,
   phone_number = EXCLUDED.phone_number;
 
-INSERT INTO patients (id, first_name, last_name, phone, city, postal_code, birth_date)
-VALUES
-  (1, 'Pierre', 'Durand', '0612345601', 'Paris', '75015', '1945-03-15'),
-  (2, 'Paul', 'Martin', '0612345602', 'Lyon', '69001', '1952-07-22'),
-  (3, 'Jacques', 'Bernard', '0612345603', 'Marseille', '13001', '1948-11-30')
-ON CONFLICT (id) DO UPDATE SET 
-  first_name = EXCLUDED.first_name,
-  last_name = EXCLUDED.last_name,
-  phone = EXCLUDED.phone;
-
-INSERT INTO devices (id, sim_iccid, device_serial, device_name, patient_id, installation_date, first_use_date, last_seen, last_battery, latitude, longitude)
-VALUES
-  (1, '89330123456789012345', 'OTT-001', 'OTT-01', 1, NOW() - INTERVAL '45 days', NOW() - INTERVAL '120 days', NOW(), 85.5, 48.8566, 2.3522),
-  (2, '89330123456789012346', 'OTT-002', 'OTT-02', 2, NOW() - INTERVAL '30 days', NOW() - INTERVAL '90 days', NOW() - INTERVAL '2 hours', 72.3, 45.7640, 4.8357),
-  (3, '89330123456789012347', 'OTT-003', 'OTT-03', 3, NOW() - INTERVAL '60 days', NOW() - INTERVAL '150 days', NOW() - INTERVAL '5 hours', 68.9, 43.2965, 5.3698),
-  (4, '89330123456789019999', 'OTT-004', 'OTT-04', NULL, NULL, NULL, NOW() - INTERVAL '1 day', 55.0, 44.8378, -0.5792)
-ON CONFLICT (id) DO UPDATE SET 
-  device_name = EXCLUDED.device_name,
-  patient_id = EXCLUDED.patient_id;
-
-INSERT INTO device_configurations (device_id, firmware_version, sleep_minutes, measurement_duration_ms, calibration_coefficients)
-VALUES
-  (1, '3.0.0', 30, 100, '[0,1,0]'::jsonb),
-  (2, '3.0.0', 30, 100, '[0,1,0]'::jsonb),
-  (3, '3.0.0', 30, 100, '[0,1,0]'::jsonb),
-  (4, '3.0.0', 30, 100, '[0,1,0]'::jsonb)
-ON CONFLICT (device_id) DO UPDATE SET 
-  firmware_version = EXCLUDED.firmware_version,
-  calibration_coefficients = EXCLUDED.calibration_coefficients;
-
--- Firmwares fictifs supprimés - Les firmwares seront uploadés via l'interface
--- INSERT INTO firmware_versions (version, file_path, file_size, is_stable, release_notes, uploaded_by)
--- VALUES ('3.0.0', 'firmwares/fw_ott_v3.0.0.bin', 925000, TRUE, 'Version 3.0 stable avec OTA + JWT + Notifications', 1)
--- ON CONFLICT (version) DO UPDATE SET 
---   file_path = EXCLUDED.file_path,
---   is_stable = EXCLUDED.is_stable;
-
-INSERT INTO measurements (device_id, timestamp, flowrate, battery, device_status)
-VALUES
-  (1, NOW() - INTERVAL '30 minutes', 3.45, 85.5, 'TIMER'),
-  (1, NOW() - INTERVAL '60 minutes', 3.21, 85.8, 'TIMER'),
-  (1, NOW() - INTERVAL '90 minutes', 3.67, 86.0, 'TIMER'),
-  (2, NOW() - INTERVAL '2 hours', 4.12, 72.3, 'TIMER'),
-  (2, NOW() - INTERVAL '3 hours', 4.35, 73.1, 'TIMER'),
-  (3, NOW() - INTERVAL '5 hours', 2.15, 68.9, 'TIMER'),
-  (4, NOW() - INTERVAL '6 hours', 0.00, 55.0, 'IDLE')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO alerts (id, device_id, type, severity, message, status, created_at)
-VALUES
-  ('ALERT-001', 1, 'low_battery', 'medium', 'Batterie en dessous de 20% pour OTT-01', 'unresolved', NOW() - INTERVAL '15 minutes'),
-  ('ALERT-002', 2, 'device_offline', 'high', 'Dispositif OTT-02 hors ligne depuis 3h', 'unresolved', NOW() - INTERVAL '2 hours'),
-  ('ALERT-003', 4, 'device_offline', 'medium', 'Boîtier en stock sans patient, vérification requise', 'unresolved', NOW() - INTERVAL '1 day'),
-  ('ALERT-004', 3, 'abnormal_flowrate', 'critical', 'Variation de débit anormale détectée', 'unresolved', NOW() - INTERVAL '45 minutes'),
-  ('ALERT-005', 2, 'low_battery', 'low', 'Batterie revenue à 30% - alerte clôturée', 'resolved', NOW() - INTERVAL '1 day')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO device_logs (id, device_id, timestamp, level, event_type, message)
-VALUES
-  (1, 1, NOW() - INTERVAL '1 hour', 'INFO', 'wake', 'Réveil planifié'),
-  (2, 1, NOW() - INTERVAL '50 minutes', 'WARN', 'low_battery', 'Batterie 19%'),
-  (3, 2, NOW() - INTERVAL '3 hours', 'ERROR', 'offline', 'Perte réseau prolongée'),
-  (4, 4, NOW() - INTERVAL '2 hours', 'INFO', 'inventory_check', 'Boîtier stock testé en atelier')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, old_value, new_value, created_at)
-VALUES
-  (1, 1, 'user.created', 'user', '3', NULL, json_build_object('email','medecin@example.com'), NOW() - INTERVAL '2 days'),
-  (2, 1, 'device.updated', 'device', '2', json_build_object('patient_id',2), json_build_object('patient_id',2,'status','active'), NOW() - INTERVAL '12 hours'),
-  (3, 2, 'device.updated', 'device', '4', NULL, json_build_object('status','maintenance'), NOW() - INTERVAL '1 day')
-ON CONFLICT DO NOTHING;
+-- Pas de données de démo - Base de données vide prête pour les données réelles

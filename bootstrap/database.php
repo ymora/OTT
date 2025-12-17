@@ -76,8 +76,30 @@ if (!function_exists('ott_normalize_db_type')) {
 
         $databaseUrl = getenv('DATABASE_URL');
         if ($databaseUrl) {
+            // Nettoyer la DATABASE_URL (enlever les espaces, etc.)
+            $databaseUrl = trim($databaseUrl);
+            
+            // Log pour diagnostic (sans afficher le mot de passe complet)
+            $urlForLog = preg_replace('/(:[^:@]+)@/', ':****@', $databaseUrl);
+            error_log('[DB_CONFIG] Parsing DATABASE_URL: ' . $urlForLog);
+            
             $parts = @parse_url($databaseUrl);
-            if ($parts !== false) {
+            if ($parts === false) {
+                error_log('[DB_CONFIG] ❌ Erreur parse_url() - DATABASE_URL invalide');
+                // Essayer de parser manuellement si parse_url échoue
+                // Format attendu: postgresql://user:pass@host:port/dbname
+                if (preg_match('#^(postgresql?|pgsql)://([^:]+):([^@]+)@([^:]+):?(\d+)?/(.+)$#', $databaseUrl, $matches)) {
+                    $type = ott_normalize_db_type($matches[1]);
+                    $config['user'] = rawurldecode($matches[2]);
+                    $config['pass'] = rawurldecode($matches[3]);
+                    $config['host'] = $matches[4];
+                    $config['port'] = !empty($matches[5]) ? $matches[5] : ott_default_port($type);
+                    $config['name'] = rawurldecode($matches[6]);
+                    error_log('[DB_CONFIG] ✅ Parsing manuel réussi');
+                } else {
+                    error_log('[DB_CONFIG] ❌ Format DATABASE_URL non reconnu');
+                }
+            } else {
                 if (!empty($parts['scheme'])) {
                     $type = ott_normalize_db_type($parts['scheme']);
                 }
@@ -96,7 +118,11 @@ if (!function_exists('ott_normalize_db_type')) {
                 if (!empty($parts['port'])) {
                     $config['port'] = $parts['port'];
                 }
+                error_log('[DB_CONFIG] ✅ Parsing parse_url() réussi');
             }
+            
+            // Log final (sans mot de passe)
+            error_log('[DB_CONFIG] Config finale: host=' . ($config['host'] ?? 'null') . ', port=' . ($config['port'] ?? 'null') . ', db=' . ($config['name'] ?? 'null') . ', user=' . ($config['user'] ?? 'null'));
         }
 
         $config['type'] = $type;
