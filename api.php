@@ -835,6 +835,7 @@ function handleRunSqlDirect() {
             $nextChar = ($i + 1 < $length) ? $sql[$i + 1] : '';
             
             // Détecter le début d'un bloc $$ ($$ ou $tag$)
+            // IMPORTANT: Vérifier AVANT d'ajouter le caractère à currentStatement
             if ($char === '$' && !$inDollarQuote) {
                 // Vérifier si c'est le début d'un tag dollar ($$ ou $tag$)
                 $tag = '$';
@@ -850,7 +851,7 @@ function handleRunSqlDirect() {
                     $dollarTag = $tag;
                     $currentStatement .= $tag;
                     $i = $j; // Avancer jusqu'à la fin du tag d'ouverture
-                    continue;
+                    continue; // Ne pas ajouter le $ à currentStatement (déjà fait dans le tag)
                 }
             }
             
