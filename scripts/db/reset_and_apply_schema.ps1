@@ -8,7 +8,7 @@ param(
 Write-Host "🔄 Réinitialisation complète de la base de données" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Script SQL pour supprimer tous les objets
+# 1. Script SQL pour supprimer tous les objets (ordre important : triggers d'abord, puis tables)
 $resetSql = @"
 -- Supprimer tous les triggers
 DROP TRIGGER IF EXISTS trg_roles_updated ON roles;
