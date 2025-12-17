@@ -1885,6 +1885,12 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     // Le Content-Type sera défini dans handleUsbLogsRequest()
     echo handleUsbLogsRequest($pdo, $method, $path, $body, $_GET, $userId, $userRole);
 
+// Migration avec SQL en body - Route pour exécuter du SQL directement
+} elseif($method === 'POST' && ($path === '/admin/migrate-sql' || preg_match('#^/admin/migrate-sql/?$#', $path))) {
+    error_log('[ROUTER] ✅ Route /admin/migrate-sql matchée - Path: ' . $path . ' Method: ' . $method);
+    handleRunSqlDirect();
+    exit;
+
 // Migration complète - Route pour exécuter la migration complète
 } elseif(($method === 'POST' || $method === 'GET') && ($path === '/admin/migrate-complete' || preg_match('#^/admin/migrate-complete/?$#', $path))) {
     error_log('[ROUTER] ✅ Route /admin/migrate-complete matchée - Path: ' . $path . ' Method: ' . $method);
