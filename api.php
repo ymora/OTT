@@ -782,6 +782,145 @@ function handleDeleteMigration($historyId) {
     }
 }
 
+/**
+ * POST /api.php/admin/migrate-sql
+ * Exécute du SQL directement depuis le body de la requête
+ */
+function handleRunSqlDirect() {
+    global $pdo;
+    
+    // Nettoyer le buffer de sortie
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    
+    // Vérifier les permissions : admin requis OU endpoint autorisé
+    $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? null;
+    $allowWithoutAuth = in_array($remoteAddr, ['127.0.0.1', '::1', 'localhost'], true) || AUTH_DISABLED || getenv('ALLOW_MIGRATION_ENDPOINT') === 'true';
+    $currentUser = getCurrentUser();
+    $isAdmin = $currentUser && $currentUser['role_name'] === 'admin';
+    
+    if (!$allowWithoutAuth && !$isAdmin) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Forbidden - Admin access required or ALLOW_MIGRATION_ENDPOINT=true']);
+        return;
+    }
+    
+    try {
+        $body = json_decode(file_get_contents('php://input'), true);
+        if (!isset($body['sql']) || empty(trim($body['sql']))) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'SQL content is required in body.sql']);
+            return;
+        }
+        
+        $sql = $body['sql'];
+        $startTime = microtime(true);
+        error_log('[handleRunSqlDirect] Début exécution SQL direct (longueur: ' . strlen($sql) . ' caractères)');
+        
+        $logs = [];
+        $logs[] = "🚀 Début de l'exécution SQL...";
+        
+        // Diviser le SQL en instructions pour un meilleur logging
+        $statements = array_filter(
+            array_map('trim', explode(';', $sql)),
+            function($stmt) { return !empty($stmt) && !preg_match('/^\s*--/', $stmt); }
+        );
+        
+        $statementsCount = count($statements);
+        $logs[] = "📝 Nombre d'instructions SQL: $statementsCount";
+        error_log('[handleRunSqlDirect] Nombre d\'instructions: ' . $statementsCount);
+        
+        foreach ($statements as $index => $statement) {
+            if (empty(trim($statement))) continue;
+            
+            $stmtPreview = substr($statement, 0, 80);
+            error_log("[handleRunSqlDirect] Exécution instruction " . ($index + 1) . "/$statementsCount: {$stmtPreview}...");
+            
+            try {
+                $pdo->exec($statement);
+                $logs[] = "✅ Instruction " . ($index + 1) . "/$statementsCount exécutée";
+            } catch (PDOException $stmtError) {
+                $errorCode = $stmtError->getCode();
+                $errorMessage = $stmtError->getMessage();
+                $errorInfo = $pdo->errorInfo();
+                
+                $logs[] = "❌ ERREUR à l'instruction " . ($index + 1) . "/$statementsCount";
+                $logs[] = "   Code: {$errorCode}";
+                $logs[] = "   Message: {$errorMessage}";
+                $logs[] = "   Instruction: " . substr($statement, 0, 150);
+                
+                error_log("[handleRunSqlDirect] ❌ ERREUR SQL à l'instruction " . ($index + 1) . ":");
+                error_log("[handleRunSqlDirect]   Code: {$errorCode}");
+                error_log("[handleRunSqlDirect]   Message: {$errorMessage}");
+                error_log("[handleRunSqlDirect]   PDO ErrorInfo: " . json_encode($errorInfo));
+                error_log("[handleRunSqlDirect]   Instruction: " . substr($statement, 0, 500));
+                
+                http_response_code(500);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'SQL Error',
+                    'message' => $errorMessage,
+                    'code' => $errorCode,
+                    'pdoErrorInfo' => $errorInfo,
+                    'statement_index' => $index + 1,
+                    'statement_preview' => substr($statement, 0, 200),
+                    'logs' => $logs
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+        }
+        
+        $duration = round((microtime(true) - $startTime) * 1000, 2);
+        error_log('[handleRunSqlDirect] ✅ SQL exécuté avec succès en ' . $duration . 'ms');
+        
+        $logs[] = "✅ Exécution terminée avec succès";
+        $logs[] = "⏱️ Durée: {$duration}ms";
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'SQL executed successfully',
+            'duration' => $duration,
+            'statements_count' => $statementsCount,
+            'logs' => $logs
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        
+    } catch (PDOException $e) {
+        $errorCode = $e->getCode();
+        $errorMessage = $e->getMessage();
+        $errorInfo = $pdo->errorInfo();
+        
+        error_log('[handleRunSqlDirect] ❌ ERREUR PDO: ' . $errorMessage);
+        error_log('[handleRunSqlDirect] Code: ' . $errorCode);
+        error_log('[handleRunSqlDirect] PDO ErrorInfo: ' . json_encode($errorInfo));
+        
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'SQL Error',
+            'message' => $errorMessage,
+            'code' => $errorCode,
+            'pdoErrorInfo' => $errorInfo
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch (Exception $e) {
+        $errorMessage = $e->getMessage();
+        $errorCode = $e->getCode();
+        
+        error_log('[handleRunSqlDirect] ❌ ERREUR: ' . $errorMessage);
+        error_log('[handleRunSqlDirect] Code: ' . $errorCode);
+        error_log('[handleRunSqlDirect] Stack trace: ' . $e->getTraceAsString());
+        
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Migration failed',
+            'message' => $errorMessage,
+            'code' => $errorCode
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+}
+
 function handleRepairDatabase() {
     global $pdo;
     
