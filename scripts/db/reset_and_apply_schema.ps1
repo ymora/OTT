@@ -77,14 +77,14 @@ try {
 
 Write-Host ""
 
-# 2. Appliquer le schéma en étapes
-Write-Host "2️⃣  Application du schéma SQL en étapes..." -ForegroundColor Yellow
+# 2. Appliquer le schéma complet
+Write-Host "2️⃣  Application du schéma SQL complet..." -ForegroundColor Yellow
 Write-Host ""
 
-# Utiliser le script apply_schema_steps.ps1
-$stepsScript = Join-Path $PSScriptRoot "apply_schema_steps.ps1"
-if (Test-Path $stepsScript) {
-    & $stepsScript -ApiUrl $ApiUrl
+# Utiliser le script apply_schema_simple.ps1
+$simpleScript = Join-Path $PSScriptRoot "apply_schema_simple.ps1"
+if (Test-Path $simpleScript) {
+    & $simpleScript -ApiUrl $ApiUrl
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
         Write-Host "✅ Base de données initialisée avec succès !" -ForegroundColor Green
@@ -93,11 +93,11 @@ if (Test-Path $stepsScript) {
         exit 1
     }
 } else {
-    Write-Host "   ❌ Script apply_schema_steps.ps1 introuvable" -ForegroundColor Red
+    Write-Host "   ❌ Script apply_schema_simple.ps1 introuvable" -ForegroundColor Red
     exit 1
 }
 
-# Ancien code (fallback si nécessaire)
+# Code de fallback (ne devrait pas être atteint)
 $schemaFile = Join-Path $PSScriptRoot "..\..\sql\schema.sql"
 if (-not (Test-Path $schemaFile)) {
     Write-Host "   ❌ Fichier introuvable: $schemaFile" -ForegroundColor Red
@@ -105,6 +105,7 @@ if (-not (Test-Path $schemaFile)) {
 }
 
 $sqlContent = Get-Content $schemaFile -Raw -Encoding UTF8
+$sqlContent = $sqlContent -replace "`r`n", "`n" -replace "`r", "`n"
 $sqlLength = $sqlContent.Length
 Write-Host "   📋 Fichier SQL: $schemaFile ($sqlLength caractères)" -ForegroundColor Gray
 
