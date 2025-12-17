@@ -872,7 +872,7 @@ function handleRunSqlDirect() {
                         $inDollarQuote = false;
                         $currentStatement .= $potentialTag;
                         $i = $j; // Avancer jusqu'à la fin du tag de fermeture
-                        continue;
+                        continue; // Ne pas ajouter le $ à currentStatement (déjà fait)
                     }
                 }
             }
