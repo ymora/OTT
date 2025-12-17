@@ -857,6 +857,7 @@ function handleRunSqlDirect() {
             // Détecter la fin d'un bloc $$
             if ($inDollarQuote && $char === '$') {
                 // Vérifier si c'est la fin du tag dollar
+                // On doit construire le tag complet pour le comparer
                 $potentialTag = '$';
                 $j = $i + 1;
                 // Construire le tag potentiel jusqu'au prochain $
@@ -865,8 +866,8 @@ function handleRunSqlDirect() {
                     $j++;
                 }
                 if ($j < $length) {
-                    $potentialTag .= '$'; // Tag complet
-                    // Vérifier si c'est le même tag que celui d'ouverture
+                    $potentialTag .= '$'; // Tag complet ($$ ou $tag$)
+                    // Vérifier si c'est exactement le même tag que celui d'ouverture
                     if ($potentialTag === $dollarTag) {
                         $inDollarQuote = false;
                         $currentStatement .= $potentialTag;
