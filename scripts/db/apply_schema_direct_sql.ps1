@@ -1,12 +1,12 @@
-# Script pour appliquer le schéma SQL en envoyant le contenu directement à l'API
-# Usage: .\scripts\db\apply_schema_direct_sql.ps1 -ApiUrl 'https://ott-jbln.onrender.com'
+# Script simple pour appliquer le schéma SQL à la base de données
+# Usage: .\scripts\db\apply_schema_direct_sql.ps1
 
 param(
     [string]$ApiUrl = "https://ott-jbln.onrender.com",
     [string]$SchemaFile = "schema.sql"
 )
 
-Write-Host "🔧 Application du schéma SQL directement (contenu dans le body)" -ForegroundColor Cyan
+Write-Host "🚀 Application du schéma SQL" -ForegroundColor Cyan
 Write-Host ""
 
 # Construire le chemin du fichier SQL
