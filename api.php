@@ -2043,6 +2043,20 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleDiagnosticMeasurements();
     exit;
 
+// Generate password hash (utilitaire temporaire)
+} elseif($method === 'POST' && ($path === '/admin/generate-password-hash' || preg_match('#^/admin/generate-password-hash/?$#', $path))) {
+    $body = json_decode(file_get_contents('php://input'), true);
+    $password = $body['password'] ?? 'Ym120879';
+    $hash = password_hash($password, PASSWORD_BCRYPT);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success' => true,
+        'password' => $password,
+        'hash' => $hash,
+        'sql' => "INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role_id, is_active)\nVALUES\n  (1, 'ymora@free.fr', '$hash', 'Yann', 'Mora', NULL, 1, TRUE)\nON CONFLICT (id) DO UPDATE SET \n  email = EXCLUDED.email,\n  phone = EXCLUDED.phone,\n  role_id = EXCLUDED.role_id;"
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+
 // Health check
 } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
     handleHealthCheck();
