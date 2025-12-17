@@ -471,6 +471,7 @@ function handleRunMigration() {
                 'message' => $errorMessage,
                 'code' => $errorCode,
                 'details' => $errorInfo,
+                'file' => $migrationFile,
                 'logs' => [
                     "❌ ERREUR SQL lors de l'exécution de '{$migrationFile}'",
                     "Code erreur: {$errorCode}",
@@ -534,7 +535,12 @@ function handleRunMigration() {
                 'error' => 'Migration failed',
                 'message' => $errorMessage,
                 'code' => $errorCode,
+                'file' => $migrationFile,
                 'details' => $pdoErrorInfo,
+                'debug' => getenv('DEBUG_ERRORS') === 'true' ? [
+                    'trace' => $e->getTraceAsString(),
+                    'previous' => $previousException ? $previousException->getMessage() : null
+                ] : null,
                 'logs' => $logs
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
