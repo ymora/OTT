@@ -49,6 +49,11 @@ $skipUntilSemicolon = $false
 $inFunction = $false
 
 foreach ($line in $lines) {
+    # Ignorer les commentaires et lignes vides
+    if ($line -match '^\s*--' -or $line.Trim() -eq '') {
+        continue
+    }
+    
     # Ignorer les fonctions (déjà dans step1)
     if ($line -match '^CREATE EXTENSION' -or $line -match '^CREATE OR REPLACE FUNCTION') {
         $inFunction = $true
@@ -80,12 +85,19 @@ foreach ($line in $lines) {
 
 $step2 = $step2Lines -join "`n"
 
-# Étape 3: Extraire uniquement les CREATE TRIGGER
+# Étape 3: Extraire uniquement les CREATE TRIGGER avec DROP TRIGGER IF EXISTS avant
 $step3Lines = @()
 foreach ($line in $lines) {
-    if ($line -match '^\s*CREATE TRIGGER') {
-        # Trouver toutes les lignes jusqu'au prochain ; ou ligne vide
-        $triggerLines = @($line)
+    if ($line -match '^\s*CREATE TRIGGER\s+(\w+).*ON\s+(\w+)') {
+        # Extraire le nom du trigger et de la table
+        $triggerName = $matches[1]
+        $tableName = $matches[2]
+        
+        # Ajouter DROP TRIGGER IF EXISTS avant
+        $dropTrigger = "DROP TRIGGER IF EXISTS $triggerName ON $tableName;"
+        
+        # Trouver toutes les lignes jusqu'au prochain ;
+        $triggerLines = @($dropTrigger, $line)
         $lineIndex = [array]::IndexOf($lines, $line)
         for ($i = $lineIndex + 1; $i -lt $lines.Count; $i++) {
             $triggerLines += $lines[$i]

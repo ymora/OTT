@@ -77,14 +77,14 @@ try {
 
 Write-Host ""
 
-# 2. Appliquer le schéma complet
-Write-Host "2️⃣  Application du schéma SQL complet..." -ForegroundColor Yellow
+# 2. Appliquer le schéma en étapes (fonctions, tables, triggers)
+Write-Host "2️⃣  Application du schéma SQL en étapes..." -ForegroundColor Yellow
 Write-Host ""
 
-# Utiliser le script apply_schema_simple.ps1
-$simpleScript = Join-Path $PSScriptRoot "apply_schema_simple.ps1"
-if (Test-Path $simpleScript) {
-    & $simpleScript -ApiUrl $ApiUrl
+# Utiliser le script apply_schema_steps.ps1 (fonctionne mieux)
+$stepsScript = Join-Path $PSScriptRoot "apply_schema_steps.ps1"
+if (Test-Path $stepsScript) {
+    & $stepsScript -ApiUrl $ApiUrl
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
         Write-Host "✅ Base de données initialisée avec succès !" -ForegroundColor Green
@@ -93,7 +93,7 @@ if (Test-Path $simpleScript) {
         exit 1
     }
 } else {
-    Write-Host "   ❌ Script apply_schema_simple.ps1 introuvable" -ForegroundColor Red
+    Write-Host "   ❌ Script apply_schema_steps.ps1 introuvable" -ForegroundColor Red
     exit 1
 }
 
