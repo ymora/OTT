@@ -822,11 +822,72 @@ function handleRunSqlDirect() {
         $logs = [];
         $logs[] = "🚀 Début de l'exécution SQL...";
         
-        // Diviser le SQL en instructions pour un meilleur logging
-        $statements = array_filter(
-            array_map('trim', explode(';', $sql)),
-            function($stmt) { return !empty($stmt) && !preg_match('/^\s*--/', $stmt); }
-        );
+        // Diviser le SQL en instructions en tenant compte des blocs $$ de PostgreSQL
+        $statements = [];
+        $currentStatement = '';
+        $inDollarQuote = false;
+        $dollarTag = '';
+        $length = strlen($sql);
+        
+        for ($i = 0; $i < $length; $i++) {
+            $char = $sql[$i];
+            $nextChar = ($i + 1 < $length) ? $sql[$i + 1] : '';
+            
+            // Détecter le début d'un bloc $$ ($$ ou $tag$)
+            if ($char === '$' && !$inDollarQuote) {
+                $tag = '$';
+                $j = $i + 1;
+                // Chercher la fin du tag (jusqu'au prochain $)
+                while ($j < $length && $sql[$j] !== '$') {
+                    $tag .= $sql[$j];
+                    $j++;
+                }
+                if ($j < $length) {
+                    $tag .= '$';
+                    $inDollarQuote = true;
+                    $dollarTag = $tag;
+                    $currentStatement .= $tag;
+                    $i = $j; // Avancer jusqu'à la fin du tag d'ouverture
+                    continue;
+                }
+            }
+            
+            // Détecter la fin d'un bloc $$
+            if ($inDollarQuote && $char === '$') {
+                $potentialTag = '$';
+                $j = $i + 1;
+                while ($j < $length && $sql[$j] !== '$' && strlen($potentialTag) < strlen($dollarTag)) {
+                    $potentialTag .= $sql[$j];
+                    $j++;
+                }
+                if ($j < $length) {
+                    $potentialTag .= '$';
+                    if ($potentialTag === $dollarTag) {
+                        $inDollarQuote = false;
+                        $currentStatement .= $potentialTag;
+                        $i = $j;
+                        continue;
+                    }
+                }
+            }
+            
+            $currentStatement .= $char;
+            
+            // Si on est hors d'un bloc $$ et qu'on rencontre un ;, c'est la fin d'une instruction
+            if (!$inDollarQuote && $char === ';') {
+                $trimmed = trim($currentStatement);
+                if (!empty($trimmed) && !preg_match('/^\s*--/', $trimmed)) {
+                    $statements[] = $trimmed;
+                }
+                $currentStatement = '';
+            }
+        }
+        
+        // Ajouter la dernière instruction si elle existe
+        $trimmed = trim($currentStatement);
+        if (!empty($trimmed) && !preg_match('/^\s*--/', $trimmed)) {
+            $statements[] = $trimmed;
+        }
         
         $statementsCount = count($statements);
         $logs[] = "📝 Nombre d'instructions SQL: $statementsCount";
