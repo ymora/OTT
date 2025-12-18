@@ -387,6 +387,19 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
   // Obtenir la géolocalisation du PC (GPS ou IP) pour le centre de la carte
   const { latitude: pcLatitude, longitude: pcLongitude, loading: geoLoading } = useGeolocation()
   
+  // Utiliser un ref pour s'assurer qu'une seule instance de carte existe
+  const mapKeyRef = useRef(0)
+  const [mapKey, setMapKey] = useState(0)
+  
+  // Réinitialiser la carte si les devices changent significativement
+  useEffect(() => {
+    const devicesKey = devices.map(d => `${d.id}-${d.latitude}-${d.longitude}`).join(',')
+    if (devicesKey !== mapKeyRef.current) {
+      mapKeyRef.current = devicesKey
+      setMapKey(prev => prev + 1)
+    }
+  }, [devices])
+  
   const center = useMemo(() => {
     if (devices.length === 0) {
       // Si pas de dispositifs, utiliser les coordonnées du PC si disponibles
@@ -449,7 +462,24 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
   }, [devices])
 
   return (
-    <MapContainer center={center} zoom={zoom} style={{ height: 600, width: '100%' }} scrollWheelZoom>
+    <MapContainer 
+      key={mapKey}
+      center={center} 
+      zoom={zoom} 
+      style={{ height: 600, width: '100%' }} 
+      scrollWheelZoom
+      whenCreated={(mapInstance) => {
+        // Nettoyer l'instance précédente si elle existe
+        if (typeof window !== 'undefined' && window._leafletMapInstance) {
+          try {
+            window._leafletMapInstance.remove()
+          } catch (e) {
+            // Ignorer les erreurs de nettoyage
+          }
+        }
+        window._leafletMapInstance = mapInstance
+      }}
+    >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

@@ -186,10 +186,15 @@ export default function DashboardPage() {
   )
 
   // Mémoriser la carte des dispositifs (doit être avant le return conditionnel)
+  // Utiliser une clé unique basée sur les devices pour forcer le remontage si nécessaire
+  const mapKey = useMemo(() => {
+    return activeDevices.map(d => `${d.id}-${d.latitude}-${d.longitude}`).join(',')
+  }, [activeDevices])
+  
   const mapComponent = useMemo(() => {
     if (loading || activeDevices.length === 0) return null
     return (
-      <div id="map-container" className="card p-0 overflow-hidden">
+      <div id="map-container" className="card p-0 overflow-hidden" key={`map-wrapper-${mapKey}`}>
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -198,6 +203,7 @@ export default function DashboardPage() {
         </div>
         <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
           <LeafletMap
+            key={`leaflet-map-${mapKey}`}
             devices={devices}
             focusDeviceId={focusDeviceId}
             onSelect={() => {}}
@@ -205,7 +211,7 @@ export default function DashboardPage() {
         </div>
       </div>
     )
-  }, [activeDevices, geolocatedDevices, loading, focusDeviceId, devices])
+  }, [activeDevices, geolocatedDevices, loading, focusDeviceId, devices, mapKey])
 
   // Mémoriser les dispositifs en ligne
   const onlineDevicesList = useMemo(() => {
