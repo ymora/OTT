@@ -77,8 +77,8 @@ function handleLogin() {
             return;
         }
         // Récupérer l'utilisateur directement depuis la table users pour avoir le password_hash
-        // Utiliser IS TRUE pour PostgreSQL (plus robuste que = TRUE)
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email AND is_active IS TRUE AND deleted_at IS NULL");
+        // D'abord récupérer sans conditions pour debug
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email");
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch();
         
@@ -86,6 +86,15 @@ function handleLogin() {
         if (!$user) {
             error_log('[handleLogin] User not found: ' . $email);
             auditLog('user.login_failed', 'user', null, null, ['email' => $email]);
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Invalid credentials'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+        
+        // Vérifier les conditions après avoir trouvé l'utilisateur
+        if (!$user['is_active'] || $user['deleted_at'] !== null) {
+            error_log('[handleLogin] User found but inactive or deleted: ' . $email . ' - is_active: ' . ($user['is_active'] ? 'true' : 'false') . ' - deleted_at: ' . ($user['deleted_at'] ?? 'null'));
+            auditLog('user.login_failed', 'user', null, null, ['email' => $email, 'reason' => 'inactive_or_deleted']);
             http_response_code(401);
             echo json_encode(['success' => false, 'error' => 'Invalid credentials'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
