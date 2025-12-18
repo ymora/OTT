@@ -77,7 +77,6 @@ function handleLogin() {
             return;
         }
         // Récupérer l'utilisateur directement depuis la table users pour avoir le password_hash
-        // D'abord récupérer sans conditions pour debug
         // IMPORTANT: Forcer FETCH_ASSOC pour être sûr d'avoir un tableau associatif
         $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email");
         $stmt->setFetchMode(PDO::FETCH_ASSOC);
@@ -87,15 +86,52 @@ function handleLogin() {
         // Debug: Logger les informations pour diagnostiquer
         if (!$user) {
             error_log('[handleLogin] User not found: ' . $email);
+            // DEBUG: Vérifier si l'utilisateur existe avec une requête différente
+            $debugStmt = $pdo->prepare("SELECT COUNT(*) as count FROM users WHERE email = :email");
+            $debugStmt->execute(['email' => $email]);
+            $debugResult = $debugStmt->fetch(PDO::FETCH_ASSOC);
+            error_log('[handleLogin] DEBUG - Count query result: ' . json_encode($debugResult));
             auditLog('user.login_failed', 'user', null, null, ['email' => $email]);
             http_response_code(401);
             echo json_encode(['success' => false, 'error' => 'Invalid credentials'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
         
+        // DEBUG: Logger toutes les valeurs de l'utilisateur
+        error_log('[handleLogin] DEBUG - User found: ' . json_encode([
+            'id' => $user['id'] ?? 'MISSING',
+            'email' => $user['email'] ?? 'MISSING',
+            'is_active' => $user['is_active'] ?? 'MISSING',
+            'is_active_type' => gettype($user['is_active'] ?? null),
+            'is_active_bool' => (bool)($user['is_active'] ?? false),
+            'deleted_at' => $user['deleted_at'] ?? 'MISSING',
+            'deleted_at_type' => gettype($user['deleted_at'] ?? null),
+            'password_hash_length' => strlen($user['password_hash'] ?? '')
+        ]));
+        
         // Vérifier les conditions après avoir trouvé l'utilisateur
-        if (!$user['is_active'] || $user['deleted_at'] !== null) {
-            error_log('[handleLogin] User found but inactive or deleted: ' . $email . ' - is_active: ' . ($user['is_active'] ? 'true' : 'false') . ' - deleted_at: ' . ($user['deleted_at'] ?? 'null'));
+        // PostgreSQL retourne 't'/'f' pour boolean, ou true/false selon la version
+        $isActive = false;
+        if (isset($user['is_active'])) {
+            $isActiveValue = $user['is_active'];
+            // Gérer les différents formats PostgreSQL
+            if (is_bool($isActiveValue)) {
+                $isActive = $isActiveValue;
+            } elseif (is_string($isActiveValue)) {
+                $isActive = in_array(strtolower($isActiveValue), ['t', 'true', '1', 'yes']);
+            } elseif (is_numeric($isActiveValue)) {
+                $isActive = (int)$isActiveValue !== 0;
+            }
+        }
+        
+        $isDeleted = false;
+        if (isset($user['deleted_at'])) {
+            $deletedAtValue = $user['deleted_at'];
+            $isDeleted = ($deletedAtValue !== null && $deletedAtValue !== '');
+        }
+        
+        if (!$isActive || $isDeleted) {
+            error_log('[handleLogin] User found but inactive or deleted: ' . $email . ' - is_active: ' . ($isActive ? 'true' : 'false') . ' - deleted_at: ' . ($isDeleted ? 'not_null' : 'null'));
             auditLog('user.login_failed', 'user', null, null, ['email' => $email, 'reason' => 'inactive_or_deleted']);
             http_response_code(401);
             echo json_encode(['success' => false, 'error' => 'Invalid credentials'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
