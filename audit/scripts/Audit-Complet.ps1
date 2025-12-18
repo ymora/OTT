@@ -645,14 +645,14 @@ if ([string]::IsNullOrEmpty($AuditDir)) {
     $searchPaths = @($scriptRoot, $projectRoot, (Get-Location).Path)
     foreach ($searchPath in $searchPaths) {
         $testAuditDir = Join-Path $searchPath "audit"
-        if (Test-Path $testAuditDir -and (Test-Path (Join-Path $testAuditDir "audit.ps1"))) {
+        if ((Test-Path $testAuditDir) -and (Test-Path (Join-Path $testAuditDir "audit.ps1"))) {
             $AuditDir = $testAuditDir
             break
         }
         # Vérifier aussi le parent
         $parentPath = Split-Path -Parent $searchPath
         $testAuditDir = Join-Path $parentPath "audit"
-        if (Test-Path $testAuditDir -and (Test-Path (Join-Path $testAuditDir "audit.ps1"))) {
+        if ((Test-Path $testAuditDir) -and (Test-Path (Join-Path $testAuditDir "audit.ps1"))) {
             $AuditDir = $testAuditDir
             break
         }
@@ -872,6 +872,7 @@ $auditResults = @{
     Warnings = @()
     Recommendations = @()
     Stats = @{}
+    Statistics = @{}  # Pour compatibilité avec le code existant
     CorrectionPlans = @()  # Nouveau: plans de correction structurés
 }
 
