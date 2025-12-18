@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS roles (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_roles_updated ON roles;
 CREATE TRIGGER trg_roles_updated BEFORE UPDATE ON roles
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS permissions (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_permissions_updated ON permissions;
 CREATE TRIGGER trg_permissions_updated BEFORE UPDATE ON permissions
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -59,6 +61,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_users_updated ON users;
 CREATE TRIGGER trg_users_updated BEFORE UPDATE ON users
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -81,6 +84,7 @@ CREATE TABLE IF NOT EXISTS patients (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_patients_updated ON patients;
 CREATE TRIGGER trg_patients_updated BEFORE UPDATE ON patients
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -119,6 +123,7 @@ CREATE TABLE IF NOT EXISTS devices (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_devices_updated ON devices;
 CREATE TRIGGER trg_devices_updated BEFORE UPDATE ON devices
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -183,6 +188,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger pour mettre à jour automatiquement les min/max à chaque nouvelle mesure
+DROP TRIGGER IF EXISTS trg_update_device_min_max ON measurements;
 CREATE TRIGGER trg_update_device_min_max
 AFTER INSERT ON measurements
 FOR EACH ROW
@@ -239,6 +245,7 @@ CREATE TABLE IF NOT EXISTS device_configurations (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_device_configurations_updated ON device_configurations;
 CREATE TRIGGER trg_device_configurations_updated BEFORE UPDATE ON device_configurations
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -256,6 +263,7 @@ CREATE TABLE IF NOT EXISTS firmware_versions (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_firmware_versions_updated ON firmware_versions;
 CREATE TRIGGER trg_firmware_versions_updated BEFORE UPDATE ON firmware_versions
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -274,6 +282,7 @@ CREATE TABLE IF NOT EXISTS user_notifications_preferences (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_user_notifications_preferences_updated ON user_notifications_preferences;
 CREATE TRIGGER trg_user_notifications_preferences_updated BEFORE UPDATE ON user_notifications_preferences
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -292,6 +301,7 @@ CREATE TABLE IF NOT EXISTS patient_notifications_preferences (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_patient_notifications_preferences_updated ON patient_notifications_preferences;
 CREATE TRIGGER trg_patient_notifications_preferences_updated BEFORE UPDATE ON patient_notifications_preferences
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -353,6 +363,7 @@ CREATE TABLE IF NOT EXISTS device_commands (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+DROP TRIGGER IF EXISTS trg_device_commands_updated ON device_commands;
 CREATE TRIGGER trg_device_commands_updated BEFORE UPDATE ON device_commands
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
