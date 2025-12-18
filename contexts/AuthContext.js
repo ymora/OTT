@@ -64,10 +64,31 @@ export function AuthProvider({ children }) {
       if (storedToken && storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser)
+          
+          // Vérifier que l'utilisateur a les champs essentiels
+          if (!parsedUser.id || !parsedUser.email || !parsedUser.role_name) {
+            logger.warn('[AuthContext] Données utilisateur incomplètes, nettoyage...')
+            localStorage.removeItem('ott_token')
+            localStorage.removeItem('ott_user')
+            setLoading(false)
+            return
+          }
+          
+          // Vérifier que les permissions sont présentes (même si vide)
+          if (parsedUser.permissions === undefined) {
+            logger.warn('[AuthContext] Permissions manquantes, initialisation...')
+            parsedUser.permissions = []
+          }
+          
           setToken(storedToken)
           setUser(parsedUser)
           if (typeof window !== 'undefined') {
-            logger.debug('[AuthContext] Utilisateur restauré:', parsedUser.email || parsedUser.username)
+            logger.debug('[AuthContext] Utilisateur restauré:', {
+              email: parsedUser.email,
+              role: parsedUser.role_name,
+              hasPermissions: Array.isArray(parsedUser.permissions),
+              permissionsCount: Array.isArray(parsedUser.permissions) ? parsedUser.permissions.length : 0
+            })
           }
         } catch (parseError) {
           logger.error('[AuthContext] Erreur parsing user:', parseError)
@@ -163,11 +184,29 @@ export function AuthProvider({ children }) {
         throw new Error(data.error || 'Erreur de connexion')
       }
 
+      // S'assurer que les permissions sont toujours un tableau
+      const userData = { ...data.user }
+      if (!Array.isArray(userData.permissions)) {
+        if (typeof userData.permissions === 'string' && userData.permissions.length > 0) {
+          userData.permissions = userData.permissions.split(',').map(p => p.trim()).filter(p => p.length > 0)
+        } else {
+          userData.permissions = []
+        }
+      }
+      
       setToken(data.token)
-      setUser(data.user)
+      setUser(userData)
 
       localStorage.setItem('ott_token', data.token)
-      localStorage.setItem('ott_user', JSON.stringify(data.user))
+      localStorage.setItem('ott_user', JSON.stringify(userData))
+      
+      if (typeof window !== 'undefined') {
+        logger.debug('[AuthContext] Utilisateur sauvegardé:', {
+          email: userData.email,
+          role: userData.role_name,
+          permissionsCount: userData.permissions.length
+        })
+      }
 
       return data
     } catch (err) {

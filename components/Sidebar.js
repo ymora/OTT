@@ -135,7 +135,11 @@ export default function Sidebar() {
   ]
 
   // Si pas d'utilisateur et pas en chargement, ne rien afficher
+  // MAIS: Si on est en chargement, afficher quand même pour éviter le flash
   if (!loading && !user) {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      console.warn('[Sidebar] Pas d\'utilisateur et pas en chargement, masquage du menu')
+    }
     return null
   }
 
