@@ -2393,14 +2393,8 @@ export default function DebugTab() {
                             e.stopPropagation()
                             logger.debug('[UsbStreamingTab] Clic bouton modification dispositif')
                             logger.debug('[UsbStreamingTab] Device:', device)
-                            logger.debug('[UsbStreamingTab] showDeviceModal avant:', showDeviceModal)
                             setEditingDevice(device)
                             setShowDeviceModal(true)
-                            logger.debug('[UsbStreamingTab] showDeviceModal après setShowDeviceModal(true)')
-                            // Forcer un re-render pour debug
-                            setTimeout(() => {
-                              logger.debug('[UsbStreamingTab] showDeviceModal après timeout:', showDeviceModal)
-                            }, 100)
                           }}
                           className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                           title="Modifier le dispositif (données et configuration)"
@@ -2558,7 +2552,7 @@ export default function DebugTab() {
                           logger.log(`[USB] Connexion établie sur ${portLabel}`)
                           
                           // Démarrer automatiquement le streaming après connexion
-                          setTimeout(async () => {
+                          const streamTimeoutId = setTimeout(async () => {
                             try {
                               appendUsbStreamLog('🚀 Démarrage du streaming USB...', 'dashboard')
                               logger.log('[USB] Démarrage streaming après connexion manuelle')
@@ -2567,8 +2561,12 @@ export default function DebugTab() {
                             } catch (streamErr) {
                               logger.error('❌ Erreur démarrage streaming:', streamErr)
                               appendUsbStreamLog(`❌ Erreur démarrage streaming: ${streamErr.message || streamErr}`, 'dashboard')
+                            } finally {
+                              // Nettoyer le timeout de la liste
+                              timeoutRefs.current = timeoutRefs.current.filter(id => id !== streamTimeoutId)
                             }
                           }, 500)
+                          timeoutRefs.current.push(streamTimeoutId)
                         } else {
                           appendUsbStreamLog(`❌ Échec de la connexion au port ${portLabel}`, 'dashboard')
                           logger.error(`[USB] Échec connexion au port ${portLabel}`)

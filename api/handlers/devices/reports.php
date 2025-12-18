@@ -71,6 +71,10 @@ function handleGetReportsOverview() {
         ");
         $severityStmt->execute();
 
+        // Pagination pour les assignations (limiter à 100 pour éviter les grandes listes)
+        $assignmentLimit = isset($_GET['assignment_limit']) ? min(intval($_GET['assignment_limit']), 500) : 100;
+        $assignmentOffset = isset($_GET['assignment_offset']) ? max(0, intval($_GET['assignment_offset'])) : 0;
+        
         $assignmentStmt = $pdo->prepare("
             SELECT p.id AS patient_id,
                    p.first_name,
@@ -83,7 +87,10 @@ function handleGetReportsOverview() {
             LEFT JOIN devices d ON d.patient_id = p.id AND d.deleted_at IS NULL
             WHERE p.deleted_at IS NULL
             ORDER BY p.last_name, p.first_name
+            LIMIT :limit OFFSET :offset
         ");
+        $assignmentStmt->bindValue(':limit', $assignmentLimit, PDO::PARAM_INT);
+        $assignmentStmt->bindValue(':offset', $assignmentOffset, PDO::PARAM_INT);
         $assignmentStmt->execute();
 
         echo json_encode([
