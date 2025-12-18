@@ -21,6 +21,8 @@ if (-not (Test-Path "out")) {
 }
 
 # Créer un script Python temporaire qui gère le basePath
+# Échapper le $Port pour éviter l'interpolation PowerShell
+$portValue = $Port
 $pythonScript = @"
 import http.server
 import socketserver
@@ -51,7 +53,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 # Changer vers le dossier out
 os.chdir('out')
 
-PORT = $Port
+PORT = $portValue
 
 with socketserver.TCPServer(("", PORT), CustomHandler) as httpd:
     print(f"🌐 Serveur démarré sur http://localhost:{PORT}/OTT/")
