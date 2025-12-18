@@ -172,14 +172,7 @@ export default function UsersPage() {
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
                       <td className="table-cell py-3 px-4 font-medium">
-                        <div className="flex items-center gap-2">
-                          <span>{user.first_name} {user.last_name}</span>
-                          {userIsArchived ? (
-                            <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
-                          ) : (
-                            <span className="badge badge-success">✅ Actif</span>
-                          )}
-                        </div>
+                        {user.first_name} {user.last_name}
                       </td>
                       <td className="table-cell py-3 px-4">
                         <span className={`badge ${roleColors[user.role_name] || 'bg-gray-100 text-gray-700'}`}>
@@ -191,7 +184,9 @@ export default function UsersPage() {
                         {user.phone || '-'}
                       </td>
                       <td className="table-cell py-3 px-4">
-                        {user.is_active ? (
+                        {userIsArchived ? (
+                          <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">🗄️ Archivé</span>
+                        ) : user.is_active ? (
                           <span className="badge badge-success">✅ Actif</span>
                         ) : (
                           <span className="badge text-gray-600 bg-gray-100">❌ Inactif</span>
