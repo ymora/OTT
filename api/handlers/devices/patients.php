@@ -194,14 +194,14 @@ function handleCreatePatient() {
 
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO patients (first_name, last_name, birth_date, phone, email, city, postal_code)
-            VALUES (:first_name, :last_name, :birth_date, :phone, :email, :city, :postal_code)
+            INSERT INTO patients (first_name, last_name, date_of_birth, phone, email, city, postal_code)
+            VALUES (:first_name, :last_name, :date_of_birth, :phone, :email, :city, :postal_code)
             RETURNING *
         ");
         $stmt->execute([
             'first_name' => $first_name,
             'last_name' => $last_name,
-            'birth_date' => $input['birth_date'] ?? null,
+            'date_of_birth' => $input['birth_date'] ?? $input['date_of_birth'] ?? null,
             'phone' => $input['phone'] ?? null,
             'email' => $input['email'] ?? null,
             'city' => $input['city'] ?? null,
@@ -254,7 +254,7 @@ function handleUpdatePatient($patient_id) {
             return;
         }
 
-        $textFields = ['first_name','last_name','birth_date','phone','email','city','postal_code','address','notes'];
+        $textFields = ['first_name','last_name','date_of_birth','phone','email','city','postal_code','address','notes'];
         $updates = [];
         $params = ['id' => $patient_id];
 
