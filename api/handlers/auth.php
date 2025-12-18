@@ -81,7 +81,24 @@ function handleLogin() {
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch();
         
-        if (!$user || !password_verify($password, $user['password_hash'])) {
+        // Debug: Logger les informations pour diagnostiquer
+        if (!$user) {
+            error_log('[handleLogin] User not found: ' . $email);
+            auditLog('user.login_failed', 'user', null, null, ['email' => $email]);
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'Invalid credentials'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
+        
+        $hash = $user['password_hash'] ?? '';
+        $hashLength = strlen($hash);
+        $verifyResult = password_verify($password, $hash);
+        
+        error_log('[handleLogin] Debug - Email: ' . $email . ', Hash length: ' . $hashLength . ', Verify result: ' . ($verifyResult ? 'true' : 'false'));
+        
+        if (!$verifyResult) {
+            error_log('[handleLogin] Password verification failed for: ' . $email);
+            error_log('[handleLogin] Hash preview: ' . substr($hash, 0, 30) . '...');
             auditLog('user.login_failed', 'user', null, null, ['email' => $email]);
             http_response_code(401);
             echo json_encode(['success' => false, 'error' => 'Invalid credentials'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
