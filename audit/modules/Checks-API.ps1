@@ -69,11 +69,44 @@ function Invoke-Check-API {
             }
         }
         
+        # Générer contexte pour l'IA si nécessaire
+        $aiContext = @()
         if ($endpointsTotal -gt 0) {
             $apiScore = [Math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
             $Results.Scores["API"] = $apiScore
+            
+            if ($endpointsOK -lt $endpointsTotal) {
+                $failedCount = $endpointsTotal - $endpointsOK
+                $aiContext += @{
+                    Category = "API"
+                    Type = "Failed Endpoints"
+                    Failed = $failedCount
+                    Total = $endpointsTotal
+                    SuccessRate = [Math]::Round(($endpointsOK / $endpointsTotal) * 100, 1)
+                    Severity = "high"
+                    NeedsAICheck = $true
+                    Question = "$failedCount endpoint(s) sur $endpointsTotal ont échoué lors des tests. S'agit-il d'erreurs de configuration (URL, authentification), de problèmes de déploiement, ou de bugs réels dans l'API ?"
+                }
+            }
         } else {
             $Results.Scores["API"] = 5
+            $aiContext += @{
+                Category = "API"
+                Type = "No Endpoints Tested"
+                Severity = "medium"
+                NeedsAICheck = $true
+                Question = "Aucun endpoint n'a été testé. La configuration API est-elle correcte (BaseUrl, EndpointsToTest) ?"
+            }
+        }
+        
+        # Sauvegarder le contexte pour l'IA
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        if ($aiContext.Count -gt 0) {
+            $Results.AIContext.API = @{
+                Questions = $aiContext
+            }
         }
     } catch {
         Write-Err "Erreur tests API: $($_.Exception.Message)"

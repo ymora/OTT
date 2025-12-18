@@ -82,6 +82,19 @@ function Invoke-Check-Routes-Improved {
             # Note: Vérification détaillée menu vs routes nécessiterait parsing du code
         }
         
+        # Générer contexte pour l'IA si nécessaire
+        $aiContext = @()
+        if ($routesDetected.Count -eq 0 -and $ProjectInfo.Framework -match "Next.js|React") {
+            $aiContext += @{
+                Category = "Routes"
+                Type = "No Routes Detected"
+                Framework = $ProjectInfo.Framework
+                Severity = "medium"
+                NeedsAICheck = $true
+                Question = "Aucune route n'a été détectée pour un projet $($ProjectInfo.Framework). Est-ce normal (projet en construction) ou y a-t-il un problème de structure (app/, pages/, routes/) ?"
+            }
+        }
+        
         $Results.Scores["Routes"] = 10
         
         if ($routesDetected.Count -gt 0) {
@@ -89,6 +102,16 @@ function Invoke-Check-Routes-Improved {
             $Results.Routes = $routesDetected
         } else {
             Write-Warn "Aucune route détectée (peut être normal selon le framework)"
+        }
+        
+        # Sauvegarder le contexte pour l'IA
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        if ($aiContext.Count -gt 0) {
+            $Results.AIContext.Routes = @{
+                Questions = $aiContext
+            }
         }
     } catch {
         Write-Err "Erreur analyse routes: $($_.Exception.Message)"

@@ -29,8 +29,32 @@ function Invoke-Check-Documentation {
         $docCount = $mdFiles.Count + $htmlDocs.Count
         $docScore = if($docCount -ge 5) { 10 } elseif($docCount -ge 3) { 8 } elseif($docCount -ge 1) { 6 } else { 4 }
         
+        # Générer contexte pour l'IA si nécessaire
+        $aiContext = @()
+        if ($docCount -lt 3) {
+            $aiContext += @{
+                Category = "Documentation"
+                Type = "Insufficient Documentation"
+                Count = $docCount
+                Recommended = 3
+                Severity = "medium"
+                NeedsAICheck = $true
+                Question = "Seulement $docCount fichier(s) de documentation détecté(s) (recommandé >= 3). La documentation est-elle complète (README, guides, API docs) ? Certains fichiers sont-ils manquants ou la documentation est-elle ailleurs ?"
+            }
+        }
+        
         Write-OK "Documentation: $docCount fichier(s)"
         $Results.Scores["Documentation"] = $docScore
+        
+        # Sauvegarder le contexte pour l'IA
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        if ($aiContext.Count -gt 0) {
+            $Results.AIContext.Documentation = @{
+                Questions = $aiContext
+            }
+        }
     } catch {
         $Results.Scores["Documentation"] = 5
     }

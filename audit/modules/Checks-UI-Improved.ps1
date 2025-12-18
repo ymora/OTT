@@ -86,8 +86,23 @@ function Invoke-Check-UI-Improved {
             Write-OK "Tables détectées: $($tableUsage.Count) pattern(s)"
         }
         
+        # Générer contexte pour l'IA si nécessaire
+        $aiContext = @()
+        # Note: UI/UX est principalement une vérification de cohérence
+        # Si des problèmes spécifiques sont détectés, ils peuvent être ajoutés ici
+        
         Write-OK "UI/UX: Cohérence vérifiée"
         $Results.Scores["UI/UX"] = $uiScore
+        
+        # Sauvegarder le contexte pour l'IA (vide pour l'instant, mais structure prête)
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        if ($aiContext.Count -gt 0) {
+            $Results.AIContext.UI = @{
+                Questions = $aiContext
+            }
+        }
     } catch {
         Write-Err "Erreur vérification UI/UX: $($_.Exception.Message)"
         $Results.Scores["UI/UX"] = 7

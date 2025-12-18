@@ -146,6 +146,8 @@ function Invoke-Check-Architecture-Improved {
         $Results.Stats = $stats
         $Results.Scores["Architecture"] = 10
         
+        # Générer contexte pour l'IA si nécessaire
+        $aiContext = @()
         if ($stats.MD -gt 10) {
             Write-Warn "Trop de fichiers MD à la racine ($($stats.MD)) - Recommande <= 5"
             $Results.Issues += @{
@@ -155,8 +157,27 @@ function Invoke-Check-Architecture-Improved {
                 File = $ProjectPath
                 Line = 0
             }
+            $aiContext += @{
+                Category = "Architecture"
+                Type = "Too Many MD Files"
+                Count = $stats.MD
+                Recommended = 5
+                Severity = "low"
+                NeedsAICheck = $true
+                Question = "Il y a $($stats.MD) fichiers Markdown à la racine (recommandé <= 5). Certains peuvent-ils être consolidés, déplacés dans un dossier docs/, ou supprimés s'ils sont obsolètes ?"
+            }
         } else {
             Write-OK "Organisation fichiers MD OK"
+        }
+        
+        # Sauvegarder le contexte pour l'IA
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        if ($aiContext.Count -gt 0) {
+            $Results.AIContext.Architecture = @{
+                Questions = $aiContext
+            }
         }
     } catch {
         Write-Err "Erreur analyse architecture: $($_.Exception.Message)"
