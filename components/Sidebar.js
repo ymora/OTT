@@ -48,7 +48,20 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+  
+  // Debug: Logger l'état de l'utilisateur
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      console.debug('[Sidebar] État utilisateur:', {
+        hasUser: !!user,
+        userRole: user?.role_name,
+        userPermissions: user?.permissions,
+        permissionsType: typeof user?.permissions,
+        loading
+      })
+    }
+  }, [user, loading])
   
   // Garder le menu documentation ouvert si on est sur la page documentation
   const isOnDocumentationPage = pathname === '/dashboard/documentation'
