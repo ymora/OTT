@@ -52,12 +52,13 @@ export default function Sidebar() {
   
   // Debug: Logger l'état de l'utilisateur
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
       console.debug('[Sidebar] État utilisateur:', {
         hasUser: !!user,
         userRole: user?.role_name,
         userPermissions: user?.permissions,
         permissionsType: typeof user?.permissions,
+        permissionsIsArray: Array.isArray(user?.permissions),
         loading
       })
     }
