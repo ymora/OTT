@@ -104,11 +104,30 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-gradient-to-b from-white via-white to-primary-50/20 dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-[rgb(var(--night-blue-start))] border-r border-gray-200/80 dark:border-[rgb(var(--night-border))] overflow-y-auto backdrop-blur-sm">
       <nav className="p-4 space-y-1">
         {menuStructure.map((item) => {
-          if (!hasPermission(item.permission)) return null
+          // Debug: Logger les vérifications de permission
+          if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+            console.debug('[Sidebar] Vérification menu:', {
+              item: item.name,
+              permission: item.permission,
+              userRole: user?.role_name,
+              userPermissions: user?.permissions,
+              hasPermission: hasPermission(item.permission)
+            })
+          }
+          
+          if (!hasPermission(item.permission)) {
+            if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+              console.debug('[Sidebar] Menu masqué (permission):', item.name)
+            }
+            return null
+          }
           
           // Vérification spéciale pour le menu Dispositifs OTT (admin ou technicien uniquement)
           if (item.path === '/dashboard/dispositifs') {
             if (user?.role_name !== 'admin' && user?.role_name !== 'technicien') {
+              if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+                console.debug('[Sidebar] Menu masqué (rôle):', item.name, 'role:', user?.role_name)
+              }
               return null
             }
           }
