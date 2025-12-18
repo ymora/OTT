@@ -401,7 +401,8 @@ LEFT JOIN device_configurations dc ON d.id = dc.device_id
 LEFT JOIN measurements m ON d.id = m.device_id
 GROUP BY d.id, p.first_name, p.last_name, dc.firmware_version, dc.ota_pending;
 
-CREATE OR REPLACE VIEW users_with_roles AS
+DROP VIEW IF EXISTS users_with_roles CASCADE;
+CREATE VIEW users_with_roles AS
 SELECT 
   u.id,
   u.email,
@@ -410,8 +411,8 @@ SELECT
   u.phone,
   u.password_hash,
   u.is_active,
-  u.last_login,
   u.created_at,
+  u.updated_at,
   r.name AS role_name,
   r.description AS role_description,
   STRING_AGG(p.code, ',') AS permissions
@@ -421,7 +422,7 @@ LEFT JOIN role_permissions rp ON r.id = rp.role_id
 LEFT JOIN permissions p ON rp.permission_id = p.id
 WHERE u.deleted_at IS NULL
 GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash, 
-         u.is_active, u.last_login, u.created_at, r.name, r.description;
+         u.is_active, u.created_at, u.updated_at, r.name, r.description;
 
 -- ========================= SEED =========================
 
