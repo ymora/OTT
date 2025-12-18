@@ -570,8 +570,13 @@ function handleDeleteUser($user_id) {
     $forcePermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
     
     try {
-        // Vérifier que l'utilisateur existe
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id AND deleted_at IS NULL");
+        // Pour la suppression définitive, on peut supprimer même si déjà archivé
+        // Pour l'archivage normal, on ne peut archiver que si pas déjà archivé
+        $whereClause = $forcePermanent && $isAdmin 
+            ? "id = :id"  // Suppression définitive : peut supprimer même si archivé
+            : "id = :id AND deleted_at IS NULL";  // Archivage : seulement si pas déjà archivé
+        
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE $whereClause");
         $stmt->execute(['id' => $user_id]);
         $userToDelete = $stmt->fetch();
         
