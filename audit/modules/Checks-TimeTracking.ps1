@@ -5,7 +5,10 @@
 function Invoke-Check-TimeTracking {
     param(
         [Parameter(Mandatory=$true)]
-        [string]$ProjectPath
+        [string]$ProjectPath,
+        
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Results
     )
     
     Write-Section "[17/21] Suivi du Temps - Analyse Git Commits"
@@ -183,6 +186,42 @@ _Basé sur l'analyse Git des commits_
         Write-OK "Rapport généré: public\SUIVI_TEMPS_FACTURATION.md"
         Write-Host "  Total estimé: ~$totalHours heures sur $daysWorked jours" -ForegroundColor Green
         Write-Host "  Moyenne: ~${avgHours}h/jour" -ForegroundColor Green
+        
+        # Générer contexte pour l'IA si nécessaire
+        $aiContext = @()
+        if ($totalHours -gt 0) {
+            $totalDays = [math]::Round($totalHours / 8, 1)
+            $aiContext += @{
+                Category = "TimeTracking"
+                Type = "Time Tracking Report"
+                TotalHours = $totalHours
+                TotalDays = $totalDays
+                DaysWorked = $daysWorked
+                AvgHours = $avgHours
+                ReportFile = $publicPath
+                Severity = "info"
+                NeedsAICheck = $false
+                Question = "Rapport de suivi du temps généré: $totalHours heures ($totalDays jours) sur $daysWorked jours travaillés. Le rapport est-il correct et complet pour la facturation ?"
+            }
+        } else {
+            $aiContext += @{
+                Category = "TimeTracking"
+                Type = "No Time Tracked"
+                Severity = "low"
+                NeedsAICheck = $true
+                Question = "Aucun temps n'a été tracké via Git commits. Le suivi du temps est-il activé ou les commits ne contiennent-ils pas les informations nécessaires ?"
+            }
+        }
+        
+        # Sauvegarder le contexte pour l'IA
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        if ($aiContext.Count -gt 0) {
+            $Results.AIContext.TimeTracking = @{
+                Questions = $aiContext
+            }
+        }
         
     } catch {
         Write-Warn "Erreur génération suivi temps: $($_.Exception.Message)"

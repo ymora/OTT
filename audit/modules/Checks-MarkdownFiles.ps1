@@ -685,6 +685,65 @@ function Invoke-Check-MarkdownFiles {
         $reportContent | Out-File -FilePath $reportFile -Encoding UTF8
         Write-OK "Rapport détaillé sauvegardé: $reportFile"
         
+        # Générer contexte pour l'IA si nécessaire
+        $aiContext = @()
+        if ($dashboardStatus.Missing.Count -gt 0) {
+            $aiContext += @{
+                Category = "MarkdownFiles"
+                Type = "Missing Dashboard Files"
+                MissingFiles = $dashboardStatus.Missing
+                Count = $dashboardStatus.Missing.Count
+                Severity = "high"
+                NeedsAICheck = $true
+                Question = "$($dashboardStatus.Missing.Count) fichier(s) dashboard manquant(s): $($dashboardStatus.Missing -join ', '). Ces fichiers sont-ils critiques pour le fonctionnement du dashboard ? Doivent-ils être créés ou restaurés ?"
+            }
+        }
+        if ($coherenceIssues.HooksMissingInDoc.Count -gt 0) {
+            $aiContext += @{
+                Category = "MarkdownFiles"
+                Type = "Hooks Missing in Documentation"
+                MissingHooks = $coherenceIssues.HooksMissingInDoc
+                Count = $coherenceIssues.HooksMissingInDoc.Count
+                Severity = "medium"
+                NeedsAICheck = $true
+                Question = "$($coherenceIssues.HooksMissingInDoc.Count) hook(s) manquant(s) dans la documentation développeurs: $($coherenceIssues.HooksMissingInDoc -join ', '). La documentation doit-elle être mise à jour pour inclure ces hooks ?"
+            }
+        }
+        if ($mdAnalysis.Obsolete.Count -gt 0 -or $mdAnalysis.ToDelete.Count -gt 0) {
+            $totalObsolete = $mdAnalysis.Obsolete.Count + $mdAnalysis.ToDelete.Count
+            $aiContext += @{
+                Category = "MarkdownFiles"
+                Type = "Obsolete Files"
+                ObsoleteCount = $mdAnalysis.Obsolete.Count
+                ToDeleteCount = $mdAnalysis.ToDelete.Count
+                Total = $totalObsolete
+                Severity = "low"
+                NeedsAICheck = $true
+                Question = "$totalObsolete fichier(s) Markdown obsolète(s) détecté(s) ($($mdAnalysis.Obsolete.Count) obsolètes, $($mdAnalysis.ToDelete.Count) à supprimer). Ces fichiers peuvent-ils être supprimés en toute sécurité ou doivent-ils être archivés ?"
+            }
+        }
+        if ($mdAnalysis.Duplicates.Count -gt 0) {
+            $aiContext += @{
+                Category = "MarkdownFiles"
+                Type = "Duplicate Files"
+                Duplicates = $mdAnalysis.Duplicates
+                Count = $mdAnalysis.Duplicates.Count
+                Severity = "low"
+                NeedsAICheck = $true
+                Question = "$($mdAnalysis.Duplicates.Count) doublon(s) de fichiers Markdown détecté(s). Ces fichiers doivent-ils être consolidés ou l'un d'eux peut-il être supprimé ?"
+            }
+        }
+        
+        # Sauvegarder le contexte pour l'IA
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        if ($aiContext.Count -gt 0) {
+            $Results.AIContext.MarkdownFiles = @{
+                Questions = $aiContext
+            }
+        }
+        
     } catch {
         Write-Err "Erreur analyse fichiers Markdown: $($_.Exception.Message)"
         $Results.Scores["MarkdownFiles"] = 5
