@@ -737,30 +737,55 @@ function handleDeleteMigrationFile($filename) {
         
         if ($realPath === false) {
             error_log('[handleDeleteMigrationFile] realpath() a échoué pour: ' . $filePath);
+            error_log('[handleDeleteMigrationFile] SQL_BASE_DIR: ' . SQL_BASE_DIR);
+            error_log('[handleDeleteMigrationFile] filePath: ' . $filePath);
+            error_log('[handleDeleteMigrationFile] file_exists: ' . (file_exists($filePath) ? 'true' : 'false'));
             http_response_code(500);
             echo json_encode([
                 'success' => false, 
-                'error' => 'Impossible de résoudre le chemin du fichier'
+                'error' => 'Impossible de résoudre le chemin du fichier',
+                'debug' => [
+                    'filename' => $filename,
+                    'filePath' => $filePath,
+                    'SQL_BASE_DIR' => SQL_BASE_DIR,
+                    'file_exists' => file_exists($filePath)
+                ]
             ]);
             return;
         }
         
         if ($basePath === false) {
             error_log('[handleDeleteMigrationFile] realpath() a échoué pour SQL_BASE_DIR: ' . SQL_BASE_DIR);
+            error_log('[handleDeleteMigrationFile] is_dir: ' . (is_dir(SQL_BASE_DIR) ? 'true' : 'false'));
             http_response_code(500);
             echo json_encode([
                 'success' => false, 
-                'error' => 'Impossible de résoudre le chemin du répertoire sql/'
+                'error' => 'Impossible de résoudre le chemin du répertoire sql/',
+                'debug' => [
+                    'SQL_BASE_DIR' => SQL_BASE_DIR,
+                    'is_dir' => is_dir(SQL_BASE_DIR)
+                ]
             ]);
             return;
         }
         
         if (strpos($realPath, $basePath) !== 0) {
             error_log('[handleDeleteMigrationFile] Path traversal détecté: ' . $realPath . ' n\'est pas dans ' . $basePath);
+            error_log('[handleDeleteMigrationFile] SQL_BASE_DIR: ' . SQL_BASE_DIR);
+            error_log('[handleDeleteMigrationFile] filePath: ' . $filePath);
+            error_log('[handleDeleteMigrationFile] realPath: ' . $realPath);
+            error_log('[handleDeleteMigrationFile] basePath: ' . $basePath);
             http_response_code(400);
             echo json_encode([
                 'success' => false, 
-                'error' => 'Invalid file path (security check failed)'
+                'error' => 'Invalid file path (security check failed)',
+                'debug' => [
+                    'filename' => $filename,
+                    'filePath' => $filePath,
+                    'realPath' => $realPath,
+                    'basePath' => $basePath,
+                    'SQL_BASE_DIR' => SQL_BASE_DIR
+                ]
             ]);
             return;
         }
