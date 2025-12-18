@@ -510,12 +510,13 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
       addLog('[TEST] Attente redémarrage (3 secondes)...')
       await new Promise(resolve => createTimeoutWithCleanup(resolve, 3000))
 
+      let responseCheck = null
       try {
         addLog('[TEST] Envoi commande AT pour vérifier...')
         await write('AT\r\n')
 
         let hasResponse = false
-        const responseCheck = setInterval(() => {
+        responseCheck = setInterval(() => {
           const recentLogs = terminalLogs.slice(-10)
           const foundResponse = recentLogs.some(log =>
             log.raw && (
@@ -533,13 +534,21 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
         }, 500)
 
         createTimeoutWithCleanup(() => {
-          clearInterval(responseCheck)
+          if (responseCheck) {
+            clearInterval(responseCheck)
+            responseCheck = null
+          }
           if (!hasResponse) {
             setDeviceAlive(false)
             addLog('[TEST] ⚠️ Pas de réponse détectée')
           }
         }, 5000)
       } catch (testErr) {
+        // SÉCURITÉ: Nettoyer l'interval en cas d'erreur
+        if (responseCheck) {
+          clearInterval(responseCheck)
+          responseCheck = null
+        }
         addLog(`[TEST] ⚠️ Erreur test: ${testErr.message}`)
       }
     } catch (err) {
