@@ -5646,6 +5646,14 @@ $scoreWeights = @{
     Write-Host ""
     Write-Section "Export Rapport JSON"
     try {
+        # Déterminer le répertoire de résultats si non défini
+        if (-not $resultsDir) {
+            $resultsDir = Join-Path $AuditDir "resultats"
+            if (-not (Test-Path $resultsDir)) {
+                New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+            }
+        }
+        
         $jsonReport = @{
             timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
             project = if ($script:Config -and $script:Config.Project) { $script:Config.Project.Name } elseif ($projectMetadata -and $projectMetadata.project.name) { $projectMetadata.project.name } else { $projectName }
@@ -5660,16 +5668,16 @@ $scoreWeights = @{
                 jsFiles = if ($auditResults.Statistics.JSFiles) { $auditResults.Statistics.JSFiles } elseif ($auditResults.Stats.JS) { $auditResults.Stats.JS } else { 0 }
                 phpFiles = if ($auditResults.Statistics.PHPFiles) { $auditResults.Statistics.PHPFiles } elseif ($auditResults.Stats.PHP) { $auditResults.Stats.PHP } else { 0 }
             }
-            secrets = $auditResults.Secrets
-            outdatedPackages = $auditResults.OutdatedPackages
+            secrets = if ($auditResults.Secrets) { $auditResults.Secrets } else { @() }
+            outdatedPackages = if ($auditResults.OutdatedPackages) { $auditResults.OutdatedPackages } else { @() }
         }
         
-    $jsonPath = Join-Path $resultsDir "audit_resultat_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
-    $jsonReport | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
-    Write-OK "Rapport JSON exporte: $jsonPath"
-} catch {
-    Write-Warn "Erreur export JSON: $($_.Exception.Message)"
-}
+        $jsonPath = Join-Path $resultsDir "audit_resultat_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
+        $jsonReport | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
+        Write-OK "Rapport JSON exporte: $jsonPath"
+    } catch {
+        Write-Warn "Erreur export JSON: $($_.Exception.Message)"
+    }
 
 # Export des plans de correction
 if ($auditResults.CorrectionPlans.Count -gt 0) {
