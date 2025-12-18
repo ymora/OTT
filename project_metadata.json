@@ -1,68 +1,12 @@
 {
-  "project": {
-    "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
-    "name": "ott-dashboard",
-    "company": "",
-    "version": "3.1.0"
-  },
-  "hasFirmware": true,
-  "hasApi": true,
-  "firmware": {
-    "version": "2.5",
-    "directory": "/hardware/firmware",
-    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino"
-  },
-  "projectType": "nextjs",
   "github": {
-    "basePath": "/OTT",
+    "repo": "ymora/OTT",
     "baseUrl": "https://ymora.github.io/OTT",
-    "repo": "ymora/OTT"
-  },
-  "frontend": {
-    "buildTool": "",
-    "framework": "Next.js",
-    "routes": [
-      {
-        "name": "C:\\",
-        "route": "/",
-        "file": "/app/page.js"
-      },
-      {
-        "name": "dashboard",
-        "route": "/dashboard",
-        "file": "/app/dashboard/page.js"
-      },
-      {
-        "name": "admin-migrations",
-        "route": "/dashboard/admin-migrations",
-        "file": "/app/dashboard/admin-migrations/page.js"
-      },
-      {
-        "name": "dispositifs",
-        "route": "/dashboard/dispositifs",
-        "file": "/app/dashboard/dispositifs/page.js"
-      },
-      {
-        "name": "documentation",
-        "route": "/dashboard/documentation",
-        "file": "/app/dashboard/documentation/page.js"
-      },
-      {
-        "name": "patients",
-        "route": "/dashboard/patients",
-        "file": "/app/dashboard/patients/page.js"
-      },
-      {
-        "name": "users",
-        "route": "/dashboard/users",
-        "file": "/app/dashboard/users/page.js"
-      }
-    ]
+    "basePath": "/OTT"
   },
   "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
-  "detectedAt": "2025-12-15 08:35:02",
   "api": {
-    "baseUrl": "",
+    "authEndpoint": "/api.php/auth/login",
     "endpoints": [
       "/bootstrap/env_loader.php",
       "/bootstrap/database.php",
@@ -89,8 +33,12 @@
       "/api/handlers/database_audit.php",
       "/.jwt_secret_cache",
       "/sql",
+      "/api/init_database.php",
       "/^migration_[a-z0-9_]+\\.sql$/",
       "/\\.sql$/",
+      "/^migration_[a-z0-9_]+\\.sql$/",
+      "/^\\s*--/",
+      "/^\\s*--/",
       "/^\\s*--/",
       "/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/",
       "/api.php",
@@ -110,18 +58,23 @@
       "/public/diagnostic-measurements.html",
       "/devices/test/create",
       "/api/handlers/firmwares/debug_logs.php",
+      "/admin/migrate-sql",
       "/admin/migrate-complete",
       "/admin/diagnostic/measurements",
+      "/admin/generate-password-hash",
       "/admin/database-audit",
       "/audit",
       "/audit",
       "/migrations/history",
       "/api/openapi.json"
     ],
-    "authEndpoint": "/api.php/auth/login"
+    "baseUrl": ""
   },
+  "hasFrontend": true,
+  "technologies": [
+    "PHP API"
+  ],
   "database": {
-    "schemaFile": "/sql/schema.sql",
     "type": "PostgreSQL",
     "expectedTables": [
       "roles",
@@ -141,11 +94,64 @@
       "audit_logs",
       "device_commands",
       "usb_logs"
-    ]
+    ],
+    "schemaFile": "/sql/schema.sql"
+  },
+  "frontend": {
+    "buildTool": "",
+    "routes": [
+      {
+        "file": "/app/page.js",
+        "route": "/",
+        "name": "C:\\"
+      },
+      {
+        "file": "/app/dashboard/page.js",
+        "route": "/dashboard",
+        "name": "dashboard"
+      },
+      {
+        "file": "/app/dashboard/admin-migrations/page.js",
+        "route": "/dashboard/admin-migrations",
+        "name": "admin-migrations"
+      },
+      {
+        "file": "/app/dashboard/dispositifs/page.js",
+        "route": "/dashboard/dispositifs",
+        "name": "dispositifs"
+      },
+      {
+        "file": "/app/dashboard/documentation/page.js",
+        "route": "/dashboard/documentation",
+        "name": "documentation"
+      },
+      {
+        "file": "/app/dashboard/patients/page.js",
+        "route": "/dashboard/patients",
+        "name": "patients"
+      },
+      {
+        "file": "/app/dashboard/users/page.js",
+        "route": "/dashboard/users",
+        "name": "users"
+      }
+    ],
+    "framework": "Next.js"
+  },
+  "firmware": {
+    "directory": "/hardware/firmware",
+    "version": "2.5",
+    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino"
+  },
+  "hasFirmware": true,
+  "hasApi": true,
+  "project": {
+    "name": "ott-dashboard",
+    "version": "3.1.0",
+    "company": "",
+    "description": "OTT Dashboard React - HAPPLYZ MEDICAL"
   },
   "hasDatabase": true,
-  "hasFrontend": true,
-  "technologies": [
-    "PHP API"
-  ]
+  "detectedAt": "2025-12-18 20:27:25",
+  "projectType": "nextjs"
 }
