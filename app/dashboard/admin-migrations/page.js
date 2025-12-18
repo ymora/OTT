@@ -304,6 +304,8 @@ export default function AdminMigrationsPage() {
           closeDeleteModal()
           // Recharger la page pour mettre à jour la liste
           window.location.reload()
+        } else {
+          throw new Error(data.error || 'Erreur lors de la suppression de la migration')
         }
       } else {
         // Supprimer l'entrée de l'historique
