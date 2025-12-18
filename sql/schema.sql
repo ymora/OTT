@@ -482,13 +482,16 @@ ON CONFLICT DO NOTHING;
 -- Email: ymora@free.fr
 -- Password: Ym120879
 -- Hash bcrypt généré avec: password_hash('Ym120879', PASSWORD_BCRYPT)
-INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role_id, is_active)
+INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role_id, is_active, deleted_at)
 VALUES
-  (1, 'ymora@free.fr', '$2y$10$CfYRXTMKgtzNsYnMoq2RU.6/SjicRxCnIXj50OZkiQ9/.4VvF51SC', 'Yann', 'Mora', NULL, 1, TRUE)
+  (1, 'ymora@free.fr', '$2y$10$CfYRXTMKgtzNsYnMoq2RU.6/SjicRxCnIXj50OZkiQ9/.4VvF51SC', 'Yann', 'Mora', NULL, 1, TRUE, NULL)
 ON CONFLICT (id) DO UPDATE SET 
   email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
   phone = EXCLUDED.phone,
-  role_id = EXCLUDED.role_id;
+  role_id = EXCLUDED.role_id,
+  is_active = TRUE,
+  deleted_at = NULL;
 
 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled, phone_number)
 VALUES
