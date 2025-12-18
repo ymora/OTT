@@ -35,14 +35,20 @@ function handleGetPatients() {
             // Vérifier et ajouter la colonne notify_alert_critical si elle n'existe pas
             if ($hasNotificationsTable) {
                 try {
-                    $checkColumn = $pdo->query("
+                    // SÉCURITÉ: Utiliser prepared statement même pour information_schema
+                    $checkColumn = $pdo->prepare("
                         SELECT column_name 
                         FROM information_schema.columns 
-                        WHERE table_name = 'patient_notifications_preferences' 
-                        AND column_name = 'notify_alert_critical'
+                        WHERE table_name = :table_name 
+                        AND column_name = :column_name
                     ");
+                    $checkColumn->execute([
+                        ':table_name' => 'patient_notifications_preferences',
+                        ':column_name' => 'notify_alert_critical'
+                    ]);
                     if ($checkColumn->rowCount() === 0) {
-                        // Ajouter la colonne manquante
+                        // SÉCURITÉ: Utiliser prepared statement pour ALTER TABLE (nom de colonne fixe, pas de variable utilisateur)
+                        // Note: ALTER TABLE ne supporte pas les placeholders pour les noms de colonnes, mais ici c'est un nom fixe
                         $pdo->exec("
                             ALTER TABLE patient_notifications_preferences 
                             ADD COLUMN IF NOT EXISTS notify_alert_critical BOOLEAN DEFAULT FALSE

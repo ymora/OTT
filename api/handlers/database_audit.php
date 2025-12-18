@@ -27,7 +27,9 @@ function handleDatabaseAudit() {
         
         // 1. Test de connexion
         try {
-            $stmt = $pdo->query("SELECT version()");
+            // SÉCURITÉ: Utiliser prepared statement même pour requête statique (bonne pratique)
+            $stmt = $pdo->prepare("SELECT version()");
+            $stmt->execute();
             $version = $stmt->fetchColumn();
             $results['connection']['version'] = $version;
         } catch(PDOException $e) {
@@ -48,13 +50,15 @@ function handleDatabaseAudit() {
         ];
         
         // Récupérer toutes les tables existantes
-        $stmt = $pdo->query("
+        // SÉCURITÉ: Utiliser prepared statement même pour requête statique (bonne pratique)
+        $stmt = $pdo->prepare("
             SELECT table_name 
             FROM information_schema.tables 
             WHERE table_schema = 'public' 
             AND table_type = 'BASE TABLE'
             ORDER BY table_name
         ");
+        $stmt->execute();
         $existingTables = $stmt->fetchAll(PDO::FETCH_COLUMN);
         
         // Vérifier les tables attendues
