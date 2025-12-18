@@ -259,9 +259,13 @@ function handleUpdatePatient($patient_id) {
         $params = ['id' => $patient_id];
 
         foreach ($textFields as $field) {
-            if (array_key_exists($field, $input)) {
+            // Gérer le mapping birth_date -> date_of_birth pour compatibilité frontend
+            $inputKey = ($field === 'date_of_birth' && array_key_exists('birth_date', $input)) ? 'birth_date' : $field;
+            
+            if (array_key_exists($inputKey, $input) || array_key_exists($field, $input)) {
                 $updates[] = "$field = :$field";
-                $params[$field] = ($input[$field] === '' || $input[$field] === null) ? null : $input[$field];
+                $value = $input[$inputKey] ?? $input[$field] ?? null;
+                $params[$field] = ($value === '' || $value === null) ? null : $value;
             }
         }
 
