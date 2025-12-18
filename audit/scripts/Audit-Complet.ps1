@@ -5655,10 +5655,10 @@ $scoreWeights = @{
             recommendations = $auditResults.Recommendations
             issues = $auditResults.Issues
             statistics = @{
-                totalFiles = $auditResults.Statistics.TotalFiles
-                totalLines = $auditResults.Statistics.TotalLines
-                jsFiles = $auditResults.Statistics.JSFiles
-                phpFiles = $auditResults.Statistics.PHPFiles
+                totalFiles = if ($auditResults.Statistics.TotalFiles) { $auditResults.Statistics.TotalFiles } elseif ($auditResults.Stats.TotalFiles) { $auditResults.Stats.TotalFiles } else { 0 }
+                totalLines = if ($auditResults.Statistics.TotalLines) { $auditResults.Statistics.TotalLines } elseif ($auditResults.Stats.TotalLines) { $auditResults.Stats.TotalLines } else { 0 }
+                jsFiles = if ($auditResults.Statistics.JSFiles) { $auditResults.Statistics.JSFiles } elseif ($auditResults.Stats.JS) { $auditResults.Stats.JS } else { 0 }
+                phpFiles = if ($auditResults.Statistics.PHPFiles) { $auditResults.Statistics.PHPFiles } elseif ($auditResults.Stats.PHP) { $auditResults.Stats.PHP } else { 0 }
             }
             secrets = $auditResults.Secrets
             outdatedPackages = $auditResults.OutdatedPackages
