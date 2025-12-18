@@ -18,7 +18,7 @@ function Invoke-Check-Organization {
         return
     }
     
-    Write-Section "[12/13] Organisation Projet et Nettoyage"
+    Write-Section "[2/21] Organisation Projet et Nettoyage"
     
     try {
         # TODO/FIXME

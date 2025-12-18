@@ -18,7 +18,7 @@ function Invoke-Check-Architecture-Improved {
         [string]$ProjectPath
     )
     
-    Write-Section "[1/13] Architecture et Statistiques Code (Amélioré)"
+    Write-Section "[1/21] Architecture et Statistiques Code (Amélioré)"
     
     try {
         Write-Info "Comptage des fichiers..."

@@ -18,7 +18,7 @@ function Invoke-Check-Tests {
         return
     }
     
-    Write-Section "[10/13] Tests et Couverture"
+    Write-Section "[10/21] Tests et Couverture"
     
     try {
         $testFiles = $Files | Where-Object {

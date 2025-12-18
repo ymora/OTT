@@ -15,7 +15,7 @@ function Invoke-Check-UI-Improved {
         [hashtable]$Results
     )
     
-    Write-Section "[13/13] Uniformisation UI/UX (Amélioré)"
+    Write-Section "[16/21] Uniformisation UI/UX (Amélioré)"
     
     try {
         $uiScore = 10.0

@@ -11,7 +11,7 @@ function Invoke-Check-Database {
         [hashtable]$Results
     )
     
-    Write-Section "[7/13] Base de Données - Cohérence et Intégrité"
+    Write-Section "[5/21] Base de Données - Cohérence et Intégrité"
     
     try {
         if ($Results.Scores["API"] -gt 7) {

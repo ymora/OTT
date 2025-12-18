@@ -19,7 +19,7 @@ function Invoke-Check-Optimizations-Improved {
         [hashtable]$ProjectInfo
     )
     
-    Write-Section "[16/18] Optimisations Avancées - Backend (Amélioré)"
+    Write-Section "[12/21] Optimisations Avancées - Backend (Amélioré)"
     
     try {
         $optimizationScore = 10.0

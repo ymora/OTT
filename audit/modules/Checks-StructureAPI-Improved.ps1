@@ -13,7 +13,7 @@ function Invoke-Check-StructureAPI-Improved {
         [string]$ProjectPath
     )
     
-    Write-Section "[15/18] Structure API - Cohérence Handlers (Amélioré)"
+    Write-Section "[6/21] Structure API - Cohérence Handlers (Amélioré)"
     
     try {
         $structureScore = 10.0

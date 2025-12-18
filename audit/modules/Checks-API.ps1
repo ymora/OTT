@@ -11,7 +11,7 @@ function Invoke-Check-API {
         [hashtable]$Results
     )
     
-    Write-Section "[6/13] Endpoints API - Tests Fonctionnels"
+    Write-Section "[4/21] Endpoints API - Tests Fonctionnels"
     
     try {
         if (-not $Config.API.BaseUrl) {

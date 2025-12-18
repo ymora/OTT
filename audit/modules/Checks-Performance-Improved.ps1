@@ -23,7 +23,7 @@ function Invoke-Check-Performance-Improved {
         return
     }
     
-    Write-Section "[9/13] Performance - Optimisations React et Cache (Amélioré)"
+    Write-Section "[17/21] Performance - Optimisations React et Cache (Amélioré)"
     
     try {
         $jsFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$" }

@@ -19,7 +19,7 @@ function Invoke-Check-Duplication-Improved {
         return
     }
     
-    Write-Section "[3/13] Duplication de Code et Refactoring (Amélioré)"
+    Write-Section "[8/21] Duplication de Code et Refactoring (Amélioré)"
     
     try {
         $searchFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$|\.php$" }

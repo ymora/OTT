@@ -22,7 +22,7 @@ function Invoke-Check-Security-Improved {
         return
     }
     
-    Write-Section "[8/13] Sécurité - Headers, SQL Injection, XSS (Amélioré)"
+    Write-Section "[3/21] Sécurité - Headers, SQL Injection, XSS (Amélioré)"
     
     try {
         $securityScore = 10

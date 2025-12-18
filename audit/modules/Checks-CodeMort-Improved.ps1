@@ -20,7 +20,7 @@ function Invoke-Check-CodeMort-Improved {
         return
     }
     
-    Write-Section "[2/13] Code Mort - Détection Composants/Hooks/Libs Non Utilisés (Amélioré)"
+    Write-Section "[7/21] Code Mort - Détection Composants/Hooks/Libs Non Utilisés (Amélioré)"
     
     try {
         $deadCode = @{

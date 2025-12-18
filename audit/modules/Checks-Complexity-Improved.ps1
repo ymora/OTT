@@ -19,7 +19,7 @@ function Invoke-Check-Complexity-Improved {
         return
     }
     
-    Write-Section "[4/13] Complexité - Fichiers/Fonctions Volumineux (Amélioré)"
+    Write-Section "[9/21] Complexité - Fichiers/Fonctions Volumineux (Amélioré)"
     
     try {
         $maxFileLines = $Config.Checks.Complexity.MaxFileLines
