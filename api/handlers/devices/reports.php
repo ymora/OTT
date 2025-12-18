@@ -93,13 +93,29 @@ function handleGetReportsOverview() {
         $assignmentStmt->bindValue(':offset', $assignmentOffset, PDO::PARAM_INT);
         $assignmentStmt->execute();
 
+        // Compter le total des assignations pour la pagination
+        $assignmentCountStmt = $pdo->prepare("
+            SELECT COUNT(DISTINCT p.id)
+            FROM patients p
+            LEFT JOIN devices d ON d.patient_id = p.id AND d.deleted_at IS NULL
+            WHERE p.deleted_at IS NULL
+        ");
+        $assignmentCountStmt->execute();
+        $assignmentTotal = intval($assignmentCountStmt->fetchColumn());
+
         echo json_encode([
             'success' => true,
             'overview' => $stats,
             'trend' => $trendStmt->fetchAll(),
             'top_devices' => $topDevicesStmt->fetchAll(),
             'severity_breakdown' => $severityStmt->fetchAll(),
-            'assignments' => $assignmentStmt->fetchAll()
+            'assignments' => $assignmentStmt->fetchAll(),
+            'assignments_pagination' => [
+                'total' => $assignmentTotal,
+                'limit' => $assignmentLimit,
+                'offset' => $assignmentOffset,
+                'has_more' => ($assignmentOffset + $assignmentLimit) < $assignmentTotal
+            ]
         ]);
     } catch(PDOException $e) {
         http_response_code(500);
