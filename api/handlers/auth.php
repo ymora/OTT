@@ -157,12 +157,14 @@ function handleLogin() {
         
         // Récupérer les informations complètes depuis la vue pour le retour
         $userStmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE id = :id");
+        $userStmt->setFetchMode(PDO::FETCH_ASSOC);
         $userStmt->execute(['id' => $user['id']]);
         $userFull = $userStmt->fetch();
         
         if (!$userFull) {
             // Fallback si la vue ne fonctionne pas
             $roleStmt = $pdo->prepare("SELECT name FROM roles WHERE id = :role_id");
+            $roleStmt->setFetchMode(PDO::FETCH_ASSOC);
             $roleStmt->execute(['role_id' => $user['role_id']]);
             $role = $roleStmt->fetch();
             $userFull = $user;
@@ -179,9 +181,11 @@ function handleLogin() {
         auditLog('user.login', 'user', $userFull['id']);
         
         unset($userFull['password_hash']);
-        $userFull['permissions'] = $userFull['permissions'] ? explode(',', $userFull['permissions']) : [];
+        // Convertir permissions en tableau si c'est une string
+        $permissionsStr = $userFull['permissions'] ?? '';
+        $userFull['permissions'] = !empty($permissionsStr) ? explode(',', $permissionsStr) : [];
         
-        echo json_encode(['success' => true, 'token' => $token, 'user' => $user], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode(['success' => true, 'token' => $token, 'user' => $userFull], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         
     } catch(PDOException $e) {
         error_log('[handleLogin] Database error: ' . $e->getMessage());
