@@ -8,7 +8,7 @@ function Invoke-Check-TimeTracking {
         [string]$ProjectPath
     )
     
-    Write-Section "[17/18] Suivi du Temps - Analyse Git Commits"
+    Write-Section "[17/21] Suivi du Temps - Analyse Git Commits"
     
     try {
         # Vérifier Git disponible

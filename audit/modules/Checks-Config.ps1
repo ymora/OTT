@@ -17,7 +17,7 @@ function Invoke-Check-Config {
         [string]$ProjectPath
     )
     
-    Write-Section "[14/18] Configuration - Render, GitHub Pages, Next.js, Déploiement"
+    Write-Section "[19/21] Configuration - Render, GitHub Pages, Next.js, Déploiement"
     
     try {
         $configScore = 10.0
@@ -160,6 +160,20 @@ function Invoke-Check-Config {
             $configScore -= 1.0
         }
         
+        # Générer contexte pour l'IA si nécessaire
+        $aiContext = @()
+        if ($configWarnings.Count -gt 0) {
+            $aiContext += @{
+                Category = "Configuration"
+                Type = "Configuration Issues"
+                Warnings = $configWarnings
+                Count = $configWarnings.Count
+                Severity = "medium"
+                NeedsAICheck = $true
+                Question = "$($configWarnings.Count) problème(s) de configuration détecté(s) (Render, GitHub Pages, Next.js, env.example). Ces problèmes sont-ils critiques pour le déploiement ou peuvent-ils être ignorés si la configuration est faite manuellement ?"
+            }
+        }
+        
         Write-OK "Vérification configuration terminée"
         $Results.Scores["Configuration"] = [Math]::Max($configScore, 0)
         
@@ -168,6 +182,16 @@ function Invoke-Check-Config {
         }
         if ($configWarnings.Count -gt 0) {
             $Results.Warnings += $configWarnings
+        }
+        
+        # Sauvegarder le contexte pour l'IA
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        if ($aiContext.Count -gt 0) {
+            $Results.AIContext.Configuration = @{
+                Questions = $aiContext
+            }
         }
     } catch {
         Write-Err "Erreur vérification configuration: $($_.Exception.Message)"
