@@ -78,7 +78,9 @@ function handleLogin() {
         }
         // Récupérer l'utilisateur directement depuis la table users pour avoir le password_hash
         // D'abord récupérer sans conditions pour debug
+        // IMPORTANT: Forcer FETCH_ASSOC pour être sûr d'avoir un tableau associatif
         $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email");
+        $stmt->setFetchMode(PDO::FETCH_ASSOC);
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch();
         
