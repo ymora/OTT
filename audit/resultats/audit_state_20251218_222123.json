@@ -1,0 +1,27 @@
+{
+  "CompletedPhases": [
+    0,
+    1
+  ],
+  "PartialResults": {
+    "Phase1": {
+      "CorrectionPlans": [],
+      "Scores": {
+        "Architecture": 10
+      },
+      "Recommendations": [],
+      "Warnings": [],
+      "Issues": []
+    },
+    "Phase0": {
+      "CorrectionPlans": [],
+      "Scores": {
+        "Architecture": 10
+      },
+      "Recommendations": [],
+      "Warnings": [],
+      "Issues": []
+    }
+  },
+  "Timestamp": "2025-12-18 22:21:30"
+}

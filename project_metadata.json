@@ -1,10 +1,94 @@
 {
-  "github": {
-    "repo": "ymora/OTT",
-    "baseUrl": "https://ymora.github.io/OTT",
-    "basePath": "/OTT"
+  "database": {
+    "type": "PostgreSQL",
+    "expectedTables": [
+      "roles",
+      "permissions",
+      "role_permissions",
+      "users",
+      "patients",
+      "devices",
+      "measurements",
+      "alerts",
+      "device_logs",
+      "device_configurations",
+      "firmware_versions",
+      "user_notifications_preferences",
+      "patient_notifications_preferences",
+      "notifications_queue",
+      "audit_logs",
+      "device_commands",
+      "usb_logs"
+    ],
+    "schemaFile": "/sql/schema.sql"
   },
+  "hasDatabase": true,
   "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
+  "frontend": {
+    "framework": "Next.js",
+    "buildTool": "",
+    "routes": [
+      {
+        "route": "/",
+        "name": "C:\\",
+        "file": "/app/page.js"
+      },
+      {
+        "route": "/dashboard",
+        "name": "dashboard",
+        "file": "/app/dashboard/page.js"
+      },
+      {
+        "route": "/dashboard/admin-migrations",
+        "name": "admin-migrations",
+        "file": "/app/dashboard/admin-migrations/page.js"
+      },
+      {
+        "route": "/dashboard/dispositifs",
+        "name": "dispositifs",
+        "file": "/app/dashboard/dispositifs/page.js"
+      },
+      {
+        "route": "/dashboard/documentation",
+        "name": "documentation",
+        "file": "/app/dashboard/documentation/page.js"
+      },
+      {
+        "route": "/dashboard/patients",
+        "name": "patients",
+        "file": "/app/dashboard/patients/page.js"
+      },
+      {
+        "route": "/dashboard/users",
+        "name": "users",
+        "file": "/app/dashboard/users/page.js"
+      }
+    ]
+  },
+  "hasApi": true,
+  "hasFrontend": true,
+  "detectedAt": "2025-12-18 22:21:23",
+  "technologies": [
+    "PHP API"
+  ],
+  "project": {
+    "company": "",
+    "name": "ott-dashboard",
+    "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
+    "version": "3.1.0"
+  },
+  "hasFirmware": true,
+  "firmware": {
+    "directory": "/hardware/firmware",
+    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino",
+    "version": "2.5"
+  },
+  "projectType": "nextjs",
+  "github": {
+    "basePath": "/OTT",
+    "repo": "ymora/OTT",
+    "baseUrl": "https://ymora.github.io/OTT"
+  },
   "api": {
     "authEndpoint": "/api.php/auth/login",
     "endpoints": [
@@ -61,7 +145,6 @@
       "/admin/migrate-sql",
       "/admin/migrate-complete",
       "/admin/diagnostic/measurements",
-      "/admin/generate-password-hash",
       "/admin/database-audit",
       "/audit",
       "/audit",
@@ -69,89 +152,5 @@
       "/api/openapi.json"
     ],
     "baseUrl": ""
-  },
-  "hasFrontend": true,
-  "technologies": [
-    "PHP API"
-  ],
-  "database": {
-    "type": "PostgreSQL",
-    "expectedTables": [
-      "roles",
-      "permissions",
-      "role_permissions",
-      "users",
-      "patients",
-      "devices",
-      "measurements",
-      "alerts",
-      "device_logs",
-      "device_configurations",
-      "firmware_versions",
-      "user_notifications_preferences",
-      "patient_notifications_preferences",
-      "notifications_queue",
-      "audit_logs",
-      "device_commands",
-      "usb_logs"
-    ],
-    "schemaFile": "/sql/schema.sql"
-  },
-  "frontend": {
-    "buildTool": "",
-    "routes": [
-      {
-        "file": "/app/page.js",
-        "route": "/",
-        "name": "C:\\"
-      },
-      {
-        "file": "/app/dashboard/page.js",
-        "route": "/dashboard",
-        "name": "dashboard"
-      },
-      {
-        "file": "/app/dashboard/admin-migrations/page.js",
-        "route": "/dashboard/admin-migrations",
-        "name": "admin-migrations"
-      },
-      {
-        "file": "/app/dashboard/dispositifs/page.js",
-        "route": "/dashboard/dispositifs",
-        "name": "dispositifs"
-      },
-      {
-        "file": "/app/dashboard/documentation/page.js",
-        "route": "/dashboard/documentation",
-        "name": "documentation"
-      },
-      {
-        "file": "/app/dashboard/patients/page.js",
-        "route": "/dashboard/patients",
-        "name": "patients"
-      },
-      {
-        "file": "/app/dashboard/users/page.js",
-        "route": "/dashboard/users",
-        "name": "users"
-      }
-    ],
-    "framework": "Next.js"
-  },
-  "firmware": {
-    "directory": "/hardware/firmware",
-    "version": "2.5",
-    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino"
-  },
-  "hasFirmware": true,
-  "hasApi": true,
-  "project": {
-    "name": "ott-dashboard",
-    "version": "3.1.0",
-    "company": "",
-    "description": "OTT Dashboard React - HAPPLYZ MEDICAL"
-  },
-  "hasDatabase": true,
-  "detectedAt": "2025-12-18 20:27:25",
-  "projectType": "nextjs"
+  }
 }

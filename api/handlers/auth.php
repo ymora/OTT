@@ -228,11 +228,9 @@ function handleGetUsers() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     try {
+        // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
         // Condition WHERE selon le paramètre include_deleted
-        $whereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
-        
-        // Compter le total
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE $whereClause");
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE deleted_at " . ($includeDeleted ? "IS NOT NULL" : "IS NULL"));
         $countStmt->execute();
         $total = $countStmt->fetchColumn();
         
@@ -602,11 +600,16 @@ function handleDeleteUser($user_id) {
     try {
         // Pour la suppression définitive, on peut supprimer même si déjà archivé
         // Pour l'archivage normal, on ne peut archiver que si pas déjà archivé
-        $whereClause = $forcePermanent && $isAdmin 
-            ? "id = :id"  // Suppression définitive : peut supprimer même si archivé
-            : "id = :id AND deleted_at IS NULL";  // Archivage : seulement si pas déjà archivé
-        
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE $whereClause");
+        // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
+        // Pour la suppression définitive, on peut supprimer même si déjà archivé
+        // Pour l'archivage normal, on ne peut archiver que si pas déjà archivé
+        if ($forcePermanent && $isAdmin) {
+            // Suppression définitive : peut supprimer même si archivé
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id");
+        } else {
+            // Archivage : seulement si pas déjà archivé
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :id AND deleted_at IS NULL");
+        }
         $stmt->execute(['id' => $user_id]);
         $userToDelete = $stmt->fetch();
         

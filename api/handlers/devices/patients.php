@@ -57,9 +57,8 @@ function handleGetPatients() {
             error_log('[handleGetPatients] ⚠️ Erreur vérification table notifications: ' . $e->getMessage());
         }
         
-        $whereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
-        
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE $whereClause");
+        // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE deleted_at " . ($includeDeleted ? "IS NOT NULL" : "IS NULL"));
         $countStmt->execute();
         $total = intval($countStmt->fetchColumn());
         
@@ -312,13 +311,16 @@ function handleDeletePatient($patient_id) {
     $forcePermanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
 
     try {
+        // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
         // Pour la suppression définitive, on peut supprimer même si déjà archivé
         // Pour l'archivage normal, on ne peut archiver que si pas déjà archivé
-        $whereClause = $forcePermanent && $isAdmin 
-            ? "id = :id"  // Suppression définitive : peut supprimer même si archivé
-            : "id = :id AND deleted_at IS NULL";  // Archivage : seulement si pas déjà archivé
-        
-        $stmt = $pdo->prepare("SELECT * FROM patients WHERE $whereClause");
+        if ($forcePermanent && $isAdmin) {
+            // Suppression définitive : peut supprimer même si archivé
+            $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id");
+        } else {
+            // Archivage : seulement si pas déjà archivé
+            $stmt = $pdo->prepare("SELECT * FROM patients WHERE id = :id AND deleted_at IS NULL");
+        }
         $stmt->execute(['id' => $patient_id]);
         $patient = $stmt->fetch();
 
