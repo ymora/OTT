@@ -2133,6 +2133,57 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
         'sql' => "INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role_id, is_active)\nVALUES\n  (1, 'ymora@free.fr', '$hash', 'Yann', 'Mora', NULL, 1, TRUE)\nON CONFLICT (id) DO UPDATE SET \n  email = EXCLUDED.email,\n  phone = EXCLUDED.phone,\n  role_id = EXCLUDED.role_id;"
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
+} elseif($method === 'POST' && ($path === '/admin/test-login' || preg_match('#^/admin/test-login/?$#', $path))) {
+    // Endpoint de test pour diagnostiquer le problème de connexion
+    global $pdo;
+    $body = json_decode(file_get_contents('php://input'), true);
+    $email = $body['email'] ?? 'ymora@free.fr';
+    $password = $body['password'] ?? 'Ym120879';
+    
+    header('Content-Type: application/json; charset=utf-8');
+    
+    try {
+        // Récupérer l'utilisateur
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email AND is_active = TRUE AND deleted_at IS NULL");
+        $stmt->execute(['email' => $email]);
+        $user = $stmt->fetch();
+        
+        if (!$user) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'User not found',
+                'email' => $email
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+        
+        $hash = $user['password_hash'];
+        $hashLength = strlen($hash);
+        $verifyResult = password_verify($password, $hash);
+        
+        // Générer un nouveau hash pour comparaison
+        $newHash = password_hash($password, PASSWORD_BCRYPT);
+        $newHashVerify = password_verify($password, $newHash);
+        
+        echo json_encode([
+            'success' => true,
+            'user_found' => true,
+            'hash_length' => $hashLength,
+            'hash_preview' => substr($hash, 0, 20) . '...',
+            'password_verify_result' => $verifyResult,
+            'new_hash_preview' => substr($newHash, 0, 20) . '...',
+            'new_hash_verify_result' => $newHashVerify,
+            'hash_match' => ($hash === $newHash),
+            'diagnosis' => $verifyResult ? 'Password should work' : 'Password verification failed - hash may be incorrect'
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    } catch(Exception $e) {
+        echo json_encode([
+            'success' => false,
+            'error' => $e->getMessage()
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
 
 // Health check
 } elseif(preg_match('#/health$#', $path) && $method === 'GET') {
