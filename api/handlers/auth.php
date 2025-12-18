@@ -338,16 +338,46 @@ function handleCreateUser() {
     
     // Vérifier si l'email existe déjà (avant de créer)
     try {
-        $checkStmt = $pdo->prepare("SELECT id FROM users WHERE email = :email AND deleted_at IS NULL");
+        // Vérifier d'abord les utilisateurs actifs
+        $checkStmt = $pdo->prepare("SELECT id, deleted_at FROM users WHERE email = :email");
         $checkStmt->execute(['email' => trim($input['email'])]);
-        $existingUser = $checkStmt->fetch();
+        $existingUser = $checkStmt->fetch(PDO::FETCH_ASSOC);
+        
         if ($existingUser) {
-            http_response_code(409);
-            echo json_encode([
-                'success' => false, 
-                'error' => 'Cet email est déjà utilisé par un autre utilisateur'
-            ]);
-            return;
+            if ($existingUser['deleted_at'] === null) {
+                // Utilisateur actif existe déjà
+                http_response_code(409);
+                echo json_encode([
+                    'success' => false, 
+                    'error' => 'Cet email est déjà utilisé par un autre utilisateur'
+                ]);
+                return;
+            } else {
+                // Utilisateur archivé existe : supprimer définitivement pour permettre la création
+                error_log('[handleCreateUser] Utilisateur archivé trouvé (id: ' . $existingUser['id'] . '), suppression définitive avant création');
+                
+                // Supprimer les préférences de notifications
+                try {
+                    $pdo->prepare("DELETE FROM user_notifications_preferences WHERE user_id = :user_id")
+                        ->execute(['user_id' => $existingUser['id']]);
+                } catch(PDOException $e) {
+                    error_log('[handleCreateUser] Could not delete notification preferences: ' . $e->getMessage());
+                }
+                
+                // Mettre à jour les logs d'audit
+                try {
+                    $pdo->prepare("UPDATE audit_logs SET user_id = NULL WHERE user_id = :user_id")
+                        ->execute(['user_id' => $existingUser['id']]);
+                } catch(PDOException $e) {
+                    error_log('[handleCreateUser] Could not update audit logs: ' . $e->getMessage());
+                }
+                
+                // Supprimer définitivement l'utilisateur archivé
+                $pdo->prepare("DELETE FROM users WHERE id = :id")
+                    ->execute(['id' => $existingUser['id']]);
+                
+                error_log('[handleCreateUser] Utilisateur archivé supprimé définitivement (id: ' . $existingUser['id'] . ')');
+            }
         }
     } catch(PDOException $e) {
         // Si la vérification échoue, continuer quand même (la contrainte unique le détectera)
