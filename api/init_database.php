@@ -1,22 +1,39 @@
 <?php
 /**
  * Initialisation automatique de la base de données
- * Vérifie et crée les données essentielles si elles n'existent pas
+ * Fallback minimal si le schéma SQL n'a pas été appliqué
+ * NOTE: Le schéma complet doit être appliqué via sql/schema.sql pour une base neuve
  */
 
 function initDatabaseIfEmpty() {
     global $pdo;
     
     try {
+        // Vérifier si les tables existent (si aucune table, le schéma n'a pas été appliqué)
+        $tablesCheck = $pdo->prepare("
+            SELECT COUNT(*) FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name IN ('roles', 'users', 'devices', 'patients', 'firmware_versions')
+        ");
+        $tablesCheck->execute();
+        $tablesCount = $tablesCheck->fetchColumn();
+        
+        // Si moins de 5 tables essentielles, le schéma n'a pas été appliqué
+        if ($tablesCount < 5) {
+            error_log('[initDatabase] ⚠️ Schéma SQL non appliqué - ' . $tablesCount . ' tables trouvées');
+            error_log('[initDatabase] ⚠️ Le schéma complet doit être appliqué via sql/schema.sql');
+            error_log('[initDatabase] ⚠️ Application uniquement des données essentielles (rôles + admin)');
+        }
+        
         // Vérifier si les rôles existent
         $rolesStmt = $pdo->prepare("SELECT COUNT(*) FROM roles");
         $rolesStmt->execute();
         $rolesCount = $rolesStmt->fetchColumn();
         
         if ($rolesCount == 0) {
-            error_log('[initDatabase] Base vide détectée - Initialisation...');
+            error_log('[initDatabase] Base vide détectée - Initialisation minimale...');
             
-            // Créer les rôles
+            // Créer les rôles (fallback si le schéma n'a pas été appliqué)
             $pdo->exec("
                 INSERT INTO roles (id, name, description) VALUES
                 (1, 'admin', 'Administrateur systeme - Acces complet'),
@@ -34,7 +51,7 @@ function initDatabaseIfEmpty() {
             $userExists = $userStmt->fetchColumn() > 0;
             
             if (!$userExists) {
-                // Hash pour Ym120879 (généré une fois, réutilisé)
+                // Hash pour Ym120879 (doit correspondre à celui dans schema.sql)
                 $adminHash = '$2y$10$CfYRXTMKgtzNsYnMoq2RU.6/SjicRxCnIXj50OZkiQ9/.4VvF51SC';
                 
                 $pdo->prepare("
@@ -52,7 +69,7 @@ function initDatabaseIfEmpty() {
                 error_log('[initDatabase] ✅ Utilisateur admin créé');
             }
             
-            error_log('[initDatabase] ✅ Initialisation terminée');
+            error_log('[initDatabase] ✅ Initialisation minimale terminée');
         }
     } catch (PDOException $e) {
         // Ne pas bloquer si l'initialisation échoue (peut être que les tables n'existent pas encore)
