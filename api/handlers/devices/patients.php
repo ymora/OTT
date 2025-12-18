@@ -31,6 +31,28 @@ function handleGetPatients() {
         $hasNotificationsTable = false;
         try {
             $hasNotificationsTable = tableExists('patient_notifications_preferences');
+            
+            // Vérifier et ajouter la colonne notify_alert_critical si elle n'existe pas
+            if ($hasNotificationsTable) {
+                try {
+                    $checkColumn = $pdo->query("
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'patient_notifications_preferences' 
+                        AND column_name = 'notify_alert_critical'
+                    ");
+                    if ($checkColumn->rowCount() === 0) {
+                        // Ajouter la colonne manquante
+                        $pdo->exec("
+                            ALTER TABLE patient_notifications_preferences 
+                            ADD COLUMN IF NOT EXISTS notify_alert_critical BOOLEAN DEFAULT FALSE
+                        ");
+                        error_log('[handleGetPatients] ✅ Colonne notify_alert_critical ajoutée');
+                    }
+                } catch (PDOException $e) {
+                    error_log('[handleGetPatients] ⚠️ Erreur ajout colonne notify_alert_critical: ' . $e->getMessage());
+                }
+            }
         } catch (Exception $e) {
             error_log('[handleGetPatients] ⚠️ Erreur vérification table notifications: ' . $e->getMessage());
         }
