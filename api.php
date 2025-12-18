@@ -286,6 +286,10 @@ try {
     );
     
     error_log('[DB_CONNECTION] ✅ Connexion réussie');
+    
+    // Initialisation automatique de la base si elle est vide
+    require_once __DIR__ . '/api/init_database.php';
+    initDatabaseIfEmpty();
 } catch(PDOException $e) {
     $errorMsg = $e->getMessage();
     error_log('[DB_CONNECTION] ❌ Erreur: ' . $errorMsg);
