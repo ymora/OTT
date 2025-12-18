@@ -89,13 +89,8 @@ if ($pythonCmd) {
     Write-Host "📋 Appuyez sur Ctrl+C pour arrêter le serveur" -ForegroundColor Gray
     Write-Host ""
     
-    # Obtenir le répertoire du script de manière robuste
-    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
-    $projectRoot = if ($scriptDir) {
-        (Get-Item $scriptDir).Parent.Parent.FullName
-    } else {
-        $PWD
-    }
+    # Obtenir le répertoire du projet (racine)
+    $projectRoot = $PWD
     
     Push-Location $projectRoot
     try {
@@ -118,4 +113,3 @@ if ($pythonCmd) {
     }
     exit 1
 }
-
