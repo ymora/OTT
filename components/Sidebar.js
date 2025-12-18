@@ -75,16 +75,36 @@ export default function Sidebar() {
   }, [searchParams])
   
   const hasPermission = (permission) => {
+    // Si pas de permission requise, toujours autoriser
     if (!permission) return true
-    if (permission === 'admin.only') {
-      // Permission spéciale : admin uniquement
-      return user?.role_name === 'admin'
+    
+    // Si pas d'utilisateur, refuser (sauf si on est en chargement)
+    if (!user) {
+      if (loading) {
+        // En chargement, autoriser temporairement pour éviter le flash
+        return true
+      }
+      return false
     }
-    if (user?.role_name === 'admin') return true
-    // Si permissions n'est pas un tableau (string), le convertir
-    const permissions = Array.isArray(user?.permissions) 
-      ? user.permissions 
-      : (user?.permissions ? user.permissions.split(',') : [])
+    
+    // IMPORTANT: Admin a TOUJOURS toutes les permissions (vérifier en premier)
+    if (user?.role_name === 'admin') {
+      return true
+    }
+    
+    // Permission spéciale : admin uniquement
+    if (permission === 'admin.only') {
+      return false // Déjà vérifié ci-dessus pour admin
+    }
+    
+    // Convertir permissions en tableau si nécessaire
+    let permissions = []
+    if (Array.isArray(user?.permissions)) {
+      permissions = user.permissions
+    } else if (typeof user?.permissions === 'string' && user.permissions.length > 0) {
+      permissions = user.permissions.split(',').map(p => p.trim()).filter(p => p.length > 0)
+    }
+    
     return permissions.includes(permission)
   }
 
@@ -113,6 +133,11 @@ export default function Sidebar() {
     { name: 'Commerciale', icon: '💼', doc: 'commerciale' },
     { name: 'Suivi Temps', icon: '⏱️', doc: 'suivi-temps' },
   ]
+
+  // Si pas d'utilisateur et pas en chargement, ne rien afficher
+  if (!loading && !user) {
+    return null
+  }
 
   return (
     <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-gradient-to-b from-white via-white to-primary-50/20 dark:from-[rgb(var(--night-bg-start))] dark:via-[rgb(var(--night-bg-mid))] dark:to-[rgb(var(--night-blue-start))] border-r border-gray-200/80 dark:border-[rgb(var(--night-border))] overflow-y-auto backdrop-blur-sm">
