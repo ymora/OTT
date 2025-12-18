@@ -76,7 +76,8 @@ function handleLogin() {
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             return;
         }
-        $stmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE email = :email AND is_active = TRUE");
+        // Récupérer l'utilisateur directement depuis la table users pour avoir le password_hash
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email AND is_active = TRUE AND deleted_at IS NULL");
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch();
         
@@ -89,16 +90,31 @@ function handleLogin() {
         
         $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = :id")->execute(['id' => $user['id']]);
         
+        // Récupérer les informations complètes depuis la vue pour le retour
+        $userStmt = $pdo->prepare("SELECT * FROM users_with_roles WHERE id = :id");
+        $userStmt->execute(['id' => $user['id']]);
+        $userFull = $userStmt->fetch();
+        
+        if (!$userFull) {
+            // Fallback si la vue ne fonctionne pas
+            $roleStmt = $pdo->prepare("SELECT name FROM roles WHERE id = :role_id");
+            $roleStmt->execute(['role_id' => $user['role_id']]);
+            $role = $roleStmt->fetch();
+            $userFull = $user;
+            $userFull['role_name'] = $role['name'] ?? 'unknown';
+            $userFull['permissions'] = '';
+        }
+        
         $token = generateJWT([
-            'user_id' => $user['id'],
-            'email' => $user['email'],
-            'role' => $user['role_name']
+            'user_id' => $userFull['id'],
+            'email' => $userFull['email'],
+            'role' => $userFull['role_name']
         ]);
         
-        auditLog('user.login', 'user', $user['id']);
+        auditLog('user.login', 'user', $userFull['id']);
         
-        unset($user['password_hash']);
-        $user['permissions'] = $user['permissions'] ? explode(',', $user['permissions']) : [];
+        unset($userFull['password_hash']);
+        $userFull['permissions'] = $userFull['permissions'] ? explode(',', $userFull['permissions']) : [];
         
         echo json_encode(['success' => true, 'token' => $token, 'user' => $user], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         
