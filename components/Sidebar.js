@@ -73,7 +73,6 @@ export default function Sidebar() {
       : (user?.permissions ? user.permissions.split(',') : [])
     return permissions.includes(permission)
   }
-  }
 
   // Normaliser le pathname pour la comparaison
   const normalizedPathname = useMemo(() => {

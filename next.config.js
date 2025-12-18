@@ -31,10 +31,6 @@ const nextConfig = {
     }
     return []
   },
-  // Configuration pour éviter les erreurs de pages
-  experimental: {
-    missingSuspenseWithCSRBailout: false
-  },
   // Désactiver la génération de pages d'erreur statiques en dev
   // Utiliser le commit SHA + timestamp pour forcer de nouveaux hash de fichiers JS à chaque déploiement
   // FORCER un buildId unique à chaque fois pour bypasser complètement le cache
@@ -51,6 +47,7 @@ const nextConfig = {
   },
   // Désactiver le cache lors du build pour éviter les problèmes
   // En mode export statique, on veut toujours un build frais
+  // Note: Next.js 16 utilise Turbopack par défaut, mais on force webpack ici
   webpack: (config, { dev, isServer, webpack }) => {
     if (!dev && isStaticExport) {
       // En export statique, désactiver tous les caches pour forcer la régénération
