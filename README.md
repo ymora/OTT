@@ -243,7 +243,6 @@ Si vous utilisez une base locale PostgreSQL, vous aurez 2 bases séparées (loca
 #### Commandes utiles (si base locale PostgreSQL)
 
 - Accéder à la base : `psql -U postgres -d ott_data`
-- Réinitialiser complètement : `.\scripts\db\reset_database.ps1 -DATABASE_URL "postgresql://..." -Confirm`
 - Sauvegarder : `.\scripts\db\backup_data.ps1 -DATABASE_URL "postgresql://..."`
 - Restaurer : `.\scripts\db\restore_data.ps1 -DATABASE_URL "postgresql://..." -BackupFile "backups/backup.json"`
 
