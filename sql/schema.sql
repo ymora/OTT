@@ -484,7 +484,7 @@ ON CONFLICT DO NOTHING;
 -- Hash bcrypt généré avec: password_hash('Ym120879', PASSWORD_BCRYPT)
 INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role_id, is_active)
 VALUES
-  (1, 'ymora@free.fr', '$2y$10$dJ//iERQ8PKytgV7Jz2cJukGEKk8R3gLSIR718vgw4BXBn3SJaGS6', 'Yann', 'Mora', NULL, 1, TRUE)
+  (1, 'ymora@free.fr', '$2y$10$CfYRXTMKgtzNsYnMoq2RU.6/SjicRxCnIXj50OZkiQ9/.4VvF51SC', 'Yann', 'Mora', NULL, 1, TRUE)
 ON CONFLICT (id) DO UPDATE SET 
   email = EXCLUDED.email,
   phone = EXCLUDED.phone,
