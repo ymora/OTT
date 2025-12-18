@@ -67,7 +67,12 @@ export default function Sidebar() {
       return user?.role_name === 'admin'
     }
     if (user?.role_name === 'admin') return true
-    return user?.permissions?.includes(permission)
+    // Si permissions n'est pas un tableau (string), le convertir
+    const permissions = Array.isArray(user?.permissions) 
+      ? user.permissions 
+      : (user?.permissions ? user.permissions.split(',') : [])
+    return permissions.includes(permission)
+  }
   }
 
   // Normaliser le pathname pour la comparaison
