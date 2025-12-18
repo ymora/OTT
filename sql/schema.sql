@@ -406,10 +406,10 @@ CREATE VIEW users_with_roles AS
 SELECT 
   u.id,
   u.email,
+  u.password_hash,
   u.first_name,
   u.last_name,
   u.phone,
-  u.password_hash,
   u.is_active,
   u.created_at,
   u.updated_at,
@@ -421,7 +421,7 @@ JOIN roles r ON u.role_id = r.id
 LEFT JOIN role_permissions rp ON r.id = rp.role_id
 LEFT JOIN permissions p ON rp.permission_id = p.id
 WHERE u.deleted_at IS NULL
-GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash, 
+GROUP BY u.id, u.email, u.password_hash, u.first_name, u.last_name, u.phone, 
          u.is_active, u.created_at, u.updated_at, r.name, r.description;
 
 -- ========================= SEED =========================
