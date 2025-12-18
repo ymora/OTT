@@ -193,20 +193,27 @@ function handleCreatePatient() {
     }
 
     try {
+        // DEBUG: Logger les valeurs reçues
+        error_log('[handleCreatePatient] Input reçu: ' . json_encode($input));
+        $dateOfBirth = $input['birth_date'] ?? $input['date_of_birth'] ?? null;
+        error_log('[handleCreatePatient] date_of_birth mappé: ' . ($dateOfBirth ?? 'NULL'));
+        
         $stmt = $pdo->prepare("
             INSERT INTO patients (first_name, last_name, date_of_birth, phone, email, city, postal_code)
             VALUES (:first_name, :last_name, :date_of_birth, :phone, :email, :city, :postal_code)
             RETURNING *
         ");
-        $stmt->execute([
+        $params = [
             'first_name' => $first_name,
             'last_name' => $last_name,
-            'date_of_birth' => $input['birth_date'] ?? $input['date_of_birth'] ?? null,
+            'date_of_birth' => $dateOfBirth,
             'phone' => $input['phone'] ?? null,
             'email' => $input['email'] ?? null,
             'city' => $input['city'] ?? null,
             'postal_code' => $input['postal_code'] ?? null
-        ]);
+        ];
+        error_log('[handleCreatePatient] Paramètres SQL: ' . json_encode($params));
+        $stmt->execute($params);
         $patient = $stmt->fetch();
         
         try {
