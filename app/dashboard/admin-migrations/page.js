@@ -338,7 +338,32 @@ export default function AdminMigrationsPage() {
       }
     } catch (err) {
       logger.error('Erreur suppression migration:', err)
-      setActionError('Erreur lors de la suppression de la migration: ' + (err.message || 'Erreur inconnue'))
+      
+      // Construire un message d'erreur détaillé
+      let errorMessage = err.message || err.error || 'Erreur inconnue'
+      
+      // Ajouter les détails si disponibles
+      if (err.details) {
+        errorMessage += ` (Détails: ${JSON.stringify(err.details)})`
+      }
+      if (err.debug) {
+        errorMessage += ` (Debug: ${JSON.stringify(err.debug)})`
+      }
+      if (err.logs && Array.isArray(err.logs)) {
+        errorMessage += ` (Logs: ${err.logs.join(', ')})`
+      }
+      
+      setActionError('Erreur lors de la suppression de la migration: ' + errorMessage)
+      
+      // Logger aussi les détails complets pour debug
+      logger.error('Détails complets de l\'erreur:', {
+        message: err.message,
+        error: err.error,
+        details: err.details,
+        debug: err.debug,
+        logs: err.logs,
+        stack: err.stack
+      })
     } finally {
       setDeletingMigration(null)
     }
