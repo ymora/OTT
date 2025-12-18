@@ -210,7 +210,7 @@ NEXT_PUBLIC_ENABLE_DEMO_RESET=false
 # Récupérer DATABASE_URL depuis Render Dashboard
 # Render > PostgreSQL > Connect > Internal Database URL
 
-.\scripts\db\migrate_render.ps1 -DATABASE_URL "postgresql://..."
+Pour appliquer le schéma SQL, utilisez directement le fichier `sql/schema.sql` via DBeaver ou via l'endpoint `/admin/migrate-sql` de l'API.
 ```
 
 **Sur Linux/Mac :**
