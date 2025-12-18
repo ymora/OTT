@@ -410,7 +410,11 @@ SELECT
   u.first_name,
   u.last_name,
   u.phone,
+  u.role_id,
   u.is_active,
+  u.last_login,
+  u.timezone,
+  u.deleted_at,
   u.created_at,
   u.updated_at,
   r.name AS role_name,
@@ -422,7 +426,8 @@ LEFT JOIN role_permissions rp ON r.id = rp.role_id
 LEFT JOIN permissions p ON rp.permission_id = p.id
 WHERE u.deleted_at IS NULL
 GROUP BY u.id, u.email, u.password_hash, u.first_name, u.last_name, u.phone, 
-         u.is_active, u.created_at, u.updated_at, r.name, r.description;
+         u.role_id, u.is_active, u.last_login, u.timezone, u.deleted_at,
+         u.created_at, u.updated_at, r.name, r.description;
 
 -- ========================= SEED =========================
 
