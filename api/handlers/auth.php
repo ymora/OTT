@@ -77,7 +77,8 @@ function handleLogin() {
             return;
         }
         // Récupérer l'utilisateur directement depuis la table users pour avoir le password_hash
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email AND is_active = TRUE AND deleted_at IS NULL");
+        // Utiliser IS TRUE pour PostgreSQL (plus robuste que = TRUE)
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email AND is_active IS TRUE AND deleted_at IS NULL");
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch();
         
