@@ -698,7 +698,9 @@ function handleDeleteMigrationFile($filename) {
         
         // Vérifier que le fichier existe AVANT de vérifier realpath
         // Si le fichier n'existe pas, c'est OK - on peut quand même supprimer l'entrée de l'historique
-        if (!file_exists($filePath)) {
+        $fileExists = file_exists($filePath);
+        
+        if (!$fileExists) {
             // Si le fichier n'existe pas, c'est OK - on peut quand même supprimer l'entrée de l'historique
             error_log('[handleDeleteMigrationFile] Fichier non trouvé: ' . $filePath . ' (suppression de l\'historique uniquement)');
             
@@ -721,21 +723,17 @@ function handleDeleteMigrationFile($filename) {
             return;
         }
         
+        // Si le fichier existe, vérifier la sécurité avec realpath
         // Protection contre path traversal: vérifier que le chemin réel est dans SQL_BASE_DIR
         $realPath = realpath($filePath);
         $basePath = realpath(SQL_BASE_DIR);
         
-        // Si realpath échoue, c'est peut-être parce que le répertoire n'existe pas
-        // Dans ce cas, on accepte quand même si le fichier n'existe pas (déjà géré ci-dessus)
-        // Mais si le fichier existe, on doit vérifier la sécurité
+        // Si realpath échoue pour le fichier, c'est suspect mais on continue (le fichier existe selon file_exists)
+        // Si realpath échoue pour SQL_BASE_DIR, on vérifie quand même avec le chemin normalisé
         if ($realPath !== false && $basePath !== false) {
-            // Vérification de sécurité normale
+            // Vérification de sécurité normale avec realpath
             if (strpos($realPath, $basePath) !== 0) {
                 error_log('[handleDeleteMigrationFile] Path traversal détecté: ' . $realPath . ' n\'est pas dans ' . $basePath);
-                error_log('[handleDeleteMigrationFile] SQL_BASE_DIR: ' . SQL_BASE_DIR);
-                error_log('[handleDeleteMigrationFile] filePath: ' . $filePath);
-                error_log('[handleDeleteMigrationFile] realPath: ' . $realPath);
-                error_log('[handleDeleteMigrationFile] basePath: ' . $basePath);
                 http_response_code(400);
                 echo json_encode([
                     'success' => false, 
@@ -750,14 +748,35 @@ function handleDeleteMigrationFile($filename) {
                 ]);
                 return;
             }
+        } elseif ($realPath === false && $basePath === false) {
+            // Si les deux realpath échouent, vérifier avec le chemin normalisé
+            // Normaliser les chemins pour la comparaison (supprimer les .. et .)
+            $normalizedFilePath = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, $filePath);
+            $normalizedBasePath = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, SQL_BASE_DIR);
+            
+            // Vérifier que le fichier est bien dans le répertoire de base
+            if (strpos($normalizedFilePath, $normalizedBasePath) !== 0) {
+                error_log('[handleDeleteMigrationFile] Path traversal détecté (normalisé): ' . $normalizedFilePath . ' n\'est pas dans ' . $normalizedBasePath);
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false, 
+                    'error' => 'Invalid file path (security check failed)',
+                    'debug' => [
+                        'filename' => $filename,
+                        'filePath' => $filePath,
+                        'normalizedFilePath' => $normalizedFilePath,
+                        'normalizedBasePath' => $normalizedBasePath,
+                        'SQL_BASE_DIR' => SQL_BASE_DIR
+                    ]
+                ]);
+                return;
+            }
+            // Si la vérification normalisée passe, on continue
+            error_log('[handleDeleteMigrationFile] realpath() a échoué mais vérification normalisée OK, continuation...');
         } else {
-            // Si realpath échoue mais que le fichier existe, c'est suspect
-            // Mais comme on a déjà vérifié file_exists, si on arrive ici c'est que le fichier existe
-            // Donc on doit quand même essayer de le supprimer
-            error_log('[handleDeleteMigrationFile] realpath() a échoué mais le fichier existe: ' . $filePath);
-            error_log('[handleDeleteMigrationFile] SQL_BASE_DIR: ' . SQL_BASE_DIR);
-            error_log('[handleDeleteMigrationFile] is_dir(SQL_BASE_DIR): ' . (is_dir(SQL_BASE_DIR) ? 'true' : 'false'));
-            // On continue quand même - la vérification du nom de fichier (regex) est déjà faite
+            // Un seul des deux realpath a échoué - on continue quand même
+            // La vérification du nom de fichier (regex) est déjà faite et c'est la sécurité principale
+            error_log('[handleDeleteMigrationFile] realpath() partiel: filePath=' . ($realPath ?: 'false') . ', basePath=' . ($basePath ?: 'false'));
         }
         
         // Supprimer le fichier
@@ -785,7 +804,16 @@ function handleDeleteMigrationFile($filename) {
     } catch (Exception $e) {
         http_response_code(500);
         error_log('[handleDeleteMigrationFile] Erreur: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        error_log('[handleDeleteMigrationFile] Stack trace: ' . $e->getTraceAsString());
+        echo json_encode([
+            'success' => false, 
+            'error' => $e->getMessage(),
+            'debug' => [
+                'filename' => $filename,
+                'filePath' => $filePath ?? 'N/A',
+                'SQL_BASE_DIR' => SQL_BASE_DIR
+            ]
+        ]);
     }
 }
 
