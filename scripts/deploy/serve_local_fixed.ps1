@@ -21,7 +21,6 @@ if (-not (Test-Path "out")) {
 }
 
 # Créer un script Python temporaire qui gère le basePath
-# Échapper le $Port pour éviter l'interpolation PowerShell
 $portValue = $Port
 $pythonScript = @"
 import http.server
@@ -80,7 +79,7 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
     $pythonCmd = "python3"
 }
 
-if ($pythonCmd) {
+if ($null -ne $pythonCmd) {
     Write-Host "✅ Utilisation de Python avec support basePath /OTT/" -ForegroundColor Green
     Write-Host ""
     Write-Host "🌐 Site accessible sur:" -ForegroundColor Cyan
@@ -89,7 +88,6 @@ if ($pythonCmd) {
     Write-Host "📋 Appuyez sur Ctrl+C pour arrêter le serveur" -ForegroundColor Gray
     Write-Host ""
     
-    # Obtenir le répertoire du projet (racine)
     $projectRoot = $PWD
     
     Push-Location $projectRoot
@@ -97,7 +95,6 @@ if ($pythonCmd) {
         & $pythonCmd $scriptPath
     } finally {
         Pop-Location
-        # Nettoyer le script temporaire
         if (Test-Path $scriptPath) {
             Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
         }
@@ -107,7 +104,6 @@ if ($pythonCmd) {
     Write-Host ""
     Write-Host "💡 Installez Python depuis: https://www.python.org/downloads/" -ForegroundColor Yellow
     Write-Host ""
-    # Nettoyer le script temporaire
     if (Test-Path $scriptPath) {
         Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
     }
