@@ -82,27 +82,8 @@ if ($null -eq $pythonCmd) {
     }
 }
 
-if ($null -ne $pythonCmd) {
-    Write-Host "✅ Utilisation de Python avec support basePath /OTT/" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "🌐 Site accessible sur:" -ForegroundColor Cyan
-    Write-Host "   http://localhost:$Port/OTT/" -ForegroundColor White
-    Write-Host ""
-    Write-Host "📋 Appuyez sur Ctrl+C pour arrêter le serveur" -ForegroundColor Gray
-    Write-Host ""
-    
-    $projectRoot = $PWD
-    
-    Push-Location $projectRoot
-    try {
-        & $pythonCmd $scriptPath
-    } finally {
-        Pop-Location
-        if (Test-Path $scriptPath) {
-            Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
-        }
-    }
-} else {
+# Vérifier si Python est disponible
+if ($null -eq $pythonCmd) {
     Write-Host "❌ Python n'est pas installé!" -ForegroundColor Red
     Write-Host ""
     Write-Host "💡 Installez Python depuis: https://www.python.org/downloads/" -ForegroundColor Yellow
@@ -111,4 +92,25 @@ if ($null -ne $pythonCmd) {
         Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
     }
     exit 1
+}
+
+# Python est disponible, démarrer le serveur
+Write-Host "✅ Utilisation de Python avec support basePath /OTT/" -ForegroundColor Green
+Write-Host ""
+Write-Host "🌐 Site accessible sur:" -ForegroundColor Cyan
+Write-Host "   http://localhost:$Port/OTT/" -ForegroundColor White
+Write-Host ""
+Write-Host "📋 Appuyez sur Ctrl+C pour arrêter le serveur" -ForegroundColor Gray
+Write-Host ""
+
+$projectRoot = $PWD
+
+Push-Location $projectRoot
+try {
+    & $pythonCmd $scriptPath
+} finally {
+    Pop-Location
+    if (Test-Path $scriptPath) {
+        Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
+    }
 }
