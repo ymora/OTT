@@ -387,16 +387,56 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
   // Obtenir la géolocalisation du PC (GPS ou IP) pour le centre de la carte
   const { latitude: pcLatitude, longitude: pcLongitude, loading: geoLoading } = useGeolocation()
   
-  // Utiliser un ref pour s'assurer qu'une seule instance de carte existe
-  const mapKeyRef = useRef(0)
-  const [mapKey, setMapKey] = useState(0)
+  // Utiliser un état pour forcer le démontage/remontage complet de la carte
+  const [mapKey, setMapKey] = useState(1)
+  const mapInstanceRef = useRef(null)
+  const devicesKeyRef = useRef('')
+  
+  // Nettoyer l'instance de carte lors du démontage
+  useEffect(() => {
+    return () => {
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove()
+          mapInstanceRef.current = null
+        } catch (e) {
+          // Ignorer les erreurs de nettoyage
+        }
+      }
+      if (typeof window !== 'undefined' && window._leafletMapInstance) {
+        try {
+          const instance = window._leafletMapInstance
+          if (instance && typeof instance.remove === 'function') {
+            instance.remove()
+          }
+          window._leafletMapInstance = null
+        } catch (e) {
+          // Ignorer les erreurs de nettoyage
+        }
+      }
+    }
+  }, [])
   
   // Réinitialiser la carte si les devices changent significativement
   useEffect(() => {
-    const devicesKey = devices.map(d => `${d.id}-${d.latitude}-${d.longitude}`).join(',')
-    if (devicesKey !== mapKeyRef.current) {
-      mapKeyRef.current = devicesKey
-      setMapKey(prev => prev + 1)
+    const devicesKey = devices.map(d => `${d.id}-${d.latitude || 'null'}-${d.longitude || 'null'}`).join(',')
+    if (devicesKey !== devicesKeyRef.current) {
+      devicesKeyRef.current = devicesKey
+      // Forcer le démontage complet en mettant mapKey à null puis en le réinitialisant
+      // Cela garantit que React démonte complètement le composant avant de le remonter
+      setMapKey(prev => {
+        // D'abord nettoyer l'instance actuelle
+        if (mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.remove()
+            mapInstanceRef.current = null
+          } catch (e) {
+            // Ignorer les erreurs
+          }
+        }
+        // Retourner une nouvelle valeur pour forcer le remontage
+        return prev + 1
+      })
     }
   }, [devices])
   
@@ -462,29 +502,43 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
   }, [devices])
 
   return (
-    <MapContainer 
-      key={mapKey}
-      center={center} 
-      zoom={zoom} 
-      style={{ height: 600, width: '100%' }} 
-      scrollWheelZoom
-      whenCreated={(mapInstance) => {
-        // Nettoyer l'instance précédente si elle existe
-        if (typeof window !== 'undefined' && window._leafletMapInstance) {
-          try {
-            window._leafletMapInstance.remove()
-          } catch (e) {
-            // Ignorer les erreurs de nettoyage
+    <div key={`map-wrapper-${mapKey}`} id={`leaflet-map-wrapper-${mapKey}`} style={{ height: 600, width: '100%', position: 'relative' }}>
+      <MapContainer 
+        key={`map-container-${mapKey}`}
+        center={center} 
+        zoom={zoom} 
+        style={{ height: '100%', width: '100%' }} 
+        scrollWheelZoom={true}
+        whenCreated={(mapInstance) => {
+          // Nettoyer les références précédentes AVANT d'assigner la nouvelle
+          if (mapInstanceRef.current && mapInstanceRef.current !== mapInstance) {
+            try {
+              mapInstanceRef.current.remove()
+            } catch (e) {
+              // Ignorer les erreurs de nettoyage
+            }
           }
-        }
-        window._leafletMapInstance = mapInstance
-      }}
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <DeviceMarkers devices={devices} focusDeviceId={focusDeviceId} onSelect={onSelect} />
-    </MapContainer>
+          if (typeof window !== 'undefined' && window._leafletMapInstance && window._leafletMapInstance !== mapInstance) {
+            try {
+              window._leafletMapInstance.remove()
+            } catch (e) {
+              // Ignorer les erreurs de nettoyage
+            }
+          }
+          
+          // Stocker la nouvelle instance
+          mapInstanceRef.current = mapInstance
+          if (typeof window !== 'undefined') {
+            window._leafletMapInstance = mapInstance
+          }
+        }}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <DeviceMarkers devices={devices} focusDeviceId={focusDeviceId} onSelect={onSelect} />
+      </MapContainer>
+    </div>
   )
 }

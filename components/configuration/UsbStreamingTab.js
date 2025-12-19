@@ -429,26 +429,39 @@ export default function DebugTab() {
       displayList = [...devices]
       
       // Ajouter le dispositif USB s'il n'est pas déjà dans la liste (non enregistré)
-      if (usbDevice && !isUsbDeviceRegistered()) {
-        const hasIdentifiers = usbDevice.sim_iccid || usbDevice.device_serial
+      // NOUVEAU: Aussi ajouter si usbDeviceInfo existe mais usbDevice n'est pas encore créé
+      const usbDeviceToAdd = usbDevice || (isConnected && usbDeviceInfo ? {
+        id: `usb_virtual_${Date.now()}`,
+        device_name: usbDeviceInfo.device_name || 'USB-En attente...',
+        sim_iccid: usbDeviceInfo.sim_iccid || null,
+        device_serial: usbDeviceInfo.device_serial || null,
+        firmware_version: usbDeviceInfo.firmware_version || null,
+        status: 'active',
+        isVirtual: true,
+        isTemporary: !usbDeviceInfo.sim_iccid && !usbDeviceInfo.device_serial
+      } : null)
+      
+      if (usbDeviceToAdd && !isUsbDeviceRegistered()) {
+        const hasIdentifiers = usbDeviceToAdd.sim_iccid || usbDeviceToAdd.device_serial
         
         logger.debug('[devicesToDisplay] USB Device trouvé:', {
-          deviceName: usbDevice.device_name,
+          deviceName: usbDeviceToAdd.device_name,
           hasIdentifiers,
-          sim_iccid: usbDevice.sim_iccid?.slice(-10),
-          device_serial: usbDevice.device_serial,
-          isVirtual: usbDevice.isVirtual,
-          isTemporary: usbDevice.isTemporary
+          sim_iccid: usbDeviceToAdd.sim_iccid?.slice(-10),
+          device_serial: usbDeviceToAdd.device_serial,
+          isVirtual: usbDeviceToAdd.isVirtual,
+          isTemporary: usbDeviceToAdd.isTemporary,
+          fromUsbDeviceInfo: !usbDevice
         })
         
         if (!hasIdentifiers) {
           // Dispositif temporaire sans identifiants : toujours ajouter
           logger.debug('[devicesToDisplay] Ajout dispositif temporaire sans identifiants')
-          displayList = [usbDevice, ...displayList]
+          displayList = [usbDeviceToAdd, ...displayList]
         } else {
           // Vérifier si le dispositif existe déjà en base
-          const usbIccid = normalizeId(usbDevice.sim_iccid)
-          const usbSerial = normalizeId(usbDevice.device_serial)
+          const usbIccid = normalizeId(usbDeviceToAdd.sim_iccid)
+          const usbSerial = normalizeId(usbDeviceToAdd.device_serial)
           
           const exists = allDevices.some(d => {
             const dbIccid = normalizeId(d.sim_iccid)
@@ -467,7 +480,7 @@ export default function DebugTab() {
           if (!exists) {
             // Ajouter le dispositif USB en premier
             logger.debug('[devicesToDisplay] Ajout dispositif USB virtuel')
-            displayList = [usbDevice, ...displayList]
+            displayList = [usbDeviceToAdd, ...displayList]
           } else {
             logger.debug('[devicesToDisplay] Dispositif existe déjà en base, non ajouté')
           }
@@ -475,6 +488,8 @@ export default function DebugTab() {
       } else {
         logger.debug('[devicesToDisplay] Pas de dispositif USB à ajouter:', {
           hasUsbDevice: !!usbDevice,
+          hasUsbDeviceInfo: !!usbDeviceInfo,
+          isConnected,
           isRegistered: usbDevice ? isUsbDeviceRegistered() : 'N/A'
         })
       }
@@ -486,7 +501,7 @@ export default function DebugTab() {
     })
     
     return displayList
-  }, [showArchived, devices, archivedDevices, usbDevice, isUsbDeviceRegistered, allDevices])
+  }, [showArchived, devices, archivedDevices, usbDevice, isUsbDeviceRegistered, allDevices, isConnected, usbDeviceInfo])
   
   // ========== STREAMING LOGS EN TEMPS RÉEL (pour admin à distance) ==========
   const [remoteLogs, setRemoteLogs] = useState([])
@@ -2192,18 +2207,23 @@ export default function DebugTab() {
                   )
                   
                   // Vérifier si ce dispositif est un dispositif USB virtuel (non enregistré)
+                  // IMPORTANT: Pour un dispositif temporaire (USB-En attente...), utiliser usbDeviceInfo si connecté
+                  // même si les identifiants ne correspondent pas encore (ils arrivent progressivement depuis les logs)
                   const isDeviceUsbVirtual = usbDevice && !isUsbDeviceRegistered() && (
                     (usbDevice.sim_iccid && normalizeId(usbDevice.sim_iccid) === deviceIccid) ||
                     (usbDevice.device_serial && normalizeId(usbDevice.device_serial) === normalizedDeviceSerial) ||
                     // Si le dispositif est temporaire (sans identifiants) et qu'on est connecté, utiliser usbDeviceInfo
-                    (isConnected && device.isTemporary && !deviceIccid && !normalizedDeviceSerial && usbDeviceInfo)
+                    (isConnected && device.isTemporary && !deviceIccid && !normalizedDeviceSerial && usbDeviceInfo) ||
+                    // NOUVEAU: Si le dispositif a "USB-En attente..." et qu'on est connecté avec usbDeviceInfo, c'est le dispositif USB
+                    (isConnected && device.device_name === 'USB-En attente...' && usbDeviceInfo)
                   )
                   
                   // Source de données USB : TOUJOURS utiliser usbDeviceInfo en priorité si disponible
                   // car c'est là que sont stockées toutes les informations parsées depuis les logs
                   // (sim_phone_number, sim_status, operator, apn, network_connected, etc.)
                   // Si le dispositif est temporaire (USB-En attente...) et connecté, utiliser usbDeviceInfo même sans correspondance d'identifiants
-                  const usbInfo = (isDeviceUsbConnected || isDeviceUsbVirtual) && usbDeviceInfo ? usbDeviceInfo : 
+                  // NOUVEAU: Si connecté et usbDeviceInfo disponible, l'utiliser même si isDeviceUsbVirtual est false
+                  const usbInfo = (isDeviceUsbConnected || isDeviceUsbVirtual || (isConnected && usbDeviceInfo && device.device_name === 'USB-En attente...')) && usbDeviceInfo ? usbDeviceInfo : 
                                   (isDeviceUsbVirtual ? usbDevice : null)
                   const usbConfig = usbInfo?.config || {}
                   

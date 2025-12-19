@@ -275,6 +275,8 @@ export default function PatientsPage() {
                   <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Téléphone</th>
                   <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Ville</th>
                   <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Code Postal</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Statut</th>
+                  <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Dernière connexion</th>
                   <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-300">Dispositif</th>
                   <th className="text-right py-3 px-4 text-gray-700 dark:text-gray-300">Actions</th>
                 </tr>
@@ -282,7 +284,7 @@ export default function PatientsPage() {
               <tbody>
                 {filteredPatients.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan="10" className="py-8 text-center text-gray-500 dark:text-gray-400">
                       {searchTerm 
                         ? 'Aucun patient ne correspond à la recherche' 
                         : showArchived 
@@ -301,20 +303,32 @@ export default function PatientsPage() {
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
                       <td className="table-cell py-3 px-4 font-medium text-primary">
-                        <div className="flex items-center gap-2">
-                          <span>{p.first_name} {p.last_name}</span>
-                          {patientIsArchived ? (
-                            <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
-                          ) : (
-                            <span className="badge badge-success">✅ Actif</span>
-                          )}
-                        </div>
+                        <span>{p.first_name} {p.last_name}</span>
                       </td>
-                      <td className="table-cell">{p.birth_date ? new Date(p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
+                      <td className="table-cell">{(p.date_of_birth || p.birth_date) ? new Date(p.date_of_birth || p.birth_date).toLocaleDateString('fr-FR') : '-'}</td>
                       <td className="table-cell">{p.email || '-'}</td>
                       <td className="table-cell text-sm">{p.phone || '-'}</td>
                       <td className="table-cell text-sm">{p.city || '-'}</td>
                       <td className="table-cell text-sm">{p.postal_code || '-'}</td>
+                      <td className="table-cell py-3 px-4">
+                        {patientIsArchived ? (
+                          <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
+                        ) : p.status === 'inactive' ? (
+                          <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs">⏸️ Inactif</span>
+                        ) : (
+                          <span className="badge badge-success">✅ Actif</span>
+                        )}
+                      </td>
+                      <td className="table-cell text-sm">
+                        {p.device_last_seen ? (
+                          <div>
+                            <div>{new Date(p.device_last_seen).toLocaleDateString('fr-FR')}</div>
+                            <div className="text-xs text-muted">{new Date(p.device_last_seen).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
+                          </div>
+                        ) : (
+                          <span className="text-muted">-</span>
+                        )}
+                      </td>
                       <td className="table-cell py-3 px-4">
                         {(() => {
                           const assignedDevice = devices.find(d => d.patient_id === p.id)

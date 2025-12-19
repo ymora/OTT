@@ -22,6 +22,8 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const { error, success, setError, setSuccess, reset: resetMessages } = useActionState({ resetOnNewAction: true })
   // Utiliser useApiCall pour les appels API simples
   const { loading: loadingIno, call: apiCall } = useApiCall({ requiresAuth: true })
+  // État supplémentaire pour gérer le chargement lors de l'édition d'un .ino
+  const [loadingInoEdit, setLoadingInoEdit] = useState(false)
   const [showVersionExistsModal, setShowVersionExistsModal] = useState(false)
   const [existingFirmware, setExistingFirmware] = useState(null)
   const [pendingFile, setPendingFile] = useState(null)
@@ -468,7 +470,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
   // Charger un fichier .ino existant pour l'éditer
   const handleLoadIno = useCallback(async (firmwareId) => {
-    setLoadingIno(true)
+    setLoadingInoEdit(true)
     setError(null)
     setSuccess(null)
     setEditingFirmwareId(firmwareId)
@@ -508,7 +510,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
       setError(err.message || 'Erreur lors du chargement du fichier .ino')
       setEditingFirmwareId(null)
     } finally {
-      setLoadingIno(false)
+      setLoadingInoEdit(false)
     }
   }, [API_URL, fetchWithAuth])
 
@@ -1020,7 +1022,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
                               handleLoadIno(fw.id)
                             }
                           }}
-                          disabled={loadingIno}
+                          disabled={loadingInoEdit}
                           className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50"
                           title={editingFirmwareId === fw.id && inoContent.trim() !== '' ? "Fermer l'éditeur" : "Éditer le fichier .ino"}
                         >

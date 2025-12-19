@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS patients (
   emergency_contact_phone VARCHAR(20),
   medical_notes TEXT,
   timezone VARCHAR(50) DEFAULT 'Europe/Paris',
+  status TEXT CHECK (status IN ('active','inactive')) DEFAULT 'active',
   deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -87,6 +88,7 @@ CREATE TABLE IF NOT EXISTS patients (
 DROP TRIGGER IF EXISTS trg_patients_updated ON patients;
 CREATE TRIGGER trg_patients_updated BEFORE UPDATE ON patients
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE INDEX IF NOT EXISTS idx_patients_status ON patients(status) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS devices (
   id SERIAL PRIMARY KEY,
@@ -260,6 +262,8 @@ CREATE TABLE IF NOT EXISTS firmware_versions (
   min_battery_pct INT DEFAULT 30,
   uploaded_by INT REFERENCES users(id) ON DELETE SET NULL,
   status VARCHAR(50) DEFAULT 'compiled' CHECK (status IN ('pending_compilation', 'compiling', 'compiled', 'error')),
+  ino_content BYTEA,
+  bin_content BYTEA,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

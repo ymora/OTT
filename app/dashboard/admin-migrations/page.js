@@ -27,32 +27,8 @@ export default function AdminMigrationsPage() {
   const isAdmin = user?.role_name === 'admin' || user?.role === 'admin' || user?.roles?.includes('admin')
 
   // Liste des migrations disponibles (définie avant le return conditionnel pour respecter les règles des hooks)
-  const migrationsList = [
-    {
-      id: 'migration_fix_users_with_roles_view.sql',
-      name: '🔥 URGENT: Corriger VIEW users (ERREURS 500)',
-      description: '❌ CRITIQUE: Corrige la VIEW users_with_roles qui manque de colonnes (deleted_at, timezone, phone). Ceci résout les erreurs 500 sur TOUTES les pages.',
-      variant: 'danger'
-    },
-    {
-      id: 'migration_repair_database.sql',
-      name: '🔧 Réparer la base de données',
-      description: '✅ Crée toutes les tables manquantes (notifications, index, etc.) SANS PERTE DE DONNÉES. Utilisez ceci pour corriger les erreurs "table not found".',
-      variant: 'success'
-    },
-    {
-      id: 'migration_sim_pin_varchar16.sql',
-      name: '📱 Mettre à jour sim_pin (VARCHAR 8→16)',
-      description: '✅ Augmente la limite de sim_pin de VARCHAR(8) à VARCHAR(16). Corrige l\'erreur "value too long for type character varying(8)" lors de la configuration des dispositifs. Validation applicative reste à 4-8 chiffres (standard 3GPP).',
-      variant: 'success'
-    },
-    {
-      id: 'migration_create_migration_history.sql',
-      name: '📊 Créer table migration_history',
-      description: '✅ Crée la table pour tracker les migrations exécutées. Permet d\'afficher le statut et de masquer les migrations déjà exécutées.',
-      variant: 'success'
-    }
-  ]
+  // NOTE: Liste vide - toutes les migrations ont été supprimées car plus nécessaires
+  const migrationsList = []
 
   // Enrichir les migrations avec l'historique (défini avant le return conditionnel)
   const migrations = useMemo(() => {

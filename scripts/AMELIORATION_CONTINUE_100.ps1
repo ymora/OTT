@@ -26,7 +26,7 @@ Write-Host ""
 Write-Host "🎯 Objectif: Score 100% (10.0/10) sur toutes les phases" -ForegroundColor Yellow
 Write-Host "⏱️  Timeout: $TimeoutMinutes minutes" -ForegroundColor Yellow
 Write-Host "🔄 Itérations max: $MaxIterations" -ForegroundColor Yellow
-Write-Host "🔧 Auto-correction: $(if ($AutoFix) { 'Activée' } else { 'Désactivée' })" -ForegroundColor Yellow
+Write-Host "🔧 Auto-correction: $(if ($AutoFix) { 'Activee' } else { 'Desactivee' })" -ForegroundColor Yellow
 Write-Host ""
 
 function Get-AuditScores {
@@ -155,9 +155,9 @@ function Invoke-AutoFix {
                                 }
                             }
                             
-                            $newContent = $newLines -join "`n"
-                            Set-Content -Path $issue.File -Value $newContent -Encoding UTF8 -NoNewline
-                            $fixed += "whereClause ajouté dans $($issue.File)"
+                            $newContent = $newLines -join [Environment]::NewLine
+                            Set-Content -Path $issue.File -Value $newContent -Encoding UTF8
+                            $fixed += "whereClause ajoute dans $($issue.File)"
                             $fixApplied = $true
                         }
                     }
@@ -181,8 +181,8 @@ function Invoke-AutoFix {
                             $newContent = $newContent -replace '(error_reporting\([^)]+\);)', "`$1`nini_set('display_errors', 0);"
                         }
                     }
-                    Set-Content -Path $issue.File -Value $newContent -Encoding UTF8 -NoNewline
-                    $fixed += "display_errors désactivé dans api.php"
+                    Set-Content -Path $issue.File -Value $newContent -Encoding UTF8
+                    $fixed += "display_errors desactive dans api.php"
                     $fixApplied = $true
                 }
             } catch {
@@ -220,9 +220,9 @@ function Invoke-AutoFix {
                             }
                         }
                         
-                        $newContent = $newLines -join "`n"
-                        Set-Content -Path $issue.File -Value $newContent -Encoding UTF8 -NoNewline
-                        $fixed += "urldecode ajouté dans $($issue.File)"
+                        $newContent = $newLines -join [Environment]::NewLine
+                        Set-Content -Path $issue.File -Value $newContent -Encoding UTF8
+                        $fixed += "urldecode ajoute dans $($issue.File)"
                         $fixApplied = $true
                     }
                 }
@@ -371,9 +371,9 @@ while ($Iteration -lt $MaxIterations) {
         Write-Host "📋 Problèmes détectés: $($issues.Count)" -ForegroundColor Cyan
         foreach ($issue in $issues) {
             $icon = switch ($issue.Severity) {
-                "critical" { "🔴" }
-                "high" { "🟠" }
-                default { "🟡" }
+                "critical" { "[CRITIQUE]" }
+                "high" { "[HAUTE]" }
+                default { "[MOYENNE]" }
             }
             Write-Host "   $icon $($issue.Type)" -ForegroundColor $(if ($issue.Severity -eq "critical") { "Red" } elseif ($issue.Severity -eq "high") { "Yellow" } else { "Gray" })
             if ($issue.File) {

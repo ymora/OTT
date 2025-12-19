@@ -87,7 +87,8 @@ function handleGetPatients() {
                         patient_id,
                         id AS device_id,
                         device_name,
-                        sim_iccid
+                        sim_iccid,
+                        last_seen
                     FROM devices
                     WHERE patient_id IS NOT NULL
                     ORDER BY patient_id, updated_at DESC NULLS LAST
@@ -99,6 +100,7 @@ function handleGetPatients() {
                     ld.device_id,
                     ld.device_name,
                     ld.sim_iccid,
+                    ld.last_seen AS device_last_seen,
                     COALESCE(pnp.email_enabled, FALSE) as email_enabled,
                     COALESCE(pnp.sms_enabled, FALSE) as sms_enabled,
                     COALESCE(pnp.push_enabled, FALSE) as push_enabled,
@@ -130,7 +132,8 @@ function handleGetPatients() {
                         patient_id,
                         id AS device_id,
                         device_name,
-                        sim_iccid
+                        sim_iccid,
+                        last_seen
                     FROM devices
                     WHERE patient_id IS NOT NULL
                     ORDER BY patient_id, updated_at DESC NULLS LAST
@@ -142,6 +145,7 @@ function handleGetPatients() {
                     ld.device_id,
                     ld.device_name,
                     ld.sim_iccid,
+                    ld.last_seen AS device_last_seen,
                     FALSE as email_enabled,
                     FALSE as sms_enabled,
                     FALSE as push_enabled,
@@ -207,8 +211,8 @@ function handleCreatePatient() {
         error_log('[handleCreatePatient] date_of_birth mappé: ' . ($dateOfBirth ?? 'NULL'));
         
         $stmt = $pdo->prepare("
-            INSERT INTO patients (first_name, last_name, date_of_birth, phone, email, city, postal_code)
-            VALUES (:first_name, :last_name, :date_of_birth, :phone, :email, :city, :postal_code)
+            INSERT INTO patients (first_name, last_name, date_of_birth, phone, email, city, postal_code, status)
+            VALUES (:first_name, :last_name, :date_of_birth, :phone, :email, :city, :postal_code, :status)
             RETURNING *
         ");
         $params = [
@@ -218,7 +222,8 @@ function handleCreatePatient() {
             'phone' => $input['phone'] ?? null,
             'email' => $input['email'] ?? null,
             'city' => $input['city'] ?? null,
-            'postal_code' => $input['postal_code'] ?? null
+            'postal_code' => $input['postal_code'] ?? null,
+            'status' => $input['status'] ?? 'active'
         ];
         error_log('[handleCreatePatient] Paramètres SQL: ' . json_encode($params));
         $stmt->execute($params);
@@ -269,7 +274,7 @@ function handleUpdatePatient($patient_id) {
             return;
         }
 
-        $textFields = ['first_name','last_name','date_of_birth','phone','email','city','postal_code','address','notes'];
+        $textFields = ['first_name','last_name','date_of_birth','phone','email','city','postal_code','address','notes','status'];
         $updates = [];
         $params = ['id' => $patient_id];
 

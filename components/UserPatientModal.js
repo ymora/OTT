@@ -114,7 +114,8 @@ export default function UserPatientModal({
           phone: editingItem.phone || '',
           email: editingItem.email || '',
           city: editingItem.city || '',
-          postal_code: editingItem.postal_code || ''
+          postal_code: editingItem.postal_code || '',
+          status: editingItem.status || 'active'
         }
         setFormData(initialFormData)
       }
@@ -168,7 +169,8 @@ export default function UserPatientModal({
           phone: '',
           email: '',
           city: '',
-          postal_code: ''
+          postal_code: '',
+          status: 'active'
         })
       }
       
@@ -468,7 +470,8 @@ export default function UserPatientModal({
           phone: formData.phone && formData.phone.trim().length > 0 ? formData.phone.trim() : null,
           email: formData.email && formData.email.trim().length > 0 ? formData.email.trim() : null,
           city: formData.city && formData.city.trim().length > 0 ? formData.city.trim() : null,
-          postal_code: formData.postal_code && formData.postal_code.trim().length > 0 ? formData.postal_code.trim() : null
+          postal_code: formData.postal_code && formData.postal_code.trim().length > 0 ? formData.postal_code.trim() : null,
+          status: formData.status || 'active'
         }
         
         if (type === 'user' && formData.password && formData.password.trim().length >= 6) {
@@ -545,7 +548,8 @@ export default function UserPatientModal({
           phone: formData.phone && formData.phone.trim().length > 0 ? formData.phone.trim() : null,
           email: formData.email && formData.email.trim().length > 0 ? formData.email.trim() : null,
           city: formData.city && formData.city.trim().length > 0 ? formData.city.trim() : null,
-          postal_code: formData.postal_code && formData.postal_code.trim().length > 0 ? formData.postal_code.trim() : null
+          postal_code: formData.postal_code && formData.postal_code.trim().length > 0 ? formData.postal_code.trim() : null,
+          status: formData.status || 'active'
         }
         
         const response = await fetchJson(
@@ -884,6 +888,21 @@ export default function UserPatientModal({
                     />
                   </label>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Statut
+                  <select
+                    name="status"
+                    value={formData.status || 'active'}
+                    onChange={handleInputChange}
+                    className="input mt-1"
+                  >
+                    <option value="active">Actif</option>
+                    <option value="inactive">Inactif</option>
+                  </select>
+                </label>
               </div>
             </>
           )}

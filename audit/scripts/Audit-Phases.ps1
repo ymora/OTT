@@ -1,4 +1,4 @@
-﻿# ===============================================================================
+# ===============================================================================
 # DÉFINITION DES PHASES D'AUDIT
 # ===============================================================================
 
@@ -20,64 +20,64 @@ $script:AuditPhases = @(
     # ============================================================================
     # STRUCTURE (1-3) - BASE DU PROJET - À FAIRE EN PREMIER
     # ============================================================================
-    @{ Number = 0; Name = "Inventaire Exhaustif"; Description = "Tous les fichiers et répertoires"; Dependencies = @(); Category = "Structure"; CategoryNumber = 1 }
-    @{ Number = 1; Name = "Architecture et Statistiques"; Description = "Structure du projet, statistiques"; Dependencies = @(0); Category = "Structure"; CategoryNumber = 2 }
-    @{ Number = 2; Name = "Organisation"; Description = "Structure fichiers, doublons"; Dependencies = @(0); Category = "Structure"; CategoryNumber = 3 }
+    @{ Number = 1; Name = "Inventaire Exhaustif"; Description = "Tous les fichiers et répertoires"; Dependencies = @(); Category = "Structure"; CategoryNumber = 1 }
+    @{ Number = 2; Name = "Architecture et Statistiques"; Description = "Structure du projet, statistiques"; Dependencies = @(1); Category = "Structure"; CategoryNumber = 2 }
+    @{ Number = 3; Name = "Organisation"; Description = "Structure fichiers, doublons"; Dependencies = @(1); Category = "Structure"; CategoryNumber = 3 }
     
     # ============================================================================
-    # SÉCURITÉ (1) - CRITIQUE - À FAIRE EN PRIORITÉ
+    # SÉCURITÉ (4) - CRITIQUE - À FAIRE EN PRIORITÉ
     # ============================================================================
-    @{ Number = 3; Name = "Sécurité"; Description = "SQL injection, XSS, secrets, modals unifiés"; Dependencies = @(0); Category = "Sécurité"; CategoryNumber = 1 }
+    @{ Number = 4; Name = "Sécurité"; Description = "SQL injection, XSS, secrets, modals unifiés"; Dependencies = @(1); Category = "Sécurité"; CategoryNumber = 1 }
     
     # ============================================================================
-    # BACKEND (1-3) - API ET BASE DE DONNÉES - PRIORITAIRE
+    # BACKEND (5-7) - API ET BASE DE DONNÉES - PRIORITAIRE
     # ============================================================================
-    @{ Number = 4; Name = "Endpoints API"; Description = "Tests fonctionnels des endpoints API"; Dependencies = @(); Category = "Backend"; CategoryNumber = 1 }
-    @{ Number = 5; Name = "Base de Données"; Description = "Cohérence BDD, données, intégrité"; Dependencies = @(4); Category = "Backend"; CategoryNumber = 2 }
-    @{ Number = 6; Name = "Structure API"; Description = "Cohérence handlers, routes API"; Dependencies = @(0); Category = "Backend"; CategoryNumber = 3 }
+    @{ Number = 5; Name = "Endpoints API"; Description = "Tests fonctionnels des endpoints API"; Dependencies = @(); Category = "Backend"; CategoryNumber = 1 }
+    @{ Number = 6; Name = "Base de Données"; Description = "Cohérence BDD, données, intégrité"; Dependencies = @(5); Category = "Backend"; CategoryNumber = 2 }
+    @{ Number = 7; Name = "Structure API"; Description = "Cohérence handlers, routes API"; Dependencies = @(1); Category = "Backend"; CategoryNumber = 3 }
     
     # ============================================================================
-    # QUALITÉ (1-7) - CODE MORT, DUPLICATION, ETC.
+    # QUALITÉ (8-14) - CODE MORT, DUPLICATION, ETC.
     # ============================================================================
-    @{ Number = 7; Name = "Code Mort"; Description = "Fichiers, composants, fonctions non utilisés"; Dependencies = @(0, 1); Category = "Qualité"; CategoryNumber = 1 }
-    @{ Number = 8; Name = "Duplication de Code"; Description = "Code dupliqué, fonctions redondantes"; Dependencies = @(0); Category = "Qualité"; CategoryNumber = 2 }
-    @{ Number = 9; Name = "Complexité"; Description = "Complexité cyclomatique, fichiers volumineux"; Dependencies = @(0); Category = "Qualité"; CategoryNumber = 3 }
-    @{ Number = 10; Name = "Tests"; Description = "Tests unitaires, intégration, couverture"; Dependencies = @(); Category = "Qualité"; CategoryNumber = 4 }
-    @{ Number = 11; Name = "Gestion d'Erreurs"; Description = "Error boundaries, gestion erreurs API"; Dependencies = @(0); Category = "Qualité"; CategoryNumber = 5 }
-    @{ Number = 12; Name = "Optimisations Avancées"; Description = "Vérifications détaillées"; Dependencies = @(0, 7, 8, 9); Category = "Qualité"; CategoryNumber = 6 }
-    @{ Number = 13; Name = "Liens et Imports"; Description = "Liens cassés, imports manquants"; Dependencies = @(0); Category = "Qualité"; CategoryNumber = 7 }
+    @{ Number = 8; Name = "Code Mort"; Description = "Fichiers, composants, fonctions non utilisés"; Dependencies = @(1, 2); Category = "Qualité"; CategoryNumber = 1 }
+    @{ Number = 9; Name = "Duplication de Code"; Description = "Code dupliqué, fonctions redondantes"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 2 }
+    @{ Number = 10; Name = "Complexité"; Description = "Complexité cyclomatique, fichiers volumineux"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 3 }
+    @{ Number = 11; Name = "Tests"; Description = "Tests unitaires, intégration, couverture"; Dependencies = @(); Category = "Qualité"; CategoryNumber = 4 }
+    @{ Number = 12; Name = "Gestion d'Erreurs"; Description = "Error boundaries, gestion erreurs API"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 5 }
+    @{ Number = 13; Name = "Optimisations Avancées"; Description = "Vérifications détaillées"; Dependencies = @(1, 8, 9, 10); Category = "Qualité"; CategoryNumber = 6 }
+    @{ Number = 14; Name = "Liens et Imports"; Description = "Liens cassés, imports manquants"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 7 }
     
     # ============================================================================
-    # FRONTEND (1-3) - UI/UX
+    # FRONTEND (15-17) - UI/UX
     # ============================================================================
-    @{ Number = 14; Name = "Routes et Navigation"; Description = "Routes Next.js, cohérence navigation"; Dependencies = @(0); Category = "Frontend"; CategoryNumber = 1 }
-    @{ Number = 15; Name = "Accessibilité (a11y)"; Description = "WCAG 2.1 AA, aria-labels, navigation clavier"; Dependencies = @(0); Category = "Frontend"; CategoryNumber = 2 }
-    @{ Number = 16; Name = "Uniformisation UI/UX"; Description = "Composants unifiés, modals"; Dependencies = @(0); Category = "Frontend"; CategoryNumber = 3 }
+    @{ Number = 15; Name = "Routes et Navigation"; Description = "Routes Next.js, cohérence navigation"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 1 }
+    @{ Number = 16; Name = "Accessibilité (a11y)"; Description = "WCAG 2.1 AA, aria-labels, navigation clavier"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 2 }
+    @{ Number = 17; Name = "Uniformisation UI/UX"; Description = "Composants unifiés, modals"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 3 }
     
     # ============================================================================
-    # PERFORMANCE (1)
+    # PERFORMANCE (18)
     # ============================================================================
-    @{ Number = 17; Name = "Performance"; Description = "Optimisations React, mémoire, re-renders"; Dependencies = @(0); Category = "Performance"; CategoryNumber = 1 }
+    @{ Number = 18; Name = "Performance"; Description = "Optimisations React, mémoire, re-renders"; Dependencies = @(1); Category = "Performance"; CategoryNumber = 1 }
     
     # ============================================================================
-    # DOCUMENTATION (1)
+    # DOCUMENTATION (19)
     # ============================================================================
-    @{ Number = 18; Name = "Documentation"; Description = "README, commentaires, documentation"; Dependencies = @(0); Category = "Documentation"; CategoryNumber = 1 }
+    @{ Number = 19; Name = "Documentation"; Description = "README, commentaires, documentation"; Dependencies = @(1); Category = "Documentation"; CategoryNumber = 1 }
     
     # ============================================================================
-    # DÉPLOIEMENT (1)
+    # DÉPLOIEMENT (20)
     # ============================================================================
-    @{ Number = 19; Name = "Synchronisation GitHub Pages"; Description = "Vérification déploiement"; Dependencies = @(0); Category = "Déploiement"; CategoryNumber = 1 }
+    @{ Number = 20; Name = "Synchronisation GitHub Pages"; Description = "Vérification déploiement"; Dependencies = @(1); Category = "Déploiement"; CategoryNumber = 1 }
     
     # ============================================================================
-    # HARDWARE (1)
+    # HARDWARE (21)
     # ============================================================================
-    @{ Number = 20; Name = "Firmware"; Description = "Fichiers firmware, versions, compilation, cohérence"; Dependencies = @(0); Category = "Hardware"; CategoryNumber = 1 }
+    @{ Number = 21; Name = "Firmware"; Description = "Fichiers firmware, versions, compilation, cohérence"; Dependencies = @(1); Category = "Hardware"; CategoryNumber = 1 }
     
     # ============================================================================
-    # TESTS COMPLETS (1) - APPLICATION OTT
+    # TESTS COMPLETS (22) - APPLICATION OTT
     # ============================================================================
-    @{ Number = 21; Name = "Tests Complets Application"; Description = "Tests exhaustifs, corrections critiques, API, navigation"; Dependencies = @(4, 6); Category = "Tests"; CategoryNumber = 1 }
+    @{ Number = 22; Name = "Tests Complets Application"; Description = "Tests exhaustifs, corrections critiques, API, navigation"; Dependencies = @(5, 7); Category = "Tests"; CategoryNumber = 1 }
 )
 
 # Fonction pour obtenir toutes les dépendances récursives d'une phase
@@ -173,7 +173,7 @@ function Show-PhaseMenu {
     Write-Host "  Options:" -ForegroundColor Yellow
     Write-Host "    [A]  Relancer TOUTES les phases" -ForegroundColor White
     Write-Host "    [R]  Reprendre depuis la dernière phase incomplète" -ForegroundColor White
-    Write-Host "    [0-20] Sélectionner une ou plusieurs phases (ex: 5 ou 0-3)" -ForegroundColor White
+    Write-Host "    [1-22] Sélectionner une ou plusieurs phases (ex: 5 ou 0-3)" -ForegroundColor White
     Write-Host "           → Les dépendances seront ajoutées automatiquement" -ForegroundColor DarkGray
     Write-Host "    [Q]  Quitter" -ForegroundColor White
     Write-Host ""
