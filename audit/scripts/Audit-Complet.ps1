@@ -5751,6 +5751,47 @@ if ($scoreGlobal -ge 9.5) {
     $exitCode = 1
 }
 
+# ===============================================================================
+# PHASE 21 : TESTS COMPLETS APPLICATION OTT
+# ===============================================================================
+
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 21) {
+    Write-Host ""
+    Write-Section "[21/21] Tests Complets Application OTT"
+    
+    try {
+        # Charger le module de tests complets
+        $MODULES_DIR = Join-Path $AuditDir "modules"
+        $testsModule = Join-Path $MODULES_DIR "Checks-TestsComplets.ps1"
+        
+        if (Test-Path $testsModule) {
+            . $testsModule
+            
+            # Préparer la configuration pour le module
+            $moduleConfig = @{
+                API = @{
+                    BaseUrl = if ($ApiUrl) { $ApiUrl } elseif ($script:Config -and $script:Config.Api -and $script:Config.Api.BaseUrl) { $script:Config.Api.BaseUrl } else { "http://localhost:8000" }
+                    AuthEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
+                    Credentials = @{
+                        Email = if ($Email) { $Email } elseif ($script:Config -and $script:Config.Credentials -and $script:Config.Credentials.Email) { $script:Config.Credentials.Email } else { "" }
+                        Password = if ($Password) { $Password } elseif ($script:Config -and $script:Config.Credentials -and $script:Config.Credentials.Password) { $script:Config.Credentials.Password } else { "" }
+                    }
+                }
+            }
+            
+            # Appeler le module de tests complets
+            Invoke-Check-TestsComplets -Config $moduleConfig -Results $auditResults
+        } else {
+            Write-Warn "Module Checks-TestsComplets.ps1 non trouvé - phase ignorée"
+            $auditResults.Scores["TestsComplets"] = 5
+        }
+    } catch {
+        Write-Err "Erreur phase Tests Complets: $($_.Exception.Message)"
+        $auditResults.Scores["TestsComplets"] = 5
+    }
+}  # Fin if SelectedPhases -contains 21
+
+Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 Write-Host ""
 

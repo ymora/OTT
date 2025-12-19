@@ -107,17 +107,15 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
 // Debug mode activable via variable d'environnement
-// IMPORTANT: En production, désactiver display_errors pour éviter les erreurs HTML dans les réponses JSON
+// IMPORTANT: Même en mode debug, désactiver display_errors pour éviter les erreurs HTML dans les réponses JSON
+// Les erreurs sont toujours loggées mais jamais affichées dans les réponses JSON
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 if (getenv('DEBUG_ERRORS') === 'true') {
-    ini_set('display_errors', 1);
-    ini_set('display_startup_errors', 1);
     error_reporting(E_ALL);
+    ini_set('log_errors', 1);
 } else {
-    // En production, désactiver l'affichage des erreurs pour éviter les réponses HTML
-    ini_set('display_errors', 0);
-    ini_set('display_startup_errors', 0);
     error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
-    // Logger les erreurs au lieu de les afficher
     ini_set('log_errors', 1);
 }
 

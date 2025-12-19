@@ -218,6 +218,9 @@ function getDeviceUsbLogs($pdo, $deviceIdentifier, $query, $userRole) {
         return json_encode(['success' => false, 'error' => 'Accès refusé. Seuls les administrateurs peuvent consulter les logs.']);
     }
     
+    // Décoder l'identifiant du dispositif (URL decode)
+    $deviceIdentifier = urldecode($deviceIdentifier);
+    
     $query['device'] = $deviceIdentifier;
     return getUsbLogs($pdo, $query, $userRole);
 }

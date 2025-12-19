@@ -28,6 +28,9 @@ function handleGetPatients() {
             header('Content-Type: application/json; charset=utf-8');
         }
         
+        // Définir la clause WHERE
+        $whereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
+        
         $hasNotificationsTable = false;
         try {
             $hasNotificationsTable = tableExists('patient_notifications_preferences');

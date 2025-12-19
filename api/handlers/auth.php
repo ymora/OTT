@@ -227,6 +227,9 @@ function handleGetUsers() {
     $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
+    // Définir la clause WHERE
+    $whereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
+    
     try {
         // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
         // Condition WHERE selon le paramètre include_deleted

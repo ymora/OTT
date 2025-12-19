@@ -105,3 +105,37 @@ $aiReport = Generate-AIContext -Results $Results -ProjectPath $ProjectRoot -Outp
 $prompt = Generate-AIVerificationPrompt -AIReport $aiReport -OutputFile "$ResultDir\ai-verification-prompt.txt"
 ```
 
+## 🧪 Module Tests Complets Application OTT (Phase 21)
+
+### Description
+
+Module spécialisé pour tester exhaustivement l'application OTT :
+- ✅ Vérification fichiers critiques
+- ✅ Vérification corrections critiques (whereClause, display_errors, urldecode)
+- ✅ Tests API (health check, endpoints)
+- ✅ Vérification sécurité SQL
+- ✅ Génération contexte IA pour analyse approfondie
+
+### Utilisation
+
+```powershell
+# Exécuter uniquement la phase 21
+.\audit\audit.ps1 -Phases 21
+
+# Ou inclure dans l'audit complet
+.\audit\audit.ps1 -All
+```
+
+### Contexte IA Généré
+
+Le module génère automatiquement un contexte IA structuré avec :
+- Questions spécifiques pour chaque problème détecté
+- Contexte de code pour analyse approfondie
+- Recommandations basées sur les résultats
+- Score de qualité global
+
+### Fichiers
+
+- `audit/modules/Checks-TestsComplets.ps1` - Module de vérification
+- `audit/modules/AI-TestsComplets.ps1` - Générateur de contexte IA
+
