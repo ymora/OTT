@@ -314,7 +314,7 @@ function handleCompileFirmware($firmware_id) {
             }
             
             sendSSE('log', 'info', 'Démarrage de la compilation...');
-            $sendProgress(10);
+            $sendProgress(5); // Commencer plus bas pour avoir plus de marge
             flush();
             echo ": keep-alive\n\n";
             flush();
@@ -404,7 +404,9 @@ function handleCompileFirmware($firmware_id) {
                 error_log('[handleCompileFirmware] Étape: arduino-cli disponible');
                 sendSSE('log', 'info', '✅ arduino-cli disponible - démarrage de la compilation réelle');
                 sendSSE('log', 'info', '   Chemin: ' . $arduinoCli);
-                $sendProgress(20);
+                $sendProgress(15);
+                flush();
+                echo ": keep-alive\n\n";
                 flush();
                 
                 // Définir HOME temporairement pour le test (avant la définition complète de $envStr)
@@ -461,6 +463,9 @@ function handleCompileFirmware($firmware_id) {
                 
                 sendSSE('log', 'info', 'Préparation de l\'environnement de compilation...');
                 $sendProgress(30);
+                flush();
+                echo ": keep-alive\n\n";
+                flush();
                 
                 // Copier le fichier .ino dans le dossier de build
                 $sketch_name = 'fw_ott_optimized';
@@ -570,6 +575,8 @@ function handleCompileFirmware($firmware_id) {
                 
                 sendSSE('log', 'info', 'Vérification du core ESP32...');
                 $sendProgress(40);
+                flush();
+                echo ": keep-alive\n\n";
                 flush();
                 
                 // Définir descriptorspec pour proc_open (nécessaire pour core list)
@@ -1235,10 +1242,14 @@ function handleCompileFirmware($firmware_id) {
                     $compile_last_heartbeat = $compile_start_time;
                     $compile_last_keepalive = $compile_start_time;
                     $compile_last_output_time = $compile_start_time;
+                    $compile_last_progress_update = $compile_start_time;
                     $compile_output_lines = [];
+                    $compile_phase = 'initialization'; // 'initialization', 'compiling', 'linking', 'archiving'
+                    $compile_base_progress = 60; // Progression de base au début de la compilation
                     
                     while (true) {
                         $current_time = time();
+                        $elapsed_seconds = $current_time - $compile_start_time;
                         
                         // Utiliser stream_select pour vérifier si des données sont disponibles (non-bloquant)
                         $read = [$compile_stdout, $compile_stderr];
@@ -1274,6 +1285,33 @@ function handleCompileFirmware($firmware_id) {
                                             if (!empty($lineTrimmed)) {
                                                 $compile_output_lines[] = $lineTrimmed;
                                                 
+                                                // Détecter la phase de compilation pour ajuster la progression
+                                                $newPhase = $compile_phase;
+                                                if (stripos($lineTrimmed, 'compiling') !== false && (stripos($lineTrimmed, '.cpp') !== false || stripos($lineTrimmed, '.c') !== false)) {
+                                                    $newPhase = 'compiling';
+                                                    // Phase compilation: 60-70%
+                                                    $compile_base_progress = 60;
+                                                } elseif (stripos($lineTrimmed, 'linking') !== false || stripos($lineTrimmed, 'Linking') !== false) {
+                                                    $newPhase = 'linking';
+                                                    // Phase linking: 70-75%
+                                                    $compile_base_progress = 70;
+                                                } elseif (stripos($lineTrimmed, 'archiving') !== false || stripos($lineTrimmed, 'Archiving') !== false) {
+                                                    $newPhase = 'archiving';
+                                                    // Phase archiving: 75-78%
+                                                    $compile_base_progress = 75;
+                                                } elseif (stripos($lineTrimmed, 'Building') !== false && stripos($lineTrimmed, 'firmware') !== false) {
+                                                    $newPhase = 'building';
+                                                    // Phase building finale: 78-80%
+                                                    $compile_base_progress = 78;
+                                                }
+                                                
+                                                // Si la phase a changé, mettre à jour la progression immédiatement
+                                                if ($newPhase !== $compile_phase) {
+                                                    $compile_phase = $newPhase;
+                                                    $sendProgress($compile_base_progress);
+                                                    flush();
+                                                }
+                                                
                                                 // Déterminer le niveau de log selon le contenu
                                                 $logLevel = $isStderr ? 'error' : 'info';
                                                 
@@ -1306,6 +1344,22 @@ function handleCompileFirmware($firmware_id) {
                             }
                         }
                         
+                        // PROGRESSION TEMPORELLE : Avancer la barre de progression même sans output
+                        // Cela évite que la barre reste bloquée pendant les phases longues
+                        if ($current_time - $compile_last_progress_update >= 2) { // Mise à jour toutes les 2 secondes
+                            $compile_last_progress_update = $current_time;
+                            
+                            // Calculer la progression basée sur le temps écoulé et la phase
+                            // Estimation: compilation complète prend généralement 2-5 minutes
+                            // On répartit 60-80% sur cette période
+                            $estimated_total_seconds = 180; // 3 minutes estimées
+                            $time_based_progress = min(80, $compile_base_progress + intval(($elapsed_seconds / $estimated_total_seconds) * (80 - $compile_base_progress)));
+                            
+                            // Ne pas dépasser 80% avant la fin de la compilation
+                            $sendProgress($time_based_progress);
+                            flush();
+                        }
+                        
                         // Vérifier si le processus est terminé
                         $compile_status = proc_get_status($compile_process);
                         if (!$compile_status || $compile_status['running'] === false) {
@@ -1315,14 +1369,14 @@ function handleCompileFirmware($firmware_id) {
                         // Timeout de sécurité : si pas de sortie depuis 5 minutes
                         if ($current_time - $compile_last_output_time > 300) {
                             sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 5 minutes, la compilation semble bloquée');
-                    sendSSE('error', 'Timeout: La compilation a pris trop de temps');
-                    proc_terminate($compile_process);
-                    // Nettoyer le répertoire de build en cas de timeout
-                    if (isset($build_dir) && $build_dir_created) {
-                        cleanupBuildDir($build_dir);
-                    }
-                    break;
-                }
+                            sendSSE('error', 'Timeout: La compilation a pris trop de temps');
+                            proc_terminate($compile_process);
+                            // Nettoyer le répertoire de build en cas de timeout
+                            if (isset($build_dir) && $build_dir_created) {
+                                cleanupBuildDir($build_dir);
+                            }
+                            break;
+                        }
                         
                         // Envoyer un keep-alive SSE toutes les 1 seconde (plus fréquent pour éviter les timeouts)
                         if ($current_time - $compile_last_keepalive >= 1) {
@@ -1331,8 +1385,9 @@ function handleCompileFirmware($firmware_id) {
                             flush();
                         }
                         
-                        // Envoyer un heartbeat toutes les 5 secondes pour maintenir la connexion SSE (plus fréquent)
-                        if ($current_time - $compile_last_heartbeat >= 5) {
+                        // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion SSE
+                        // (moins fréquent car on a déjà la progression temporelle toutes les 2 secondes)
+                        if ($current_time - $compile_last_heartbeat >= 10) {
                             $compile_last_heartbeat = $current_time;
                             $elapsed = $current_time - $compile_start_time;
                             $minutes = floor($elapsed / 60);

@@ -1211,20 +1211,6 @@ export default function DeviceModal({
                 </p>
               </div>
             )}
-            {/* Message pour dispositif USB connecté */}
-            {usbIsConnected && port && usbWrite && (isDeviceUsbConnected || isNotRegistered) && (
-              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                <p className="text-sm text-green-700 dark:text-green-300">
-                  🔌 <strong>Dispositif connecté en USB</strong>
-                </p>
-                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                  {isNotRegistered 
-                    ? "Ce dispositif n'est pas encore enregistré en base. La configuration sera envoyée directement via USB et le dispositif sera ajouté automatiquement lors de la première connexion OTA."
-                    : "Dispositif connecté en USB - la configuration sera envoyée directement au dispositif."}
-                </p>
-              </div>
-            )}
-            
             {/* Message d'avertissement si USB non connecté */}
             {(!usbIsConnected || !port || !usbWrite) && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">

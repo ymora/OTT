@@ -643,10 +643,12 @@ export default function InoEditorTab({ onUploadSuccess }) {
       
       // IMPORTANT: Pour les SSE, utiliser l'URL directe de l'API (pas le proxy Next.js)
       // Le proxy Next.js ne fonctionne pas correctement pour EventSource/SSE
-      // Utiliser l'URL distante directement pour les SSE
+      // Utiliser l'URL de l'API directement (depuis NEXT_PUBLIC_API_URL ou défaut)
       const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      // En localhost, utiliser l'URL de l'API depuis la variable d'environnement ou localhost:8000 (Docker)
+      // En production, utiliser API_URL normal
       const sseApiUrl = isLocalhost 
-        ? 'https://ott-jbln.onrender.com'  // URL directe pour SSE en local
+        ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')  // URL directe pour SSE en local (Docker)
         : API_URL  // En production, utiliser API_URL normal
       
       const sseUrl = `${sseApiUrl}/api.php/firmwares/compile/${firmwareId}?token=${tokenEncoded}`

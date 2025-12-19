@@ -4,8 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useTimers, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh } from '@/hooks'
-import { createUpdateConfigCommand } from '@/lib/deviceCommands'
+import { useApiData, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh } from '@/hooks'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import { isArchived } from '@/lib/utils'
 import logger from '@/lib/logger'
@@ -22,6 +21,10 @@ export default function DebugTab() {
   // Références pour gérer les timeouts avec cleanup
   const timeoutRefs = useRef([])
   const isMountedRef = useRef(true)
+  // Flag pour éviter le double démarrage du streaming
+  const isStartingStreamRef = useRef(false)
+  // Référence stable pour startUsbStreaming pour éviter les re-renders
+  const startUsbStreamingRef = useRef(null)
   
   // Nettoyer tous les timeouts au démontage
   useEffect(() => {
@@ -62,75 +65,34 @@ export default function DebugTab() {
     usbStreamLastUpdate,
     requestPort,
     connect,
-    startReading,
     write,
     startUsbStreaming,
     pauseUsbStreaming,
     appendUsbStreamLog,
-    clearUsbStreamLogs,
     setSendMeasurementCallback,
     setUpdateDeviceFirmwareCallback,
-    otaMonitoringStatus,
     checkOtaSync
   } = usbContext
   
-  // Cleanup au démontage
+  // Mettre à jour la référence stable
   useEffect(() => {
-    return () => {
-      logger.debug('[USB-TAB] Cleanup')
-    }
-  }, [])
+    startUsbStreamingRef.current = startUsbStreaming
+  }, [startUsbStreaming])
   
-  // Debug: Vérifier l'état de la connexion et du streaming
-  const hasLoggedTest = useRef(false)
+  // Démarrage automatique du streaming quand connecté
   useEffect(() => {
-    logger.debug('[UsbStreamingTab] État USB:', {
-      isConnected,
-      port: port ? 'présent' : 'absent',
-      usbStreamStatus,
-      usbStreamLogsLength: usbStreamLogs.length,
-      usbStreamError,
-      usbDevice: usbDevice ? {
-        name: usbDevice.device_name,
-        id: usbDevice.id,
-        isVirtual: usbDevice.isVirtual,
-        isTemporary: usbDevice.isTemporary,
-        sim_iccid: usbDevice.sim_iccid?.slice(-10),
-        device_serial: usbDevice.device_serial,
-        isRegistered: isUsbDeviceRegistered()
-      } : 'null',
-      usbDeviceInfo: usbDeviceInfo ? {
-        sim_iccid: usbDeviceInfo.sim_iccid?.slice(-10),
-        device_serial: usbDeviceInfo.device_serial,
-        device_name: usbDeviceInfo.device_name
-      } : 'null'
-    })
-    
-    // Ajouter un log de test au montage pour vérifier que les logs fonctionnent (une seule fois)
-    if (!hasLoggedTest.current) {
-      hasLoggedTest.current = true
-      appendUsbStreamLog('🔍 [TEST] Composant UsbStreamingTab monté - Console de logs active', 'dashboard')
-      logger.log('[UsbStreamingTab] Log de test ajouté')
+    if (isConnected && port && usbStreamStatus === 'idle' && !usbStreamError && !isStartingStreamRef.current && startUsbStreamingRef.current) {
+      isStartingStreamRef.current = true
+      startUsbStreamingRef.current(port)
+        .then(() => {
+          isStartingStreamRef.current = false
+        })
+        .catch(err => {
+          isStartingStreamRef.current = false
+          logger.error('[UsbStreamingTab] Erreur démarrage streaming:', err)
+        })
     }
-    
-    // Si connecté mais streaming pas démarré, essayer de démarrer
-    if (isConnected && port && usbStreamStatus === 'idle' && !usbStreamError) {
-      logger.log('[UsbStreamingTab] Connexion détectée mais streaming idle, démarrage automatique...')
-      appendUsbStreamLog('🔄 [AUTO] Démarrage automatique du streaming USB...', 'dashboard')
-      startUsbStreaming(port).catch(err => {
-        logger.error('[UsbStreamingTab] Erreur démarrage streaming:', err)
-        appendUsbStreamLog(`❌ [AUTO] Erreur démarrage: ${err.message || err}`, 'dashboard')
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, port, usbStreamStatus, usbStreamError, usbDevice, usbDeviceInfo])
-  
-  // Log contexte USB uniquement si changement important
-  useEffect(() => {
-    if (usbDeviceInfo?.sim_iccid) {
-      logger.debug('[USB-TAB] Device:', usbDeviceInfo.sim_iccid?.slice(-4))
-    }
-  }, [usbDeviceInfo?.sim_iccid])
+  }, [isConnected, port, usbStreamStatus, usbStreamError])
   
   const { fetchWithAuth, API_URL, user } = useAuth()
   
@@ -140,6 +102,9 @@ export default function DebugTab() {
     if (user?.role_name === 'admin') return true
     return user?.permissions?.includes(permission) || false
   }
+  
+  // Helper pour normaliser les identifiants (fonction pure, mémorisée pour éviter les recréations)
+  const normalizeId = useCallback((val) => val ? String(val).trim().replace(/\s+/g, '') : '', [])
 
   // Fonction pour formater le JSON de manière lisible
   const formatJsonLog = useCallback((logLine) => {
@@ -306,6 +271,24 @@ export default function DebugTab() {
     { requiresAuth: true, autoLoad: !!user, cacheTTL: 3000 } // Cache de 3 secondes (optimisé pour le polling adaptatif)
   )
   
+  // Référence stable pour refetchDevices pour éviter les boucles infinies
+  const refetchDevicesRef = useRef(refetchDevices)
+  useEffect(() => {
+    refetchDevicesRef.current = refetchDevices
+  }, [refetchDevices])
+  
+  // Référence pour suivre l'état de connexion précédent
+  const previousIsConnectedRef = useRef(isConnected)
+  
+  // Rafraîchir la liste quand on se connecte
+  useEffect(() => {
+    if (!previousIsConnectedRef.current && isConnected) {
+      invalidateCache()
+      setTimeout(() => refetchDevicesRef.current(), 200)
+    }
+    previousIsConnectedRef.current = isConnected
+  }, [isConnected, invalidateCache])
+  
   // Rafraîchissement intelligent : polling adaptatif + événements + debounce
   // - Si USB connecté : polling toutes les 30 secondes (pour voir les updates USB en temps réel)
   // - Si web seulement : polling toutes les 60 secondes (1 minute - les dispositifs sont en deep sleep)
@@ -331,7 +314,7 @@ export default function DebugTab() {
       // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
       invalidateCache()
       createTimeoutWithCleanup(async () => {
-        await refetchDevices()
+        await refetchDevicesRef.current()
       }, 500)
     },
     onError: (errorMessage) => {
@@ -354,7 +337,7 @@ export default function DebugTab() {
       setSuccessMessage('✅ Dispositif archivé')
       invalidateCache()
       createTimeoutWithCleanup(() => {
-        refetchDevices()
+        refetchDevicesRef.current()
       }, 500)
       createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
     },
@@ -378,7 +361,7 @@ export default function DebugTab() {
       setSuccessMessage('✅ Dispositif supprimé définitivement')
       invalidateCache()
       createTimeoutWithCleanup(() => {
-        refetchDevices()
+        refetchDevicesRef.current()
       }, 300)
       createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
     },
@@ -389,15 +372,11 @@ export default function DebugTab() {
     invalidateCache
   })
   // Extraire les dispositifs depuis la réponse API
-  // La structure de l'API est: { success: true, devices: [...] }
   const allDevicesFromApi = useMemo(() => {
     if (!devicesData) return []
-    // Si c'est un tableau directement (ne devrait pas arriver mais on gère)
     if (Array.isArray(devicesData)) return devicesData
-    // Si c'est un objet avec devices (structure normale de l'API)
-    if (devicesData.devices && Array.isArray(devicesData.devices)) {
-      return devicesData.devices
-    }
+    if (devicesData.devices && Array.isArray(devicesData.devices)) return devicesData.devices
+    if (devicesData.data?.devices && Array.isArray(devicesData.data.devices)) return devicesData.data.devices
     return []
   }, [devicesData])
   
@@ -416,9 +395,6 @@ export default function DebugTab() {
   
   // Dispositifs à afficher selon le toggle
   const devicesToDisplay = useMemo(() => {
-    // Normaliser les identifiants pour comparaison
-    const normalizeId = (val) => val ? String(val).trim().replace(/\s+/g, '') : ''
-    
     let displayList = []
     
     if (showArchived) {
@@ -428,80 +404,32 @@ export default function DebugTab() {
       // Afficher les dispositifs actifs + le dispositif virtuel USB s'il n'existe pas en base
       displayList = [...devices]
       
-      // Ajouter le dispositif USB s'il n'est pas déjà dans la liste (non enregistré)
-      // NOUVEAU: Aussi ajouter si usbDeviceInfo existe mais usbDevice n'est pas encore créé
-      const usbDeviceToAdd = usbDevice || (isConnected && usbDeviceInfo ? {
-        id: `usb_virtual_${Date.now()}`,
-        device_name: usbDeviceInfo.device_name || 'USB-En attente...',
-        sim_iccid: usbDeviceInfo.sim_iccid || null,
-        device_serial: usbDeviceInfo.device_serial || null,
-        firmware_version: usbDeviceInfo.firmware_version || null,
-        status: 'active',
-        isVirtual: true,
-        isTemporary: !usbDeviceInfo.sim_iccid && !usbDeviceInfo.device_serial
-      } : null)
-      
-      if (usbDeviceToAdd && !isUsbDeviceRegistered()) {
-        const hasIdentifiers = usbDeviceToAdd.sim_iccid || usbDeviceToAdd.device_serial
+      // IMPORTANT: Ne PAS créer de dispositif virtuel ici - la logique de synchronisation USB (useEffect SYNC)
+      // s'occupe déjà de créer/mettre à jour usbDevice. On ajoute seulement usbDevice si :
+      // 1. Il existe (usbDevice n'est pas null)
+      // 2. Il n'est PAS enregistré en base (!isUsbDeviceRegistered())
+      // 3. Il n'est PAS déjà dans la liste (pas déjà ajouté)
+      // Ajouter le dispositif USB virtuel s'il n'est pas enregistré en base
+      if (usbDevice && !isUsbDeviceRegistered() && isConnected) {
+        const usbIccid = normalizeId(usbDevice.sim_iccid)
+        const usbSerial = normalizeId(usbDevice.device_serial)
         
-        logger.debug('[devicesToDisplay] USB Device trouvé:', {
-          deviceName: usbDeviceToAdd.device_name,
-          hasIdentifiers,
-          sim_iccid: usbDeviceToAdd.sim_iccid?.slice(-10),
-          device_serial: usbDeviceToAdd.device_serial,
-          isVirtual: usbDeviceToAdd.isVirtual,
-          isTemporary: usbDeviceToAdd.isTemporary,
-          fromUsbDeviceInfo: !usbDevice
+        // Vérifier qu'il n'est pas déjà dans la liste
+        const alreadyInList = displayList.some(d => {
+          const dIccid = normalizeId(d.sim_iccid)
+          const dSerial = normalizeId(d.device_serial)
+          return (usbIccid && dIccid && usbIccid === dIccid) ||
+                 (usbSerial && dSerial && usbSerial === dSerial)
         })
         
-        if (!hasIdentifiers) {
-          // Dispositif temporaire sans identifiants : toujours ajouter
-          logger.debug('[devicesToDisplay] Ajout dispositif temporaire sans identifiants')
-          displayList = [usbDeviceToAdd, ...displayList]
-        } else {
-          // Vérifier si le dispositif existe déjà en base
-          const usbIccid = normalizeId(usbDeviceToAdd.sim_iccid)
-          const usbSerial = normalizeId(usbDeviceToAdd.device_serial)
-          
-          const exists = allDevices.some(d => {
-            const dbIccid = normalizeId(d.sim_iccid)
-            const dbSerial = normalizeId(d.device_serial)
-            return (usbIccid && dbIccid && usbIccid === dbIccid) ||
-                   (usbSerial && dbSerial && usbSerial === dbSerial)
-          })
-          
-          logger.debug('[devicesToDisplay] Vérification existence en base:', {
-            exists,
-            usbIccid: usbIccid?.slice(-10),
-            usbSerial,
-            allDevicesCount: allDevices.length
-          })
-          
-          if (!exists) {
-            // Ajouter le dispositif USB en premier
-            logger.debug('[devicesToDisplay] Ajout dispositif USB virtuel')
-            displayList = [usbDeviceToAdd, ...displayList]
-          } else {
-            logger.debug('[devicesToDisplay] Dispositif existe déjà en base, non ajouté')
-          }
+        if (!alreadyInList) {
+          displayList = [usbDevice, ...displayList]
         }
-      } else {
-        logger.debug('[devicesToDisplay] Pas de dispositif USB à ajouter:', {
-          hasUsbDevice: !!usbDevice,
-          hasUsbDeviceInfo: !!usbDeviceInfo,
-          isConnected,
-          isRegistered: usbDevice ? isUsbDeviceRegistered() : 'N/A'
-        })
       }
     }
     
-    logger.debug('[devicesToDisplay] Liste finale:', {
-      count: displayList.length,
-      deviceNames: displayList.map(d => d.device_name)
-    })
-    
     return displayList
-  }, [showArchived, devices, archivedDevices, usbDevice, isUsbDeviceRegistered, allDevices, isConnected, usbDeviceInfo])
+    }, [showArchived, devices, archivedDevices, usbDevice, isUsbDeviceRegistered, allDevices, isConnected, usbDeviceInfo, normalizeId])
   
   // ========== STREAMING LOGS EN TEMPS RÉEL (pour admin à distance) ==========
   const [remoteLogs, setRemoteLogs] = useState([])
@@ -565,7 +493,7 @@ export default function DebugTab() {
   
   // AUTO-SÉLECTION du device avec badge ● LIVE pour admin distant
   useEffect(() => {
-    if (user?.role_name !== 'admin' || isConnected || usbDevice || allDevices.length === 0) {
+    if (user?.role_name !== 'admin' || isConnected || usbDevice || !allDevices || allDevices.length === 0) {
       return
     }
     
@@ -608,10 +536,9 @@ export default function DebugTab() {
   }, [user, isConnected, usbDevice, allDevices, setUsbDevice, fetchWithAuth, API_URL])
   
   // Déterminer si on doit utiliser les logs distants (admin sans USB local)
-  const currentDevice = usbDevice
   const shouldUseRemoteLogs = useMemo(() => {
-    return user?.role_name === 'admin' && !isConnected && currentDevice
-  }, [user, isConnected, currentDevice])
+    return user?.role_name === 'admin' && !isConnected && usbDevice
+  }, [user, isConnected, usbDevice])
   
   // Fusionner les logs locaux et distants et filtrer les logs trop verbeux
   const allLogs = useMemo(() => {
@@ -715,14 +642,14 @@ export default function DebugTab() {
   
   // STREAMING AUTOMATIQUE en temps réel pour les admins
   useEffect(() => {
-    if (!shouldUseRemoteLogs || !currentDevice) {
+    if (!shouldUseRemoteLogs || !usbDevice) {
       setIsStreamingRemote(false)
       setRemoteLogs([])
       lastLogTimestampRef.current = 0
       return
     }
     
-    const deviceId = currentDevice.sim_iccid || currentDevice.device_serial || currentDevice.device_name
+    const deviceId = usbDevice.sim_iccid || usbDevice.device_serial || usbDevice.device_name
     
     // Chargement initial
     setIsStreamingRemote(true)
@@ -737,7 +664,7 @@ export default function DebugTab() {
       clearInterval(interval)
       setIsStreamingRemote(false)
     }
-  }, [shouldUseRemoteLogs, currentDevice, loadRemoteLogs])
+  }, [shouldUseRemoteLogs, usbDevice, loadRemoteLogs])
   
   // ========== CONFIGURATION DES CALLBACKS USB ==========
   // Configurer les callbacks pour enregistrer automatiquement les dispositifs dans la base
@@ -783,7 +710,7 @@ export default function DebugTab() {
         // Rafraîchir les données après l'enregistrement
         createTimeoutWithCleanup(() => {
           logger.log('🔄 Rafraîchissement des dispositifs...')
-          refetchDevices()
+          refetchDevicesRef.current()
           notifyDevicesUpdated()
         }, 500)
         
@@ -857,7 +784,7 @@ export default function DebugTab() {
               
               // Rafraîchir la liste des dispositifs
               createTimeoutWithCleanup(() => {
-                refetchDevices()
+                refetchDevicesRef.current()
                 notifyDevicesUpdated()
               }, 500)
               
@@ -895,7 +822,7 @@ export default function DebugTab() {
             appendUsbStreamLog(`✅ [BASE DE DONNÉES] Dispositif ${device.id} mis à jour (${updatedFields.join(', ')})`, 'dashboard')
           }
           createTimeoutWithCleanup(() => {
-            refetchDevices()
+            refetchDevicesRef.current()
             notifyDevicesUpdated()
           }, 500)
         }
@@ -1038,165 +965,97 @@ export default function DebugTab() {
   // ========== SYNCHRONISATION DISPOSITIF USB ==========
   // Créer un dispositif virtuel temporaire pour que les callbacks soient appelés
   // La création en base se fait automatiquement via callbacks → /api.php/devices/measurements
+  const wasConnectedRef = useRef(false)
+  // Références pour accéder aux dernières valeurs sans les inclure dans les dépendances (évite boucles infinies)
+  const allDevicesRef = useRef([])
+  const usbDeviceRef = useRef(null)
+  
+  // Mettre à jour les références à chaque changement
   useEffect(() => {
-    logger.debug('[SYNC] useEffect déclenché:', {
-      isConnected,
-      hasUsbDeviceInfo: !!usbDeviceInfo,
-      hasUsbDevice: !!usbDevice,
-      usbDeviceName: usbDevice?.device_name,
-      usbDeviceId: usbDevice?.id,
-      isRegistered: usbDevice ? isUsbDeviceRegistered() : false,
-      allDevicesCount: allDevices.length
-    })
-    
-    // Si pas connecté, ne rien faire
+    allDevicesRef.current = allDevices
+  }, [allDevices])
+  
+  useEffect(() => {
+    usbDeviceRef.current = usbDevice
+  }, [usbDevice])
+  
+  // Mémoriser les identifiants USB pour éviter les re-renders inutiles
+  const usbIdentifiers = useMemo(() => ({
+    iccid: normalizeId(usbDeviceInfo?.sim_iccid),
+    serial: normalizeId(usbDeviceInfo?.device_serial),
+    name: usbDeviceInfo?.device_name,
+    firmware: usbDeviceInfo?.firmware_version
+  }), [
+    usbDeviceInfo?.sim_iccid,
+    usbDeviceInfo?.device_serial,
+    usbDeviceInfo?.device_name,
+    usbDeviceInfo?.firmware_version
+  ])
+  
+  // Synchronisation simple du dispositif USB avec la base
+  useEffect(() => {
     if (!isConnected) {
-      // Si on était connecté avant et qu'on se déconnecte, ne pas supprimer usbDevice
-      // car il pourrait se reconnecter rapidement
-      logger.debug('[SYNC] Pas connecté, arrêt')
+      wasConnectedRef.current = false
       return
     }
     
-    // Normaliser les identifiants pour comparaison
-    const normalizeId = (val) => val ? String(val).trim().replace(/\s+/g, '') : ''
-    
-    const simIccid = usbDeviceInfo?.sim_iccid
-    const deviceSerial = usbDeviceInfo?.device_serial
-    const normalizedIccid = normalizeId(simIccid)
-    const normalizedSerial = normalizeId(deviceSerial)
-    
-    // Si pas encore d'identifiants mais connecté, créer un dispositif temporaire
-    if (!normalizedIccid && !normalizedSerial && !usbDevice) {
-      logger.log('📝 [SYNC] Connexion USB détectée - Création dispositif temporaire en attente d\'identifiants')
-      const tempDevice = {
-        id: `usb_virtual_${Date.now()}`,
-        device_name: 'USB-En attente...',
-        sim_iccid: null,
-        device_serial: null,
-        firmware_version: null,
-        status: 'active',
-        last_seen: new Date().toISOString(),
-        isVirtual: true,
-        isTemporary: true
-      }
-      setUsbDevice(tempDevice)
-      logger.debug('[SYNC] Dispositif temporaire créé:', tempDevice)
-      return
-    }
-    
-    // Si on a un dispositif temporaire mais toujours pas d'identifiants, ne rien faire
-    if (!normalizedIccid && !normalizedSerial && usbDevice && usbDevice.isTemporary) {
-      logger.debug('[SYNC] Dispositif temporaire existe déjà, en attente d\'identifiants')
-      return
+    // Rafraîchir la liste à la première connexion
+    if (!wasConnectedRef.current) {
+      wasConnectedRef.current = true
+      invalidateCache()
+      setTimeout(() => refetchDevicesRef.current(), 200)
     }
     
     // Si on a des identifiants, chercher en base
+    const normalizedIccid = usbIdentifiers.iccid
+    const normalizedSerial = usbIdentifiers.serial
+    
     if (normalizedIccid || normalizedSerial) {
-      logger.log('🔍 [SYNC] Recherche device:', { 
-        iccid: simIccid?.slice(-10), 
-        serial: deviceSerial,
-        allDevicesCount: allDevices.length 
-      })
-      
-      // Chercher si le dispositif existe déjà en base (recherche simple et efficace)
-      const existingDevice = allDevices.find(d => {
+      const existingDevice = allDevicesRef.current.find(d => {
         const dbIccid = normalizeId(d.sim_iccid)
         const dbSerial = normalizeId(d.device_serial)
         return (normalizedIccid && dbIccid && normalizedIccid === dbIccid) ||
                (normalizedSerial && dbSerial && normalizedSerial === dbSerial)
       })
       
-      logger.log(existingDevice 
-        ? `✅ [SYNC] Trouvé: ${existingDevice.device_name}`
-        : `📝 [SYNC] Dispositif non enregistré - Affichage comme virtuel`
-      )
-      
-      if (existingDevice) {
-        // Dispositif trouvé → lier au contexte (simple et direct)
-        if (!usbDevice || !isUsbDeviceRegistered() || usbDevice.id !== existingDevice.id) {
-          setUsbDevice({ ...existingDevice, isVirtual: false })
-        }
+      if (existingDevice && (!usbDeviceRef.current || usbDeviceRef.current.id !== existingDevice.id)) {
+        setUsbDevice({ ...existingDevice, isVirtual: false })
         return
       }
     }
     
-    // Dispositif pas en base OU pas encore d'identifiants → Créer/mettre à jour dispositif virtuel
-    // Vérifier si le dispositif USB actuel existe toujours en base (si on a des identifiants)
-    let currentDeviceStillExists = false
-    if (usbDevice && isUsbDeviceRegistered() && (normalizedIccid || normalizedSerial)) {
-      currentDeviceStillExists = allDevices.some(d => {
-        const dbIccid = normalizeId(d.sim_iccid)
-        const dbSerial = normalizeId(d.device_serial)
-        const usbIccid = normalizeId(usbDevice.sim_iccid)
-        const usbSerial = normalizeId(usbDevice.device_serial)
-        return (usbIccid && dbIccid && usbIccid === dbIccid) ||
-               (usbSerial && dbSerial && usbSerial === dbSerial)
-      })
-    }
-    
-    // Mettre à jour si :
-    // - Pas de dispositif USB actuel
-    // - Le dispositif USB actuel était enregistré mais n'existe plus en base (supprimé)
-    // - Les identifiants ont changé ou sont maintenant disponibles
-    // - On est connecté mais pas encore de dispositif virtuel (même sans identifiants)
-    // - Le nom est "USB-En attente..." et des identifiants sont maintenant disponibles
-    const shouldUpdate = !usbDevice || 
-                        currentDeviceStillExists === false ||
-                        (normalizedIccid && normalizeId(usbDevice.sim_iccid) !== normalizedIccid) ||
-                        (normalizedSerial && normalizeId(usbDevice.device_serial) !== normalizedSerial) ||
-                        (usbDevice.device_name === 'USB-En attente...' && (normalizedIccid || normalizedSerial)) ||
-                        (!normalizedIccid && !normalizedSerial && (!usbDevice.isVirtual || usbDevice.device_name === 'USB-En attente...'))
-    
-    if (shouldUpdate) {
-      // Note: L'enregistrement en base se fera automatiquement via OTA quand le dispositif enverra sa première mesure
-      // Le dispositif virtuel est juste une représentation locale pour l'affichage
-      logger.log('📝 [SYNC] Création/mise à jour dispositif virtuel (enregistrement automatique via OTA à la première mesure)')
+    // Créer un dispositif virtuel si pas trouvé en base
+    if (!usbDeviceRef.current || usbDeviceRef.current.id?.startsWith('usb_virtual')) {
       const deviceName = usbDeviceInfo?.device_name || 
-                       (simIccid ? `USB-${simIccid.slice(-4)}` : 
-                        deviceSerial ? `USB-${deviceSerial.slice(-4)}` : 
-                        'USB-En attente...')
+        (usbIdentifiers.iccid ? `USB-${usbIdentifiers.iccid.slice(-4)}` : 
+         usbIdentifiers.serial ? `USB-${usbIdentifiers.serial.slice(-4)}` : 
+         'USB-En attente...')
+      
       const newDevice = {
         id: `usb_virtual_${Date.now()}`,
         device_name: deviceName,
-        sim_iccid: simIccid || null,
-        device_serial: deviceSerial || null,
+        sim_iccid: usbDeviceInfo?.sim_iccid || null,
+        device_serial: usbDeviceInfo?.device_serial || null,
         firmware_version: usbDeviceInfo?.firmware_version || null,
         status: 'active',
         last_seen: new Date().toISOString(),
         isVirtual: true,
-        isTemporary: !normalizedIccid && !normalizedSerial // Temporaire si pas d'identifiants
+        isTemporary: !normalizedIccid && !normalizedSerial
       }
-      logger.debug('[SYNC] Création dispositif virtuel:', {
-        ...newDevice,
-        sim_iccid: newDevice.sim_iccid?.slice(-10),
-        isRegistered: false // Doit être false car ID commence par 'usb-'
-      })
-      setUsbDevice(newDevice)
+      
+      if (!usbDeviceRef.current || 
+          usbDeviceRef.current.sim_iccid !== newDevice.sim_iccid ||
+          usbDeviceRef.current.device_serial !== newDevice.device_serial) {
+        setUsbDevice(newDevice)
+      }
     }
-  }, [isConnected, usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, usbDeviceInfo?.device_name, usbDeviceInfo?.firmware_version, allDevices, usbDevice, isUsbDeviceRegistered])
-  // IMPORTANT: Ne surveiller QUE les identifiants USB (ICCID, Serial) et la connexion
-  // PAS allDevices, pas usbDevice (causerait boucle infinie)
+  }, [isConnected, usbIdentifiers, invalidateCache, normalizeId])
+  // IMPORTANT: Surveiller isConnected et usbIdentifiers (mémorisé pour éviter les boucles)
+  // PAS allDevices, pas usbDevice, pas usbDeviceInfo directement (causerait boucle infinie)
   // Les setters sont stables et n'ont pas besoin d'être dans les dépendances
+  // NOTE: allDevices est utilisé dans le useEffect mais pas dans les dépendances car il change
+  // trop souvent et causerait des boucles. On se fie aux identifiants USB uniquement.
   // ========== FIN SYNCHRONISATION USB ==========
-  
-  // Helper pour déterminer la source et le timestamp d'une donnée
-  const getDataInfo = useCallback((usbValue, usbTimestamp, dbValue, dbTimestamp) => {
-    // Vérifier explicitement !== null et !== undefined (pas != null qui exclut aussi 0 et false)
-    if (usbValue !== null && usbValue !== undefined) {
-      return {
-        value: usbValue,
-        source: 'usb',
-        timestamp: usbTimestamp || usbStreamLastUpdate || usbDeviceInfo?.last_seen || null
-      }
-    } else if (dbValue !== null && dbValue !== undefined) {
-      return {
-        value: dbValue,
-        source: 'database',
-        timestamp: dbTimestamp || dbDeviceData?.last_seen || null
-      }
-    }
-    return { value: null, source: null, timestamp: null }
-  }, [usbStreamLastUpdate, usbDeviceInfo?.last_seen, dbDeviceData?.last_seen])
   
   // Helper pour formater l'heure
   const formatTime = useCallback((timestamp) => {
@@ -1277,81 +1136,46 @@ export default function DebugTab() {
     if (!isSupported) return
     
     loadAvailablePorts()
-    // Recharger périodiquement (toutes les 5 secondes)
     const interval = setInterval(loadAvailablePorts, 5000)
     return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSupported, port, usbDevice])
+  }, [isSupported, loadAvailablePorts])
 
-  // La connexion automatique est maintenant gérée par UsbContext.js en permanence
-  // Ce useEffect synchronise uniquement le port sélectionné avec le port connecté
-  useEffect(() => {
-    if (!isSupported) return
-    
-    // Synchroniser le port sélectionné avec le port connecté dans le contexte
-    if (isConnected && port) {
-      const syncPort = async () => {
-        try {
-          await loadAvailablePorts()
-          const ports = await navigator.serial.getPorts()
-          const portIndex = ports.findIndex(p => p === port)
-          if (portIndex >= 0) {
-            setSelectedPortId(`port-${portIndex}`)
-          }
-        } catch (err) {
-          logger.debug('[DebugTab] Erreur synchronisation port:', err)
-        }
-      }
-      syncPort()
-    }
-  }, [isSupported, isConnected, port, loadAvailablePorts])
-
-  // Démarrer automatiquement le streaming dès qu'on est connecté et pas encore en streaming
+  // Synchroniser le port sélectionné avec le port connecté
   useEffect(() => {
     if (!isSupported || !isConnected || !port) return
     
-    // Si on est connecté mais pas en streaming (ni en pause), démarrer automatiquement
-    if (usbStreamStatus === 'idle' && !isToggling) {
-      const autoStart = async () => {
-        try {
-          logger.debug('[USB] Auto-start streaming')
-          await startUsbStreaming(port)
-        } catch (err) {
-          logger.error('[DebugTab] Erreur démarrage automatique streaming:', err)
+    const syncPort = async () => {
+      try {
+        await loadAvailablePorts()
+        const ports = await navigator.serial.getPorts()
+        const portIndex = ports.findIndex(p => p === port)
+        if (portIndex >= 0) {
+          setSelectedPortId(`port-${portIndex}`)
         }
+      } catch (err) {
+        logger.debug('[DebugTab] Erreur synchronisation port:', err)
       }
-      // Petit délai pour s'assurer que la connexion est bien établie
-      const timeout = setTimeout(autoStart, 300)
-      return () => clearTimeout(timeout)
     }
-  }, [isSupported, isConnected, port, usbStreamStatus, isToggling, startUsbStreaming])
+    syncPort()
+  }, [isSupported, isConnected, port, loadAvailablePorts])
 
-  // Charger les données de la base de données au démarrage (même sans USB)
+  // Charger les données de la base de données
   useEffect(() => {
+    if (!fetchWithAuth || !API_URL || loadingDbData) return
+    
+    const identifier = usbDeviceInfo?.sim_iccid || usbDeviceInfo?.device_serial || usbDeviceInfo?.device_name
+    
+    // Si on a déjà des données DB qui correspondent, ne pas recharger
+    if (dbDeviceData && identifier) {
+      const matches = dbDeviceData.sim_iccid === identifier || 
+                      dbDeviceData.device_serial === identifier || 
+                      dbDeviceData.device_name === identifier
+      if (matches) return
+    }
+    
     const loadDbDeviceData = async () => {
-      // Si déjà chargé, ne pas recharger
-      if (loadingDbData) return
-      
-      // Vérifier que fetchWithAuth et API_URL sont disponibles
-      if (!fetchWithAuth || !API_URL) {
-        logger.debug('[DebugTab] fetchWithAuth ou API_URL non disponible, skip chargement DB')
-        return
-      }
-      
-      // Si on a un identifiant USB, l'utiliser, sinon charger tous les dispositifs
-      const identifier = usbDeviceInfo?.sim_iccid || usbDeviceInfo?.device_serial || usbDeviceInfo?.device_name
-      
-      // Si on a déjà des données DB et un identifiant USB qui correspond, ne pas recharger
-      if (dbDeviceData && identifier) {
-        const matches = dbDeviceData.sim_iccid === identifier || 
-                        dbDeviceData.device_serial === identifier || 
-                        dbDeviceData.device_name === identifier
-        if (matches) return
-      }
-      
       setLoadingDbData(true)
       try {
-        // Chercher le dispositif dans la liste des dispositifs
         const response = await fetchJson(
           fetchWithAuth,
           API_URL,
@@ -1361,19 +1185,13 @@ export default function DebugTab() {
         )
         
         if (response?.devices?.devices) {
-          let device = null
-          
-          // Si on a un identifiant, chercher le dispositif correspondant
-          if (identifier) {
-            device = response.devices.devices.find((d) => 
-              d.sim_iccid === identifier || 
-              d.device_serial === identifier || 
-              d.device_name === identifier
-            )
-          } else {
-            // Sinon, prendre le premier dispositif disponible (pour affichage)
-            device = response.devices.devices[0]
-          }
+          const device = identifier 
+            ? response.devices.devices.find((d) => 
+                d.sim_iccid === identifier || 
+                d.device_serial === identifier || 
+                d.device_name === identifier
+              )
+            : response.devices.devices[0]
           
           if (device) {
             setDbDeviceData({
@@ -1389,90 +1207,22 @@ export default function DebugTab() {
               last_seen: device.last_seen,
               status: device.status
             })
-            // Ne définir la source que si pas de données USB
             if (!usbStreamLastMeasurement && !usbDeviceInfo) {
               setDataSource('database')
-            }
-            if (process.env.NODE_ENV === 'development') {
-              logger.debug('📦 Données DB chargées:', device.device_name)
             }
           }
         }
       } catch (err) {
-        // Ne logger que si ce n'est pas une erreur réseau/CORS attendue (API non démarrée)
         if (!err.message?.includes('Impossible de contacter l\'API')) {
           logger.error('[DebugTab] Erreur chargement données DB:', err)
-        } else {
-          logger.debug('[DebugTab] API non accessible (probablement non démarrée), skip chargement DB')
         }
       } finally {
         setLoadingDbData(false)
       }
     }
     
-    // Charger immédiatement au montage seulement si fetchWithAuth et API_URL sont disponibles
-    if (fetchWithAuth && API_URL) {
-      loadDbDeviceData()
-    }
-  }, [fetchWithAuth, API_URL, usbDeviceInfo, dbDeviceData, loadingDbData, usbStreamLastMeasurement])
-  
-  // Recharger si on obtient un identifiant USB qui ne correspond pas aux données DB actuelles
-  useEffect(() => {
-    const identifier = usbDeviceInfo?.sim_iccid || usbDeviceInfo?.device_serial || usbDeviceInfo?.device_name
-    if (identifier) {
-      // Vérifier si les données DB correspondent
-      const matches = dbDeviceData && (
-        dbDeviceData.sim_iccid === identifier || 
-        dbDeviceData.device_serial === identifier || 
-        dbDeviceData.device_name === identifier
-      )
-      
-      if (!matches && !loadingDbData) {
-        // Recharger avec l'identifiant USB
-        const loadDbDeviceData = async () => {
-          setLoadingDbData(true)
-          try {
-            const response = await fetchJson(
-              fetchWithAuth,
-              API_URL,
-              '/api.php/devices',
-              { method: 'GET' },
-              { requiresAuth: true }
-            )
-            
-            if (response?.devices?.devices) {
-              const device = response.devices.devices.find((d) => 
-                d.sim_iccid === identifier || 
-                d.device_serial === identifier || 
-                d.device_name === identifier
-              )
-              
-              if (device) {
-                setDbDeviceData({
-                  device_name: device.device_name,
-                  sim_iccid: device.sim_iccid,
-                  device_serial: device.device_serial,
-                  firmware_version: device.firmware_version,
-                  last_battery: device.last_battery,
-                  last_flowrate: device.last_flowrate || null,
-                  last_rssi: device.last_rssi || null,
-                  last_latitude: device.latitude || null,
-                  last_longitude: device.longitude || null,
-                  last_seen: device.last_seen,
-                  status: device.status
-                })
-              }
-            }
-          } catch (err) {
-            logger.error('[DebugTab] Erreur rechargement données DB:', err)
-          } finally {
-            setLoadingDbData(false)
-          }
-        }
-        loadDbDeviceData()
-      }
-    }
-  }, [usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, usbDeviceInfo?.device_name, fetchWithAuth, API_URL, loadingDbData, dbDeviceData])
+    loadDbDeviceData()
+  }, [fetchWithAuth, API_URL, usbDeviceInfo?.sim_iccid, usbDeviceInfo?.device_serial, usbDeviceInfo?.device_name, dbDeviceData, loadingDbData, usbStreamLastMeasurement, usbDeviceInfo])
   
   // Mettre à jour la source des données : USB en priorité si disponible
   useEffect(() => {
@@ -1544,14 +1294,24 @@ export default function DebugTab() {
         appendUsbStreamLog('⏸️ Visualisation des logs mise en pause - Port toujours connecté', 'dashboard')
       } else if (isPaused) {
         // Reprendre si en pause
-        if (isConnected && port) {
-          await startUsbStreaming(port)
-          appendUsbStreamLog('▶️ Visualisation des logs reprise', 'dashboard')
+        if (isConnected && port && !isStartingStreamRef.current) {
+          isStartingStreamRef.current = true
+          try {
+            await startUsbStreaming(port)
+            appendUsbStreamLog('▶️ Visualisation des logs reprise', 'dashboard')
+          } finally {
+            isStartingStreamRef.current = false
+          }
         }
       } else {
         // Si arrêté (ne devrait pas arriver normalement), démarrer
-        if (isConnected && port) {
-          await startUsbStreaming(port)
+        if (isConnected && port && !isStartingStreamRef.current) {
+          isStartingStreamRef.current = true
+          try {
+            await startUsbStreaming(port)
+          } finally {
+            isStartingStreamRef.current = false
+          }
         }
       }
     } catch (err) {
@@ -1669,7 +1429,7 @@ export default function DebugTab() {
           })
         }
         // Recharger la liste des dispositifs
-        refetchDevices()
+        refetchDevicesRef.current()
       } else {
         logger.error('Erreur création dispositifs fictifs:', data.error)
         appendUsbStreamLog(`❌ Erreur: ${data.error}`, 'dashboard')
@@ -1680,7 +1440,7 @@ export default function DebugTab() {
     } finally {
       setCreatingTestDevices(false)
     }
-  }, [fetchWithAuth, API_URL, refetchDevices, appendUsbStreamLog])
+  }, [fetchWithAuth, API_URL, appendUsbStreamLog])
   
   // Gérer la création d'un dispositif
   
@@ -1712,14 +1472,14 @@ export default function DebugTab() {
       appendUsbStreamLog(`✅ Dispositif assigné à ${patient?.first_name} ${patient?.last_name || patientId}`, 'dashboard')
       setShowAssignPatientModal(false)
       setDeviceToAssign(null)
-      refetchDevices()
+      refetchDevicesRef.current()
     } catch (err) {
       logger.error('Erreur assignation patient:', err)
       appendUsbStreamLog(`❌ Erreur assignation patient: ${err.message || err}`, 'dashboard')
     } finally {
       setAssigningPatient(false)
     }
-  }, [fetchWithAuth, API_URL, deviceToAssign, allPatients, appendUsbStreamLog, refetchDevices])
+  }, [fetchWithAuth, API_URL, deviceToAssign, allPatients, appendUsbStreamLog])
   
   // Gérer la désassignation d'un patient d'un dispositif
   const handleUnassignPatient = useCallback(async (device) => {
@@ -1775,7 +1535,7 @@ export default function DebugTab() {
       setSuccessMessage('✅ Dispositif désassigné et réinitialisé avec succès')
       invalidateCache()
       createTimeoutWithCleanup(async () => {
-        await refetchDevices()
+        await refetchDevicesRef.current()
       }, 500)
       createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
     } catch (err) {
@@ -1784,7 +1544,7 @@ export default function DebugTab() {
     } finally {
       setUnassigningPatient(null)
     }
-  }, [fetchWithAuth, API_URL, allPatients, appendUsbStreamLog, refetchDevices, invalidateCache, createTimeoutWithCleanup, setSuccessMessage])
+  }, [fetchWithAuth, API_URL, allPatients, appendUsbStreamLog, invalidateCache, createTimeoutWithCleanup, setSuccessMessage])
   
   // Patients disponibles (sans dispositif assigné et non archivés)
   const availablePatients = useMemo(() => {
@@ -2006,7 +1766,7 @@ export default function DebugTab() {
           setShowDeviceModal(false)
           const action = editingDevice ? 'mis à jour' : 'créé'
           const name = editingDevice?.device_name || editingDevice?.sim_iccid || usbDeviceInfo?.device_name || usbDeviceInfo?.sim_iccid || 'nouveau dispositif'
-          refetchDevices()
+          refetchDevicesRef.current()
           appendUsbStreamLog(`✅ Dispositif "${name}" ${action}`, 'dashboard')
           setEditingDevice(null)
         }}
@@ -2064,17 +1824,27 @@ export default function DebugTab() {
           </div>
           {/* Fonctions helpers pour fusionner les données (définies une seule fois) */}
           {(() => {
-            // Normaliser un identifiant (supprime espaces)
-            const normalizeId = (val) => val ? String(val).trim().replace(/\s+/g, '') : ''
-            
+            // Utiliser la fonction normalizeId définie avec useCallback (ligne 145)
+            // Note: normalizeId est accessible depuis le scope du composant
             // Fusionner valeurs : USB en priorité, puis DB
             const getValue = (usbVal, dbVal) => usbVal ?? dbVal
+            // Alias pour normalizeId pour s'assurer qu'elle est accessible (même si elle est déjà dans le scope)
+            const normalizeIdLocal = normalizeId
             
             return (
               <div className="overflow-x-auto">
                 {devicesLoading ? (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                     Chargement des dispositifs...
+                  </div>
+                ) : devicesToDisplay.length === 0 && !devicesLoading ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <p className="text-sm">Aucun dispositif trouvé</p>
+                    <p className="text-xs mt-2 text-gray-400 dark:text-gray-500">
+                      devicesData: {devicesData ? JSON.stringify(Object.keys(devicesData)).substring(0, 100) : 'null'} | 
+                      allDevicesFromApi: {allDevicesFromApi.length} | 
+                      devicesToDisplay: {devicesToDisplay.length}
+                    </p>
                   </div>
                 ) : (
                   <>
@@ -2095,92 +1865,29 @@ export default function DebugTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(() => {
-                      // Debug: logger l'état pour diagnostiquer
-                      logger.debug('[UsbStreamingTab] Affichage message "Aucun dispositif":', {
-                        allDevicesLength: allDevices.length,
-                        hasUsbDevice: !!usbDevice,
-                        usbDeviceName: usbDevice?.device_name || 'N/A',
-                        isConnected: isConnected,
-                        usbStreamLogsLength: usbStreamLogs.length
-                      })
-                      
-                      // Cas 1: Aucun dispositif enregistré du tout (mais on peut avoir un dispositif USB virtuel)
-                      if (allDevices.length === 0 && !usbDevice) {
-                        logger.debug('[UsbStreamingTab] Affichage message "Aucun dispositif enregistré"')
-                        return (
-                          <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
-                              <div className="flex flex-col items-center gap-3">
-                                <span className="text-4xl">🔌</span>
-                                <p className="text-sm font-medium">Aucun dispositif enregistré</p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500">
-                                  Connectez un dispositif USB pour le configurer (il sera ajouté à la base par OTA)
-                                </p>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      }
-                      
-                      // Si on a un dispositif virtuel mais pas de dispositifs en base, ne pas afficher le message
-                      // Le dispositif virtuel sera affiché juste au-dessus
-                      if (allDevices.length === 0 && usbDevice) {
-                        logger.debug('[UsbStreamingTab] Dispositif virtuel existe, ne pas afficher le message')
-                        return null // Ne pas afficher le message, le dispositif virtuel sera affiché
-                      }
-                      
-                      // Cas 2: Afficher les archives mais aucun dispositif archivé
-                      if (showArchived) {
-                        const archivedDevices = allDevices.filter(d => isArchived(d))
-                        if (archivedDevices.length === 0) {
-                          return (
-                            <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
-                              <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
-                                <div className="flex flex-col items-center gap-3">
-                                  <span className="text-4xl">🗄️</span>
-                                  <p className="text-sm font-medium">Aucun dispositif archivé</p>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        }
-                      }
-                      
-                      // Cas 3: Afficher les dispositifs actifs mais aucun à afficher (sauf si dispositif USB virtuel existe)
-                      // Ne pas afficher ce message si on a un dispositif USB virtuel (il sera affiché au-dessus)
-                      if (!showArchived && devicesToDisplay.length === 0 && !usbDevice && allDevices.length === 0) {
-                        return (
-                          <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
-                              <div className="flex flex-col items-center gap-3">
-                                <span className="text-4xl">📱</span>
-                                <p className="text-sm font-medium">Aucun dispositif actif</p>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      }
-                      
-                      // Si on a un dispositif virtuel mais pas de dispositifs en base, ne pas afficher de message
-                      // Le dispositif virtuel sera affiché juste au-dessus
-                      if (!showArchived && devicesToDisplay.length === 0 && usbDevice) {
-                        return null // Ne pas afficher le message, le dispositif virtuel sera affiché
-                      }
-                      
-                      // Cas 4: Afficher les dispositifs
-                      return null
-                    })()}
-                    {(() => {
-                      // Log de debug pour voir ce qui est affiché
-                      logger.debug('[RENDER] Affichage tableau:', {
-                        devicesToDisplayCount: devicesToDisplay.length,
-                        hasUsbDevice: !!usbDevice,
-                        usbDeviceInList: devicesToDisplay.some(d => d.id === usbDevice?.id),
-                        allDeviceIds: devicesToDisplay.map(d => ({ id: d.id, name: d.device_name }))
-                      })
-                      return null
-                    })()}
+                    {allDevices.length === 0 && !usbDevice && (
+                      <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                          <div className="flex flex-col items-center gap-3">
+                            <span className="text-4xl">🔌</span>
+                            <p className="text-sm font-medium">Aucun dispositif enregistré</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              Connectez un dispositif USB pour le configurer
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {showArchived && allDevices.filter(d => isArchived(d)).length === 0 && (
+                      <tr className="table-row hover:bg-gray-50 dark:hover:bg-gray-800">
+                        <td colSpan="11" className="table-cell px-3 py-8 text-center text-gray-500 dark:text-gray-400">
+                          <div className="flex flex-col items-center gap-3">
+                            <span className="text-4xl">🗄️</span>
+                            <p className="text-sm font-medium">Aucun dispositif archivé</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                     {devicesToDisplay.length > 0 && (
                       devicesToDisplay.map((device) => {
                   const deviceIsArchived = isArchived(device)
@@ -2196,13 +1903,14 @@ export default function DebugTab() {
                   const isNotRegistered = !hasRealId || device?.isVirtual || device?.isTemporary
                   
                   // Normaliser les identifiants pour comparaison
-                  const deviceIccid = normalizeId(device.sim_iccid)
-                  const normalizedDeviceSerial = normalizeId(device.device_serial)
+                  // Utiliser normalizeIdLocal (alias de normalizeId) pour éviter les warnings ESLint
+                  const deviceIccid = normalizeIdLocal(device.sim_iccid)
+                  const normalizedDeviceSerial = normalizeIdLocal(device.device_serial)
                   
                   // Vérifier si ce dispositif est connecté en USB (enregistré ou virtuel)
                   const isDeviceUsbConnected = isConnected && (
-                    (usbDeviceInfo?.sim_iccid && normalizeId(usbDeviceInfo.sim_iccid) === deviceIccid) ||
-                    (usbDeviceInfo?.device_serial && normalizeId(usbDeviceInfo.device_serial) === normalizedDeviceSerial) ||
+                    (usbDeviceInfo?.sim_iccid && normalizeIdLocal(usbDeviceInfo.sim_iccid) === deviceIccid) ||
+                    (usbDeviceInfo?.device_serial && normalizeIdLocal(usbDeviceInfo.device_serial) === normalizedDeviceSerial) ||
                     isUsbDeviceRegistered() && usbDevice.id === device.id
                   )
                   
@@ -2210,8 +1918,8 @@ export default function DebugTab() {
                   // IMPORTANT: Pour un dispositif temporaire (USB-En attente...), utiliser usbDeviceInfo si connecté
                   // même si les identifiants ne correspondent pas encore (ils arrivent progressivement depuis les logs)
                   const isDeviceUsbVirtual = usbDevice && !isUsbDeviceRegistered() && (
-                    (usbDevice.sim_iccid && normalizeId(usbDevice.sim_iccid) === deviceIccid) ||
-                    (usbDevice.device_serial && normalizeId(usbDevice.device_serial) === normalizedDeviceSerial) ||
+                    (usbDevice.sim_iccid && normalizeIdLocal(usbDevice.sim_iccid) === deviceIccid) ||
+                    (usbDevice.device_serial && normalizeIdLocal(usbDevice.device_serial) === normalizedDeviceSerial) ||
                     // Si le dispositif est temporaire (sans identifiants) et qu'on est connecté, utiliser usbDeviceInfo
                     (isConnected && device.isTemporary && !deviceIccid && !normalizedDeviceSerial && usbDeviceInfo) ||
                     // NOUVEAU: Si le dispositif a "USB-En attente..." et qu'on est connecté avec usbDeviceInfo, c'est le dispositif USB
@@ -2221,11 +1929,50 @@ export default function DebugTab() {
                   // Source de données USB : TOUJOURS utiliser usbDeviceInfo en priorité si disponible
                   // car c'est là que sont stockées toutes les informations parsées depuis les logs
                   // (sim_phone_number, sim_status, operator, apn, network_connected, etc.)
-                  // Si le dispositif est temporaire (USB-En attente...) et connecté, utiliser usbDeviceInfo même sans correspondance d'identifiants
-                  // NOUVEAU: Si connecté et usbDeviceInfo disponible, l'utiliser même si isDeviceUsbVirtual est false
-                  const usbInfo = (isDeviceUsbConnected || isDeviceUsbVirtual || (isConnected && usbDeviceInfo && device.device_name === 'USB-En attente...')) && usbDeviceInfo ? usbDeviceInfo : 
-                                  (isDeviceUsbVirtual ? usbDevice : null)
+                  // Vérifier si ce dispositif correspond au dispositif USB connecté
+                  let usbInfo = null
+                  if (isConnected && usbDeviceInfo) {
+                    // Vérifier si ce dispositif correspond au dispositif USB connecté
+                    const usbInfoIccid = normalizeIdLocal(usbDeviceInfo.sim_iccid)
+                    const usbInfoSerial = normalizeIdLocal(usbDeviceInfo.device_serial)
+                    
+                    // Correspondance par ICCID (priorité 1)
+                    const matchesByIccid = usbInfoIccid && deviceIccid && usbInfoIccid === deviceIccid
+                    // Correspondance par Serial (priorité 2)
+                    const matchesBySerial = usbInfoSerial && normalizedDeviceSerial && usbInfoSerial === normalizedDeviceSerial
+                    // Correspondance pour dispositif temporaire (priorité 3)
+                    const matchesTemporary = device.device_name === 'USB-En attente...' && !deviceIccid && !normalizedDeviceSerial
+                    
+                    if (matchesByIccid || matchesBySerial || matchesTemporary || isDeviceUsbConnected || isDeviceUsbVirtual) {
+                      usbInfo = usbDeviceInfo
+                      logger.debug('[TableRow] usbDeviceInfo utilisé pour:', {
+                        deviceName: device.device_name,
+                        matchesByIccid,
+                        matchesBySerial,
+                        matchesTemporary,
+                        deviceIccid: deviceIccid?.slice(-10),
+                        usbInfoIccid: usbInfoIccid?.slice(-10)
+                      })
+                    }
+                  }
+                  // Si pas de correspondance avec usbDeviceInfo, utiliser usbDevice si c'est un dispositif virtuel
+                  if (!usbInfo && isDeviceUsbVirtual && usbDevice) {
+                    usbInfo = usbDevice
+                    logger.debug('[TableRow] usbDevice utilisé (virtuel):', device.device_name)
+                  }
                   const usbConfig = usbInfo?.config || {}
+                  
+                  // Debug : vérifier qu'on a bien les données USB
+                  if (!usbInfo && isConnected && (deviceIccid || normalizedDeviceSerial)) {
+                    logger.debug('[TableRow] ⚠️ Pas de usbInfo trouvé pour:', {
+                      deviceName: device.device_name,
+                      deviceIccid: deviceIccid?.slice(-10),
+                      deviceSerial: normalizedDeviceSerial,
+                      hasUsbDeviceInfo: !!usbDeviceInfo,
+                      usbDeviceInfoIccid: usbDeviceInfo?.sim_iccid?.slice(-10),
+                      usbDeviceInfoSerial: usbDeviceInfo?.device_serial
+                    })
+                  }
                   
                   // Fusionner toutes les données : USB en priorité, puis DB
                   const simIccid = getValue(usbInfo?.sim_iccid, deviceDbData?.sim_iccid)
@@ -2572,8 +2319,17 @@ export default function DebugTab() {
                           logger.log(`[USB] Connexion établie sur ${portLabel}`)
                           
                           // Démarrer automatiquement le streaming après connexion
+                          // Le useEffect gère déjà le démarrage automatique, donc on ne démarre que si pas déjà en cours
                           const streamTimeoutId = setTimeout(async () => {
+                            // Vérifier si le streaming n'est pas déjà démarré par le useEffect
+                            if (usbStreamStatus !== 'idle' || isStartingStreamRef.current) {
+                              logger.debug('[USB] Streaming déjà démarré ou en cours, pas de démarrage manuel')
+                              timeoutRefs.current = timeoutRefs.current.filter(id => id !== streamTimeoutId)
+                              return
+                            }
+                            
                             try {
+                              isStartingStreamRef.current = true
                               appendUsbStreamLog('🚀 Démarrage du streaming USB...', 'dashboard')
                               logger.log('[USB] Démarrage streaming après connexion manuelle')
                               await startUsbStreaming(selectedPort)
@@ -2582,6 +2338,7 @@ export default function DebugTab() {
                               logger.error('❌ Erreur démarrage streaming:', streamErr)
                               appendUsbStreamLog(`❌ Erreur démarrage streaming: ${streamErr.message || streamErr}`, 'dashboard')
                             } finally {
+                              isStartingStreamRef.current = false
                               // Nettoyer le timeout de la liste
                               timeoutRefs.current = timeoutRefs.current.filter(id => id !== streamTimeoutId)
                             }
@@ -2613,13 +2370,18 @@ export default function DebugTab() {
                 </button>
               )}
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (usbStreamStatus === 'running') {
                     pauseUsbStreaming()
                     logger.log('⏸️ Logs en pause')
-                  } else if (usbStreamStatus === 'paused') {
-                    startUsbStreaming(port)
-                    logger.log('▶️ Logs reprennent')
+                  } else if (usbStreamStatus === 'paused' && !isStartingStreamRef.current) {
+                    isStartingStreamRef.current = true
+                    try {
+                      await startUsbStreaming(port)
+                      logger.log('▶️ Logs reprennent')
+                    } finally {
+                      isStartingStreamRef.current = false
+                    }
                   }
                 }}
                 className={`px-3 py-1.5 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${

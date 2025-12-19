@@ -48,12 +48,33 @@ function createUsbLogs($pdo, $body, $userId) {
     try {
         $pdo->beginTransaction();
         
-        $insertedCount = 0;
-        $stmt = $pdo->prepare("
-            INSERT INTO usb_logs (device_identifier, device_name, log_line, log_source, user_id, created_at)
-            VALUES (:device_identifier, :device_name, :log_line, :log_source, :user_id, :created_at)
-        ");
+        // Vérifier si la colonne user_id existe avant de l'utiliser (une seule fois)
+        static $hasUserIdColumnCache = null;
+        if ($hasUserIdColumnCache === null) {
+            $checkColumnStmt = $pdo->query("
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'usb_logs' AND column_name = 'user_id'
+            ");
+            $hasUserIdColumnCache = $checkColumnStmt->rowCount() > 0;
+        }
+        $hasUserIdColumn = $hasUserIdColumnCache;
         
+        // Préparer la requête SQL selon l'existence de la colonne user_id
+        if ($hasUserIdColumn) {
+            $insertSql = "
+                INSERT INTO usb_logs (device_identifier, device_name, log_line, log_source, user_id, created_at)
+                VALUES (:device_identifier, :device_name, :log_line, :log_source, :user_id, :created_at)
+            ";
+        } else {
+            $insertSql = "
+                INSERT INTO usb_logs (device_identifier, device_name, log_line, log_source, created_at)
+                VALUES (:device_identifier, :device_name, :log_line, :log_source, :created_at)
+            ";
+        }
+        $stmt = $pdo->prepare($insertSql);
+        
+        $insertedCount = 0;
         foreach ($logs as $log) {
             if (!isset($log['log_line']) || empty(trim($log['log_line']))) {
                 continue;
@@ -78,14 +99,17 @@ function createUsbLogs($pdo, $body, $userId) {
                 : date('Y-m-d H:i:s.u');
             
             // $userId peut être null pour les logs USB locaux
-            $stmt->execute([
+            $params = [
                 ':device_identifier' => $deviceIdentifier,
                 ':device_name' => $deviceName,
                 ':log_line' => $logLine,
                 ':log_source' => $logSource,
-                ':user_id' => $userId, // null acceptable pour logs USB sans auth
                 ':created_at' => $timestamp
-            ]);
+            ];
+            if ($hasUserIdColumn) {
+                $params[':user_id'] = $userId; // null acceptable pour logs USB sans auth
+            }
+            $stmt->execute($params);
             
             $insertedCount++;
         }
@@ -139,8 +163,14 @@ function getUsbLogs($pdo, $query, $userRole) {
         $params = [];
         
         if (isset($query['device']) && !empty($query['device'])) {
+            $deviceParam = trim($query['device']);
+            // Valider la longueur
+            if (strlen($deviceParam) > 255) {
+                http_response_code(400);
+                return json_encode(['success' => false, 'error' => 'Identifiant de dispositif trop long']);
+            }
             $conditions[] = "device_identifier = :device";
-            $params[':device'] = trim($query['device']);
+            $params[':device'] = $deviceParam;
         }
         
         if (isset($query['since']) && is_numeric($query['since'])) {
@@ -158,14 +188,27 @@ function getUsbLogs($pdo, $query, $userRole) {
         
         $whereClause = count($conditions) > 0 ? 'WHERE ' . implode(' AND ', $conditions) : '';
         
+        // Vérifier si la colonne user_id existe (peut ne pas exister dans certaines versions du schéma)
+        static $hasUserIdColumnCacheGet = null;
+        if ($hasUserIdColumnCacheGet === null) {
+            $checkColumnStmt = $pdo->query("
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'usb_logs' AND column_name = 'user_id'
+            ");
+            $hasUserIdColumnCacheGet = $checkColumnStmt->rowCount() > 0;
+        }
+        $hasUserIdColumn = $hasUserIdColumnCacheGet;
+        
+        $userIdSelect = $hasUserIdColumn ? ', user_id' : '';
         $sql = "
             SELECT 
                 id,
                 device_identifier,
                 device_name,
                 log_line,
-                log_source,
-                user_id,
+                log_source
+                $userIdSelect,
                 created_at,
                 EXTRACT(EPOCH FROM created_at) * 1000 as timestamp_ms
             FROM usb_logs
@@ -218,11 +261,37 @@ function getDeviceUsbLogs($pdo, $deviceIdentifier, $query, $userRole) {
         return json_encode(['success' => false, 'error' => 'Accès refusé. Seuls les administrateurs peuvent consulter les logs.']);
     }
     
-    // Décoder l'identifiant du dispositif (URL decode)
-    $deviceIdentifier = urldecode($deviceIdentifier);
-    
-    $query['device'] = $deviceIdentifier;
-    return getUsbLogs($pdo, $query, $userRole);
+    try {
+        // Décoder l'identifiant du dispositif (URL decode)
+        $deviceIdentifier = urldecode($deviceIdentifier);
+        
+        // Sanitizer et valider l'identifiant
+        $deviceIdentifier = trim($deviceIdentifier);
+        if (empty($deviceIdentifier)) {
+            http_response_code(400);
+            return json_encode(['success' => false, 'error' => 'Identifiant de dispositif invalide']);
+        }
+        
+        // Limiter la longueur (protection)
+        if (strlen($deviceIdentifier) > 255) {
+            http_response_code(400);
+            return json_encode(['success' => false, 'error' => 'Identifiant de dispositif trop long']);
+        }
+        
+        // Passer l'identifiant dans la query
+        $query['device'] = $deviceIdentifier;
+        return getUsbLogs($pdo, $query, $userRole);
+        
+    } catch (Exception $e) {
+        error_log("Erreur getDeviceUsbLogs: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        http_response_code(500);
+        return json_encode([
+            'success' => false, 
+            'error' => 'Erreur lors de la récupération des logs du dispositif',
+            'details' => getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : null
+        ]);
+    }
 }
 
 /**

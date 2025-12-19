@@ -393,3 +393,5 @@ Si vous avez des erreurs CORS, mettez à jour `CORS_ALLOWED_ORIGINS` dans `docke
 
 **Note** : Pour un usage en production, nous recommandons fortement **Cloudflare Tunnel** ou un **VPS/Cloud** (comme Render, que vous utilisez déjà pour l'API de production).
 
+
+

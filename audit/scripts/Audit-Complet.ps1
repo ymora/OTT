@@ -1032,10 +1032,7 @@ function Invoke-AuditPhase {
 # Vérifier si la phase doit être exécutée
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 2) {
     if ($completedPhases -notcontains 2) {
-        Write-PhaseSection -PhaseNumber 1 -Title "Inventaire Exhaustif - Tous les Fichiers et Répertoires"
-
-# INTÉGRATION PSScriptAnalyzer - Analyse des scripts PowerShell
-Write-Host "`n  Analyse avec PSScriptAnalyzer (scripts PowerShell)..." -ForegroundColor Yellow
+        Write-PhaseSection -PhaseNumber 1 -Title "Inventaire Exhaustif - Tous les Fichiers et Répertoires" -ForegroundColor Yellow
 $psaResult = Invoke-PSScriptAnalyzerAnalysis -ProjectRoot (Get-Location).Path
 if ($psaResult.Success) {
     if ($psaResult.Errors -gt 0 -or $psaResult.Warnings -gt 0) {
@@ -1185,9 +1182,6 @@ try {
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 3) {
     if ($completedPhases -notcontains 3) {
         Write-PhaseSection -PhaseNumber 2 -Title "Architecture et Statistiques Code"
-
-        try {
-            Write-Info "Comptage des fichiers..."
     
             # Utiliser l'inventaire exhaustif
             $jsFiles = $fileInventory.JS + $fileInventory.JSX
@@ -1354,17 +1348,7 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 3) {
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 8) {
-Write-PhaseSection -PhaseNumber 8 -Title "Code Mort - Detection Composants/Hooks/Libs Non Utilises" - Detection Composants/Hooks/Libs Non Utilises"
-
-$deadCode = @{
-    Components = @()
-    Hooks = @()
-    Libs = @()
-}
-$totalDead = 0
-
-try {
-    Write-Info "Analyse composants..."
+    Write-PhaseSection -PhaseNumber 8 -Title "Code Mort - Detection Composants/Hooks/Libs Non Utilises"
     
     $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
         $_.FullName -notmatch 'node_modules' -and
@@ -1412,19 +1396,19 @@ try {
         }
     }
     
-    $totalDead = $deadCode.Components.Count + $deadCode.Hooks.Count + $deadCode.Libs.Count
-    if ($totalDead -eq 0) {
-        Write-OK "Aucun code mort detecte"
-        $auditResults.Scores["CodeMort"] = 10
-    } else {
-        Write-Warn "$totalDead fichiers non utilises detectes"
-        $auditResults.Issues += "Code mort: $totalDead fichiers a supprimer"
-        $auditResults.Scores["CodeMort"] = [Math]::Max(10 - $totalDead, 0)
+        $totalDead = $deadCode.Components.Count + $deadCode.Hooks.Count + $deadCode.Libs.Count
+        if ($totalDead -eq 0) {
+            Write-OK "Aucun code mort detecte"
+            $auditResults.Scores["CodeMort"] = 10
+        } else {
+            Write-Warn "$totalDead fichiers non utilises detectes"
+            $auditResults.Issues += "Code mort: $totalDead fichiers a supprimer"
+            $auditResults.Scores["CodeMort"] = [Math]::Max(10 - $totalDead, 0)
+        }
+    } catch {
+        Write-Err "Erreur analyse code mort: $($_.Exception.Message)"
+        $auditResults.Scores["CodeMort"] = 5
     }
-} catch {
-    Write-Err "Erreur analyse code mort: $($_.Exception.Message)"
-    $auditResults.Scores["CodeMort"] = 5
-}
 }  # Fin if SelectedPhases -contains 8
 
 # ===============================================================================
@@ -1432,12 +1416,11 @@ try {
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 9) {
-Write-PhaseSection -PhaseNumber 9 -Title "Duplication de Code et Refactoring" de Code et Refactoring"
-
-try {
-    Write-Info "Analyse patterns dupliques..."
+    Write-PhaseSection -PhaseNumber 9 -Title "Duplication de Code et Refactoring"
     
-    $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+    try {
+        $duplications = @()
+        $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
         $_.FullName -notmatch 'node_modules' -and
         $_.FullName -notmatch '\\\.next\\' -and
         $_.FullName -notmatch '\\docs\\'
@@ -1508,18 +1491,18 @@ try {
         $duplicationScoreFromJscpd = 10
     }
     
-    if ($duplications.Count -eq 0) {
-        Write-OK "Pas de duplication excessive detectee"
-        $auditResults.Scores["Duplication"] = [Math]::Min(10, ($duplicationScoreFromJscpd + 10) / 2)
-    } else {
-        Write-Warn "$($duplications.Count) patterns a fort potentiel de refactoring"
-        $baseScore = [Math]::Max(10 - $duplications.Count, 5)
-        $auditResults.Scores["Duplication"] = [Math]::Min(10, ($baseScore + $duplicationScoreFromJscpd) / 2)
+        if ($duplications.Count -eq 0) {
+            Write-OK "Pas de duplication excessive detectee"
+            $auditResults.Scores["Duplication"] = [Math]::Min(10, ($duplicationScoreFromJscpd + 10) / 2)
+        } else {
+            Write-Warn "$($duplications.Count) patterns a fort potentiel de refactoring"
+            $baseScore = [Math]::Max(10 - $duplications.Count, 5)
+            $auditResults.Scores["Duplication"] = [Math]::Min(10, ($baseScore + $duplicationScoreFromJscpd) / 2)
+        }
+    } catch {
+        Write-Err "Erreur analyse duplication: $($_.Exception.Message)"
+        $auditResults.Scores["Duplication"] = 7
     }
-} catch {
-    Write-Err "Erreur analyse duplication: $($_.Exception.Message)"
-    $auditResults.Scores["Duplication"] = 7
-}
 }  # Fin if SelectedPhases -contains 9
 
 # ===============================================================================
@@ -1527,12 +1510,10 @@ try {
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 10) {
-Write-PhaseSection -PhaseNumber 10 -Title "Complexite - Fichiers/Fonctions Volumineux" - Fichiers/Fonctions Volumineux"
-
-try {
-    Write-Info "Analyse fichiers volumineux..."
+    Write-PhaseSection -PhaseNumber 10 -Title "Complexite - Fichiers/Fonctions Volumineux"
     
-    $largeFiles = @()
+    try {
+        $largeFiles = @()
     $allCodeFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx,*.php | Where-Object {
         $_.FullName -notmatch 'node_modules' -and
         $_.FullName -notmatch '\\\.next\\' -and
@@ -1551,48 +1532,43 @@ try {
         } catch {}
     }
     
-    $complexityScore = if($largeFiles.Count -lt 10) { 10 } 
-                       elseif($largeFiles.Count -lt 20) { 9 } 
-                       elseif($largeFiles.Count -lt 30) { 8 } 
-                       else { 7 }
-    
-    if ($largeFiles.Count -eq 0) {
-        Write-OK "Complexite code parfaite"
-    } elseif ($largeFiles.Count -lt 20) {
-        Write-OK "$($largeFiles.Count) fichiers volumineux (acceptable)"
-    } else {
-        Write-Warn "$($largeFiles.Count) fichiers volumineux (> $MaxFileLines lignes)"
+        $complexityScore = if($largeFiles.Count -lt 10) { 10 } 
+                           elseif($largeFiles.Count -lt 20) { 9 } 
+                           elseif($largeFiles.Count -lt 30) { 8 } 
+                           else { 7 }
+        
+        if ($largeFiles.Count -eq 0) {
+            Write-OK "Complexite code parfaite"
+        } elseif ($largeFiles.Count -lt 20) {
+            Write-OK "$($largeFiles.Count) fichiers volumineux (acceptable)"
+        } else {
+            Write-Warn "$($largeFiles.Count) fichiers volumineux (> $MaxFileLines lignes)"
+        }
+        
+        $auditResults.Scores["Complexite"] = $complexityScore
+    } catch {
+        Write-Err "Erreur analyse complexite: $($_.Exception.Message)"
+        $auditResults.Scores["Complexite"] = 7
     }
-    
-    $auditResults.Scores["Complexite"] = $complexityScore
-} catch {
-    Write-Err "Erreur analyse complexite: $($_.Exception.Message)"
-    $auditResults.Scores["Complexite"] = 7
-}
+}  # Fin if SelectedPhases -contains 10
 
 # ===============================================================================
 # Phase 6 : ROUTES ET NAVIGATION
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 15 -Title "Routes et Navigation - Verification Pages Menu" et Navigation - Verification Pages Menu"
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 15) {
+    Write-PhaseSection -PhaseNumber 15 -Title "Routes et Navigation - Verification Pages Menu"
 
-try {
-    # Utiliser le répertoire racine détecté au début du script
-    # Si $projectRoot n'est pas défini, utiliser le répertoire courant
-    $rootPath = if ($projectRoot) { $projectRoot } else { (Get-Location).Path }
-    Push-Location $rootPath
-    
-    # Utiliser la configuration ou valeurs par défaut
-    if ($script:Config.Routes) {
-        $menuPages = $script:Config.Routes
-    } else {
+    try {
+        $rootPath = if ($projectRoot) { $projectRoot } else { (Get-Location).Path }
+        Push-Location $rootPath
+        
         $menuPages = @(
             @{Route="/dashboard"; File="app/dashboard/page.js"; Name="Vue Ensemble"},
             @{Route="/dashboard/patients"; File="app/dashboard/patients/page.js"; Name="Patients"},
             @{Route="/dashboard/users"; File="app/dashboard/users/page.js"; Name="Utilisateurs"},
             @{Route="/dashboard/documentation"; File="app/dashboard/documentation/page.js"; Name="Documentation"}
         )
-    }
     
     $missingPages = 0
     foreach ($page in $menuPages) {
@@ -1606,13 +1582,13 @@ try {
         }
     }
     
-    Pop-Location
-    
-    $auditResults.Scores["Routes"] = [Math]::Max(10 - ($missingPages * 2), 0)
-} catch {
-    Write-Err "Erreur analyse routes: $($_.Exception.Message)"
-    $auditResults.Scores["Routes"] = 5
-}
+        Pop-Location
+        
+        $auditResults.Scores["Routes"] = [Math]::Max(10 - ($missingPages * 2), 0)
+    } catch {
+        Write-Err "Erreur analyse routes: $($_.Exception.Message)"
+        $auditResults.Scores["Routes"] = 5
+    }
 }  # Fin if SelectedPhases -contains 15
 
 # ===============================================================================
@@ -1621,14 +1597,6 @@ try {
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 5) {
 Write-PhaseSection -PhaseNumber 5 -Title "Endpoints API - Tests Fonctionnels"
-
-$apiScore = 0
-$endpointsTotal = 0
-$endpointsOK = 0
-$script:apiAuthFailed = $false  # Marquer si l'authentification a échoué pour réessayer plus tard
-
-try {
-    Write-Info "Connexion API..."
     $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
     
     $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
@@ -1691,20 +1659,7 @@ $auditResults.Scores["API"] = $apiScore
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 6) {
-    Write-PhaseSection -PhaseNumber 6 -Title "Base de Donnees - Coherence et Integrite"
-
-    # Variables pour la Phase 15 (initialisées si l'authentification a réussi)
-    $script:authHeaders = $null
-    $script:authToken = $null
-
-    try {
-        # Si l'authentification a réussi dans la phase 6, continuer
-        # Sinon, on réessayera à la fin de l'audit
-        if ($apiScore -gt 0 -and $endpointsOK -gt 0 -and $script:authHeaders -and $script:authToken) {
-            # Utiliser les headers de la Phase 7 si disponibles
-            try {
-                # Récupérer les données avec gestion d'erreur améliorée
-                $devicesData = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
+    Write-PhaseSection -PhaseNumber 6 -Title "Base de Donnees - Coherence et Integrite" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
                 $patientsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
                 $usersData = Invoke-RestMethod -Uri "$ApiUrl/api.php/users" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
                 $alertsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/alerts" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
@@ -1770,12 +1725,6 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 6) {
 # ===============================================================================
 
 Write-PhaseSection -PhaseNumber 4 -Title "Securite - Headers, SQL Injection, XSS"
-
-$securityScore = 10
-
-try {
-    # Headers de securite
-    Write-Info "Verification headers..."
     
     # SQL Injection
     Write-Info "Verification SQL..."
@@ -2060,20 +2009,7 @@ $auditResults.Scores["Securite"] = [Math]::Max($securityScore, 0)
 # Phase 10 : PERFORMANCE
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 18 -Title "Performance - Optimisations React et Cache"
-
-try {
-    $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
-        $_.FullName -notmatch 'node_modules' -and
-        $_.FullName -notmatch '\\\.next\\'
-    }
-    
-    $lazyLoading = @($searchFiles | Select-String -Pattern 'dynamicImport|lazy\(|React\.lazy').Count
-    $memoUsage = @($searchFiles | Select-String -Pattern 'useMemo|useCallback').Count
-    $cacheUsage = @($searchFiles | Select-String -Pattern 'cache|Cache').Count
-    
-    Write-OK "Lazy loading: $lazyLoading composants"
-    Write-OK "Optimisations React: $memoUsage useMemo/useCallback"
+Write-PhaseSection -PhaseNumber 18 -Title "Performance - Optimisations React et Cache"Optimisations React: $memoUsage useMemo/useCallback"
     Write-OK "Cache: $cacheUsage utilisations"
     
     # NOUVEAU: Vérifier optimisations .filter() sans useMemo
@@ -2226,15 +2162,7 @@ try {
 # Phase 11 : TESTS
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 11 -Title "Tests et Couverture"
-
-try {
-    $testFiles = @(Get-ChildItem -Recurse -File -Include *.test.js,*.spec.js | Where-Object {
-        $_.FullName -notmatch 'node_modules' -and
-        $_.FullName -notmatch '\\\.next\\'
-    })
-    
-    Write-Host "  Fichiers de tests: $($testFiles.Count)" -ForegroundColor White
+Write-PhaseSection -PhaseNumber 11 -Title "Tests et Couverture" -ForegroundColor White
     
     $testScore = if($testFiles.Count -ge 10) { 8 } elseif($testFiles.Count -ge 5) { 6 } else { 4 }
     
@@ -2277,10 +2205,7 @@ try {
 # PHASES 11-15 : AUTRES VERIFICATIONS
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 19 -Title "Documentation, Imports, Erreurs, Logs, Best Practices"
-
-# Documentation
-$auditResults.Scores["Documentation"] = if($stats.MD -le 5) { 10 } else { 7 }
+Write-PhaseSection -PhaseNumber 19 -Title "Documentation, Imports, Erreurs, Logs, Best Practices"] = if($stats.MD -le 5) { 10 } else { 7 }
 Write-OK "Documentation: $($stats.MD) fichiers MD"
 
 # Imports
@@ -3094,13 +3019,6 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # ===============================================================================
 
 Write-PhaseSection -PhaseNumber 14 -Title "Vérification Exhaustive - Liens, Imports, Références, Contenus"
-
-$exhaustiveIssues = @()
-$exhaustiveWarnings = @()
-$exhaustiveScore = 10.0
-
-try {
-    Write-Info "Vérification exhaustive de tous les fichiers..."
     
     # INTÉGRATION DEPENDENCY-CRUISER - Analyse des dépendances
     Write-Host "`n  Analyse avec dependency-cruiser (graphe de dépendances)..." -ForegroundColor Yellow
@@ -3470,15 +3388,7 @@ if ($exhaustiveIssues.Count -eq 0 -and $exhaustiveWarnings.Count -eq 0) {
 # ===============================================================================
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 17 -Title "Uniformisation UI/UX - Badges, Tables, Modals"
-
-$uiScore = 10.0
-$uiIssues = @()
-$uiWarnings = @()
-
-# Fichiers à vérifier
-$uiFiles = @(
-    "app/dashboard/users/page.js",
+Write-PhaseSection -PhaseNumber 17 -Title "Uniformisation UI/UX - Badges, Tables, Modals",
     "app/dashboard/patients/page.js",
     "components/configuration/UsbStreamingTab.js"
 )
@@ -3613,21 +3523,7 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # ===============================================================================
 # Phase 17 : ORGANISATION ET NETTOYAGE
 # ===============================================================================
-Write-PhaseSection -PhaseNumber 19 -Title "Organisation Projet et Nettoyage" Organisation Projet et Nettoyage"
-
-# Vérifier que tous les docs du menu existent et sont accessibles
-$docMapping = @{
-    'presentation' = 'public/docs/DOCUMENTATION_PRESENTATION.html'
-    'developpeurs' = 'public/docs/DOCUMENTATION_DEVELOPPEURS.html'
-    'commerciale' = 'public/docs/DOCUMENTATION_COMMERCIALE.html'
-    'suivi-temps' = 'public/SUIVI_TEMPS_FACTURATION.md'
-}
-
-$docIssues = 0
-foreach ($docKey in $docMapping.Keys) {
-    $docPath = $docMapping[$docKey]
-    if (-not (Test-Path $docPath)) {
-        Write-Error "Doc '$docKey' manquant: $docPath"
+Write-PhaseSection -PhaseNumber 19 -Title "Organisation Projet et Nettoyage"Doc '$docKey' manquant: $docPath"
         $auditResults.Errors += "Documentation manquante: $docKey → $docPath"
         $docIssues++
     }
@@ -3861,10 +3757,7 @@ if ($sidebarContent) {
 
 Write-Info "Documentation analysée"
 
-Write-PhaseSection -PhaseNumber 19 -Title "Organisation Projet et Nettoyage" Organisation Projet et Nettoyage"
-
-# Vérifier l'organisation des dossiers
-$expectedDirs = @("app", "components", "contexts", "hooks", "lib", "api", "sql", "scripts", "public")
+Write-PhaseSection -PhaseNumber 19 -Title "Organisation Projet et Nettoyage"app", "components", "contexts", "hooks", "lib", "api", "sql", "scripts", "public")
 $actualDirs = Get-ChildItem -Path "." -Directory | Where-Object { $_.Name -notmatch "node_modules|\.git|\.next|docs|hardware|bin|bootstrap" } | Select-Object -ExpandProperty Name
 $missingDirs = $expectedDirs | Where-Object { $actualDirs -notcontains $_ }
 if ($missingDirs.Count -eq 0) {
@@ -4183,15 +4076,7 @@ $auditResults.Scores["Structure API"] = $structureScore
 # ===============================================================================
 
 # Cette section a été déplacée avant l'affichage des scores finaux pour que le score soit disponible
-# Write-PhaseSection -PhaseNumber 17 -Title "Uniformisation UI/UX - Badges, Tables, Modals"
-
-$uiScore = 10.0
-$uiIssues = @()
-$uiWarnings = @()
-
-# Fichiers à vérifier
-$uiFiles = @(
-    "app/dashboard/users/page.js",
+# Write-PhaseSection -PhaseNumber 17 -Title "Uniformisation UI/UX - Badges, Tables, Modals",
     "app/dashboard/patients/page.js",
     "components/configuration/UsbStreamingTab.js",
     "components/UserPatientModal.js",
@@ -4408,27 +4293,6 @@ $auditResults.Warnings += $uiWarnings
 # ===============================================================================
 
 Write-PhaseSection -PhaseNumber 13 -Title "Éléments Inutiles - Fichiers Obsolètes et Redondants"
-
-$elementsInutilesScore = 10.0
-$elementsInutilesIssues = @()
-$elementsInutilesWarnings = @()
-
-# Variables pour stocker les résultats
-$fichiersLogs = @()
-$scriptsMigrationRedondants = @()
-$fichiersTestObsoletes = @()
-$dossiersVides = @()
-$fichiersDupliques = @()
-$codeMort = @()
-$scriptsRedondants = @()
-$fichiersTemporaires = @()
-$documentationObsolete = @()
-$ps1Obsoletes = @()
-$jsObsoletes = @()
-$sqlObsoletes = @()
-
-# 1. FICHIERS DE LOGS OBSOLÈTES
-Write-Info "Recherche fichiers de logs obsolètes..."
 $logFiles = Get-ChildItem -Path . -Recurse -Include "*.log","*.txt" -ErrorAction SilentlyContinue | 
     Where-Object { 
         $_.Name -match "^(audit_result|logs_serie|audit_resultat)" -or
@@ -4855,14 +4719,7 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 20) {
     Write-Host ""
-    Write-PhaseSection -PhaseNumber 20 -Title "Vérification Synchronisation GitHub Pages" Vérification Synchronisation GitHub Pages"
-    
-    $deploymentScore = 10.0
-    $deploymentIssues = @()
-    $deploymentWarnings = @()
-    
-    # Détecter GitHub depuis métadonnées ou config
-    $repo = ""
+    Write-PhaseSection -PhaseNumber 20 -Title "Vérification Synchronisation GitHub Pages""
     $baseUrl = ""
     if ($script:Config -and $script:Config.GitHub -and $script:Config.GitHub.Repo) {
         $repo = $script:Config.GitHub.Repo
@@ -5087,28 +4944,7 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 21) {
     Write-Host ""
-    Write-PhaseSection -PhaseNumber 21 -Title "Audit Firmware" Audit Firmware"
-    
-    $firmwareScore = 10.0
-    $firmwareIssues = @()
-    $firmwareWarnings = @()
-    $firmwareInfo = @{}
-    
-    # Détecter le répertoire firmware depuis métadonnées ou recherche
-    $firmwareDir = $null
-    $firmwareMainFile = $null
-    
-    if ($projectMetadata -and $projectMetadata.firmware -and $projectMetadata.firmware.directory) {
-        $firmwareDir = Join-Path (Get-Location) $projectMetadata.firmware.directory.Replace('/', '\')
-        if ($projectMetadata.firmware.mainFile) {
-            $firmwareMainFile = Join-Path (Get-Location) $projectMetadata.firmware.mainFile.Replace('/', '\')
-        }
-    }
-    
-    # Si non trouvé dans métadonnées, chercher automatiquement
-    if (-not $firmwareDir) {
-        $firmwareDirs = @(
-            (Join-Path (Get-Location) "hardware\firmware"),
+    Write-PhaseSection -PhaseNumber 21 -Title "Audit Firmware"hardware\firmware"),
             (Join-Path (Get-Location) "firmware"),
             (Join-Path (Get-Location) "arduino"),
             (Join-Path (Get-Location) "esp32")
@@ -5763,11 +5599,7 @@ if ($scoreGlobal -ge 9.5) {
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 22) {
     Write-Host ""
-    Write-PhaseSection -PhaseNumber 22 -Title "Tests Complets Application OTT" Tests Complets Application OTT"
-    
-    try {
-        # Charger le module de tests complets
-        $MODULES_DIR = Join-Path $AuditDir "modules"
+    Write-PhaseSection -PhaseNumber 22 -Title "Tests Complets Application OTT"modules"
         $testsModule = Join-Path $MODULES_DIR "Checks-TestsComplets.ps1"
         
         if (Test-Path $testsModule) {

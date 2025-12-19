@@ -191,3 +191,5 @@ Write-Host "  3. Mettez à jour NEXT_PUBLIC_API_URL dans docker-compose.yml avec
 Write-Host "     NEXT_PUBLIC_API_URL: https://$apiHostname"
 Write-Host ""
 
+
+
