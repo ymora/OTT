@@ -75,8 +75,11 @@ Write-Host ""
 $pythonCmd = $null
 if (Get-Command python -ErrorAction SilentlyContinue) {
     $pythonCmd = "python"
-} elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
-    $pythonCmd = "python3"
+}
+if ($null -eq $pythonCmd) {
+    if (Get-Command python3 -ErrorAction SilentlyContinue) {
+        $pythonCmd = "python3"
+    }
 }
 
 if ($null -ne $pythonCmd) {
