@@ -1,0 +1,61 @@
+{
+  "issues": [
+    "app/dashboard/patients/page.js : Badge 'Inactif' non uniforme",
+    "2 fonction(s) non utilisée(s) (code mort)",
+    "16 fichier(s) .ps1 obsolète(s)"
+  ],
+  "project": "ott-dashboard",
+  "scores": {
+    "Logs": 8,
+    "Tests": 6,
+    "Complexite": 8,
+    "Uniformisation UI/UX": 10,
+    "Vérification Exhaustive": 10,
+    "BestPractices": 9,
+    "Routes": 10,
+    "Securite": 7,
+    "Structure API": 9.5,
+    "Configuration": 8.8,
+    "Performance": 7,
+    "Optimisation": 7.299999999999999,
+    "Documentation": 10,
+    "GestionErreurs": 9,
+    "Éléments Inutiles": 7,
+    "Duplication": 8,
+    "Imports": 10
+  },
+  "scoreGlobal": 4.7,
+  "outdatedPackages": null,
+  "warnings": [
+    "Code mort: 1 variable(s) inutilisée(s) détectée(s)",
+    "Code dupliqué: 57 fonction(s) dupliquée(s)",
+    "Performance: 6 requetes dans loops",
+    "Code mort: 138 import(s) potentiellement inutilisé(s)",
+    "Backend: 3 requêtes SQL SELECT dans loops",
+    "Frontend: 18 setInterval/setTimeout sans cleanup",
+    "DATABASE_URL non documentée dans render.yaml",
+    "startCommand peut être manquant dans render.yaml",
+    "API_URL incohérente entre configs (normal: prod vs dev)",
+    "5 répertoires vides",
+    "DOCUMENTATION_DEVELOPPEURS.html : Historique detecte (2 mot(s)-cle(s))",
+    "1 fichier(s) temporaire(s)"
+  ],
+  "statistics": {
+    "phpFiles": 0,
+    "totalFiles": 0,
+    "totalLines": 0,
+    "jsFiles": 0
+  },
+  "recommendations": [
+    "Envisager refactoring: useState tres utilise (209 fois)",
+    "Envisager refactoring: useEffect tres utilise (94 fois)",
+    "Envisager refactoring: Appels API tres utilise (78 fois)",
+    "Envisager refactoring: Try/catch tres utilise (221 fois)",
+    "Refactorisation: 4 fichier(s) volumineux/complexe(s) à considérer",
+    "Nettoyer 19 élément(s) inutile(s) (scripts obsolètes, fichiers de test, duplications)",
+    "Supprimer 1 fichier(s) temporaire(s)",
+    "Vérifier manuellement les éléments inutiles détectés (scripts archivés disponibles dans scripts/archive/)"
+  ],
+  "secrets": null,
+  "timestamp": "2025-12-20 08:31:35"
+}
