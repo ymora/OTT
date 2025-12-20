@@ -1,33 +1,36 @@
 /**
- * Point d'entrée pour tous les hooks personnalisés
- * @module hooks
+ * Export centralisé de tous les hooks custom
+ * Facilite les imports et évite la duplication
  */
 
-export { useApiData } from './useApiData'
-export { useDebounce } from './useDebounce'
-export { useFilter } from './useFilter'
-export { useUsbAutoDetection } from './useUsbAutoDetection'
-export { useEntityModal } from './useEntityModal'
-export { useEntityDelete } from './useEntityDelete'
-export { useAutoRefresh } from './useAutoRefresh'
-export { useDevicesUpdateListener } from './useDevicesUpdateListener'
-
-// Nouveaux hooks pour réduire la duplication de code
-export { useToggle } from './useToggle'
-export { useFormState } from './useFormState'
-export { useAsync } from './useAsync'
-export { useLocalStorage } from './useLocalStorage'
-export { useAsyncState } from './useAsyncState'
-export { useTimeout, createTimeout } from './useTimeout'
-export { useTimeout as useTimerTimeout, useInterval as useTimerInterval, useTimers } from './useTimer'
-export { useEntityRestore } from './useEntityRestore'
-export { useEntityArchive } from './useEntityArchive'
-export { useEntityPermanentDelete } from './useEntityPermanentDelete'
-export { useEntityPage } from './useEntityPage'
+// Hooks existants
 export { useActionState } from './useActionState'
-export { useToggleState } from './useToggleState'
-export { useSmartDeviceRefresh } from './useSmartDeviceRefresh'
 export { useApiCall } from './useApiCall'
-export { useModalState } from './useModalState'
+export { useApiData } from './useApiData'
+export { useAsync } from './useAsync'
+export { useAsyncState } from './useAsyncState'
+export { useAutoRefresh } from './useAutoRefresh'
+export { useDebounce } from './useDebounce'
+export { useDevicesUpdateListener } from './useDevicesUpdateListener'
+export { useEntityArchive } from './useEntityArchive'
+export { useEntityDelete } from './useEntityDelete'
+export { useEntityModal } from './useEntityModal'
+export { useEntityPage } from './useEntityPage'
+export { useEntityPermanentDelete } from './useEntityPermanentDelete'
+export { useEntityRestore } from './useEntityRestore'
+export { useFilter } from './useFilter'
+export { useFormState } from './useFormState'
 export { useGeolocation } from './useGeolocation'
+export { useLocalStorage } from './useLocalStorage'
+export { useSmartDeviceRefresh } from './useSmartDeviceRefresh'
+export { useTimer } from './useTimer'
+export { useTimers } from './useTimers'
+export { useToggle } from './useToggle'
+export { useToggleState } from './useToggleState'
+export { useUsbAutoDetection } from './useUsbAutoDetection'
 
+// Nouveaux hooks (refactoring)
+export { useTimeout } from './useTimeout'
+export { useModalState } from './useModalState'
+export { useDeviceSelection } from './useDeviceSelection'
+export { usePaginatedData } from './usePaginatedData'
