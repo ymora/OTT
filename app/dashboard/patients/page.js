@@ -314,7 +314,7 @@ export default function PatientsPage() {
                         {patientIsArchived ? (
                           <span className="badge bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-xs">🗄️ Archivé</span>
                         ) : p.status === 'inactive' ? (
-                          <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs">⏸️ Inactif</span>
+                          <span className="badge badge-warning">⏸️ Inactif</span>
                         ) : (
                           <span className="badge badge-success">✅ Actif</span>
                         )}

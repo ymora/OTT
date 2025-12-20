@@ -2117,11 +2117,11 @@ export default function DebugTab() {
                 {/* En base */}
                 <td className="table-cell px-3 py-1.5 text-center">
                   {isNotRegistered ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">
+                    <span className="badge badge-error text-xs">
                       ❌ Non
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">
+                    <span className="badge badge-success text-xs">
                       ✅ Oui
                     </span>
                   )}
@@ -2270,9 +2270,9 @@ export default function DebugTab() {
                   📡 Console de Logs USB
                 </h2>
                 {/* Statut USB inline */}
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                <span className={`badge text-xs ${
                   isConnected 
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                    ? 'badge-success' 
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'
                 }`}>
                   {isConnected ? 'USB Connecté' : 'USB Déconnecté'}
