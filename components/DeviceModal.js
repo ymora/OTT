@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import ErrorMessage from '@/components/ErrorMessage'
 import Tooltip from '@/components/Tooltip'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -9,15 +9,17 @@ import { useUsb } from '@/contexts/UsbContext'
 import { buildUpdateConfigPayload } from '@/lib/deviceCommands'
 import { DEVICE_DEFAULTS } from '@/lib/deviceDefaults'
 
-// Composant Accordéon simple
-function Accordion({ title, children, defaultOpen = false }) {
+// OPTIMISATION: Mémoiser le composant Accordion pour éviter les re-renders
+const Accordion = memo(function Accordion({ title, children, defaultOpen = false }) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
+  
+  const toggleOpen = useCallback(() => setIsOpen(prev => !prev), [])
   
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg">
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleOpen}
         className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
       >
         <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{title}</span>
@@ -30,10 +32,11 @@ function Accordion({ title, children, defaultOpen = false }) {
       )}
     </div>
   )
-}
+})
 
 /**
  * Composant modal réutilisable pour créer/modifier des dispositifs
+ * OPTIMISATION: Wrapper avec memo pour éviter les re-renders quand les props ne changent pas
  * @param {Object} props
  * @param {boolean} props.isOpen - Si le modal est ouvert
  * @param {Function} props.onClose - Fonction pour fermer le modal
@@ -45,7 +48,7 @@ function Accordion({ title, children, defaultOpen = false }) {
  * @param {Array} props.allDevices - Liste de tous les dispositifs (pour vérifier les doublons)
  * @param {Function} props.appendLog - Fonction pour ajouter un log au terminal USB (optionnel)
  */
-export default function DeviceModal({
+const DeviceModal = memo(function DeviceModal({
   isOpen,
   onClose,
   editingItem,
@@ -1097,13 +1100,18 @@ export default function DeviceModal({
           command: 'UPDATE_CONFIG',
           payload: payload
         })
+        
+        if (appendLog) {
+          appendLog(`📤 [USB] Envoi de la configuration au dispositif...`, 'dashboard')
+        }
+        
         await usbWrite(command + '\n')
         
         logger.log('✅ Configuration complète envoyée via USB avec valeurs par défaut')
         
         if (appendLog) {
-          appendLog(`✅ [USB] Configuration complète envoyée directement au dispositif USB (avec valeurs par défaut)`, 'dashboard')
-          appendLog(`ℹ️ [USB] Configuration appliquée directement - non enregistrée en base`, 'dashboard')
+          appendLog(`✅ [USB] Configuration envoyée - En attente de confirmation du firmware...`, 'dashboard')
+          appendLog(`ℹ️ [USB] Le firmware devrait confirmer la réception dans les prochaines secondes`, 'dashboard')
         }
 
       } catch (configErr) {
@@ -1722,5 +1730,17 @@ export default function DeviceModal({
       />
     </div>
   )
-}
+}, (prevProps, nextProps) => {
+  // OPTIMISATION: Custom comparison pour éviter re-renders inutiles
+  // Re-render seulement si ces props changent
+  return (
+    prevProps.isOpen === nextProps.isOpen &&
+    prevProps.editingItem?.id === nextProps.editingItem?.id &&
+    prevProps.editingItem?.updated_at === nextProps.editingItem?.updated_at &&
+    prevProps.patients?.length === nextProps.patients?.length &&
+    prevProps.allDevices?.length === nextProps.allDevices?.length
+  )
+})
+
+export default DeviceModal
 

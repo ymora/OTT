@@ -75,9 +75,14 @@ $script:AuditPhases = @(
     @{ Number = 21; Name = "Firmware"; Description = "Fichiers firmware, versions, compilation, cohérence"; Dependencies = @(1); Category = "Hardware"; CategoryNumber = 1 }
     
     # ============================================================================
-    # TESTS COMPLETS (22) - APPLICATION OTT
+    # CONFIGURATION (22) - COHÉRENCE ENVIRONNEMENT
     # ============================================================================
-    @{ Number = 22; Name = "Tests Complets Application"; Description = "Tests exhaustifs, corrections critiques, API, navigation"; Dependencies = @(5, 7); Category = "Tests"; CategoryNumber = 1 }
+    @{ Number = 22; Name = "Cohérence Configuration"; Description = "Vérification Docker/Render/GitHub cohérence"; Dependencies = @(); Category = "Configuration"; CategoryNumber = 1 }
+    
+    # ============================================================================
+    # TESTS COMPLETS (23) - APPLICATION OTT
+    # ============================================================================
+    @{ Number = 23; Name = "Tests Complets Application"; Description = "Tests exhaustifs, corrections critiques, API, navigation"; Dependencies = @(5, 7); Category = "Tests"; CategoryNumber = 1 }
 )
 
 # Fonction pour obtenir toutes les dépendances récursives d'une phase
@@ -139,7 +144,8 @@ function Show-PhaseMenu {
         "Performance",
         "Documentation",
         "Déploiement",
-        "Hardware"
+        "Hardware",
+        "Configuration"
     )
     
     # Afficher les phases par catégorie dans l'ordre logique
@@ -173,7 +179,7 @@ function Show-PhaseMenu {
     Write-Host "  Options:" -ForegroundColor Yellow
     Write-Host "    [A]  Relancer TOUTES les phases" -ForegroundColor White
     Write-Host "    [R]  Reprendre depuis la dernière phase incomplète" -ForegroundColor White
-    Write-Host "    [1-22] Sélectionner une ou plusieurs phases (ex: 5 ou 0-3)" -ForegroundColor White
+    Write-Host "    [1-23] Sélectionner une ou plusieurs phases (ex: 5 ou 0-3)" -ForegroundColor White
     Write-Host "           → Les dépendances seront ajoutées automatiquement" -ForegroundColor DarkGray
     Write-Host "    [Q]  Quitter" -ForegroundColor White
     Write-Host ""

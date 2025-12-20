@@ -4,7 +4,7 @@
 # Système d'audit générique et portable pour n'importe quel projet
 # Version 3.0 - Système consolidé et portable
 #
-# Ce script effectue un audit 360 degres couvrant 21 phases
+# Ce script effectue un audit 360 degrés couvrant 23 phases
 # Détecte automatiquement les caractéristiques du projet audité
 # Usage : .\audit\scripts\Audit-Complet.ps1 [-Verbose]
 # ===============================================================================
@@ -29,14 +29,6 @@ param(
 # FONCTIONS D'AFFICHAGE (définies en premier pour être disponibles partout)
 # ===============================================================================
 function Write-Section { param([string]$Text) Write-Host "`n=== $Text ===" -ForegroundColor Cyan }
-function Write-PhaseSection { 
-    param(
-        [int]$PhaseNumber, 
-        [string]$Title
-    ) 
-    $totalPhases = ($script:AuditPhases | Measure-Object).Count
-    Write-Section "[$PhaseNumber/$totalPhases] $Title" 
-}
 function Write-OK { param([string]$Text) Write-Host "  [OK] $Text" -ForegroundColor Green }
 function Write-Warn { param([string]$Text) Write-Warning $Text }
 function Write-Err { param([string]$Text) Write-Host "  [ERROR] $Text" -ForegroundColor Red }
@@ -600,11 +592,8 @@ $ErrorActionPreference = "Continue"
 $phasesScriptPath = Join-Path $PSScriptRoot "Audit-Phases.ps1"
 if (Test-Path $phasesScriptPath) {
     . $phasesScriptPath
-    # Calculer le total de phases après le chargement
-    $script:totalPhases = ($script:AuditPhases | Measure-Object).Count
 } else {
     Write-Warn "Fichier Audit-Phases.ps1 non trouvé, certaines fonctionnalités seront limitées"
-    $script:totalPhases = 22  # Valeur par défaut si le fichier n'est pas trouvé
 }
 
 # ===============================================================================
@@ -1026,13 +1015,16 @@ function Invoke-AuditPhase {
 }
 
 # ===============================================================================
-# Phase 1 : INVENTAIRE EXHAUSTIF DE TOUS LES FICHIERS
+# PHASE 0 : INVENTAIRE EXHAUSTIF DE TOUS LES FICHIERS
 # ===============================================================================
 
 # Vérifier si la phase doit être exécutée
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 2) {
-    if ($completedPhases -notcontains 2) {
-        Write-PhaseSection -PhaseNumber 1 -Title "Inventaire Exhaustif - Tous les Fichiers et Répertoires" -ForegroundColor Yellow
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 0) {
+    if ($completedPhases -notcontains 0) {
+        Write-Section "[0/18] Inventaire Exhaustif - Tous les Fichiers et Répertoires"
+
+# INTÉGRATION PSScriptAnalyzer - Analyse des scripts PowerShell
+Write-Host "`n  Analyse avec PSScriptAnalyzer (scripts PowerShell)..." -ForegroundColor Yellow
 $psaResult = Invoke-PSScriptAnalyzerAnalysis -ProjectRoot (Get-Location).Path
 if ($psaResult.Success) {
     if ($psaResult.Errors -gt 0 -or $psaResult.Warnings -gt 0) {
@@ -1150,9 +1142,9 @@ try {
 }
 
         # Marquer la phase comme complète et sauvegarder l'état
-        $completedPhases += 1
+        $completedPhases += 0
         if (-not [string]::IsNullOrEmpty($StateFile)) {
-            $partialResults["Phase2"] = @{
+            $partialResults["Phase0"] = @{
                 Scores = $auditResults.Scores
                 Issues = $auditResults.Issues
                 Warnings = $auditResults.Warnings
@@ -1162,9 +1154,9 @@ try {
             Save-AuditState -StateFile $StateFile -CompletedPhases $completedPhases -PartialResults $partialResults
         }
     } else {
-        Write-Info "Phase 2 déjà complétée, reprise des résultats partiels..."
-        if ($partialResults.ContainsKey("Phase2")) {
-            $phase0Results = $partialResults["Phase2"]
+        Write-Info "Phase 0 déjà complétée, reprise des résultats partiels..."
+        if ($partialResults.ContainsKey("Phase0")) {
+            $phase0Results = $partialResults["Phase0"]
             if ($phase0Results.Scores) {
                 foreach ($key in $phase0Results.Scores.Keys) {
                     $auditResults.Scores[$key] = $phase0Results.Scores[$key]
@@ -1172,16 +1164,19 @@ try {
             }
         }
     }
-}  # Fin if SelectedPhases -contains 2
+}  # Fin if SelectedPhases -contains 0
 
 # ===============================================================================
-# Phase 3 : ARCHITECTURE ET STATISTIQUES
+# PHASE 1 : ARCHITECTURE ET STATISTIQUES
 # ===============================================================================
 
 # Vérifier si la phase doit être exécutée
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 3) {
-    if ($completedPhases -notcontains 3) {
-        Write-PhaseSection -PhaseNumber 2 -Title "Architecture et Statistiques Code"
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 1) {
+    if ($completedPhases -notcontains 1) {
+        Write-Section "[1/18] Architecture et Statistiques Code"
+
+        try {
+            Write-Info "Comptage des fichiers..."
     
             # Utiliser l'inventaire exhaustif
             $jsFiles = $fileInventory.JS + $fileInventory.JSX
@@ -1317,7 +1312,7 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 3) {
             # Marquer la phase comme complète et sauvegarder l'état
             $completedPhases += 1
             if (-not [string]::IsNullOrEmpty($StateFile)) {
-                $partialResults["Phase2"] = @{
+                $partialResults["Phase1"] = @{
                     Scores = $auditResults.Scores
                     Issues = $auditResults.Issues
                     Warnings = $auditResults.Warnings
@@ -1331,9 +1326,9 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 3) {
             $auditResults.Scores["Architecture"] = 5
         }
     } else {
-        Write-Info "Phase 2 déjà complétée, reprise des résultats partiels..."
-        if ($partialResults.ContainsKey("Phase2")) {
-            $phase1Results = $partialResults["Phase2"]
+        Write-Info "Phase 1 déjà complétée, reprise des résultats partiels..."
+        if ($partialResults.ContainsKey("Phase1")) {
+            $phase1Results = $partialResults["Phase1"]
             if ($phase1Results.Scores) {
                 foreach ($key in $phase1Results.Scores.Keys) {
                     $auditResults.Scores[$key] = $phase1Results.Scores[$key]
@@ -1341,14 +1336,24 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 3) {
             }
         }
     }
-}  # Fin if SelectedPhases -contains 2
+}  # Fin if SelectedPhases -contains 1
 
 # ===============================================================================
-# Phase 8 : CODE MORT (Qualité 1)
+# PHASE 7 : CODE MORT (Qualité 1)
 # ===============================================================================
 
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 8) {
-    Write-PhaseSection -PhaseNumber 8 -Title "Code Mort - Detection Composants/Hooks/Libs Non Utilises"
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 7) {
+Write-Section "[7/20] Code Mort - Detection Composants/Hooks/Libs Non Utilises"
+
+$deadCode = @{
+    Components = @()
+    Hooks = @()
+    Libs = @()
+}
+$totalDead = 0
+
+try {
+    Write-Info "Analyse composants..."
     
     $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
         $_.FullName -notmatch 'node_modules' -and
@@ -1396,31 +1401,32 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 8) {
         }
     }
     
-        $totalDead = $deadCode.Components.Count + $deadCode.Hooks.Count + $deadCode.Libs.Count
-        if ($totalDead -eq 0) {
-            Write-OK "Aucun code mort detecte"
-            $auditResults.Scores["CodeMort"] = 10
-        } else {
-            Write-Warn "$totalDead fichiers non utilises detectes"
-            $auditResults.Issues += "Code mort: $totalDead fichiers a supprimer"
-            $auditResults.Scores["CodeMort"] = [Math]::Max(10 - $totalDead, 0)
-        }
-    } catch {
-        Write-Err "Erreur analyse code mort: $($_.Exception.Message)"
-        $auditResults.Scores["CodeMort"] = 5
+    $totalDead = $deadCode.Components.Count + $deadCode.Hooks.Count + $deadCode.Libs.Count
+    if ($totalDead -eq 0) {
+        Write-OK "Aucun code mort detecte"
+        $auditResults.Scores["CodeMort"] = 10
+    } else {
+        Write-Warn "$totalDead fichiers non utilises detectes"
+        $auditResults.Issues += "Code mort: $totalDead fichiers a supprimer"
+        $auditResults.Scores["CodeMort"] = [Math]::Max(10 - $totalDead, 0)
     }
-}  # Fin if SelectedPhases -contains 8
+} catch {
+    Write-Err "Erreur analyse code mort: $($_.Exception.Message)"
+    $auditResults.Scores["CodeMort"] = 5
+}
+}  # Fin if SelectedPhases -contains 7
 
 # ===============================================================================
-# Phase 9 : DUPLICATION DE CODE (Qualité 2)
+# PHASE 8 : DUPLICATION DE CODE (Qualité 2)
 # ===============================================================================
 
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 9) {
-    Write-PhaseSection -PhaseNumber 9 -Title "Duplication de Code et Refactoring"
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 8) {
+Write-Section "[8/20] Duplication de Code et Refactoring"
+
+try {
+    Write-Info "Analyse patterns dupliques..."
     
-    try {
-        $duplications = @()
-        $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+    $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
         $_.FullName -notmatch 'node_modules' -and
         $_.FullName -notmatch '\\\.next\\' -and
         $_.FullName -notmatch '\\docs\\'
@@ -1491,29 +1497,31 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 9) {
         $duplicationScoreFromJscpd = 10
     }
     
-        if ($duplications.Count -eq 0) {
-            Write-OK "Pas de duplication excessive detectee"
-            $auditResults.Scores["Duplication"] = [Math]::Min(10, ($duplicationScoreFromJscpd + 10) / 2)
-        } else {
-            Write-Warn "$($duplications.Count) patterns a fort potentiel de refactoring"
-            $baseScore = [Math]::Max(10 - $duplications.Count, 5)
-            $auditResults.Scores["Duplication"] = [Math]::Min(10, ($baseScore + $duplicationScoreFromJscpd) / 2)
-        }
-    } catch {
-        Write-Err "Erreur analyse duplication: $($_.Exception.Message)"
-        $auditResults.Scores["Duplication"] = 7
+    if ($duplications.Count -eq 0) {
+        Write-OK "Pas de duplication excessive detectee"
+        $auditResults.Scores["Duplication"] = [Math]::Min(10, ($duplicationScoreFromJscpd + 10) / 2)
+    } else {
+        Write-Warn "$($duplications.Count) patterns a fort potentiel de refactoring"
+        $baseScore = [Math]::Max(10 - $duplications.Count, 5)
+        $auditResults.Scores["Duplication"] = [Math]::Min(10, ($baseScore + $duplicationScoreFromJscpd) / 2)
     }
-}  # Fin if SelectedPhases -contains 9
+} catch {
+    Write-Err "Erreur analyse duplication: $($_.Exception.Message)"
+    $auditResults.Scores["Duplication"] = 7
+}
+}  # Fin if SelectedPhases -contains 8
 
 # ===============================================================================
-# Phase 10 : COMPLEXITE (Qualité 3)
+# PHASE 9 : COMPLEXITE (Qualité 3)
 # ===============================================================================
 
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 10) {
-    Write-PhaseSection -PhaseNumber 10 -Title "Complexite - Fichiers/Fonctions Volumineux"
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 9) {
+Write-Section "[9/20] Complexite - Fichiers/Fonctions Volumineux"
+
+try {
+    Write-Info "Analyse fichiers volumineux..."
     
-    try {
-        $largeFiles = @()
+    $largeFiles = @()
     $allCodeFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx,*.php | Where-Object {
         $_.FullName -notmatch 'node_modules' -and
         $_.FullName -notmatch '\\\.next\\' -and
@@ -1532,43 +1540,48 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 10) {
         } catch {}
     }
     
-        $complexityScore = if($largeFiles.Count -lt 10) { 10 } 
-                           elseif($largeFiles.Count -lt 20) { 9 } 
-                           elseif($largeFiles.Count -lt 30) { 8 } 
-                           else { 7 }
-        
-        if ($largeFiles.Count -eq 0) {
-            Write-OK "Complexite code parfaite"
-        } elseif ($largeFiles.Count -lt 20) {
-            Write-OK "$($largeFiles.Count) fichiers volumineux (acceptable)"
-        } else {
-            Write-Warn "$($largeFiles.Count) fichiers volumineux (> $MaxFileLines lignes)"
-        }
-        
-        $auditResults.Scores["Complexite"] = $complexityScore
-    } catch {
-        Write-Err "Erreur analyse complexite: $($_.Exception.Message)"
-        $auditResults.Scores["Complexite"] = 7
+    $complexityScore = if($largeFiles.Count -lt 10) { 10 } 
+                       elseif($largeFiles.Count -lt 20) { 9 } 
+                       elseif($largeFiles.Count -lt 30) { 8 } 
+                       else { 7 }
+    
+    if ($largeFiles.Count -eq 0) {
+        Write-OK "Complexite code parfaite"
+    } elseif ($largeFiles.Count -lt 20) {
+        Write-OK "$($largeFiles.Count) fichiers volumineux (acceptable)"
+    } else {
+        Write-Warn "$($largeFiles.Count) fichiers volumineux (> $MaxFileLines lignes)"
     }
-}  # Fin if SelectedPhases -contains 10
+    
+    $auditResults.Scores["Complexite"] = $complexityScore
+} catch {
+    Write-Err "Erreur analyse complexite: $($_.Exception.Message)"
+    $auditResults.Scores["Complexite"] = 7
+}
 
 # ===============================================================================
-# Phase 6 : ROUTES ET NAVIGATION
+# PHASE 5 : ROUTES ET NAVIGATION
 # ===============================================================================
 
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 15) {
-    Write-PhaseSection -PhaseNumber 15 -Title "Routes et Navigation - Verification Pages Menu"
+Write-Section "[5/18] Routes et Navigation - Verification Pages Menu"
 
-    try {
-        $rootPath = if ($projectRoot) { $projectRoot } else { (Get-Location).Path }
-        Push-Location $rootPath
-        
+try {
+    # Utiliser le répertoire racine détecté au début du script
+    # Si $projectRoot n'est pas défini, utiliser le répertoire courant
+    $rootPath = if ($projectRoot) { $projectRoot } else { (Get-Location).Path }
+    Push-Location $rootPath
+    
+    # Utiliser la configuration ou valeurs par défaut
+    if ($script:Config.Routes) {
+        $menuPages = $script:Config.Routes
+    } else {
         $menuPages = @(
             @{Route="/dashboard"; File="app/dashboard/page.js"; Name="Vue Ensemble"},
             @{Route="/dashboard/patients"; File="app/dashboard/patients/page.js"; Name="Patients"},
             @{Route="/dashboard/users"; File="app/dashboard/users/page.js"; Name="Utilisateurs"},
             @{Route="/dashboard/documentation"; File="app/dashboard/documentation/page.js"; Name="Documentation"}
         )
+    }
     
     $missingPages = 0
     foreach ($page in $menuPages) {
@@ -1582,21 +1595,29 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 15) {
         }
     }
     
-        Pop-Location
-        
-        $auditResults.Scores["Routes"] = [Math]::Max(10 - ($missingPages * 2), 0)
-    } catch {
-        Write-Err "Erreur analyse routes: $($_.Exception.Message)"
-        $auditResults.Scores["Routes"] = 5
-    }
-}  # Fin if SelectedPhases -contains 15
+    Pop-Location
+    
+    $auditResults.Scores["Routes"] = [Math]::Max(10 - ($missingPages * 2), 0)
+} catch {
+    Write-Err "Erreur analyse routes: $($_.Exception.Message)"
+    $auditResults.Scores["Routes"] = 5
+}
+}  # Fin if SelectedPhases -contains 14
 
 # ===============================================================================
-# Phase 5 : ENDPOINTS API (Backend 1)
+# PHASE 4 : ENDPOINTS API (Backend 1)
 # ===============================================================================
 
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 5) {
-Write-PhaseSection -PhaseNumber 5 -Title "Endpoints API - Tests Fonctionnels"
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 4) {
+Write-Section "[4/20] Endpoints API - Tests Fonctionnels"
+
+$apiScore = 0
+$endpointsTotal = 0
+$endpointsOK = 0
+$script:apiAuthFailed = $false  # Marquer si l'authentification a échoué pour réessayer plus tard
+
+try {
+    Write-Info "Connexion API..."
     $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
     
     $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
@@ -1652,14 +1673,27 @@ Write-PhaseSection -PhaseNumber 5 -Title "Endpoints API - Tests Fonctionnels"
 }
 
 $auditResults.Scores["API"] = $apiScore
-}  # Fin if SelectedPhases -contains 5
+}  # Fin if SelectedPhases -contains 4
 
 # ===============================================================================
-# Phase 6 : BASE DE DONNEES (Backend 2)
+# PHASE 5 : BASE DE DONNEES (Backend 2)
 # ===============================================================================
 
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 6) {
-    Write-PhaseSection -PhaseNumber 6 -Title "Base de Donnees - Coherence et Integrite" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 5) {
+    Write-Section "[5/20] Base de Donnees - Coherence et Integrite"
+
+    # Variables pour la phase 14 (initialisées si l'authentification a réussi)
+    $script:authHeaders = $null
+    $script:authToken = $null
+
+    try {
+        # Si l'authentification a réussi dans la phase 6, continuer
+        # Sinon, on réessayera à la fin de l'audit
+        if ($apiScore -gt 0 -and $endpointsOK -gt 0 -and $script:authHeaders -and $script:authToken) {
+            # Utiliser les headers de la phase 6 si disponibles
+            try {
+                # Récupérer les données avec gestion d'erreur améliorée
+                $devicesData = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
                 $patientsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
                 $usersData = Invoke-RestMethod -Uri "$ApiUrl/api.php/users" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
                 $alertsData = Invoke-RestMethod -Uri "$ApiUrl/api.php/alerts" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
@@ -1718,13 +1752,19 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 6) {
         Write-Err "Erreur BDD: $($_.Exception.Message)"
         $auditResults.Scores["Database"] = 5
     }
-}  # Fin if SelectedPhases -contains 6
+}  # Fin if SelectedPhases -contains 5
 
 # ===============================================================================
-# Phase 9 : SECURITE
+# PHASE 8 : SECURITE
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 4 -Title "Securite - Headers, SQL Injection, XSS"
+Write-Section "[8/18] Securite - Headers, SQL Injection, XSS"
+
+$securityScore = 10
+
+try {
+    # Headers de securite
+    Write-Info "Verification headers..."
     
     # SQL Injection
     Write-Info "Verification SQL..."
@@ -2006,10 +2046,23 @@ Exemple de correction:
 $auditResults.Scores["Securite"] = [Math]::Max($securityScore, 0)
 
 # ===============================================================================
-# Phase 10 : PERFORMANCE
+# PHASE 9 : PERFORMANCE
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 18 -Title "Performance - Optimisations React et Cache"Optimisations React: $memoUsage useMemo/useCallback"
+Write-Section "[9/18] Performance - Optimisations React et Cache"
+
+try {
+    $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\'
+    }
+    
+    $lazyLoading = @($searchFiles | Select-String -Pattern 'dynamicImport|lazy\(|React\.lazy').Count
+    $memoUsage = @($searchFiles | Select-String -Pattern 'useMemo|useCallback').Count
+    $cacheUsage = @($searchFiles | Select-String -Pattern 'cache|Cache').Count
+    
+    Write-OK "Lazy loading: $lazyLoading composants"
+    Write-OK "Optimisations React: $memoUsage useMemo/useCallback"
     Write-OK "Cache: $cacheUsage utilisations"
     
     # NOUVEAU: Vérifier optimisations .filter() sans useMemo
@@ -2159,10 +2212,18 @@ Write-PhaseSection -PhaseNumber 18 -Title "Performance - Optimisations React et 
 }
 
 # ===============================================================================
-# Phase 11 : TESTS
+# PHASE 10 : TESTS
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 11 -Title "Tests et Couverture" -ForegroundColor White
+Write-Section "[10/18] Tests et Couverture"
+
+try {
+    $testFiles = @(Get-ChildItem -Recurse -File -Include *.test.js,*.spec.js | Where-Object {
+        $_.FullName -notmatch 'node_modules' -and
+        $_.FullName -notmatch '\\\.next\\'
+    })
+    
+    Write-Host "  Fichiers de tests: $($testFiles.Count)" -ForegroundColor White
     
     $testScore = if($testFiles.Count -ge 10) { 8 } elseif($testFiles.Count -ge 5) { 6 } else { 4 }
     
@@ -2205,7 +2266,10 @@ Write-PhaseSection -PhaseNumber 11 -Title "Tests et Couverture" -ForegroundColor
 # PHASES 11-15 : AUTRES VERIFICATIONS
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 19 -Title "Documentation, Imports, Erreurs, Logs, Best Practices"] = if($stats.MD -le 5) { 10 } else { 7 }
+Write-Section "[11/18] Documentation, Imports, Erreurs, Logs, Best Practices"
+
+# Documentation
+$auditResults.Scores["Documentation"] = if($stats.MD -le 5) { 10 } else { 7 }
 Write-OK "Documentation: $($stats.MD) fichiers MD"
 
 # Imports
@@ -3015,10 +3079,17 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 
 # ===============================================================================
 # ===============================================================================
-# Phase 17 : VÉRIFICATION EXHAUSTIVE - LIENS, IMPORTS, RÉFÉRENCES, CONTENUS
+# PHASE 16 : VÉRIFICATION EXHAUSTIVE - LIENS, IMPORTS, RÉFÉRENCES, CONTENUS
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 14 -Title "Vérification Exhaustive - Liens, Imports, Références, Contenus"
+Write-Section "[16/18] Vérification Exhaustive - Liens, Imports, Références, Contenus"
+
+$exhaustiveIssues = @()
+$exhaustiveWarnings = @()
+$exhaustiveScore = 10.0
+
+try {
+    Write-Info "Vérification exhaustive de tous les fichiers..."
     
     # INTÉGRATION DEPENDENCY-CRUISER - Analyse des dépendances
     Write-Host "`n  Analyse avec dependency-cruiser (graphe de dépendances)..." -ForegroundColor Yellow
@@ -3384,11 +3455,19 @@ if ($exhaustiveIssues.Count -eq 0 -and $exhaustiveWarnings.Count -eq 0) {
 }
 
 # ===============================================================================
-# Phase 18 : VÉRIFICATION UNIFORMISATION UI/UX (AVANT LES SCORES FINAUX)
+# PHASE 17 : VÉRIFICATION UNIFORMISATION UI/UX (AVANT LES SCORES FINAUX)
 # ===============================================================================
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 17 -Title "Uniformisation UI/UX - Badges, Tables, Modals",
+Write-Section "[16/16] Uniformisation UI/UX - Badges, Tables, Modals"
+
+$uiScore = 10.0
+$uiIssues = @()
+$uiWarnings = @()
+
+# Fichiers à vérifier
+$uiFiles = @(
+    "app/dashboard/users/page.js",
     "app/dashboard/patients/page.js",
     "components/configuration/UsbStreamingTab.js"
 )
@@ -3521,9 +3600,23 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # ===============================================================================
 
 # ===============================================================================
-# Phase 17 : ORGANISATION ET NETTOYAGE
+# PHASE 16 : ORGANISATION ET NETTOYAGE
 # ===============================================================================
-Write-PhaseSection -PhaseNumber 19 -Title "Organisation Projet et Nettoyage"Doc '$docKey' manquant: $docPath"
+Write-Section "[18/18] Organisation Projet et Nettoyage"
+
+# Vérifier que tous les docs du menu existent et sont accessibles
+$docMapping = @{
+    'presentation' = 'public/docs/DOCUMENTATION_PRESENTATION.html'
+    'developpeurs' = 'public/docs/DOCUMENTATION_DEVELOPPEURS.html'
+    'commerciale' = 'public/docs/DOCUMENTATION_COMMERCIALE.html'
+    'suivi-temps' = 'public/SUIVI_TEMPS_FACTURATION.md'
+}
+
+$docIssues = 0
+foreach ($docKey in $docMapping.Keys) {
+    $docPath = $docMapping[$docKey]
+    if (-not (Test-Path $docPath)) {
+        Write-Error "Doc '$docKey' manquant: $docPath"
         $auditResults.Errors += "Documentation manquante: $docKey → $docPath"
         $docIssues++
     }
@@ -3757,7 +3850,10 @@ if ($sidebarContent) {
 
 Write-Info "Documentation analysée"
 
-Write-PhaseSection -PhaseNumber 19 -Title "Organisation Projet et Nettoyage"app", "components", "contexts", "hooks", "lib", "api", "sql", "scripts", "public")
+Write-Section "[18/18] Organisation Projet et Nettoyage"
+
+# Vérifier l'organisation des dossiers
+$expectedDirs = @("app", "components", "contexts", "hooks", "lib", "api", "sql", "scripts", "public")
 $actualDirs = Get-ChildItem -Path "." -Directory | Where-Object { $_.Name -notmatch "node_modules|\.git|\.next|docs|hardware|bin|bootstrap" } | Select-Object -ExpandProperty Name
 $missingDirs = $expectedDirs | Where-Object { $actualDirs -notcontains $_ }
 if ($missingDirs.Count -eq 0) {
@@ -4072,11 +4168,19 @@ if ($warnings.Count -gt 0) {
 $auditResults.Scores["Structure API"] = $structureScore
 
 # ===============================================================================
-# Phase 17 : VÉRIFICATION UNIFORMISATION UI/UX (DÉJÀ FAIT AVANT LES SCORES FINAUX)
+# PHASE 16 : VÉRIFICATION UNIFORMISATION UI/UX (DÉJÀ FAIT AVANT LES SCORES FINAUX)
 # ===============================================================================
 
 # Cette section a été déplacée avant l'affichage des scores finaux pour que le score soit disponible
-# Write-PhaseSection -PhaseNumber 17 -Title "Uniformisation UI/UX - Badges, Tables, Modals",
+# Write-Section "[16/16] Uniformisation UI/UX - Badges, Tables, Modals"
+
+$uiScore = 10.0
+$uiIssues = @()
+$uiWarnings = @()
+
+# Fichiers à vérifier
+$uiFiles = @(
+    "app/dashboard/users/page.js",
     "app/dashboard/patients/page.js",
     "components/configuration/UsbStreamingTab.js",
     "components/UserPatientModal.js",
@@ -4289,10 +4393,31 @@ $auditResults.Issues += $uiIssues
 $auditResults.Warnings += $uiWarnings
 
 # ===============================================================================
-# Phase 20 : ÉLÉMENTS INUTILES (Fichiers obsolètes, redondants, mal organisés)
+# PHASE 19 : ÉLÉMENTS INUTILES (Fichiers obsolètes, redondants, mal organisés)
 # ===============================================================================
 
-Write-PhaseSection -PhaseNumber 13 -Title "Éléments Inutiles - Fichiers Obsolètes et Redondants"
+Write-Section "[19/19] Éléments Inutiles - Fichiers Obsolètes et Redondants"
+
+$elementsInutilesScore = 10.0
+$elementsInutilesIssues = @()
+$elementsInutilesWarnings = @()
+
+# Variables pour stocker les résultats
+$fichiersLogs = @()
+$scriptsMigrationRedondants = @()
+$fichiersTestObsoletes = @()
+$dossiersVides = @()
+$fichiersDupliques = @()
+$codeMort = @()
+$scriptsRedondants = @()
+$fichiersTemporaires = @()
+$documentationObsolete = @()
+$ps1Obsoletes = @()
+$jsObsoletes = @()
+$sqlObsoletes = @()
+
+# 1. FICHIERS DE LOGS OBSOLÈTES
+Write-Info "Recherche fichiers de logs obsolètes..."
 $logFiles = Get-ChildItem -Path . -Recurse -Include "*.log","*.txt" -ErrorAction SilentlyContinue | 
     Where-Object { 
         $_.Name -match "^(audit_result|logs_serie|audit_resultat)" -or
@@ -4714,12 +4839,19 @@ Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 
 # ===============================================================================
-# Phase 20 : VÉRIFICATION SYNCHRONISATION GITHUB PAGES
+# PHASE 19 : VÉRIFICATION SYNCHRONISATION GITHUB PAGES
 # ===============================================================================
 
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 20) {
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 19) {
     Write-Host ""
-    Write-PhaseSection -PhaseNumber 20 -Title "Vérification Synchronisation GitHub Pages""
+    Write-Section "[19/20] Vérification Synchronisation GitHub Pages"
+    
+    $deploymentScore = 10.0
+    $deploymentIssues = @()
+    $deploymentWarnings = @()
+    
+    # Détecter GitHub depuis métadonnées ou config
+    $repo = ""
     $baseUrl = ""
     if ($script:Config -and $script:Config.GitHub -and $script:Config.GitHub.Repo) {
         $repo = $script:Config.GitHub.Repo
@@ -4939,12 +5071,33 @@ Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 
 # ===============================================================================
-# Phase 21 : AUDIT FIRMWARE
+# PHASE 20 : AUDIT FIRMWARE
 # ===============================================================================
 
-if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 21) {
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 20) {
     Write-Host ""
-    Write-PhaseSection -PhaseNumber 21 -Title "Audit Firmware"hardware\firmware"),
+    Write-Section "[20/20] Audit Firmware"
+    
+    $firmwareScore = 10.0
+    $firmwareIssues = @()
+    $firmwareWarnings = @()
+    $firmwareInfo = @{}
+    
+    # Détecter le répertoire firmware depuis métadonnées ou recherche
+    $firmwareDir = $null
+    $firmwareMainFile = $null
+    
+    if ($projectMetadata -and $projectMetadata.firmware -and $projectMetadata.firmware.directory) {
+        $firmwareDir = Join-Path (Get-Location) $projectMetadata.firmware.directory.Replace('/', '\')
+        if ($projectMetadata.firmware.mainFile) {
+            $firmwareMainFile = Join-Path (Get-Location) $projectMetadata.firmware.mainFile.Replace('/', '\')
+        }
+    }
+    
+    # Si non trouvé dans métadonnées, chercher automatiquement
+    if (-not $firmwareDir) {
+        $firmwareDirs = @(
+            (Join-Path (Get-Location) "hardware\firmware"),
             (Join-Path (Get-Location) "firmware"),
             (Join-Path (Get-Location) "arduino"),
             (Join-Path (Get-Location) "esp32")
@@ -5222,183 +5375,6 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # RÉESSAI D'AUTHENTIFICATION API (si échec au début)
 # ===============================================================================
 
-# Fonction pour compléter les phases API et BDD après authentification réussie
-function Complete-ApiAndDbPhases {
-    param($ApiUrl, $authHeaders, $SelectedPhases, $script:Config, $auditResults)
-    
-    # Compléter Phase 7 : Endpoints API
-    if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 7) {
-        Write-Host "`n  === Tests Endpoints API ===" -ForegroundColor Yellow
-        $endpointsTotal = 0
-        $endpointsOK = 0
-        
-        if ($script:Config.Api.Endpoints) {
-            $endpoints = $script:Config.Api.Endpoints
-        } else {
-            $endpoints = @(
-                @{Path="/api.php/devices"; Name="Dispositifs"},
-                @{Path="/api.php/patients"; Name="Patients"},
-                @{Path="/api.php/users"; Name="Utilisateurs"},
-                @{Path="/api.php/alerts"; Name="Alertes"},
-                @{Path="/api.php/firmwares"; Name="Firmwares"},
-                @{Path="/api.php/roles"; Name="Roles"},
-                @{Path="/api.php/permissions"; Name="Permissions"},
-                @{Path="/api.php/health"; Name="Healthcheck"}
-            )
-        }
-        
-        foreach ($endpoint in $endpoints) {
-            $endpointsTotal++
-            try {
-                $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $authHeaders -TimeoutSec 10
-                Write-OK "  $($endpoint.Name)"
-                $endpointsOK++
-            } catch {
-                Write-Err "  $($endpoint.Name) - Erreur"
-            }
-        }
-        
-        if ($endpointsTotal -gt 0) {
-            $apiScore = [math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
-            $auditResults.Scores["API"] = $apiScore
-            Write-Host "  Score API mis à jour: $apiScore/10" -ForegroundColor $(if ($apiScore -ge 8) { "Green" } elseif ($apiScore -ge 6) { "Yellow" } else { "Red" })
-        }
-    }
-    
-    # Compléter Phase 15 : Base de Données
-    if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 15) {
-        Write-Host "`n  === Analyse Base de Données ===" -ForegroundColor Yellow
-        try {
-            Write-Host "  🔍 Exécution audit complet du schéma (code vs base en ligne)..." -ForegroundColor Cyan
-            try {
-                $auditResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/admin/database-audit" -Headers $authHeaders -TimeoutSec 30
-                
-                if ($auditResponse.success -and $auditResponse.results) {
-                    $dbAudit = $auditResponse.results
-                    $dbScore = $dbAudit.score
-                    
-                    if ($dbAudit.connection) {
-                        if ($dbAudit.connection.status -eq 'ok') {
-                            Write-OK "  Connexion BDD: OK"
-                            if ($dbAudit.connection.version) {
-                                Write-Info "    Version: $($dbAudit.connection.version)"
-                            }
-                        } else {
-                            Write-Err "  Connexion BDD: ÉCHEC - $($dbAudit.connection.message)"
-                        }
-                    }
-                    
-                    if ($dbAudit.tables -and $dbAudit.tables.Count -gt 0) {
-                        $tablesOk = ($dbAudit.tables | Where-Object { $_.exists }).Count
-                        $tablesMissing = ($dbAudit.tables | Where-Object { -not $_.exists }).Count
-                        Write-Host "  Tables: $tablesOk/$($dbAudit.tables.Count) OK" -ForegroundColor $(if ($tablesMissing -eq 0) { "Green" } else { "Yellow" })
-                        if ($tablesMissing -gt 0) {
-                            Write-Warn "    $tablesMissing table(s) manquante(s)"
-                        }
-                    }
-                    
-                    if ($dbAudit.issues -and $dbAudit.issues.Count -gt 0) {
-                        Write-Err "  ❌ Problèmes critiques: $($dbAudit.issues.Count)"
-                        foreach ($issue in $dbAudit.issues) {
-                            Write-Err "    - $issue"
-                            $auditResults.Issues += "BDD: $issue"
-                        }
-                    }
-                    
-                    if ($dbAudit.duplicates -and $dbAudit.duplicates.Count -gt 0) {
-                        Write-Err "  ⚠️  Colonnes en double détectées: $($dbAudit.duplicates.Count)"
-                        foreach ($dup in $dbAudit.duplicates) {
-                            Write-Err "    - $($dup.table): $($dup.columns -join ', ')"
-                            Write-Err "      → $($dup.issue)"
-                            $auditResults.Issues += "BDD DOUBLON: $($dup.table) - $($dup.columns -join ', ')"
-                        }
-                    }
-                    
-                    if ($dbAudit.warnings -and $dbAudit.warnings.Count -gt 0) {
-                        Write-Warn "  ⚠️  Avertissements: $($dbAudit.warnings.Count)"
-                        foreach ($warning in $dbAudit.warnings) {
-                            Write-Warn "    - $warning"
-                            $auditResults.Warnings += "BDD: $warning"
-                        }
-                    }
-                    
-                    if ($dbAudit.orphans -and $dbAudit.orphans.Count -gt 0) {
-                        Write-Warn "  📋 Tables orphelines: $($dbAudit.orphans.Count) (existent en DB mais pas dans schema.sql)"
-                        foreach ($orphan in $dbAudit.orphans) {
-                            Write-Warn "    - $orphan"
-                        }
-                    }
-                    
-                    if ($dbAudit.indexes -and $dbAudit.indexes.Count -gt 0) {
-                        $indexesOk = ($dbAudit.indexes | Where-Object { $_.exists }).Count
-                        $indexesMissing = ($dbAudit.indexes | Where-Object { -not $_.exists }).Count
-                        if ($indexesMissing -gt 0) {
-                            Write-Warn "  Index critiques: $indexesOk/$($dbAudit.indexes.Count) OK, $indexesMissing manquant(s)"
-                        } else {
-                            Write-OK "  Index critiques: $indexesOk/$($dbAudit.indexes.Count) OK"
-                        }
-                    }
-                    
-                    if ($dbAudit.missing -and $dbAudit.missing.Count -gt 0) {
-                        Write-Err "  Tables manquantes: $($dbAudit.missing.Count)"
-                        foreach ($missing in $dbAudit.missing) {
-                            Write-Err "    - $missing"
-                        }
-                    }
-                    
-                    $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
-                    Write-Host ""
-                    Write-Host "  ✅ Audit schéma terminé - Score: $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
-                } else {
-                    Write-Warn "  Audit schéma non disponible, utilisation méthode alternative"
-                    throw "Audit schéma échoué"
-                }
-            } catch {
-                Write-Warn "  Erreur audit schéma: $($_.Exception.Message), utilisation méthode alternative"
-                
-                if ($script:Config.Database -and $script:Config.Database.Entities) {
-                    $entities = $script:Config.Database.Entities
-                } else {
-                    $entities = @(
-                        @{ Name = "devices"; Field = "devices"; CountField = "Count"; UnassignedField = "patient_id"; UnassignedMessage = "dispositifs non assignes" }
-                        @{ Name = "patients"; Field = "patients"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
-                        @{ Name = "users"; Field = "users"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
-                        @{ Name = "alerts"; Field = "alerts"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
-                    )
-                }
-                
-                $dbScore = 10
-                foreach ($entity in $entities) {
-                    try {
-                        $endpointPath = "/api.php/$($entity.Name)"
-                        $response = Invoke-RestMethod -Uri "$ApiUrl$endpointPath" -Headers $authHeaders -TimeoutSec 10
-                        
-                        $data = Get-ArrayFromApiResponse -data $response -propertyName $entity.Field
-                        $count = if ($data) { $data.Count } else { 0 }
-                        
-                        Write-OK "  $($entity.Name): $count élément(s)"
-                        
-                        if ($entity.UnassignedField -and $count -gt 0) {
-                            $unassigned = @($data | Where-Object { -not $_.$($entity.UnassignedField) }).Count
-                            if ($unassigned -gt 0) {
-                                Write-Info "    $unassigned $($entity.UnassignedMessage)"
-                            }
-                        }
-                    } catch {
-                        Write-Err "  Erreur récupération $($entity.Name): $($_.Exception.Message)"
-                        $dbScore -= 1
-                    }
-                }
-                
-                $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
-                Write-Host "  Score BDD (méthode alternative): $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
-            }
-        } catch {
-            Write-Err "  Erreur analyse BDD: $($_.Exception.Message)"
-        }
-    }
-}
-
 if ($script:apiAuthFailed) {
     Write-Host ""
     Write-Section "[RÉESSAI] Authentification API - Tentatives Finales"
@@ -5425,7 +5401,189 @@ if ($script:apiAuthFailed) {
             
             # Maintenant que l'authentification est réussie, compléter les phases API et BDD
             Write-Host "`n  Complétion des phases API et BDD..." -ForegroundColor Cyan
-            Complete-ApiAndDbPhases -ApiUrl $ApiUrl -authHeaders $script:authHeaders -SelectedPhases $SelectedPhases -script:Config $script:Config -auditResults $auditResults
+            
+            # Compléter Phase 6 : Endpoints API (seulement si phase 6 sélectionnée)
+            if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 6) {
+                Write-Host "`n  === Tests Endpoints API ===" -ForegroundColor Yellow
+                $endpointsTotal = 0
+                $endpointsOK = 0
+                
+                if ($script:Config.Api.Endpoints) {
+                    $endpoints = $script:Config.Api.Endpoints
+                } else {
+                    $endpoints = @(
+                        @{Path="/api.php/devices"; Name="Dispositifs"},
+                        @{Path="/api.php/patients"; Name="Patients"},
+                        @{Path="/api.php/users"; Name="Utilisateurs"},
+                        @{Path="/api.php/alerts"; Name="Alertes"},
+                        @{Path="/api.php/firmwares"; Name="Firmwares"},
+                        @{Path="/api.php/roles"; Name="Roles"},
+                        @{Path="/api.php/permissions"; Name="Permissions"},
+                        @{Path="/api.php/health"; Name="Healthcheck"}
+                    )
+                }
+                
+                foreach ($endpoint in $endpoints) {
+                    $endpointsTotal++
+                    try {
+                        $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 10
+                        Write-OK "  $($endpoint.Name)"
+                        $endpointsOK++
+                    } catch {
+                        Write-Err "  $($endpoint.Name) - Erreur"
+                    }
+                }
+                
+                if ($endpointsTotal -gt 0) {
+                    $apiScore = [math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
+                    $auditResults.Scores["API"] = $apiScore
+                    Write-Host "  Score API mis à jour: $apiScore/10" -ForegroundColor $(if ($apiScore -ge 8) { "Green" } elseif ($apiScore -ge 6) { "Yellow" } else { "Red" })
+                }
+            }  # Fin if phase 6 sélectionnée
+            
+            # Compléter Phase 14 : Base de Données (seulement si phase 14 sélectionnée)
+            if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 14) {
+                Write-Host "`n  === Analyse Base de Données ===" -ForegroundColor Yellow
+                try {
+                    # 1. Audit complet du schéma via API (vérifie code vs base en ligne)
+                    Write-Host "  🔍 Exécution audit complet du schéma (code vs base en ligne)..." -ForegroundColor Cyan
+                    try {
+                        $auditResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/admin/database-audit" -Headers $script:authHeaders -TimeoutSec 30
+                        
+                        if ($auditResponse.success -and $auditResponse.results) {
+                            $dbAudit = $auditResponse.results
+                            $dbScore = $dbAudit.score
+                            
+                            # Afficher le statut de connexion
+                            if ($dbAudit.connection) {
+                                if ($dbAudit.connection.status -eq 'ok') {
+                                    Write-OK "  Connexion BDD: OK"
+                                    if ($dbAudit.connection.version) {
+                                        Write-Info "    Version: $($dbAudit.connection.version)"
+                                    }
+                                } else {
+                                    Write-Err "  Connexion BDD: ÉCHEC - $($dbAudit.connection.message)"
+                                }
+                            }
+                            
+                            # Afficher le résumé des tables
+                            if ($dbAudit.tables -and $dbAudit.tables.Count -gt 0) {
+                                $tablesOk = ($dbAudit.tables | Where-Object { $_.exists }).Count
+                                $tablesMissing = ($dbAudit.tables | Where-Object { -not $_.exists }).Count
+                                Write-Host "  Tables: $tablesOk/$($dbAudit.tables.Count) OK" -ForegroundColor $(if ($tablesMissing -eq 0) { "Green" } else { "Yellow" })
+                                if ($tablesMissing -gt 0) {
+                                    Write-Warn "    $tablesMissing table(s) manquante(s)"
+                                }
+                            }
+                            
+                            # Afficher les problèmes détectés
+                            if ($dbAudit.issues -and $dbAudit.issues.Count -gt 0) {
+                                Write-Err "  ❌ Problèmes critiques: $($dbAudit.issues.Count)"
+                                foreach ($issue in $dbAudit.issues) {
+                                    Write-Err "    - $issue"
+                                    $auditResults.Issues += "BDD: $issue"
+                                }
+                            }
+                            
+                            # Afficher les doublons
+                            if ($dbAudit.duplicates -and $dbAudit.duplicates.Count -gt 0) {
+                                Write-Err "  ⚠️  Colonnes en double détectées: $($dbAudit.duplicates.Count)"
+                                foreach ($dup in $dbAudit.duplicates) {
+                                    Write-Err "    - $($dup.table): $($dup.columns -join ', ')"
+                                    Write-Err "      → $($dup.issue)"
+                                    $auditResults.Issues += "BDD DOUBLON: $($dup.table) - $($dup.columns -join ', ')"
+                                }
+                            }
+                            
+                            # Afficher les avertissements
+                            if ($dbAudit.warnings -and $dbAudit.warnings.Count -gt 0) {
+                                Write-Warn "  ⚠️  Avertissements: $($dbAudit.warnings.Count)"
+                                foreach ($warning in $dbAudit.warnings) {
+                                    Write-Warn "    - $warning"
+                                    $auditResults.Warnings += "BDD: $warning"
+                                }
+                            }
+                            
+                            # Tables orphelines
+                            if ($dbAudit.orphans -and $dbAudit.orphans.Count -gt 0) {
+                                Write-Warn "  📋 Tables orphelines: $($dbAudit.orphans.Count) (existent en DB mais pas dans schema.sql)"
+                                foreach ($orphan in $dbAudit.orphans) {
+                                    Write-Warn "    - $orphan"
+                                }
+                            }
+                            
+                            # Index critiques
+                            if ($dbAudit.indexes -and $dbAudit.indexes.Count -gt 0) {
+                                $indexesOk = ($dbAudit.indexes | Where-Object { $_.exists }).Count
+                                $indexesMissing = ($dbAudit.indexes | Where-Object { -not $_.exists }).Count
+                                if ($indexesMissing -gt 0) {
+                                    Write-Warn "  Index critiques: $indexesOk/$($dbAudit.indexes.Count) OK, $indexesMissing manquant(s)"
+                                } else {
+                                    Write-OK "  Index critiques: $indexesOk/$($dbAudit.indexes.Count) OK"
+                                }
+                            }
+                            
+                            # Tables manquantes
+                            if ($dbAudit.missing -and $dbAudit.missing.Count -gt 0) {
+                                Write-Err "  Tables manquantes: $($dbAudit.missing.Count)"
+                                foreach ($missing in $dbAudit.missing) {
+                                    Write-Err "    - $missing"
+                                }
+                            }
+                            
+                            $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
+                            Write-Host ""
+                            Write-Host "  ✅ Audit schéma terminé - Score: $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
+                        } else {
+                            Write-Warn "  Audit schéma non disponible, utilisation méthode alternative"
+                            throw "Audit schéma échoué"
+                        }
+                    } catch {
+                        Write-Warn "  Erreur audit schéma: $($_.Exception.Message), utilisation méthode alternative"
+                        
+                        # Méthode alternative : vérifier les entités
+                        if ($script:Config.Database -and $script:Config.Database.Entities) {
+                            $entities = $script:Config.Database.Entities
+                        } else {
+                            $entities = @(
+                                @{ Name = "devices"; Field = "devices"; CountField = "Count"; UnassignedField = "patient_id"; UnassignedMessage = "dispositifs non assignes" }
+                                @{ Name = "patients"; Field = "patients"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                                @{ Name = "users"; Field = "users"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                                @{ Name = "alerts"; Field = "alerts"; CountField = "Count"; UnassignedField = $null; UnassignedMessage = $null }
+                            )
+                        }
+                        
+                        $dbScore = 10
+                        foreach ($entity in $entities) {
+                            try {
+                                $endpointPath = "/api.php/$($entity.Name)"
+                                $response = Invoke-RestMethod -Uri "$ApiUrl$endpointPath" -Headers $script:authHeaders -TimeoutSec 10
+                                
+                                $data = Get-ArrayFromApiResponse -data $response -propertyName $entity.Field
+                                $count = if ($data) { $data.Count } else { 0 }
+                                
+                                Write-OK "  $($entity.Name): $count élément(s)"
+                                
+                                # Vérifier les éléments non assignés si applicable
+                                if ($entity.UnassignedField -and $count -gt 0) {
+                                    $unassigned = @($data | Where-Object { -not $_.$($entity.UnassignedField) }).Count
+                                    if ($unassigned -gt 0) {
+                                        Write-Info "    $unassigned $($entity.UnassignedMessage)"
+                                    }
+                                }
+                            } catch {
+                                Write-Err "  Erreur récupération $($entity.Name): $($_.Exception.Message)"
+                                $dbScore -= 1
+                            }
+                        }
+                        
+                        $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
+                        Write-Host "  Score BDD (méthode alternative): $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
+                    }  # Fin catch audit schéma (ferme le try de 5470)
+                } catch {
+                    Write-Err "  Erreur analyse BDD: $($_.Exception.Message)"
+                }  # Fin catch analyse BDD (ferme le try de 5467)
+            }  # Fin if phase 14 sélectionnée
             
             break  # Sortir de la boucle si l'authentification réussit
             
@@ -5464,6 +5622,7 @@ $scoreWeights = @{
         "Éléments Inutiles" = 1.0
         "Synchronisation GitHub Pages" = 1.2
         "Firmware" = 1.0
+        "Cohérence Configuration" = 1.8
     }
     
     $totalWeight = ($scoreWeights.Values | Measure-Object -Sum).Sum
@@ -5594,12 +5753,82 @@ if ($scoreGlobal -ge 9.5) {
 }
 
 # ===============================================================================
-# Phase 22 : TESTS COMPLETS APPLICATION OTT
+# PHASE 22 : COHÉRENCE CONFIGURATION (Docker/Render/GitHub)
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 22) {
     Write-Host ""
-    Write-PhaseSection -PhaseNumber 22 -Title "Tests Complets Application OTT"modules"
+    Write-Section "[22/23] Cohérence Configuration"
+    
+    try {
+        # Charger le module de vérification de cohérence
+        $MODULES_DIR = Join-Path $AuditDir "modules"
+        $configModule = Join-Path $MODULES_DIR "Check-ConfigConsistency.ps1"
+        
+        if (Test-Path $configModule) {
+            # Exécuter le module et capturer stdout + résultat
+            $output = & pwsh -File $configModule -ProjectRoot $ProjectRoot 2>&1
+            
+            # Afficher la sortie
+            $output | Where-Object { $_ -is [string] } | ForEach-Object { Write-Host $_ }
+            
+            # Récupérer le résultat (dernier objet non-string)
+            $result = $output | Where-Object { $_ -isnot [string] } | Select-Object -Last 1
+            
+            if ($result -and ($result -is [hashtable] -or $result.PSObject.Properties['Score'])) {
+                $score = if ($result.Score) { $result.Score } else { 5 }
+                $auditResults.Scores["Cohérence Configuration"] = $score
+                
+                # Extraire les issues et warnings
+                $issues = if ($result.Issues) { $result.Issues } else { @() }
+                $warnings = if ($result.Warnings) { $result.Warnings } else { @() }
+                
+                if ($issues.Count -gt 0) {
+                    foreach ($issue in $issues) {
+                        $auditResults.Issues += "Configuration: $issue"
+                    }
+                }
+                
+                if ($warnings.Count -gt 0) {
+                    foreach ($warning in $warnings) {
+                        $auditResults.Warnings += "Configuration: $warning"
+                    }
+                }
+                
+                $isConsistent = if ($result.IsConsistent) { $result.IsConsistent } else { $false }
+                $primaryEnv = if ($result.PrimaryEnvironment) { $result.PrimaryEnvironment } else { "INCONNU" }
+                
+                if ($isConsistent) {
+                    Write-OK "Configuration cohérente pour $primaryEnv"
+                } else {
+                    Write-Warn "Configuration incohérente - Unification recommandée"
+                    $auditResults.Recommendations += "Unifier la configuration pour un seul environnement (Docker OU Render)"
+                }
+            } else {
+                $auditResults.Scores["Cohérence Configuration"] = 5
+                Write-Warn "Module exécuté mais résultat non parsable"
+            }
+        } else {
+            Write-Warn "Module Check-ConfigConsistency.ps1 non trouvé - phase ignorée"
+            $auditResults.Scores["Cohérence Configuration"] = 5
+        }
+    } catch {
+        Write-Err "Erreur phase Cohérence Configuration: $($_.Exception.Message)"
+        $auditResults.Scores["Cohérence Configuration"] = 5
+    }
+}  # Fin if SelectedPhases -contains 22
+
+# ===============================================================================
+# PHASE 23 : TESTS COMPLETS APPLICATION OTT
+# ===============================================================================
+
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 23) {
+    Write-Host ""
+    Write-Section "[23/23] Tests Complets Application OTT"
+    
+    try {
+        # Charger le module de tests complets
+        $MODULES_DIR = Join-Path $AuditDir "modules"
         $testsModule = Join-Path $MODULES_DIR "Checks-TestsComplets.ps1"
         
         if (Test-Path $testsModule) {
@@ -5627,7 +5856,7 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 22) {
         Write-Err "Erreur phase Tests Complets: $($_.Exception.Message)"
         $auditResults.Scores["TestsComplets"] = 5
     }
-}  # Fin if SelectedPhases -contains 22
+}  # Fin if SelectedPhases -contains 23
 
 Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
@@ -5639,5 +5868,4 @@ if ($projectRoot) {
 }
 
 exit $exitCode
-
 

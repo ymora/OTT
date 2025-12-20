@@ -1,0 +1,5 @@
+ParserError: C:\Users\ymora\Desktop\maxime\audit\scripts\Audit-Complet.ps1:1344
+Line |
+1344 |  }  # Fin if SelectedPhases -contains 2
+     |  ~
+     | Unexpected token '}' in expression or statement.

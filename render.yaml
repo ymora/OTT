@@ -1,80 +1,78 @@
 # ================================================================================
-# Configuration Render - OTT API Backend
+# CONFIGURATION RENDER - PRODUCTION UNIQUEMENT
 # ================================================================================
-# HAPPLYZ MEDICAL SAS
-# Configuration pour déploiement sur Render.com
-# ================================================================================
-#
-# ⚠️ IMPORTANT : Configuration du Persistent Disk
-# Pour éviter de retélécharger le core ESP32 (~430MB) à chaque déploiement,
-# configurez un Persistent Disk dans le dashboard Render :
-# 1. Allez dans votre service ott-api > Disks
-# 2. Cliquez sur "Add Disk"
-# 3. Mount Path: /opt/render/project/src/hardware/arduino-data
-# 4. Size: 1 GB (minimum recommandé)
-# 5. Enregistrez et déployez
-#
-# 📖 Documentation complète : docs/RENDER_PERSISTENT_DISK.md
+# Ce fichier est utilisé uniquement pour le déploiement sur Render.com
+# Pour le développement local, utilisez docker-compose.yml
 # ================================================================================
 
 services:
+  # API Backend PHP
   - type: web
     name: ott-api
-    env: php
-    buildCommand: |
-      # ⚠️ CRITIQUE: arduino-cli est OBLIGATOIRE - la compilation ne doit JAMAIS être simulée
-      echo "🔧 Installation d'arduino-cli (OBLIGATOIRE)..."
-      export PATH="${HOME}/.local/bin:${PATH}"
-      bash scripts/hardware/install_arduino_cli.sh
-      # S'assurer que le PATH inclut ~/.local/bin pour cette session
-      export PATH="${HOME}/.local/bin:${PATH}"
-      # Vérifier que arduino-cli est disponible et fonctionnel
-      if ! command -v arduino-cli &> /dev/null; then
-        echo "❌ ERREUR CRITIQUE: arduino-cli n'est pas disponible après installation"
-        echo "❌ Le build est interrompu - la compilation ne peut pas être simulée"
-        exit 1
-      fi
-      # Vérifier que arduino-cli fonctionne
-      if ! arduino-cli version &> /dev/null; then
-        echo "❌ ERREUR CRITIQUE: arduino-cli est installé mais ne fonctionne pas"
-        exit 1
-      fi
-      echo "✅ arduino-cli disponible et fonctionnel: $(arduino-cli version)"
-      echo "🔧 Préparation du core ESP32 (cache non versionné)..."
-      if [ ! -d "hardware/arduino-data" ]; then
-        mkdir -p hardware/arduino-data
-      fi
-      export ARDUINO_DIRECTORIES_USER="$(pwd)/hardware/arduino-data"
-      if [ -d "hardware/arduino-data/packages/esp32/hardware/esp32" ]; then
-        echo "✅ Core ESP32 trouvé dans hardware/arduino-data (cache local/persistant)"
-      else
-        echo "⚙️ Core ESP32 absent - installation en cours (une seule fois, ~430MB)..."
-        bash scripts/hardware/prepare_arduino_core.sh
-      fi
-      echo "✅ La compilation sera RÉELLE, jamais simulée"
-    startCommand: |
-      export PATH="${HOME}/.local/bin:${PATH}"
-      # Utiliser router.php pour éviter que les fichiers HTML de documentation soient servis directement
-      php -S 0.0.0.0:$PORT router.php
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     envVars:
-      - key: DATABASE_URL
-        sync: false
+      # Configuration Production Render
+      - key: APP_ENV
+        value: production
+      - key: DEBUG_ERRORS
+        value: false
+      - key: DB_HOST
+        fromDatabase:
+          name: ott-postgres
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: ott-postgres
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: ott-postgres
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: ott-postgres
+          property: user
+      - key: DB_PASS
+        fromDatabase:
+          name: ott-postgres
+          property: password
       - key: JWT_SECRET
-        sync: false
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://ymora.github.io,https://ott-dashboard.onrender.com
+      # Notifications (à configurer)
       - key: SENDGRID_API_KEY
         sync: false
       - key: SENDGRID_FROM_EMAIL
-        sync: false
+        value: noreply@happlyz.com
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
       - key: TWILIO_FROM_NUMBER
         sync: false
-      - key: DEBUG_ERRORS
-        sync: false
-      - key: CORS_ALLOWED_ORIGINS
-        sync: false
-      - key: APP_ENV
-        sync: false
 
+  # Dashboard Next.js
+  - type: web
+    name: ott-dashboard
+    env: docker
+    dockerfilePath: ./Dockerfile.dashboard
+    dockerContext: .
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://ott-jbln.onrender.com
+      - key: NEXT_PUBLIC_ENABLE_DEMO_RESET
+        value: false
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_STATIC_EXPORT
+        value: false
+
+# Base de données PostgreSQL
+databases:
+  - name: ott-postgres
+    databaseName: ott_data
+    user: ott_user
+    plan: starter

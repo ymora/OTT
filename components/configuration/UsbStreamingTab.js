@@ -79,20 +79,8 @@ export default function DebugTab() {
     startUsbStreamingRef.current = startUsbStreaming
   }, [startUsbStreaming])
   
-  // Démarrage automatique du streaming quand connecté
-  useEffect(() => {
-    if (isConnected && port && usbStreamStatus === 'idle' && !usbStreamError && !isStartingStreamRef.current && startUsbStreamingRef.current) {
-      isStartingStreamRef.current = true
-      startUsbStreamingRef.current(port)
-        .then(() => {
-          isStartingStreamRef.current = false
-        })
-        .catch(err => {
-          isStartingStreamRef.current = false
-          logger.error('[UsbStreamingTab] Erreur démarrage streaming:', err)
-        })
-    }
-  }, [isConnected, port, usbStreamStatus, usbStreamError])
+  // NOTE: Le démarrage automatique du streaming est géré par UsbContext
+  // Pas besoin de le redémarrer ici pour éviter les doublons
   
   const { fetchWithAuth, API_URL, user } = useAuth()
   
@@ -436,7 +424,7 @@ export default function DebugTab() {
   const [isStreamingRemote, setIsStreamingRemote] = useState(false)
   const lastLogTimestampRef = useRef(0)
   
-  // Charger les logs distants depuis l'API
+  // Charger les logs distants depuis l'API - OPTIMISÉ avec useMemo pour les URLs
   const loadRemoteLogs = useCallback(async (deviceIdentifier, sinceTimestamp = null) => {
     if (!user || user.role_name !== 'admin' || !fetchWithAuth || !API_URL) {
       return
@@ -457,6 +445,7 @@ export default function DebugTab() {
       )
       
       if (response.success && response.logs) {
+        // OPTIMISATION : Transformation des logs
         const formattedLogs = response.logs.map(log => ({
           id: `remote-${log.id}`,
           line: log.log_line,
@@ -469,10 +458,10 @@ export default function DebugTab() {
           // Ajouter uniquement les nouveaux logs
           setRemoteLogs(prev => {
             const merged = [...prev, ...formattedLogs]
-            // Dédupliquer par ID
-            const unique = merged.filter((log, index, self) => 
-              index === self.findIndex(l => l.id === log.id)
-            )
+            // OPTIMISATION : Utiliser Map pour dédupliquer plus efficacement O(n) au lieu de O(n²)
+            const uniqueMap = new Map()
+            merged.forEach(log => uniqueMap.set(log.id, log))
+            const unique = Array.from(uniqueMap.values())
             return unique.sort((a, b) => a.timestamp - b.timestamp).slice(-100)
           })
         } else {
@@ -2330,10 +2319,8 @@ export default function DebugTab() {
                             
                             try {
                               isStartingStreamRef.current = true
-                              appendUsbStreamLog('🚀 Démarrage du streaming USB...', 'dashboard')
                               logger.log('[USB] Démarrage streaming après connexion manuelle')
                               await startUsbStreaming(selectedPort)
-                              appendUsbStreamLog('✅ Streaming USB démarré - En attente de données...', 'dashboard')
                             } catch (streamErr) {
                               logger.error('❌ Erreur démarrage streaming:', streamErr)
                               appendUsbStreamLog(`❌ Erreur démarrage streaming: ${streamErr.message || streamErr}`, 'dashboard')

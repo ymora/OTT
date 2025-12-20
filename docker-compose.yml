@@ -1,3 +1,21 @@
+# ================================================================================
+# CONFIGURATION DOCKER - DÉVELOPPEMENT LOCAL UNIQUEMENT
+# ================================================================================
+# Ce fichier configure l'environnement Docker pour le développement local
+# 
+# Pour démarrer:
+#   docker-compose up -d
+# 
+# Pour initialiser la base:
+#   docker exec -i ott-postgres psql -U postgres -d ott_data < sql/schema.sql
+# 
+# Accès:
+#   - Dashboard: http://localhost:3000
+#   - API: http://localhost:8000
+#   - Base de données: localhost:5432
+#   - PgWeb (interface BDD): http://localhost:8081
+# ================================================================================
+
 services:
   # Base de données PostgreSQL
   db:
@@ -11,7 +29,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Ne pas monter sql/ ici pour éviter la réinitialisation automatique
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -29,20 +46,23 @@ services:
     ports:
       - "8000:80"
     environment:
+      # Configuration Docker locale
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: ott_data
       DB_USER: postgres
       DB_PASS: postgres
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_SECRET: docker-dev-secret-change-in-production
       APP_ENV: development
       DEBUG_ERRORS: "true"
-      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3003
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
-      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@happlyz.com}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
-      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      # CORS pour Docker local uniquement
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3003,http://localhost:8000
+      # Notifications désactivées en développement
+      SENDGRID_API_KEY: ""
+      SENDGRID_FROM_EMAIL: noreply@happlyz.com
+      TWILIO_ACCOUNT_SID: ""
+      TWILIO_AUTH_TOKEN: ""
+      TWILIO_FROM_NUMBER: ""
     depends_on:
       db:
         condition: service_healthy
@@ -62,15 +82,14 @@ services:
       context: .
       dockerfile: Dockerfile.dashboard
       args:
+        # Docker local uniquement
         NEXT_PUBLIC_API_URL: http://localhost:8000
         NEXT_PUBLIC_ENABLE_DEMO_RESET: "false"
     container_name: ott-dashboard
     ports:
       - "3000:3000"
     environment:
-      # NOTE: http://localhost:8000 pour développement local (Docker)
-      #       env.example utilise https://ott-jbln.onrender.com pour production
-      #       C'est normal - chaque environnement a sa propre configuration
+      # Docker local uniquement
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_ENABLE_DEMO_RESET: "false"
       NODE_ENV: production
@@ -99,4 +118,3 @@ volumes:
 networks:
   ott-network:
     driver: bridge
-

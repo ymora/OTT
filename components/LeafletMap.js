@@ -422,21 +422,40 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
     const devicesKey = devices.map(d => `${d.id}-${d.latitude || 'null'}-${d.longitude || 'null'}`).join(',')
     if (devicesKey !== devicesKeyRef.current) {
       devicesKeyRef.current = devicesKey
-      // Forcer le démontage complet en mettant mapKey à null puis en le réinitialisant
-      // Cela garantit que React démonte complètement le composant avant de le remonter
-      setMapKey(prev => {
-        // D'abord nettoyer l'instance actuelle
-        if (mapInstanceRef.current) {
-          try {
-            mapInstanceRef.current.remove()
-            mapInstanceRef.current = null
-          } catch (e) {
-            // Ignorer les erreurs
-          }
+      // Nettoyer complètement l'instance actuelle avant de recréer
+      if (mapInstanceRef.current) {
+        try {
+          // Supprimer tous les layers et événements
+          mapInstanceRef.current.eachLayer((layer) => {
+            try {
+              mapInstanceRef.current.removeLayer(layer)
+            } catch (e) {
+              // Ignorer les erreurs
+            }
+          })
+          // Supprimer l'instance
+          mapInstanceRef.current.remove()
+          mapInstanceRef.current = null
+        } catch (e) {
+          // Ignorer les erreurs
         }
-        // Retourner une nouvelle valeur pour forcer le remontage
-        return prev + 1
-      })
+      }
+      // Nettoyer aussi la référence globale
+      if (typeof window !== 'undefined' && window._leafletMapInstance) {
+        try {
+          const instance = window._leafletMapInstance
+          if (instance && typeof instance.remove === 'function') {
+            instance.remove()
+          }
+          window._leafletMapInstance = null
+        } catch (e) {
+          // Ignorer les erreurs
+        }
+      }
+      // Attendre un tick pour que le DOM soit nettoyé avant de recréer
+      setTimeout(() => {
+        setMapKey(prev => prev + 1)
+      }, 0)
     }
   }, [devices])
   
@@ -506,13 +525,22 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
       <MapContainer 
         key={`map-container-${mapKey}`}
         center={center} 
-        zoom={zoom} 
+        zoom={zoom}
+        preferCanvas={true} 
         style={{ height: '100%', width: '100%' }} 
         scrollWheelZoom={true}
         whenCreated={(mapInstance) => {
           // Nettoyer les références précédentes AVANT d'assigner la nouvelle
           if (mapInstanceRef.current && mapInstanceRef.current !== mapInstance) {
             try {
+              // Supprimer tous les layers
+              mapInstanceRef.current.eachLayer((layer) => {
+                try {
+                  mapInstanceRef.current.removeLayer(layer)
+                } catch (e) {
+                  // Ignorer
+                }
+              })
               mapInstanceRef.current.remove()
             } catch (e) {
               // Ignorer les erreurs de nettoyage
@@ -520,7 +548,10 @@ export default function LeafletMap({ devices = [], focusDeviceId, onSelect }) {
           }
           if (typeof window !== 'undefined' && window._leafletMapInstance && window._leafletMapInstance !== mapInstance) {
             try {
-              window._leafletMapInstance.remove()
+              const oldInstance = window._leafletMapInstance
+              if (oldInstance && typeof oldInstance.remove === 'function') {
+                oldInstance.remove()
+              }
             } catch (e) {
               // Ignorer les erreurs de nettoyage
             }

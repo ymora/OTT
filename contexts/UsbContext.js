@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSerialPort } from '@/components/SerialPortManager'
 import { useAuth } from '@/contexts/AuthContext'
 import logger from '@/lib/logger'
@@ -50,6 +50,7 @@ export function UsbProvider({ children }) {
   const portSharingRef = useRef(null)
   const streamTimeoutRefs = useRef([]) // Références pour les timeouts de streaming
   const usbGetConfigSentRef = useRef(false) // Flag pour éviter d'envoyer GET_CONFIG plusieurs fois (évite boucle infinie)
+  const isStartingStreamRef = useRef(false) // Flag global pour éviter les démarrages multiples
   
   // Batch des logs pour envoi au serveur (pour monitoring à distance)
   const logsToSendRef = useRef([])
@@ -1383,7 +1384,14 @@ export function UsbProvider({ children }) {
 
   // Démarrer ou reprendre le streaming USB
   const startUsbStreaming = useCallback(async (explicitPort = null) => {
+    // Protection contre les démarrages multiples
+    if (isStartingStreamRef.current) {
+      logger.debug('[USB] Démarrage déjà en cours, ignoré')
+      return
+    }
+    
     try {
+      isStartingStreamRef.current = true
       setUsbStreamError(null)
       
       // Si on reprend depuis une pause, ne pas réinitialiser les logs
@@ -1500,8 +1508,10 @@ export function UsbProvider({ children }) {
       setUsbStreamError(errorMsg)
       setUsbStreamStatus('idle')
       appendUsbStreamLog(`❌ Erreur: ${errorMsg}`, 'dashboard')
+    } finally {
+      isStartingStreamRef.current = false
     }
-    }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger, port, isConnected, write])
+    }, [ensurePortReady, handleUsbStreamChunk, startReading, appendUsbStreamLog, logger, port, isConnected, write, usbStreamStatus])
 
   // Fonction interne pour arrêter le streaming (sans logs, réutilisable)
   const stopStreamingInternal = useCallback((silent = false) => {
@@ -1642,9 +1652,9 @@ export function UsbProvider({ children }) {
                 // Démarrer automatiquement le streaming après connexion
                 const streamTimeoutId = setTimeout(async () => {
                   if (isMounted) {
-                    // Vérifier si un streaming est déjà en cours
-                    if (usbStreamStopRef.current) {
-                      logger.log('📡 [USB] Streaming déjà en cours, pas besoin de redémarrer')
+                    // Vérifier si un streaming est déjà en cours ou en cours de démarrage
+                    if (usbStreamStopRef.current || isStartingStreamRef.current) {
+                      logger.log('📡 [USB] Streaming déjà en cours ou en cours de démarrage')
                       appendUsbStreamLog('ℹ️ Streaming déjà actif', 'dashboard')
                       return
                     }
@@ -1683,9 +1693,9 @@ export function UsbProvider({ children }) {
                 // Démarrer automatiquement le streaming après connexion
                 const streamTimeoutId = setTimeout(async () => {
                   if (isMounted) {
-                    // Vérifier si un streaming est déjà en cours
-                    if (usbStreamStopRef.current) {
-                      logger.log('📡 [USB] Streaming déjà en cours, pas besoin de redémarrer')
+                    // Vérifier si un streaming est déjà en cours ou en cours de démarrage
+                    if (usbStreamStopRef.current || isStartingStreamRef.current) {
+                      logger.log('📡 [USB] Streaming déjà en cours ou en cours de démarrage')
                       appendUsbStreamLog('ℹ️ Streaming déjà actif', 'dashboard')
                       return
                     }
@@ -1981,6 +1991,11 @@ export function UsbProvider({ children }) {
     }
   }, [fetchWithAuth, API_URL])
 
+  // État dérivé pour cohérence : USB est prêt si connecté, port disponible et port ouvert
+  const isUsbReady = useMemo(() => {
+    return isConnected && port && port.readable && port.writable && !usbStreamError
+  }, [isConnected, port, usbStreamError])
+
   const value = {
     // État USB - UN SEUL état pour tous les dispositifs USB connectés
     usbDevice,
@@ -1997,6 +2012,7 @@ export function UsbProvider({ children }) {
     isConnected,
     isSupported,
     port,
+    isUsbReady, // État dérivé pour cohérence (isConnected && port && port.readable && port.writable)
     
     // Streaming USB
     usbStreamStatus,

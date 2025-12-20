@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiCall, useModalState, useEntityArchive, useEntityPermanentDelete, useEntityRestore } from '@/hooks'
 import { fetchJson } from '@/lib/api'
@@ -12,8 +12,9 @@ import Modal from '@/components/Modal'
 
 /**
  * Modal pour afficher l'historique des mesures d'un dispositif
+ * OPTIMISATION: Wrapper avec memo pour éviter les re-renders inutiles
  */
-export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
+const DeviceMeasurementsModal = memo(function DeviceMeasurementsModal({ isOpen, onClose, device }) {
   const { user, fetchWithAuth, API_URL } = useAuth()
   const [measurements, setMeasurements] = useState([])
   const { loading, error, call } = useApiCall({ requiresAuth: true })
@@ -754,5 +755,13 @@ export default function DeviceMeasurementsModal({ isOpen, onClose, device }) {
       />
     </Modal>
   )
-}
+}, (prevProps, nextProps) => {
+  // OPTIMISATION: Custom comparison pour éviter re-renders inutiles
+  return (
+    prevProps.isOpen === nextProps.isOpen &&
+    prevProps.device?.id === nextProps.device?.id &&
+    prevProps.device?.updated_at === nextProps.device?.updated_at
+  )
+})
 
+export default DeviceMeasurementsModal

@@ -37,16 +37,23 @@ require_once __DIR__ . '/api/handlers/database_audit.php';
 ob_start();
 
 // Headers CORS (DOIT être en tout premier)
-// Origines par défaut (production + développement local)
-$defaultAllowedOrigins = [
-    'https://ymora.github.io',
-    'https://ymora.github.io/OTT',  // GitHub Pages avec basePath
-    'http://localhost:3000',  // Développement local Next.js
-    'http://localhost:3003',  // Autres ports locaux
-    'http://localhost:5173'   // Vite dev server
-];
+// Utiliser uniquement les variables d'environnement pour les origines autorisées
+// Ne pas hardcoder les URLs en production
+$defaultAllowedOrigins = @();
+
+// En développement local : autoriser localhost par défaut
+if (getenv('APP_ENV') === 'development' || empty(getenv('APP_ENV'))) {
+    $defaultAllowedOrigins = [
+        'http://localhost:3000',  // Développement local Next.js
+        'http://localhost:3003',  // Autres ports locaux
+        'http://localhost:5173',  // Vite dev server
+        'http://localhost:8000'   // API local
+    ];
+}
 
 // Origines supplémentaires via variable d'environnement
+// PRODUCTION: Configurer CORS_ALLOWED_ORIGINS dans .env ou variables d'environnement
+// Exemple: CORS_ALLOWED_ORIGINS=https://ymora.github.io,https://ymora.github.io/OTT
 $extraOrigins = array_filter(array_map('trim', explode(',', getenv('CORS_ALLOWED_ORIGINS') ?: '')));
 $allowedOrigins = array_unique(array_merge($defaultAllowedOrigins, $extraOrigins));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';

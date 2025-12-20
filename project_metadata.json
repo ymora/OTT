@@ -22,72 +22,46 @@
     ],
     "schemaFile": "/sql/schema.sql"
   },
-  "hasDatabase": true,
-  "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
   "frontend": {
-    "framework": "Next.js",
     "buildTool": "",
+    "framework": "Next.js",
     "routes": [
       {
-        "route": "/",
         "name": "C:\\",
+        "route": "/",
         "file": "/app/page.js"
       },
       {
-        "route": "/dashboard",
         "name": "dashboard",
+        "route": "/dashboard",
         "file": "/app/dashboard/page.js"
       },
       {
-        "route": "/dashboard/admin-migrations",
         "name": "admin-migrations",
+        "route": "/dashboard/admin-migrations",
         "file": "/app/dashboard/admin-migrations/page.js"
       },
       {
-        "route": "/dashboard/dispositifs",
         "name": "dispositifs",
+        "route": "/dashboard/dispositifs",
         "file": "/app/dashboard/dispositifs/page.js"
       },
       {
-        "route": "/dashboard/documentation",
         "name": "documentation",
+        "route": "/dashboard/documentation",
         "file": "/app/dashboard/documentation/page.js"
       },
       {
-        "route": "/dashboard/patients",
         "name": "patients",
+        "route": "/dashboard/patients",
         "file": "/app/dashboard/patients/page.js"
       },
       {
-        "route": "/dashboard/users",
         "name": "users",
+        "route": "/dashboard/users",
         "file": "/app/dashboard/users/page.js"
       }
     ]
-  },
-  "hasApi": true,
-  "hasFrontend": true,
-  "detectedAt": "2025-12-18 22:21:23",
-  "technologies": [
-    "PHP API"
-  ],
-  "project": {
-    "company": "",
-    "name": "ott-dashboard",
-    "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
-    "version": "3.1.0"
-  },
-  "hasFirmware": true,
-  "firmware": {
-    "directory": "/hardware/firmware",
-    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino",
-    "version": "2.5"
-  },
-  "projectType": "nextjs",
-  "github": {
-    "basePath": "/OTT",
-    "repo": "ymora/OTT",
-    "baseUrl": "https://ymora.github.io/OTT"
   },
   "api": {
     "authEndpoint": "/api.php/auth/login",
@@ -152,5 +126,31 @@
       "/api/openapi.json"
     ],
     "baseUrl": ""
-  }
+  },
+  "hasDatabase": true,
+  "project": {
+    "version": "3.1.0",
+    "name": "ott-dashboard",
+    "company": "",
+    "description": "OTT Dashboard React - HAPPLYZ MEDICAL"
+  },
+  "projectType": "nextjs",
+  "detectedAt": "2025-12-20 07:34:44",
+  "hasFirmware": true,
+  "github": {
+    "basePath": "/OTT",
+    "baseUrl": "https://ymora.github.io/OTT",
+    "repo": "ymora/OTT"
+  },
+  "hasApi": true,
+  "technologies": [
+    "PHP API"
+  ],
+  "firmware": {
+    "version": "2.5",
+    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino",
+    "directory": "/hardware/firmware"
+  },
+  "hasFrontend": true,
+  "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime"
 }
