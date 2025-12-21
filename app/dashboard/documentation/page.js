@@ -9,6 +9,7 @@ import { withBasePath } from '@/lib/utils'
 import logger from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiCall } from '@/hooks'
+import { isAdmin as checkIsAdmin } from '@/lib/userUtils'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import MetadataCard from '@/components/MetadataCard'
 import DayDetailsModal from '@/components/DayDetailsModal'
@@ -52,7 +53,7 @@ export default function DocumentationPage() {
   const { user } = useAuth()
   
   // 🔒 SÉCURITÉ : Accès réservé aux administrateurs
-  const isAdmin = user?.role_name === 'admin'
+  const userIsAdmin = checkIsAdmin(user)
   
   const docUrl = useMemo(() => {
     const fileName = DOCUMENTATION_FILES[docType] || DOCUMENTATION_FILES.presentation
@@ -129,7 +130,7 @@ export default function DocumentationPage() {
 
   // 🔒 Protection : Si non admin, afficher un message d'erreur
   // (APRÈS tous les hooks pour respecter les règles de React)
-  if (!isAdmin) {
+  if (!userIsAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-8">
         <div className="max-w-2xl mx-auto">

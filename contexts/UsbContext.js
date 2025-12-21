@@ -111,12 +111,17 @@ export function UsbProvider({ children }) {
   // source: 'device' pour les logs venant du dispositif, 'dashboard' pour les logs du dashboard
   // Utilise un throttling pour éviter de bloquer l'interface avec trop de mises à jour
   const appendUsbStreamLog = useCallback((line, source = 'device') => {
-    if (!line) return
+    logger.log(`🔵 [USB] appendUsbStreamLog appelé - line: ${line ? `${line.length} caractères` : 'null'}, source: ${source}`)
+    
+    // ⚠️ AUCUN FILTRAGE : Ajouter TOUS les logs, même vides
+    // Convertir en string pour gérer tous les cas
+    const logLine = line !== null && line !== undefined ? String(line) : ''
     
     const timestamp = Date.now()
     
-    // Ajouter au buffer
-    logBufferRef.current.push({ id: `${timestamp}-${Math.random()}`, line, timestamp, source })
+    // Ajouter au buffer (même si vide)
+    logBufferRef.current.push({ id: `${timestamp}-${Math.random()}`, line: logLine, timestamp, source })
+    logger.debug(`✅ [USB] Log ajouté au buffer (${logBufferRef.current.length} logs dans le buffer)`)
     
     // Throttling : mettre à jour le state toutes les 100ms maximum pour éviter le blocage
     if (!logUpdateTimeoutRef.current) {
@@ -126,9 +131,11 @@ export function UsbProvider({ children }) {
         logUpdateTimeoutRef.current = null
         
         // Mettre à jour le state avec tous les logs du buffer en une seule fois
+        logger.log(`🔄 [USB] Mise à jour du state avec ${logsToAdd.length} log(s) du buffer`)
         setUsbStreamLogs(prev => {
           const next = [...prev, ...logsToAdd]
           // Limiter à 500 logs en mémoire pour éviter la surcharge
+          logger.log(`✅ [USB] State mis à jour: ${prev.length} → ${next.length} logs (limité à ${next.slice(-500).length})`)
           return next.slice(-500)
         })
       }, 100) // Mise à jour toutes les 100ms maximum
@@ -181,117 +188,8 @@ export function UsbProvider({ children }) {
     return selectedPort
   }, [connect, isConnected, isSupported, port, requestPort])
 
-  // Fonction pour envoyer les logs USB au serveur (batch)
-  const sendLogsToServer = useCallback(async () => {
-    // Vérifier qu'il y a des logs à envoyer
-    if (logsToSendRef.current.length === 0) {
-      return
-    }
-    
-    const currentDevice = usbDevice
-    if (!currentDevice) {
-      // Même sans device, on peut envoyer les logs pour qu'ils soient visibles sur le web
-      // Ne pas bloquer l'envoi des logs
-    }
-    
-    // Identifier le dispositif (ou utiliser 'unknown' si pas disponible)
-    const deviceIdentifier = currentDevice 
-      ? (currentDevice.sim_iccid || currentDevice.device_serial || currentDevice.device_name)
-      : 'unknown'
-    
-    if (!deviceIdentifier) {
-      logger.debug('⚠️ Envoi logs sans identifiant de dispositif')
-      // Continuer quand même, utiliser 'unknown' comme identifiant
-    }
-    
-    // Copier les logs et vider le buffer
-    const logsToSend = [...logsToSendRef.current]
-    logsToSendRef.current = []
-    
-    try {
-      // Utiliser l'API_URL depuis le contexte
-      const apiUrl = API_URL || 'https://ott-jbln.onrender.com'
-      const response = await fetch(`${apiUrl}/api.php/usb-logs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('ott_token') || '' : ''}`
-        },
-        body: JSON.stringify({
-          device_identifier: deviceIdentifier || 'unknown',
-          device_name: currentDevice?.device_name || 'USB-Local',
-          logs: logsToSend
-        })
-      })
-      
-      // Vérifier le Content-Type de la réponse
-      const contentType = response.headers.get('content-type') || ''
-      const isJson = contentType.includes('application/json')
-      
-      if (!response.ok) {
-        // Si ce n'est pas du JSON, c'est probablement une erreur PHP (HTML)
-        let errorMessage = `Erreur HTTP ${response.status}`
-        if (!isJson) {
-          const text = await response.text().catch(() => '')
-          // Extraire le message d'erreur PHP si possible
-          const phpErrorMatch = text.match(/<b>(?:Fatal error|Warning|Parse error|Notice):\s*(.+?)(?:<\/b>|$)/i)
-          if (phpErrorMatch) {
-            errorMessage = `Erreur PHP: ${phpErrorMatch[1].substring(0, 100)}`
-          } else {
-            errorMessage = `Erreur serveur (${response.status}) - Réponse non-JSON`
-          }
-          logger.error('⚠️ Erreur envoi logs USB - Réponse HTML:', text.substring(0, 500))
-        } else {
-          const errorData = await response.json().catch(() => ({}))
-          errorMessage = errorData.error || errorMessage
-          logger.debug('⚠️ Erreur envoi logs USB:', response.status, errorData)
-        }
-        
-        const fullErrorMsg = `⚠️ Erreur envoi logs USB: ${errorMessage}`
-        appendUsbStreamLog(fullErrorMsg, 'dashboard')
-        // En cas d'erreur, remettre les logs dans le buffer pour réessayer plus tard
-        logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
-      } else {
-        // Vérifier que la réponse est bien du JSON
-        if (!isJson) {
-          const text = await response.text().catch(() => '')
-          const errorMsg = `⚠️ Réponse serveur invalide (non-JSON): ${text.substring(0, 100)}`
-          logger.error(errorMsg)
-          appendUsbStreamLog(errorMsg, 'dashboard')
-          // Remettre les logs dans le buffer
-          logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
-        } else {
-          const result = await response.json().catch(() => ({}))
-          const count = result.inserted_count || logsToSend.length
-          logger.debug(`✅ ${count} logs USB envoyés au serveur`)
-          // Ne pas afficher ce message dans la console pour ne pas masquer les logs du firmware
-          // Les logs sont déjà visibles individuellement, ce message est redondant
-        }
-      }
-    } catch (err) {
-      const errorMsg = `⚠️ Erreur envoi logs USB au serveur (non bloquant): ${err.message || err}`
-      logger.error(errorMsg, err)
-      appendUsbStreamLog(errorMsg, 'dashboard')
-      // En cas d'erreur, remettre les logs dans le buffer
-      logsToSendRef.current = [...logsToSend, ...logsToSendRef.current].slice(-200)
-    }
-  }, [usbDevice, API_URL])
-  
   // DÉSACTIVÉ: Les logs USB ne sont plus envoyés en base de données
   // Les logs sont uniquement affichés localement dans la console
-  // useEffect(() => {
-  //   const interval = setInterval(() => {
-  //     sendLogsToServer()
-  //   }, 5000) // Envoyer toutes les 5 secondes
-  //   
-  //   return () => {
-  //     clearInterval(interval)
-  //     // Envoyer les derniers logs avant de démonter
-  //     if (logsToSendRef.current.length > 0) {
-  //       sendLogsToServer()
-  //     }
-  //   }
-  // }, [sendLogsToServer])
   
   // Vérifier et envoyer les commandes UPDATE_CONFIG via USB
   useEffect(() => {
@@ -490,25 +388,18 @@ export function UsbProvider({ children }) {
 
   // Traitement des lignes de streaming USB
   const processUsbStreamLine = useCallback((line) => {
-    if (!line) {
-      logger.debug('processUsbStreamLine: ligne vide')
-      return
-    }
-    const trimmed = line.trim()
-    if (!trimmed) {
-      logger.debug('processUsbStreamLine: ligne vide après trim')
-      return
-    }
-
-    logger.debug('processUsbStreamLine:', trimmed.substring(0, Math.min(100, trimmed.length)))
-
+    logger.log(`🔵 [USB] processUsbStreamLine appelé - ligne: ${line ? `${line.length} caractères` : 'null'} - "${line ? line.substring(0, Math.min(50, line.length)) : ''}${line && line.length > 50 ? '...' : ''}"`)
+    
+    // ⚠️ AUCUN FILTRAGE : Ajouter TOUS les logs, même vides
     // Si en pause, ne pas ajouter les logs à l'affichage (mais continuer à traiter les JSON pour les mesures)
     // Note: Cette fonction est déjà protégée par handleUsbStreamChunk qui vérifie usbStreamStatus === 'paused'
-    // Mais ajoutons une vérification supplémentaire pour être sûr
-    // appendUsbStreamLog sera appelé seulement si on n'est pas en pause (protégé par handleUsbStreamChunk)
     
     // Toujours ajouter les logs pour affichage (sauf si en pause, ce qui est géré par handleUsbStreamChunk)
-    appendUsbStreamLog(trimmed)
+    // Ajouter la ligne telle quelle, même si elle est vide ou contient seulement des espaces
+    const trimmed = line ? line.trim() : ''
+    logger.log(`📤 [USB] Appel appendUsbStreamLog avec: "${trimmed || line || ''}"`)
+    appendUsbStreamLog(trimmed || line || '') // Ajouter même si vide
+    logger.debug(`✅ [USB] appendUsbStreamLog appelé`)
     // Log uniquement en debug pour éviter le spam
     if (process.env.NODE_ENV === 'development') {
       logger.debug('✅ Log ajouté via appendUsbStreamLog:', trimmed.substring(0, 50))
@@ -707,8 +598,22 @@ export function UsbProvider({ children }) {
         if (isUnifiedFormat) {
           const now = new Date().toISOString()
           
-          // Log pour les 3 premiers messages
-          if (!payload.seq || payload.seq <= 3) {
+          // 🚀 APPROCHE 3 (HYBRIDE) : Détecter boot_info avec PRIORITÉ MAX
+          const isBootInfo = payload.type === 'boot_info'
+          
+          if (isBootInfo) {
+            logger.log('🚀🚀🚀 [BOOT_INFO] Message de boot reçu - Chargement instantané !', {
+              has_sim_iccid: !!payload.sim_iccid,
+              has_device_name: !!payload.device_name,
+              has_firmware_version: !!payload.firmware_version,
+              has_config: !!(payload.sleep_minutes || payload.measurement_duration_ms),
+              all_keys: Object.keys(payload).length
+            })
+            appendUsbStreamLog('🚀 BOOT_INFO reçu - Configuration complète chargée instantanément !', 'dashboard')
+          }
+          
+          // Log pour les 3 premiers messages (ou boot_info)
+          if (isBootInfo || !payload.seq || payload.seq <= 3) {
             logger.log('✅ Format unifié détecté:', {
               seq: payload.seq,
               mode: payload.mode,
@@ -846,11 +751,11 @@ export function UsbProvider({ children }) {
           }
           
           // 2. Extraire et stocker la configuration
-          // Détecter si c'est une réponse GET_CONFIG/GET_STATUS (contient type: "config_response")
+          // Détecter si c'est une réponse GET_CONFIG/GET_STATUS (isBootInfo déjà déclaré ligne 602)
           const isConfigResponse = payload.type === 'config_response' || 
                                    (payload.mode === 'usb_stream' && payload.type === 'config_response')
           
-          // Log de débogage pour config_response
+          // Log de débogage pour config_response ou boot_info
           if (isConfigResponse) {
             logger.log('🔍🔍🔍 [USB] CONFIG_RESPONSE DÉTECTÉ:', {
               type: payload.type,
@@ -863,18 +768,19 @@ export function UsbProvider({ children }) {
             appendUsbStreamLog('🔍 CONFIG_RESPONSE détecté - Configuration complète reçue', 'dashboard')
           }
           
-          // Si c'est une réponse GET_CONFIG, elle contient TOUTE la configuration
+          // 🚀 BOOT_INFO : traiter comme config_response (configuration complète)
+          // Si c'est une réponse GET_CONFIG ou BOOT_INFO, elle contient TOUTE la configuration
           // Sinon, on extrait seulement les champs essentiels des messages de streaming
-          const hasConfigData = isConfigResponse || // Réponse GET_CONFIG contient toujours toute la config
+          const hasConfigData = isBootInfo || isConfigResponse || // boot_info et GET_CONFIG contiennent toute la config
                                 payload.sleep_minutes != null || payload.measurement_duration_ms != null || 
                                 payload.calibration_coefficients // Champs essentiels seulement dans le streaming
           
           if (hasConfigData) {
-            // Si c'est une réponse GET_CONFIG, utiliser directement toutes les valeurs
+            // Si c'est boot_info ou GET_CONFIG, utiliser directement toutes les valeurs
             // Sinon (message de streaming), fusionner seulement les champs essentiels avec la config existante
             const existingConfig = usbDeviceInfo?.config || usbDevice?.config || {}
             
-            const deviceConfigFromUsb = isConfigResponse 
+            const deviceConfigFromUsb = (isBootInfo || isConfigResponse) 
               ? {
                   // Réponse GET_CONFIG : utiliser toutes les valeurs directement (config complète)
                   sleep_minutes: payload.sleep_minutes ?? null,
@@ -914,7 +820,30 @@ export function UsbProvider({ children }) {
                     : (existingConfig.calibration_coefficients || [0, 1, 0])
                 }
             
-            if (isConfigResponse) {
+            if (isBootInfo) {
+              logger.log('🚀🚀🚀 Configuration COMPLÈTE reçue via BOOT_INFO:', JSON.stringify(deviceConfigFromUsb, null, 2))
+              appendUsbStreamLog('🚀 Configuration complète chargée au boot (INSTANTANÉ !)', 'dashboard')
+              
+              // Mettre à jour aussi firmware_version et device_serial depuis boot_info
+              if (payload.firmware_version) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  firmware_version: payload.firmware_version
+                }))
+              }
+              if (payload.device_serial) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  device_serial: payload.device_serial
+                }))
+              }
+              if (payload.sim_iccid) {
+                setUsbDeviceInfo(prev => ({
+                  ...prev,
+                  sim_iccid: payload.sim_iccid
+                }))
+              }
+            } else if (isConfigResponse) {
               logger.log('✅✅✅ Configuration COMPLÈTE reçue via GET_CONFIG:', JSON.stringify(deviceConfigFromUsb, null, 2))
               appendUsbStreamLog('✅ Configuration complète reçue du dispositif (GET_CONFIG)', 'dashboard')
               
@@ -1298,8 +1227,10 @@ export function UsbProvider({ children }) {
 
   // Gestion des chunks de streaming
   const handleUsbStreamChunk = useCallback((chunk) => {
+    logger.log(`🔵 [USB] handleUsbStreamChunk appelé - chunk: ${chunk ? `${chunk.length} caractères` : 'null'}`)
+    
     if (!chunk) {
-      logger.debug('⚠️ handleUsbStreamChunk: chunk vide ou null')
+      logger.warn('⚠️ [USB] handleUsbStreamChunk: chunk vide ou null')
       return
     }
 
@@ -1309,7 +1240,7 @@ export function UsbProvider({ children }) {
       return
     }
 
-    logger.debug('📥 [USB] Chunk reçu, longueur:', chunk.length)
+    logger.log(`📥 [USB] Chunk reçu: ${chunk.length} caractères - "${chunk.substring(0, Math.min(100, chunk.length))}${chunk.length > 100 ? '...' : ''}"`)
     
     // Accumuler les chunks dans le buffer jusqu'à avoir une ligne complète (terminée par \n)
     usbStreamBufferRef.current += chunk
@@ -1336,43 +1267,55 @@ export function UsbProvider({ children }) {
     }
     
     // Traiter toutes les lignes extraites
-    logger.debug(`📦 [USB] ${parts.length} ligne(s) extraite(s) du chunk`)
+    logger.log(`📦 [USB] ${parts.length} ligne(s) extraite(s) du chunk`)
     let jsonCount = 0
+    let logCount = 0
     parts.forEach((line, index) => {
-      if (line || line === '') {
-        const trimmed = line.trim()
-        logger.debug(`📝 [USB] Traitement ligne ${index + 1}/${parts.length}: ${trimmed.substring(0, 50)}`)
-        
-        // Log uniquement les JSON (pas les logs du firmware)
-        if (trimmed.startsWith('{')) {
-          jsonCount++
-          try {
-            const testPayload = JSON.parse(trimmed)
-            // Log tous les JSON (mais pas trop verbeux)
-            logger.log(`📥 JSON #${jsonCount} - type: ${testPayload.type || testPayload.mode || 'unknown'}, seq: ${testPayload.seq || 'N/A'}`)
-            
-            // Log détaillé pour la configuration
-            if (testPayload.sleep_minutes != null || testPayload.measurement_duration_ms != null || testPayload.calibration_coefficients) {
-              logger.log(`✅ Configuration détectée dans JSON:`, {
-                sleep_minutes: testPayload.sleep_minutes,
-                measurement_duration_ms: testPayload.measurement_duration_ms,
-                calibration: testPayload.calibration_coefficients
-              })
-            }
-          } catch (e) {
-            logger.warn(`❌ JSON invalide:`, e.message, `| Ligne: ${trimmed.substring(0, 100)}`)
+      // Traiter toutes les lignes, même vides (pour les logs du firmware)
+      const trimmed = line.trim()
+      
+      logger.log(`📝 [USB] Traitement ligne ${index + 1}/${parts.length} (${line.length} chars, trimmed: ${trimmed.length}): "${trimmed.substring(0, 80)}${trimmed.length > 80 ? '...' : ''}"`)
+      
+      // Détecter les JSON
+      if (trimmed.startsWith('{')) {
+        jsonCount++
+        try {
+          const testPayload = JSON.parse(trimmed)
+          // Log tous les JSON (mais pas trop verbeux)
+          logger.log(`📥 JSON #${jsonCount} - type: ${testPayload.type || testPayload.mode || 'unknown'}, seq: ${testPayload.seq || 'N/A'}`)
+          
+          // Log détaillé pour la configuration
+          if (testPayload.sleep_minutes != null || testPayload.measurement_duration_ms != null || testPayload.calibration_coefficients) {
+            logger.log(`✅ Configuration détectée dans JSON:`, {
+              sleep_minutes: testPayload.sleep_minutes,
+              measurement_duration_ms: testPayload.measurement_duration_ms,
+              calibration: testPayload.calibration_coefficients
+            })
           }
+        } catch (e) {
+          logger.warn(`❌ JSON invalide:`, e.message, `| Ligne: ${trimmed.substring(0, 100)}`)
         }
-        
-        // TOUJOURS appeler processUsbStreamLine pour que les logs soient ajoutés
-        logger.debug(`📤 [USB] Appel processUsbStreamLine pour ligne ${index + 1}`)
-        processUsbStreamLine(line)
+      } else {
+        // Log du firmware (pas JSON)
+        logCount++
+        logger.log(`📋 [USB] Log firmware #${logCount}: "${trimmed.substring(0, 80)}${trimmed.length > 80 ? '...' : ''}"`)
       }
+      
+      // TOUJOURS appeler processUsbStreamLine pour que les logs soient ajoutés
+      logger.log(`📤 [USB] Appel processUsbStreamLine pour ligne ${index + 1}`)
+      processUsbStreamLine(line)
+      logger.debug(`✅ [USB] processUsbStreamLine terminé pour ligne ${index + 1}`)
     })
     
-    // Log un résumé si plusieurs lignes traitées (mais pas de JSON)
-    if (parts.length > 0 && jsonCount === 0) {
-      logger.debug(`📥 ${parts.length} ligne(s) de log du firmware traitée(s)`)
+    // Log un résumé des lignes traitées
+    if (parts.length > 0) {
+      if (jsonCount > 0 && logCount > 0) {
+        logger.debug(`📥 ${jsonCount} JSON + ${logCount} log(s) du firmware traitée(s)`)
+      } else if (jsonCount > 0) {
+        logger.debug(`📥 ${jsonCount} JSON traité(s)`)
+      } else if (logCount > 0) {
+        logger.debug(`📥 ${logCount} log(s) du firmware traité(s)`)
+      }
     }
     
     // Ne mettre à jour le status que si on n'est pas en pause
@@ -1408,32 +1351,77 @@ export function UsbProvider({ children }) {
       // Utiliser le port explicite si fourni, sinon utiliser le port du contexte
       const portToUse = explicitPort || port
       
-      // Vérifier si le port est disponible et ouvert
-      const portIsOpen = portToUse && portToUse.readable && portToUse.writable
-      const portIsConnected = portToUse && isConnected
+      logger.log(`🔍 [USB] startUsbStreaming - explicitPort: ${!!explicitPort}, port: ${!!port}, portToUse: ${!!portToUse}`)
       
-      if (portIsOpen || portIsConnected) {
-        logger.debug('[USB] Port ready')
+      if (!portToUse) {
+        logger.error('❌ [USB] Aucun port disponible (ni explicitPort ni port du contexte)')
+        throw new Error('Aucun port USB disponible. Veuillez sélectionner et connecter un port d\'abord.')
+      }
+      
+      // Vérifier si le port est disponible et ouvert
+      const portIsOpen = portToUse.readable && portToUse.writable
+      const portIsConnected = isConnected && (port === portToUse)
+      
+      logger.log(`🔍 [USB] Port check - portIsOpen: ${portIsOpen}, portIsConnected: ${portIsConnected}, readable: ${!!portToUse.readable}, writable: ${!!portToUse.writable}`)
+      
+      if (portIsOpen) {
+        logger.log('[USB] ✅ Port ready et ouvert')
         // Si le port est ouvert mais pas dans le contexte, mettre à jour le contexte
-        if (portToUse && portToUse !== port) {
-          logger.log('🔄 [USB] Mise à jour du port dans le contexte...')
-          // Le port sera mis à jour automatiquement par SerialPortManager
+        if (portToUse !== port) {
+          logger.log('🔄 [USB] Port explicite utilisé (différent du contexte)')
         }
-      } else if (portToUse && !portIsOpen && !portIsConnected) {
-        // Port existe mais pas ouvert, essayer de reconnecter
-        logger.log('🔄 [USB] Port existe mais non ouvert, reconnexion...')
-        const reconnected = await connect(portToUse, 115200)
-        if (!reconnected) {
-          throw new Error('Impossible de reconnecter au port')
+      } else if (portIsConnected) {
+        logger.log('[USB] ✅ Port connecté dans le contexte')
+        // Port connecté mais peut-être pas encore complètement ouvert, attendre un peu
+        await new Promise(resolve => setTimeout(resolve, 200))
+        // Vérifier à nouveau
+        if (!portToUse.readable || !portToUse.writable) {
+          logger.warn('⚠️ [USB] Port connecté mais pas encore ouvert, tentative de réouverture...')
+          // Le port devrait être ouvert par SerialPortManager, on continue quand même
         }
-        logger.log('✅ [USB] Port reconnecté')
       } else {
-        // Aucun port disponible - ne pas appeler ensurePortReady ici
-        // car cela ouvrirait un modal. Le composant doit gérer la connexion avant
-        logger.error('❌ [USB] Aucun port USB connecté')
-        throw new Error('Aucun port USB connecté. Veuillez sélectionner et connecter un port d\'abord.')
+        // Port existe mais pas ouvert ni connecté
+        logger.warn('⚠️ [USB] Port existe mais non ouvert - Tentative de connexion via ensurePortReady...')
+        // Utiliser ensurePortReady qui gère la connexion
+        try {
+          const readyPort = await ensurePortReady()
+          if (!readyPort) {
+            throw new Error('Impossible de préparer le port. Veuillez réessayer.')
+          }
+          // Attendre un peu que le port soit complètement ouvert
+          await new Promise(resolve => setTimeout(resolve, 300))
+          logger.log('[USB] ✅ Port préparé et prêt')
+        } catch (ensureErr) {
+          logger.error('❌ [USB] Erreur ensurePortReady:', ensureErr)
+          throw new Error(`Impossible de préparer le port: ${ensureErr.message}`)
+        }
       }
 
+      // ⚠️ IMPORTANT: Vérifier une dernière fois que le port est disponible avant de démarrer la lecture
+      // Attendre que le port soit complètement ouvert (avec retry)
+      let portReady = false
+      let retries = 0
+      const maxRetries = 10
+      
+      while (!portReady && retries < maxRetries) {
+        const currentPort = explicitPort || port
+        if (currentPort && currentPort.readable && currentPort.writable) {
+          portReady = true
+          logger.log(`✅ [USB] Port vérifié et prêt (tentative ${retries + 1}/${maxRetries})`)
+        } else {
+          retries++
+          logger.debug(`⏳ [USB] Port pas encore prêt (tentative ${retries}/${maxRetries}), attente...`)
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+      }
+      
+      if (!portReady) {
+        const errorMsg = 'Port non disponible après vérification. Veuillez reconnecter le port.'
+        logger.error(`❌ [USB] ${errorMsg}`)
+        appendUsbStreamLog(`❌ ${errorMsg}`, 'dashboard')
+        throw new Error(errorMsg)
+      }
+      
       // Arrêter l'ancien streaming s'il existe (si on n'est pas en pause)
       if (usbStreamStopRef.current && !isResuming) {
         logger.debug('[USB] Stop ancien stream')
@@ -1460,7 +1448,7 @@ export function UsbProvider({ children }) {
         appendUsbStreamLog('▶️ Reprise du streaming...', 'dashboard')
       }
       
-        logger.debug('[USB] Reading...')
+      logger.debug('[USB] Reading...')
 
       // Démarrer la lecture
       appendUsbStreamLog('🚀 Démarrage du streaming USB...', 'dashboard')
@@ -1477,7 +1465,7 @@ export function UsbProvider({ children }) {
       setUsbStreamStatus('waiting')
       
       logger.log('✅ USB streaming démarré')
-      appendUsbStreamLog('✅ Streaming USB démarré - En attente de données...', 'dashboard')
+      // Message supprimé car redondant avec "🚀 Démarrage du streaming USB..." affiché juste avant
       
       // Demander la configuration complète au démarrage (SEULEMENT si on démarre, pas si on reprend)
       // Cela permet de récupérer TOUS les paramètres en une seule fois
@@ -1594,6 +1582,10 @@ export function UsbProvider({ children }) {
 
     let isMounted = true
     let connectionAttemptInProgress = false
+    let lastConnectionAttempt = 0
+    const MIN_CONNECTION_INTERVAL_MS = 10000 // Minimum 10 secondes entre les tentatives
+    let consecutiveFailures = 0
+    const MAX_CONSECUTIVE_FAILURES = 3 // Arrêter après 3 échecs consécutifs
 
     // Fonction pour tenter la connexion automatique
     const attemptAutoConnect = async () => {
@@ -1604,30 +1596,52 @@ export function UsbProvider({ children }) {
 
       // Si déjà connecté, ne rien faire
       if (isConnected && port) {
+        consecutiveFailures = 0 // Réinitialiser le compteur si connecté
         return
       }
 
+      // Vérifier le délai minimum entre les tentatives
+      const now = Date.now()
+      if (now - lastConnectionAttempt < MIN_CONNECTION_INTERVAL_MS) {
+        return
+      }
+
+      // Si trop d'échecs consécutifs, logger mais continuer quand même (ne pas bloquer complètement)
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        logger.warn(`⚠️ [USB] Trop d'échecs consécutifs (${consecutiveFailures}), mais on continue quand même`)
+        // Ne pas return, continuer pour permettre de nouvelles tentatives
+        // Réinitialiser le compteur après un délai pour permettre de nouvelles tentatives
+        consecutiveFailures = Math.max(0, consecutiveFailures - 1) // Réduire progressivement
+      }
+
       connectionAttemptInProgress = true
+      lastConnectionAttempt = now
 
       try {
         // Récupérer les ports déjà autorisés
         const ports = await navigator.serial.getPorts()
         
-        // Log uniquement en debug, pas dans la console utilisateur (trop verbeux)
-        logger.debug(`[USB] attemptAutoConnect: ${ports.length} port(s) autorisé(s) trouvé(s)`)
+        // Logger pour debug
+        logger.log(`🔍 [USB] attemptAutoConnect: ${ports.length} port(s) autorisé(s) trouvé(s)`)
         
         if (ports.length === 0) {
           // Pas de ports autorisés - c'est normal, l'utilisateur devra autoriser manuellement
           // Ne pas spammer avec des messages, la détection automatique fonctionnera une fois qu'un port sera autorisé
+          // ⚠️ IMPORTANT: Ne pas incrémenter consecutiveFailures car ce n'est pas un échec
+          logger.log(`ℹ️ [USB] Aucun port autorisé - Cliquez sur "Sélectionner un port USB" pour autoriser COM3`)
           connectionAttemptInProgress = false
           return
         }
+        
+        logger.log(`🔍 [USB] ${ports.length} port(s) autorisé(s) trouvé(s) - Tentative de connexion...`)
 
         // Essayer de se connecter au premier port disponible
         for (const availablePort of ports) {
-          // Vérifier si ce port est déjà utilisé
+          // Vérifier si ce port est déjà utilisé ET connecté
           if (port === availablePort && isConnected) {
-            continue
+            logger.debug('🔌 [USB] Port déjà connecté, pas besoin de reconnecter')
+            connectionAttemptInProgress = false
+            return
           }
 
           // Vérifier si le port est déjà ouvert
@@ -1641,6 +1655,13 @@ export function UsbProvider({ children }) {
               return
             }
             
+            // Port déjà ouvert et non verrouillé, vérifier si on est déjà connecté à ce port
+            if (port === availablePort && isConnected) {
+              logger.debug('🔌 [USB] Port déjà connecté et ouvert, pas besoin de reconnecter')
+              connectionAttemptInProgress = false
+              return
+            }
+            
             // Port déjà ouvert et non verrouillé, l'utiliser
             logger.log('🔌 [USB] Port déjà ouvert détecté, connexion automatique...')
             try {
@@ -1650,6 +1671,7 @@ export function UsbProvider({ children }) {
                 appendUsbStreamLog('✅ Connexion automatique au dispositif USB établie', 'dashboard')
                 
                 // Démarrer automatiquement le streaming après connexion
+                // ⚠️ IMPORTANT: Attendre que le port soit dans le contexte avant de démarrer le streaming
                 const streamTimeoutId = setTimeout(async () => {
                   if (isMounted) {
                     // Vérifier si un streaming est déjà en cours ou en cours de démarrage
@@ -1658,9 +1680,18 @@ export function UsbProvider({ children }) {
                       appendUsbStreamLog('ℹ️ Streaming déjà actif', 'dashboard')
                       return
                     }
+                    
+                    // Vérifier que le port est bien ouvert avant de démarrer le streaming
+                    if (!availablePort || !availablePort.readable || !availablePort.writable) {
+                      logger.error('❌ [USB] Port non disponible après connexion')
+                      appendUsbStreamLog('❌ Erreur: Port non disponible après connexion', 'dashboard')
+                      return
+                    }
+                    
                     try {
                       logger.log('📡 [USB] Démarrage automatique du streaming...')
-                      appendUsbStreamLog('🚀 Démarrage automatique du streaming USB...', 'dashboard')
+                      // Ne pas afficher de message ici car startUsbStreaming affiche déjà les messages
+                      // Passer explicitement le port pour éviter les problèmes de closure
                       await startUsbStreaming(availablePort)
                     } catch (streamErr) {
                       logger.warn('⚠️ [USB] Erreur démarrage streaming automatique:', streamErr)
@@ -1669,19 +1700,28 @@ export function UsbProvider({ children }) {
                   } else {
                     logger.warn('⚠️ [USB] Composant démonté avant démarrage streaming')
                   }
-                }, 500)
+                }, 1000) // Délai augmenté à 1 seconde pour laisser le temps au contexte de se mettre à jour
                 // Stocker dans une référence pour cleanup si nécessaire
                 streamTimeoutRefs.current.push(streamTimeoutId)
                 
+                consecutiveFailures = 0 // Réinitialiser le compteur en cas de succès
                 connectionAttemptInProgress = false
                 return
               }
             } catch (connectErr) {
               logger.debug('⚠️ [USB] Erreur connexion port déjà ouvert:', connectErr.message)
+              consecutiveFailures++
               // Continuer avec le port suivant
               continue
             }
           } else {
+            // Port non ouvert, vérifier si on est déjà connecté à ce port
+            if (port === availablePort && isConnected) {
+              logger.debug('🔌 [USB] Port déjà connecté (mais pas ouvert dans cet onglet), pas besoin de reconnecter')
+              connectionAttemptInProgress = false
+              return
+            }
+            
             // Port non ouvert, essayer de l'ouvrir
             logger.debug('[USB] Auto-connect')
             try {
@@ -1690,7 +1730,10 @@ export function UsbProvider({ children }) {
                 logger.log('✅ [USB] Connexion automatique réussie')
                 appendUsbStreamLog('✅ Connexion automatique au dispositif USB établie', 'dashboard')
                 
+                consecutiveFailures = 0 // Réinitialiser le compteur en cas de succès
+                
                 // Démarrer automatiquement le streaming après connexion
+                // ⚠️ IMPORTANT: Attendre que le port soit dans le contexte avant de démarrer le streaming
                 const streamTimeoutId = setTimeout(async () => {
                   if (isMounted) {
                     // Vérifier si un streaming est déjà en cours ou en cours de démarrage
@@ -1699,9 +1742,18 @@ export function UsbProvider({ children }) {
                       appendUsbStreamLog('ℹ️ Streaming déjà actif', 'dashboard')
                       return
                     }
+                    
+                    // Vérifier que le port est bien ouvert avant de démarrer le streaming
+                    if (!availablePort || !availablePort.readable || !availablePort.writable) {
+                      logger.error('❌ [USB] Port non disponible après connexion')
+                      appendUsbStreamLog('❌ Erreur: Port non disponible après connexion', 'dashboard')
+                      return
+                    }
+                    
                     try {
                       logger.log('📡 [USB] Démarrage automatique du streaming...')
-                      appendUsbStreamLog('🚀 Démarrage automatique du streaming USB...', 'dashboard')
+                      // Ne pas afficher de message ici car startUsbStreaming affiche déjà les messages
+                      // Passer explicitement le port pour éviter les problèmes de closure
                       await startUsbStreaming(availablePort)
                     } catch (streamErr) {
                       logger.warn('⚠️ [USB] Erreur démarrage streaming automatique:', streamErr)
@@ -1710,7 +1762,7 @@ export function UsbProvider({ children }) {
                   } else {
                     logger.warn('⚠️ [USB] Composant démonté avant démarrage streaming')
                   }
-                }, 500)
+                }, 1000) // Délai augmenté à 1 seconde pour laisser le temps au contexte de se mettre à jour
                 // Stocker dans une référence pour cleanup si nécessaire
                 streamTimeoutRefs.current.push(streamTimeoutId)
                 
@@ -1719,6 +1771,7 @@ export function UsbProvider({ children }) {
               }
             } catch (connectErr) {
               logger.debug('⚠️ [USB] Erreur connexion port:', connectErr.message)
+              consecutiveFailures++
               // Continuer avec le port suivant
               continue
             }
@@ -1728,28 +1781,41 @@ export function UsbProvider({ children }) {
         connectionAttemptInProgress = false
       } catch (err) {
         logger.debug('⚠️ [USB] Erreur détection/connexion automatique:', err.message)
+        consecutiveFailures++
         connectionAttemptInProgress = false
       }
     }
 
     // Tentative immédiate au montage
-    // Tentative immédiate au montage
+    logger.log('🚀 [USB] Démarrage détection automatique USB...')
     attemptAutoConnect()
 
-    // Polling périodique pour détecter les nouveaux ports (toutes les 3 secondes)
+    // Polling périodique pour détecter les nouveaux ports (toutes les 5 secondes)
+    // Intervalle réduit pour une détection plus rapide
     const interval = setInterval(() => {
       if (isMounted && !isConnected) {
+        // Réinitialiser progressivement le compteur d'échecs pour permettre de nouvelles tentatives
+        if (consecutiveFailures > 0) {
+          consecutiveFailures = Math.max(0, consecutiveFailures - 1)
+          logger.debug(`[USB] Réduction du compteur d'échecs: ${consecutiveFailures + 1} → ${consecutiveFailures}`)
+        }
         attemptAutoConnect()
       }
-    }, 3000)
+    }, 5000) // 5 secondes pour une détection plus rapide
 
     // Nettoyer à la déconnexion
     return () => {
       isMounted = false
       clearInterval(interval)
       // Nettoyer tous les timeouts de streaming
-      streamTimeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
+      streamTimeoutRefs.current.forEach(timeoutId => {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+      })
       streamTimeoutRefs.current = []
+      // Réinitialiser le flag de connexion en cours
+      connectionAttemptInProgress = false
     }
   }, [isSupported, isConnected, port, connect, startUsbStreaming, appendUsbStreamLog])
 

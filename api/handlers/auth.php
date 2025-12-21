@@ -172,13 +172,26 @@ function handleLogin() {
             $userFull['permissions'] = '';
         }
         
-        $token = generateJWT([
-            'user_id' => $userFull['id'],
-            'email' => $userFull['email'],
-            'role' => $userFull['role_name']
-        ]);
+        try {
+            $token = generateJWT([
+                'user_id' => $userFull['id'],
+                'email' => $userFull['email'],
+                'role' => $userFull['role_name']
+            ]);
+        } catch(Exception $jwtError) {
+            error_log('[handleLogin] JWT generation error: ' . $jwtError->getMessage());
+            http_response_code(500);
+            $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $jwtError->getMessage() : 'Token generation error';
+            echo json_encode(['success' => false, 'error' => $errorMsg], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return;
+        }
         
-        auditLog('user.login', 'user', $userFull['id']);
+        try {
+            auditLog('user.login', 'user', $userFull['id']);
+        } catch(Exception $auditError) {
+            // Ne pas bloquer la connexion si l'audit échoue
+            error_log('[handleLogin] Audit log error (non-blocking): ' . $auditError->getMessage());
+        }
         
         unset($userFull['password_hash']);
         // Convertir permissions en tableau si c'est une string

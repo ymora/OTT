@@ -97,19 +97,6 @@ function isValidFilename($filename, $allowedExtensions = []) {
 }
 
 /**
- * Valide un code ICCID (SIM card)
- * @param string $iccid Code ICCID à valider
- * @return bool True si valide
- */
-function isValidIccid($iccid) {
-    if (empty($iccid)) {
-        return false;
-    }
-    // ICCID: 15-20 chiffres
-    return preg_match('/^\d{15,20}$/', $iccid) === 1;
-}
-
-/**
  * Valide une version de firmware
  * @param string $version Version à valider
  * @return bool True si valide

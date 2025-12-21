@@ -4,7 +4,7 @@
 **Periode analysee** : 2025-11-14 - 2025-12-20
 **Developpeur** : ymora
 **Projet** : ott-dashboard
-**Total commits analyses** : 1111
+**Total commits analyses** : 1112
 
 ---
 
@@ -46,18 +46,18 @@
 | 2025-12-17 | ~8h | 19 | 10 | 8 | 0 | 1 | 0 | 0 | 0 | 0 |
 | 2025-12-18 | ~10h | 67 | 9 | 46 | 3 | 8 | 7 | 0 | 7 | 3 |
 | 2025-12-19 | ~8h | 18 | 3 | 12 | 3 | 2 | 2 | 2 | 1 | 2 |
-| 2025-12-20 | ~4h | 5 | 1 | 1 | 0 | 1 | 1 | 0 | 0 | 0 |
+| 2025-12-20 | ~6h | 6 | 1 | 1 | 0 | 2 | 2 | 0 | 0 | 0 |
 
 ---
 
 ## Resume
 
-- **Total estime** : ~296 heures
+- **Total estime** : ~298 heures
 - **Jours travailles** : 36 jours
-- **Moyenne** : ~8.2h/jour
+- **Moyenne** : ~8.3h/jour
 - **Periode** : 2025-11-14 -> 2025-12-20
 
 ---
 
-_Rapport genere automatiquement le 2025-12-20 08:41_
+_Rapport genere automatiquement le 2025-12-21 00:04_
 _Base sur l'analyse Git des commits de ymora_

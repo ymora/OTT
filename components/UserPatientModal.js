@@ -107,10 +107,12 @@ export default function UserPatientModal({
         setFormData(initialFormData)
         setPasswordConfirm('')
       } else {
+        // Utiliser date_of_birth (nom de la colonne DB) avec fallback sur birth_date
+        const birthDate = editingItem.date_of_birth || editingItem.birth_date
         initialFormData = {
           first_name: editingItem.first_name || '',
           last_name: editingItem.last_name || '',
-          birth_date: editingItem.birth_date ? editingItem.birth_date.split('T')[0] : '',
+          birth_date: birthDate ? birthDate.split('T')[0] : '',
           phone: editingItem.phone || '',
           email: editingItem.email || '',
           city: editingItem.city || '',

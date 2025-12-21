@@ -210,9 +210,9 @@ static const unsigned long OTA_CHECK_INTERVAL_MS = 30000;     // Vérifier comma
 // Variables pour mode USB dynamique
 static bool usbModeActive = false;
 static unsigned long lastUsbCheck = 0;
-static const unsigned long USB_CHECK_INTERVAL_MS = 500;  // Vérifier USB toutes les 500ms
+static const unsigned long USB_CHECK_INTERVAL_MS = 1000;  // Vérifier USB toutes les 1000ms (réduit oscillations)
 static int usbStateCounter = 0;                          // Compteur pour debounce (éviter oscillations)
-static const int USB_STATE_THRESHOLD = 3;                // Nombre de vérifications consécutives nécessaires pour changer d'état
+static const int USB_STATE_THRESHOLD = 6;                // Nombre de vérifications consécutives nécessaires pour changer d'état (augmenté pour stabilité)
 static bool watchdogConfigured = false;
 static String otaPrimaryUrl;
 static String otaFallbackUrl;
@@ -336,28 +336,55 @@ bool getDeviceLocation(float* latitude, float* longitude);
 bool getDeviceLocationFast(float* latitude, float* longitude);
 
 void setup() {
+  // ⚠️ CRITIQUE: Initialiser le watchdog IMMÉDIATEMENT pour éviter les resets RTCWDT
+  // Le RTC watchdog peut reset avant que le firmware ne démarre si on attend trop
+  // Utiliser une valeur par défaut si non configurée (évite timeout de 0)
+  uint32_t initialWatchdogTimeout = (watchdogTimeoutSeconds > 0) ? watchdogTimeoutSeconds : WATCHDOG_TIMEOUT_DEFAULT_SEC;
+  configureWatchdog(initialWatchdogTimeout);
+  feedWatchdog();
+  
+  // Petit délai pour laisser le système s'initialiser après le watchdog
+  delay(50);
+  feedWatchdog();
+  
   initSerial();
+  feedWatchdog();
+  
   Serial.println(F("\n═══ OTT Firmware v2.5 ═══"));
+  feedWatchdog();
+  
   Serial.printf("Serial: %s | ICCID: %s\n",
                 DEVICE_SERIAL.c_str(),
                 DEVICE_ICCID.substring(0, 10).c_str());
+  feedWatchdog();
+  
   if (DEVICE_SERIAL == "OTT-XX-XXX") {
     Serial.println(F("⚠️ Serial temporaire → Backend assignera OTT-YY-NNN"));
+    feedWatchdog();
   }
 
   initBoard();
+  feedWatchdog();
+  
   loadConfig();
+  feedWatchdog();
 
   // Vérifier si on doit faire un rollback (si le boot a échoué plusieurs fois)
   checkBootFailureAndRollback();
+  feedWatchdog();
 
   // Valider le boot et marquer le firmware comme stable si c'est un boot réussi
   validateBootAndMarkStable();
+  feedWatchdog();
 
   // Auth: ICCID uniquement (pas de JWT)
   Serial.println(F("🔐 Auth: ICCID uniquement (pas de JWT)"));
+  feedWatchdog();
 
-  configureWatchdog(watchdogTimeoutSeconds);
+  // Reconfigurer le watchdog avec la valeur chargée depuis la config (si différente)
+  if (watchdogTimeoutSeconds > 0 && watchdogTimeoutSeconds != initialWatchdogTimeout) {
+    configureWatchdog(watchdogTimeoutSeconds);
+  }
   feedWatchdog();
   logRuntimeConfig();
 
@@ -369,8 +396,13 @@ void setup() {
   // =========================================================================
   // DÉTECTION USB EN PRIORITÉ (avant modem pour ne pas bloquer)
   // =========================================================================
-  bool usbConnected = Serial.availableForWrite() > 0;
+  // Méthode de détection USB plus stable au boot
+  uint32_t availableWrite = Serial.availableForWrite();
+  bool usbConnected = (availableWrite > 0 && availableWrite >= 64);  // Buffer doit avoir au moins 64 bytes disponibles
   usbModeActive = usbConnected;
+  if (usbConnected) {
+    usbStateCounter = USB_STATE_THRESHOLD * 2;  // Initialiser avec valeur élevée pour éviter oscillations
+  }
 
   if (usbConnected) {
     Serial.println(F("\n🔌 USB: Mode streaming (1s interval)"));
@@ -450,20 +482,30 @@ void loop() {
   unsigned long now = millis();
 
   // =========================================================================
-  // DÉTECTION USB DYNAMIQUE (vérification toutes les 500ms avec debounce)
+  // DÉTECTION USB DYNAMIQUE (vérification toutes les 1000ms avec debounce amélioré)
   // =========================================================================
   if (now - lastUsbCheck >= USB_CHECK_INTERVAL_MS) {
     lastUsbCheck = now;
-    bool currentUsbState = Serial.availableForWrite() > 0;
+    feedWatchdog();  // Nourrir le watchdog pendant la vérification USB
+    
+    // Méthode de détection USB plus stable : vérifier si on peut écrire ET si le buffer n'est pas plein
+    // availableForWrite() peut être instable, donc on vérifie aussi que le buffer TX n'est pas saturé
+    bool currentUsbState = false;
+    uint32_t availableWrite = Serial.availableForWrite();
+    if (availableWrite > 0 && availableWrite >= 64) {  // Buffer doit avoir au moins 64 bytes disponibles
+      // Test d'écriture non-bloquant : essayer d'écrire un caractère de test (sans vraiment l'écrire)
+      // Si availableForWrite() est stable et > 0, USB est probablement connecté
+      currentUsbState = true;
+    }
 
-    // Debounce : compter les états consécutifs pour éviter les oscillations
+    // Debounce amélioré : compter les états consécutifs pour éviter les oscillations
     if (currentUsbState) {
-      // USB détecté : incrémenter le compteur
-      if (usbStateCounter < USB_STATE_THRESHOLD) {
+      // USB détecté : incrémenter le compteur (avec limite max pour éviter overflow)
+      if (usbStateCounter < USB_STATE_THRESHOLD * 2) {
         usbStateCounter++;
       }
     } else {
-      // USB non détecté : décrémenter le compteur
+      // USB non détecté : décrémenter le compteur (avec limite min)
       if (usbStateCounter > 0) {
         usbStateCounter--;
       }
@@ -475,14 +517,27 @@ void loop() {
     // Transition OFF → ON (USB branché)
     if (newUsbState && !usbModeActive) {
       usbModeActive = true;
-      usbStateCounter = USB_STATE_THRESHOLD;  // Verrouiller l'état
+      usbStateCounter = USB_STATE_THRESHOLD * 2;  // Verrouiller l'état (valeur élevée pour éviter oscillations)
       Serial.println(F("\n🔌 USB connecté → Streaming 1s"));
+      // NE PAS utiliser Serial.flush() qui peut bloquer et causer des reconnexions
+      // Le buffer sera vidé naturellement lors des prochaines écritures
+      
+      // 🚀 APPROCHE 3 (HYBRIDE) : Envoyer boot_info automatiquement
+      // Attendre un petit délai pour que le dashboard soit prêt à recevoir
+      // Utiliser une boucle avec feedWatchdog() au lieu de delay() bloquant
+      unsigned long waitStart = millis();
+      while (millis() - waitStart < 100) {
+        feedWatchdog();
+        delay(10);  // Petit delay pour éviter de surcharger le CPU
+      }
+      sendBootInfo();
     }
     // Transition ON → OFF (USB débranché)
     else if (!newUsbState && usbModeActive) {
       usbModeActive = false;
       usbStateCounter = 0;  // Réinitialiser le compteur
       Serial.println(F("\n📡 USB déconnecté → Mode hybride"));
+      // NE PAS utiliser Serial.flush() qui peut bloquer
     }
   }
 
@@ -894,8 +949,11 @@ void loop() {
 // ----------------------------------------------------------------------------- //
 
 void initSerial() {
-  Serial.begin(115200);
+  // Démarrer Serial avec un délai pour laisser le temps au bootloader de s'initialiser
+  // Cela peut aider à éviter les problèmes de "invalid header" si le système est instable
   delay(100);
+  Serial.begin(115200);
+  delay(200);  // Délai augmenté pour laisser le temps à Serial de s'initialiser
   while (Serial.available()) Serial.read();
   Serial.println(F("\n[BOOT] UART prêt"));
 }
@@ -1346,6 +1404,89 @@ Measurement captureSensorSnapshot() {
 }
 
 
+// ================================================================
+// APPROCHE 3 (HYBRIDE) : Envoi automatique au boot + streaming
+// ================================================================
+// Envoyer les informations complètes au boot/connexion USB
+// Appelé automatiquement dès que le port série est prêt
+void sendBootInfo() {
+  StaticJsonDocument<1536> doc;  // Augmenté pour configuration complète
+  
+  // Type spécial pour boot_info (priorité max côté dashboard)
+  doc["type"] = "boot_info";
+  doc["mode"] = "usb_stream";
+  doc["seq"] = 0;  // Séquence 0 = message de boot
+  
+  // === IDENTIFIANTS COMPLETS ===
+  doc["sim_iccid"] = DEVICE_ICCID;
+  doc["device_serial"] = DEVICE_SERIAL;
+  doc["firmware_version"] = FIRMWARE_VERSION;
+  doc["device_name"] = buildDeviceName();
+  
+  // === PREMIÈRE MESURE ===
+  Measurement m = captureSensorSnapshot();
+  doc["flow_lpm"] = m.flow;
+  doc["battery_percent"] = m.battery;
+  doc["rssi"] = m.rssi;
+  
+  // === CONFIGURATION COMPLÈTE (comme GET_CONFIG) ===
+  // Mesures
+  doc["sleep_minutes"] = configuredSleepMinutes;
+  doc["measurement_duration_ms"] = airflowSampleDelayMs;
+  doc["send_every_n_wakeups"] = sendEveryNWakeups;
+  
+  // Calibration
+  JsonArray calArray = doc.createNestedArray("calibration_coefficients");
+  float a0 = isnan(CAL_OVERRIDE_A0) ? 0.0f : CAL_OVERRIDE_A0;
+  float a1 = isnan(CAL_OVERRIDE_A1) ? 1.0f : CAL_OVERRIDE_A1;
+  float a2 = isnan(CAL_OVERRIDE_A2) ? 0.0f : CAL_OVERRIDE_A2;
+  calArray.add(a0);
+  calArray.add(a1);
+  calArray.add(a2);
+  
+  // Airflow
+  doc["airflow_passes"] = airflowPasses;
+  doc["airflow_samples_per_pass"] = airflowSamplesPerPass;
+  doc["airflow_delay_ms"] = airflowSampleDelayMs;
+  
+  // GPS et roaming
+  doc["gps_enabled"] = gpsEnabled;
+  doc["roaming_enabled"] = roamingEnabled;
+  
+  // Modem
+  doc["watchdog_seconds"] = watchdogTimeoutSeconds;
+  doc["modem_boot_timeout_ms"] = modemBootTimeoutMs;
+  doc["sim_ready_timeout_ms"] = simReadyTimeoutMs;
+  doc["network_attach_timeout_ms"] = networkAttachTimeoutMs;
+  doc["modem_max_reboots"] = modemMaxReboots;
+  
+  // Réseau
+  doc["apn"] = NETWORK_APN;
+  doc["sim_pin"] = SIM_PIN;
+  doc["operator"] = "auto";  // Opérateur détecté automatiquement par le modem
+  
+  // OTA
+  doc["ota_primary_url"] = otaPrimaryUrl.length() > 0 ? otaPrimaryUrl : "";
+  doc["ota_fallback_url"] = otaFallbackUrl.length() > 0 ? otaFallbackUrl : "";
+  doc["ota_md5"] = otaExpectedMd5.length() > 0 ? otaExpectedMd5 : "";
+  
+  // Timestamp
+  doc["timestamp_ms"] = millis();
+  doc["status"] = "BOOT_INFO";
+  
+  // Envoyer en une seule fois
+  String jsonOutput;
+  serializeJson(doc, jsonOutput);
+  jsonOutput += '\n';
+  Serial.print(jsonOutput);
+  // NE PAS utiliser Serial.flush() - peut bloquer et causer des reconnexions USB en boucle
+  // Le buffer se vide naturellement lors des prochaines écritures
+  
+  // Log de confirmation
+  String timeStr = formatTimeFromMillis(millis());
+  Serial.printf("%s[BOOT] 🚀 Configuration complète envoyée au dashboard (boot_info)\n", timeStr.c_str());
+}
+
 void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t intervalMs, float* latitude, float* longitude) {
   // Envoyer TOUTES les données en USB (format complet)
   StaticJsonDocument<1024> doc;  // Augmenté pour tous les paramètres
@@ -1402,7 +1543,8 @@ void emitDebugMeasurement(const Measurement& m, uint32_t sequence, uint32_t inte
   serializeJson(doc, jsonOutput);
   jsonOutput += '\n';        // Nouvelle ligne pour terminer le JSON
   Serial.print(jsonOutput);  // Envoyer tout d'un coup
-  Serial.flush();            // Forcer l'envoi immédiat
+  // NE PAS utiliser Serial.flush() - peut bloquer et causer des reconnexions USB en boucle
+  // Le buffer se vide naturellement lors des prochaines écritures
 
   // Message de debug (seulement toutes les 20 mesures pour réduire le bruit)
   if (sequence % 20 == 0) {
@@ -3813,7 +3955,8 @@ void handleCommand(const Command& cmd, uint32_t& nextSleepMinutes) {
     // Envoyer directement sur Serial (format JSON compatible avec le parser du frontend)
     // IMPORTANT: Envoyer avec Serial.println() pour que le frontend puisse détecter la ligne complète
     Serial.println(statusStr);
-    Serial.flush();
+    // NE PAS utiliser Serial.flush() - peut bloquer et causer des reconnexions USB en boucle
+    // Le buffer se vide naturellement lors des prochaines écritures
 
     // Log de débogage pour confirmer l'envoi
     Serial.printf("%s[CMD] 🔍 DEBUG: Réponse GET_CONFIG envoyée (%d octets)\n", timeStr.c_str(), statusStr.length());

@@ -39,7 +39,7 @@ ob_start();
 // Headers CORS (DOIT être en tout premier)
 // Utiliser uniquement les variables d'environnement pour les origines autorisées
 // Ne pas hardcoder les URLs en production
-$defaultAllowedOrigins = @();
+$defaultAllowedOrigins = [];
 
 // En développement local : autoriser localhost par défaut
 if (getenv('APP_ENV') === 'development' || empty(getenv('APP_ENV'))) {

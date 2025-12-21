@@ -9,6 +9,7 @@ import Modal from '@/components/Modal'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import LoadingSpinner from '@/components/LoadingSpinner'
+import { isAdmin as checkIsAdmin } from '@/lib/userUtils'
 
 export default function AdminMigrationsPage() {
   const { user, fetchWithAuth, API_URL } = useAuth()
@@ -24,7 +25,7 @@ export default function AdminMigrationsPage() {
   // Utiliser useApiCall pour simplifier la gestion des appels API
   const { loading, error, call, setError } = useApiCall({ requiresAuth: true, autoReset: false })
 
-  const isAdmin = user?.role_name === 'admin' || user?.role === 'admin' || user?.roles?.includes('admin')
+  const userIsAdmin = checkIsAdmin(user)
 
   // Liste des migrations disponibles (définie avant le return conditionnel pour respecter les règles des hooks)
   // NOTE: Liste vide - toutes les migrations ont été supprimées car plus nécessaires
@@ -49,7 +50,7 @@ export default function AdminMigrationsPage() {
 
   // Charger l'historique des migrations
   useEffect(() => {
-    if (!isAdmin) return
+    if (!userIsAdmin) return
     
     const loadHistory = async () => {
       try {
@@ -72,10 +73,10 @@ export default function AdminMigrationsPage() {
     }
     
     loadHistory()
-  }, [isAdmin, fetchWithAuth, API_URL])
+  }, [userIsAdmin, fetchWithAuth, API_URL])
 
   const runMigration = async (migrationFile) => {
-    if (!isAdmin) {
+    if (!userIsAdmin) {
       setError('Accès refusé : administrateur requis')
       return
     }
@@ -200,7 +201,7 @@ export default function AdminMigrationsPage() {
     }
   }
 
-  if (!isAdmin) {
+  if (!userIsAdmin) {
     return (
       <div className="card">
         <div className="alert alert-warning">
@@ -211,7 +212,7 @@ export default function AdminMigrationsPage() {
   }
 
   const hideMigration = async (historyId) => {
-    if (!isAdmin) return
+    if (!userIsAdmin) return
     
     try {
       const data = await fetchJson(
@@ -256,7 +257,7 @@ export default function AdminMigrationsPage() {
   }
 
   const deleteMigration = async () => {
-    if (!isAdmin) return
+    if (!userIsAdmin) return
     
     try {
       setActionError(null)

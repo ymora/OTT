@@ -5,9 +5,9 @@
  
  const AuthContext = createContext()
  
-// URL de l'API - Priorité: 1) variable d'environnement, 2) proxy Next.js si localhost, 3) défaut Render
+// URL de l'API - Priorité: 1) variable d'environnement, 2) API Docker locale si localhost, 3) défaut Render
 // Si NEXT_PUBLIC_API_URL est défini, l'utiliser directement (même en localhost)
-// Sinon, en localhost, utiliser le proxy Next.js qui route vers l'API distante (évite CORS)
+// Sinon, en localhost, utiliser l'API Docker locale (http://localhost:8000)
 // En production, utiliser Render directement
 const API_URL = (() => {
   // Priorité 1: Variable d'environnement (utilisée si définie, même en localhost)
@@ -15,10 +15,10 @@ const API_URL = (() => {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
   }
   
-  // Priorité 2: En localhost, utiliser le proxy Next.js (si pas de variable d'environnement)
+  // Priorité 2: En localhost, utiliser l'API Docker locale directement
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    // Utiliser le proxy Next.js (même origine, pas de problème CORS)
-    return window.location.origin // http://localhost:3000
+    // Utiliser l'API Docker locale directement (http://localhost:8000)
+    return 'http://localhost:8000'
   }
   
   // Priorité 3: Défaut production

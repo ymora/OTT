@@ -397,19 +397,29 @@ export default function DebugTab() {
       // 1. Il existe (usbDevice n'est pas null)
       // 2. Il n'est PAS enregistré en base (!isUsbDeviceRegistered())
       // 3. Il n'est PAS déjà dans la liste (pas déjà ajouté)
+      // 4. Le dispositif n'existe pas déjà dans displayList avec le même ICCID/Serial
       // Ajouter le dispositif USB virtuel s'il n'est pas enregistré en base
       if (usbDevice && !isUsbDeviceRegistered() && isConnected) {
         const usbIccid = normalizeId(usbDevice.sim_iccid)
         const usbSerial = normalizeId(usbDevice.device_serial)
         
         // Vérifier qu'il n'est pas déjà dans la liste
+        // Si le dispositif est en cours de détection (pas d'ICCID/Serial), l'afficher quand même
+        // SAUF si un dispositif avec ICCID existe déjà
         const alreadyInList = displayList.some(d => {
           const dIccid = normalizeId(d.sim_iccid)
           const dSerial = normalizeId(d.device_serial)
-          return (usbIccid && dIccid && usbIccid === dIccid) ||
-                 (usbSerial && dSerial && usbSerial === dSerial)
+          
+          // Si on a ICCID ou Serial ET qu'ils correspondent, c'est un doublon
+          if ((usbIccid && dIccid && usbIccid === dIccid) ||
+              (usbSerial && dSerial && usbSerial === dSerial)) {
+            return true
+          }
+          
+          return false
         })
         
+        // Ne pas ajouter si déjà dans la liste
         if (!alreadyInList) {
           displayList = [usbDevice, ...displayList]
         }
@@ -531,47 +541,55 @@ export default function DebugTab() {
   
   // Fusionner les logs locaux et distants et filtrer les logs trop verbeux
   const allLogs = useMemo(() => {
+    logger.log(`🔵 [UsbStreamingTab] allLogs recalculé - usbStreamLogs: ${usbStreamLogs.length}, remoteLogs: ${remoteLogs.length}, isConnected: ${isConnected}, status: ${usbStreamStatus}`)
+    
     let logs = []
     
     // Si on a une connexion USB locale ET des logs locaux, utiliser uniquement les logs locaux
-    if ((isConnected || usbStreamLogs.length > 0) && usbStreamLogs.length > 0) {
+    // ⚠️ IMPORTANT: Utiliser les logs locaux même si isConnected est false temporairement
+    // car les logs peuvent être reçus avant que la connexion soit complètement établie
+    if (usbStreamLogs.length > 0) {
       logs = usbStreamLogs
+      logger.log(`✅ [UsbStreamingTab] Utilisation de ${logs.length} log(s) local(aux)`)
+      if (logs.length > 0) {
+        logger.log(`📋 [UsbStreamingTab] Premier log: "${logs[0]?.line || String(logs[0])}"`)
+        logger.log(`📋 [UsbStreamingTab] Dernier log: "${logs[logs.length - 1]?.line || String(logs[logs.length - 1])}"`)
+      }
     }
     // Sinon, utiliser les logs distants (pour admin) s'il y en a
     else if (shouldUseRemoteLogs && remoteLogs.length > 0) {
       logs = remoteLogs
+      logger.log(`✅ [UsbStreamingTab] Utilisation de ${logs.length} log(s) distant(s)`)
+    } else {
+      logger.warn(`⚠️ [UsbStreamingTab] Aucun log disponible (usbStreamLogs: ${usbStreamLogs.length}, remoteLogs: ${remoteLogs.length})`)
     }
     
-    // Filtrer les logs trop verbeux (tableaux ASCII, logs répétitifs, etc.)
-    const filteredLogs = logs.filter(log => {
-      const line = log.line || ''
-      
-      // Ignorer les tableaux ASCII (contiennent des caractères de bordure)
-      if (line.includes('─') && line.includes('│') && (line.includes('┐') || line.includes('└'))) {
-        return false // Ignorer les tableaux ASCII
-      }
-      
-      // Ignorer les logs de debug trop verbeux
-      if (line.includes('🔍🔍🔍') || line.includes('[DEBUG]')) {
-        return false
-      }
-      
-      return true
-    })
-    
-    // Limiter à 300 logs affichés pour éviter le blocage de l'interface
-    return filteredLogs.slice(-300)
+    // ⚠️ AUCUN FILTRAGE : Afficher TOUS les logs reçus
+    // Limiter uniquement à 500 logs affichés pour éviter le blocage de l'interface
+    const limitedLogs = logs.slice(-500)
+    logger.log(`📊 [UsbStreamingTab] ${limitedLogs.length} log(s) affiché(s) (sur ${logs.length} total)`)
+    return limitedLogs
   }, [usbStreamLogs, remoteLogs, isConnected, shouldUseRemoteLogs, usbStreamStatus])
   
   // Mémoriser les logs formatés pour éviter de refaire le traitement à chaque render
   const formattedLogs = useMemo(() => {
-    return allLogs.map((log) => {
-      const isDashboard = log.source === 'dashboard'
-      const isRemote = log.isRemote
+    logger.log(`🔵 [UsbStreamingTab] formattedLogs recalculé - allLogs: ${allLogs.length} log(s)`)
+    if (allLogs.length > 0) {
+      logger.log(`📋 [UsbStreamingTab] Premier log brut:`, allLogs[0])
+      logger.log(`📋 [UsbStreamingTab] Dernier log brut:`, allLogs[allLogs.length - 1])
+    }
+    
+    const formatted = allLogs.map((log) => {
+      // Gérer les cas où log peut être un string ou un objet
+      const logLine = typeof log === 'string' ? log : (log?.line || String(log) || '')
+      const logSource = typeof log === 'object' && log !== null ? (log.source || 'device') : 'device'
+      const isRemote = typeof log === 'object' && log !== null ? (log.isRemote || false) : false
+      
+      const isDashboard = logSource === 'dashboard'
       
       // Essayer de formater le JSON si c'est un USB stream
-      const formattedJson = formatJsonLog(log.line)
-      let displayLine = formattedJson || log.line
+      const formattedJson = formatJsonLog(logLine)
+      let displayLine = formattedJson || logLine
       
       // Extraire ou déterminer la provenance entre crochets
       let provenance = null
@@ -619,7 +637,10 @@ export default function DebugTab() {
       const colorClass = getLogColorClass(category, isDashboard)
       
       return {
-        ...log,
+        id: typeof log === 'object' && log !== null ? (log.id || `${Date.now()}-${Math.random()}`) : `${Date.now()}-${Math.random()}`,
+        timestamp: typeof log === 'object' && log !== null ? (log.timestamp || Date.now()) : Date.now(),
+        source: logSource,
+        line: logLine,
         isDashboard,
         isRemote,
         provenance,
@@ -627,7 +648,25 @@ export default function DebugTab() {
         colorClass
       }
     })
+    
+    logger.log(`✅ [UsbStreamingTab] formattedLogs créé: ${formatted.length} log(s) formaté(s)`)
+    if (formatted.length > 0) {
+      logger.log(`📋 [UsbStreamingTab] Premier log formaté:`, formatted[0])
+    }
+    
+    return formatted
   }, [allLogs, formatJsonLog, analyzeLogCategory, getLogColorClass])
+  
+  // Log quand les logs changent pour debug
+  useEffect(() => {
+    logger.log(`🔵 [UsbStreamingTab] RENDU - allLogs: ${allLogs.length}, formattedLogs: ${formattedLogs.length}, usbStreamStatus: ${usbStreamStatus}`)
+    if (allLogs.length > 0) {
+      logger.log(`📋 [UsbStreamingTab] Premier log:`, allLogs[0])
+    }
+    if (formattedLogs.length > 0) {
+      logger.log(`📋 [UsbStreamingTab] Premier log formaté:`, formattedLogs[0])
+    }
+  }, [allLogs.length, formattedLogs.length, usbStreamStatus])
   
   // STREAMING AUTOMATIQUE en temps réel pour les admins
   useEffect(() => {
@@ -1014,11 +1053,24 @@ export default function DebugTab() {
     }
     
     // Créer un dispositif virtuel si pas trouvé en base
+    // IMPORTANT: Ne créer le dispositif QUE si on a au moins l'ICCID ou le Serial
+    // Utiliser le device_name envoyé par le firmware (OTT-xxxx) au lieu de USB-xxxx
     if (!usbDeviceRef.current || usbDeviceRef.current.id?.startsWith('usb_virtual')) {
+      // Attendre d'avoir au moins un identifiant (ICCID ou Serial) avant de créer le dispositif
+      if (!normalizedIccid && !normalizedSerial) {
+        // Pas encore d'identifiant, ne pas créer de dispositif
+        // Les logs USB continuent de s'afficher en bas de page
+        // Une fois l'ICCID détecté, le dispositif sera créé
+        return
+      }
+      
+      // On a l'ICCID ou le Serial, créer le dispositif
+      // IMPORTANT: Utiliser le device_name envoyé par le firmware (priorité 1)
+      // Le firmware envoie déjà le nom au format OTT-xxxx (buildDeviceName dans le firmware)
       const deviceName = usbDeviceInfo?.device_name || 
         (usbIdentifiers.iccid ? `USB-${usbIdentifiers.iccid.slice(-4)}` : 
          usbIdentifiers.serial ? `USB-${usbIdentifiers.serial.slice(-4)}` : 
-         'USB-En attente...')
+         'USB-????')
       
       const newDevice = {
         id: `usb_virtual_${Date.now()}`,
@@ -1028,8 +1080,7 @@ export default function DebugTab() {
         firmware_version: usbDeviceInfo?.firmware_version || null,
         status: 'active',
         last_seen: new Date().toISOString(),
-        isVirtual: true,
-        isTemporary: !normalizedIccid && !normalizedSerial
+        isVirtual: true
       }
       
       if (!usbDeviceRef.current || 
@@ -1829,11 +1880,6 @@ export default function DebugTab() {
                 ) : devicesToDisplay.length === 0 && !devicesLoading ? (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                     <p className="text-sm">Aucun dispositif trouvé</p>
-                    <p className="text-xs mt-2 text-gray-400 dark:text-gray-500">
-                      devicesData: {devicesData ? JSON.stringify(Object.keys(devicesData)).substring(0, 100) : 'null'} | 
-                      allDevicesFromApi: {allDevicesFromApi.length} | 
-                      devicesToDisplay: {devicesToDisplay.length}
-                    </p>
                   </div>
                 ) : (
                   <>
@@ -1889,7 +1935,7 @@ export default function DebugTab() {
                     (typeof device.id === 'number' || 
                      (typeof device.id === 'string' && !device.id.startsWith('usb')))
                   // Un dispositif est non enregistré s'il n'a pas de vrai ID, ou s'il est marqué comme virtuel/temporaire
-                  const isNotRegistered = !hasRealId || device?.isVirtual || device?.isTemporary
+                  const isNotRegistered = !hasRealId || device?.isVirtual
                   
                   // Normaliser les identifiants pour comparaison
                   // Utiliser normalizeIdLocal (alias de normalizeId) pour éviter les warnings ESLint
@@ -1904,15 +1950,9 @@ export default function DebugTab() {
                   )
                   
                   // Vérifier si ce dispositif est un dispositif USB virtuel (non enregistré)
-                  // IMPORTANT: Pour un dispositif temporaire (USB-En attente...), utiliser usbDeviceInfo si connecté
-                  // même si les identifiants ne correspondent pas encore (ils arrivent progressivement depuis les logs)
                   const isDeviceUsbVirtual = usbDevice && !isUsbDeviceRegistered() && (
                     (usbDevice.sim_iccid && normalizeIdLocal(usbDevice.sim_iccid) === deviceIccid) ||
-                    (usbDevice.device_serial && normalizeIdLocal(usbDevice.device_serial) === normalizedDeviceSerial) ||
-                    // Si le dispositif est temporaire (sans identifiants) et qu'on est connecté, utiliser usbDeviceInfo
-                    (isConnected && device.isTemporary && !deviceIccid && !normalizedDeviceSerial && usbDeviceInfo) ||
-                    // NOUVEAU: Si le dispositif a "USB-En attente..." et qu'on est connecté avec usbDeviceInfo, c'est le dispositif USB
-                    (isConnected && device.device_name === 'USB-En attente...' && usbDeviceInfo)
+                    (usbDevice.device_serial && normalizeIdLocal(usbDevice.device_serial) === normalizedDeviceSerial)
                   )
                   
                   // Source de données USB : TOUJOURS utiliser usbDeviceInfo en priorité si disponible
@@ -1929,16 +1969,13 @@ export default function DebugTab() {
                     const matchesByIccid = usbInfoIccid && deviceIccid && usbInfoIccid === deviceIccid
                     // Correspondance par Serial (priorité 2)
                     const matchesBySerial = usbInfoSerial && normalizedDeviceSerial && usbInfoSerial === normalizedDeviceSerial
-                    // Correspondance pour dispositif temporaire (priorité 3)
-                    const matchesTemporary = device.device_name === 'USB-En attente...' && !deviceIccid && !normalizedDeviceSerial
                     
-                    if (matchesByIccid || matchesBySerial || matchesTemporary || isDeviceUsbConnected || isDeviceUsbVirtual) {
+                    if (matchesByIccid || matchesBySerial || isDeviceUsbConnected || isDeviceUsbVirtual) {
                       usbInfo = usbDeviceInfo
                       logger.debug('[TableRow] usbDeviceInfo utilisé pour:', {
                         deviceName: device.device_name,
                         matchesByIccid,
                         matchesBySerial,
-                        matchesTemporary,
                         deviceIccid: deviceIccid?.slice(-10),
                         usbInfoIccid: usbInfoIccid?.slice(-10)
                       })
@@ -1968,9 +2005,8 @@ export default function DebugTab() {
                   const deviceSerial = getValue(usbInfo?.device_serial, deviceDbData?.device_serial)
                   
                   // Générer un nom intelligent : utiliser le nom USB si disponible, sinon générer depuis les identifiants
-                  // Si le nom actuel est "USB-En attente..." et qu'on a des identifiants, générer un nouveau nom
                   let deviceName = deviceDbData?.device_name || usbInfo?.device_name
-                  if ((!deviceName || deviceName === 'USB-En attente...') && (simIccid || deviceSerial)) {
+                  if (!deviceName && (simIccid || deviceSerial)) {
                     // Générer un nom depuis les identifiants disponibles
                     if (simIccid) {
                       deviceName = `USB-${simIccid.slice(-4)}`

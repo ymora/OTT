@@ -803,8 +803,8 @@ function handleDeleteDevice($device_id) {
         
         if ($forcePermanent && $isAdmin) {
             // Préparer toutes les requêtes DELETE une seule fois pour optimiser
+            // Note: device_events n'existe peut-être pas dans toutes les installations
             $deleteStmts = [
-                'events' => $pdo->prepare("DELETE FROM device_events WHERE device_id = :id"),
                 'config' => $pdo->prepare("DELETE FROM device_configurations WHERE device_id = :id"),
                 'commands' => $pdo->prepare("DELETE FROM device_commands WHERE device_id = :id"),
                 'alerts' => $pdo->prepare("DELETE FROM alerts WHERE device_id = :id"),
@@ -812,7 +812,16 @@ function handleDeleteDevice($device_id) {
                 'device' => $pdo->prepare("DELETE FROM devices WHERE id = :id")
             ];
             
-            $deleteStmts['events']->execute(['id' => $device_id]);
+            // Supprimer les événements seulement si la table existe
+            try {
+                $eventsStmt = $pdo->prepare("DELETE FROM device_events WHERE device_id = :id");
+                $eventsStmt->execute(['id' => $device_id]);
+            } catch (PDOException $e) {
+                // Table device_events n'existe pas, ignorer l'erreur
+                error_log('[handleDeleteDevice] Table device_events n\'existe pas, ignorée: ' . $e->getMessage());
+            }
+            
+            // Supprimer les autres données
             $deleteStmts['config']->execute(['id' => $device_id]);
             $deleteStmts['commands']->execute(['id' => $device_id]);
             $deleteStmts['alerts']->execute(['id' => $device_id]);

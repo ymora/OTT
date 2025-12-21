@@ -194,13 +194,30 @@ export function useSerialPort() {
         logger.debug('[SerialPortManager] connect: writable.locked =', portToUse.writable.locked)
         logger.debug('[SerialPortManager] connect: readable.locked =', portToUse.readable.locked)
         
-        // Si les streams sont verrouillés, vérifier d'abord si on est master
+        // ⚠️ IMPORTANT: Si le port est déjà ouvert ET qu'on a déjà un reader/writer actif,
+        // on ne doit PAS fermer et rouvrir le port ! C'est inutile et cause des déconnexions.
+        // On vérifie d'abord si on a déjà des refs actives
+        const hasActiveReader = readerRef.current !== null
+        const hasActiveWriter = writerRef.current !== null
+        
+        // Si les streams sont verrouillés ET qu'on a déjà des refs actives, c'est normal
+        // Le port fonctionne correctement, on ne doit rien faire
+        if ((portToUse.writable.locked || portToUse.readable.locked) && (hasActiveReader || hasActiveWriter)) {
+          logger.debug('[SerialPortManager] connect: port déjà ouvert et actif, réutilisation sans fermeture...')
+          setIsConnected(true)
+          setPort(portToUse)
+          setError(null)
+          return true // Port déjà connecté et fonctionnel, pas besoin de le rouvrir
+        }
+        
+        // Si les streams sont verrouillés mais qu'on n'a PAS de refs actives,
+        // c'est qu'un autre onglet utilise le port
         if (portToUse.writable.locked || portToUse.readable.locked) {
           // Vérifier qu'on est toujours master avant de fermer/rouvrir
           if (portSharingRef.current) {
             portSharingRef.current.checkState()
             if (!portSharingRef.current.isMaster) {
-              logger.warn('[SerialPortManager] connect: port verrouillé mais on n\'est pas master - un autre onglet a le port')
+              logger.debug('[SerialPortManager] connect: port verrouillé par un autre onglet, écoute des données partagées...')
               setError(null) // Pas d'erreur, c'est normal
               setIsConnected(true) // On est "connecté" via le partage
               setPort(null) // Pas de port local
@@ -208,85 +225,88 @@ export function useSerialPort() {
             }
           }
           
-          // Si on est master, on peut fermer et rouvrir le port
+          // Si on est master mais qu'on n'a pas de refs actives, on doit récupérer le port
           if (!isMasterRef.current) {
-            logger.warn('[SerialPortManager] connect: port verrouillé mais on n\'est pas master - un autre onglet a le port')
+            logger.debug('[SerialPortManager] connect: port verrouillé mais on n\'est pas master - un autre onglet a le port')
             setError(null) // Pas d'erreur, c'est normal
             setIsConnected(true) // On est "connecté" via le partage
             setPort(null) // Pas de port local
             return true // Retourner true car on écoute les données partagées
           }
           
-          logger.warn('[SerialPortManager] connect: port verrouillé, fermeture complète nécessaire...')
+          // Cas rare : port verrouillé mais on est master et on n'a pas de refs
+          // On doit libérer les locks en annulant les readers/writers existants
+          logger.warn('[SerialPortManager] connect: port verrouillé sans refs actives, libération des locks...')
           try {
-            // Libérer les refs d'abord
-            if (writerRef.current) {
-              // Note: writer n'a pas de méthode release() dans Web Serial API
-              writerRef.current = null
-            }
-            
+            // Essayer de libérer les locks en annulant les readers/writers
+            // Note: On ne peut pas forcer la libération, mais on peut essayer
             if (readerRef.current) {
               try {
                 await readerRef.current.cancel()
-                // Note: reader n'a pas de méthode release() dans Web Serial API
               } catch (e) {
                 logger.warn('[SerialPortManager] connect: erreur cancel reader:', e)
               }
               readerRef.current = null
             }
             
-            // Fermer complètement le port
-            logger.debug('[SerialPortManager] connect: fermeture du port pour le rouvrir...')
-            try {
-              await portToUse.close()
-              logger.debug('[SerialPortManager] connect: port fermé, attente 500ms...')
-              // Attendre que le port soit complètement fermé
-              await new Promise(resolve => setTimeout(resolve, 500))
-            } catch (closeErr) {
-              logger.warn('[SerialPortManager] connect: erreur fermeture port:', closeErr)
-              // Continuer quand même, peut-être que le port est déjà fermé
+            if (writerRef.current) {
+              writerRef.current = null
             }
             
-            // Maintenant rouvrir le port (on va continuer après le if)
-            logger.debug('[SerialPortManager] connect: port sera rouvert après la fermeture')
+            // Attendre un peu pour que les locks se libèrent
+            await new Promise(resolve => setTimeout(resolve, 200))
+            
+            // Vérifier si les locks sont toujours actifs
+            if (portToUse.writable.locked || portToUse.readable.locked) {
+              logger.warn('[SerialPortManager] connect: port toujours verrouillé après libération, réutilisation impossible')
+              setError('Port verrouillé par une autre application. Fermez les autres applications utilisant ce port.')
+              return false
+            }
+            
+            // Les locks sont libérés, on peut continuer
+            logger.debug('[SerialPortManager] connect: locks libérés, création des refs...')
           } catch (cleanupErr) {
-            logger.error('[SerialPortManager] connect: erreur nettoyage:', cleanupErr)
-            setError(`Erreur lors du nettoyage du port: ${cleanupErr.message}`)
+            logger.error('[SerialPortManager] connect: erreur libération locks:', cleanupErr)
+            setError(`Erreur lors de la libération des locks: ${cleanupErr.message}`)
             return false
           }
-        } else {
-          // Port ouvert et non verrouillé dans cet onglet, on peut réutiliser
-          logger.debug('[SerialPortManager] connect: port non verrouillé, réutilisation...')
-          try {
-            // Créer le writer (streams non verrouillés)
+        }
+        
+        // Port ouvert et non verrouillé (ou locks libérés), on peut réutiliser
+        logger.debug('[SerialPortManager] connect: port disponible, réutilisation...')
+        try {
+          // Créer le writer seulement si on n'en a pas déjà un
+          if (!writerRef.current) {
             logger.debug('[SerialPortManager] connect: création du writer...')
             const writer = portToUse.writable.getWriter()
             writerRef.current = writer
+          }
 
-            // Créer le reader
+          // Créer le reader seulement si on n'en a pas déjà un
+          if (!readerRef.current) {
             logger.debug('[SerialPortManager] connect: création du reader...')
             const reader = portToUse.readable.getReader()
             readerRef.current = reader
-
-            setIsConnected(true)
-            setPort(portToUse)
-            
-            // Notifier le système de partage que le port est ouvert
-            if (portSharingRef.current && isMasterRef.current) {
-              portSharingRef.current.notifyPortOpened({
-                baudRate,
-                timestamp: Date.now()
-              })
-            }
-            
-            logger.debug('[SerialPortManager] connect: ✅ port réutilisé avec succès')
-            return true
-          } catch (err) {
-            logger.error('[SerialPortManager] connect: erreur réutilisation port:', err)
-            setError(`Erreur lors de la réutilisation du port: ${err.message}`)
-            setIsConnected(false)
-            return false
           }
+
+          setIsConnected(true)
+          setPort(portToUse)
+          
+          // Notifier le système de partage que le port est ouvert
+          if (portSharingRef.current && isMasterRef.current) {
+            portSharingRef.current.notifyPortOpened({
+              baudRate,
+              timestamp: Date.now()
+            })
+          }
+          
+          logger.debug('[SerialPortManager] connect: ✅ port réutilisé avec succès')
+          return true
+        } catch (err) {
+          logger.error('[SerialPortManager] connect: erreur réutilisation port:', err)
+          setError(`Erreur lors de la réutilisation du port: ${err.message}`)
+          setIsConnected(false)
+          return false
         }
       }
       
@@ -424,10 +444,31 @@ export function useSerialPort() {
     logger.debug('[SerialPortManager] startReading: port.writable =', !!port?.writable)
     logger.debug('[SerialPortManager] startReading: readerRef.current =', !!readerRef.current)
     
+    // Si le port n'est pas disponible, attendre un peu et réessayer (avec retry)
     if (!portIsAvailable && !readerIsAvailable) {
-      logger.error('[SerialPortManager] startReading: Port non disponible (port:', !!port, 'readable:', !!port?.readable, 'writable:', !!port?.writable, 'reader:', !!readerRef.current, ')')
-      setError('Port non disponible. Le port doit être connecté avant de démarrer la lecture.')
-      return () => {}
+      logger.warn('[SerialPortManager] startReading: Port non disponible immédiatement, tentative de retry...')
+      
+      // Retry jusqu'à 5 fois avec délai de 200ms
+      let retries = 0
+      const maxRetries = 5
+      while (retries < maxRetries && !portIsAvailable) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+        retries++
+        const portCheck = port && port.readable && port.writable
+        if (portCheck) {
+          logger.log(`✅ [SerialPortManager] Port disponible après ${retries} tentative(s)`)
+          break
+        }
+        logger.debug(`⏳ [SerialPortManager] Retry ${retries}/${maxRetries} - port toujours indisponible`)
+      }
+      
+      // Vérifier une dernière fois
+      const finalCheck = port && port.readable && port.writable
+      if (!finalCheck && !readerIsAvailable) {
+        logger.error('[SerialPortManager] startReading: Port non disponible après retries (port:', !!port, 'readable:', !!port?.readable, 'writable:', !!port?.writable, 'reader:', !!readerRef.current, ')')
+        setError('Port non disponible. Le port doit être connecté avant de démarrer la lecture.')
+        throw new Error('Port non disponible. Le port doit être connecté avant de démarrer la lecture.')
+      }
     }
 
     // Si le reader n'existe pas mais le port est disponible, créer le reader
@@ -461,32 +502,56 @@ export function useSerialPort() {
     
     const readLoop = async () => {
       try {
-        logger.debug('[SerialPortManager] Démarrage de la boucle de lecture...')
+        logger.log('🔵 [SerialPortManager] Démarrage de la boucle de lecture...')
+        let readCount = 0
+        let lastHeartbeat = Date.now()
+        
         while (reading && readLoopActive) {
+          // Heartbeat toutes les 5 secondes pour vérifier que la boucle est active
+          const now = Date.now()
+          if (now - lastHeartbeat > 5000) {
+            logger.log(`💓 [SerialPortManager] Heartbeat - Boucle active (${readCount} lectures effectuées)`)
+            lastHeartbeat = now
+          }
+          
           // Vérifier que le reader existe toujours
           if (!readerRef.current) {
-            logger.warn('[SerialPortManager] Reader perdu, arrêt de la lecture')
+            logger.error('❌ [SerialPortManager] Reader perdu, arrêt de la lecture')
             break
           }
 
           try {
+            readCount++
+            logger.debug(`📖 [SerialPortManager] Appel read() #${readCount}...`)
             const { value, done } = await readerRef.current.read()
+            logger.debug(`📥 [SerialPortManager] read() #${readCount} retourné - done: ${done}, value: ${value ? `${value.length} bytes` : 'null'}`)
             
             // Réinitialiser le compteur d'erreurs en cas de succès
             consecutiveErrors = 0
             
             if (done) {
-              logger.debug('[SerialPortManager] Stream terminé (done=true)')
+              logger.warn('⚠️ [SerialPortManager] Stream terminé (done=true)')
               break
             }
             
-            if (value && onData) {
+            if (value) {
               // Convertir Uint8Array en string
               const text = new TextDecoder().decode(value)
+              logger.log(`✅ [SerialPortManager] Données reçues: ${text.length} caractères - "${text.substring(0, Math.min(50, text.length))}${text.length > 50 ? '...' : ''}"`)
+              
               if (text && text.length > 0) {
-                logger.debug(`[SerialPortManager] Données reçues: ${text.length} caractères`)
-                onData(text)
+                if (onData) {
+                  logger.log(`📤 [SerialPortManager] Appel onData avec ${text.length} caractères`)
+                  onData(text)
+                  logger.debug(`✅ [SerialPortManager] onData appelé avec succès`)
+                } else {
+                  logger.error('❌ [SerialPortManager] onData est null/undefined !')
+                }
+              } else {
+                logger.warn(`⚠️ [SerialPortManager] Texte vide après décodage (${text.length} caractères)`)
               }
+            } else {
+              logger.debug(`ℹ️ [SerialPortManager] read() retourné sans valeur (value=null)`)
             }
           } catch (readErr) {
             // Erreur lors de la lecture d'un chunk

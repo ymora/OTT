@@ -4,7 +4,7 @@
 # Système d'audit générique et portable pour n'importe quel projet
 # Version 3.0 - Système consolidé et portable
 #
-# Ce script effectue un audit 360 degrés couvrant 23 phases
+# Ce script effectue un audit 360 degrés couvrant 23 phases (numérotées de 1 à 23)
 # Détecte automatiquement les caractéristiques du projet audité
 # Usage : .\audit\scripts\Audit-Complet.ps1 [-Verbose]
 # ===============================================================================
@@ -1021,7 +1021,7 @@ function Invoke-AuditPhase {
 # Vérifier si la phase doit être exécutée
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 0) {
     if ($completedPhases -notcontains 0) {
-        Write-Section "[0/18] Inventaire Exhaustif - Tous les Fichiers et Répertoires"
+        Write-Section "[1/23] Inventaire Exhaustif - Tous les Fichiers et Répertoires"
 
 # INTÉGRATION PSScriptAnalyzer - Analyse des scripts PowerShell
 Write-Host "`n  Analyse avec PSScriptAnalyzer (scripts PowerShell)..." -ForegroundColor Yellow
@@ -1173,7 +1173,7 @@ try {
 # Vérifier si la phase doit être exécutée
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 1) {
     if ($completedPhases -notcontains 1) {
-        Write-Section "[1/18] Architecture et Statistiques Code"
+        Write-Section "[2/23] Architecture et Statistiques Code"
 
         try {
             Write-Info "Comptage des fichiers..."
@@ -1343,7 +1343,7 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 1) {
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 7) {
-Write-Section "[7/20] Code Mort - Detection Composants/Hooks/Libs Non Utilises"
+Write-Section "[8/23] Code Mort - Detection Composants/Hooks/Libs Non Utilises"
 
 $deadCode = @{
     Components = @()
@@ -1421,7 +1421,7 @@ try {
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 8) {
-Write-Section "[8/20] Duplication de Code et Refactoring"
+Write-Section "[9/23] Duplication de Code et Refactoring"
 
 try {
     Write-Info "Analyse patterns dupliques..."
@@ -1516,7 +1516,7 @@ try {
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 9) {
-Write-Section "[9/20] Complexite - Fichiers/Fonctions Volumineux"
+Write-Section "[10/23] Complexite - Fichiers/Fonctions Volumineux"
 
 try {
     Write-Info "Analyse fichiers volumineux..."
@@ -1563,7 +1563,7 @@ try {
 # PHASE 5 : ROUTES ET NAVIGATION
 # ===============================================================================
 
-Write-Section "[5/18] Routes et Navigation - Verification Pages Menu"
+Write-Section "[15/23] Routes et Navigation - Verification Pages Menu"
 
 try {
     # Utiliser le répertoire racine détecté au début du script
@@ -1609,7 +1609,7 @@ try {
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 4) {
-Write-Section "[4/20] Endpoints API - Tests Fonctionnels"
+Write-Section "[5/23] Endpoints API - Tests Fonctionnels"
 
 $apiScore = 0
 $endpointsTotal = 0
@@ -1680,7 +1680,7 @@ $auditResults.Scores["API"] = $apiScore
 # ===============================================================================
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 5) {
-    Write-Section "[5/20] Base de Donnees - Coherence et Integrite"
+    Write-Section "[6/23] Base de Donnees - Coherence et Integrite"
 
     # Variables pour la phase 14 (initialisées si l'authentification a réussi)
     $script:authHeaders = $null
@@ -1758,7 +1758,7 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 5) {
 # PHASE 8 : SECURITE
 # ===============================================================================
 
-Write-Section "[8/18] Securite - Headers, SQL Injection, XSS"
+Write-Section "[4/23] Securite - Headers, SQL Injection, XSS"
 
 $securityScore = 10
 
@@ -2049,7 +2049,7 @@ $auditResults.Scores["Securite"] = [Math]::Max($securityScore, 0)
 # PHASE 9 : PERFORMANCE
 # ===============================================================================
 
-Write-Section "[9/18] Performance - Optimisations React et Cache"
+Write-Section "[18/23] Performance - Optimisations React et Cache"
 
 try {
     $searchFiles = Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
@@ -2133,9 +2133,40 @@ try {
     }
     
     # NOUVEAU: Vérifier doublons de code (fonctions dupliquées)
+    # ⚠️ IMPORTANT: Ignorer les noms génériques React qui sont normaux (handleSubmit, handleChange, etc.)
     Write-Info "Analyse doublons de code..."
     $duplicateFunctions = @()
     $allFunctionNames = @{}
+    
+    # Liste des noms de fonctions génériques à ignorer (faux positifs normaux en React)
+    $ignoredFunctionNames = @(
+        # Handlers React génériques
+        'handleSubmit', 'handleChange', 'handleClick', 'handleClose', 'handleOpen',
+        'handleDelete', 'handleEdit', 'handleSave', 'handleCancel', 'handleConfirm',
+        'handleInput', 'handleBlur', 'handleFocus', 'handleKeyDown', 'handleKeyUp',
+        # Toggle functions
+        'toggleAccordion', 'toggleModal', 'toggleDropdown', 'toggleMenu', 'toggle',
+        # Format functions
+        'formatDate', 'formatCurrency', 'formatNumber', 'formatTime', 'format',
+        # Event handlers
+        'onSubmit', 'onChange', 'onClick', 'onClose', 'onOpen', 'onInput', 'onBlur', 'onFocus',
+        # Form functions
+        'setValue', 'getValue', 'resetForm', 'validateForm', 'submitForm',
+        # Data functions
+        'fetchData', 'loadData', 'saveData', 'updateData', 'deleteData', 'getData', 'setData',
+        # State flags
+        'isLoading', 'isError', 'isSuccess', 'isOpen', 'isVisible', 'isActive', 'isDisabled',
+        # React hooks
+        'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'useReducer',
+        # Noms très génériques (variables/fonctions communes)
+        'data', 'error', 'errors', 'result', 'results', 'item', 'items', 'value', 'values',
+        'response', 'request', 'config', 'options', 'params', 'args', 'arg',
+        'errorParts', 'errorMessage', 'errorMsg', 'success', 'message', 'msg',
+        'id', 'ids', 'name', 'names', 'key', 'keys', 'index', 'idx', 'count', 'total'
+    )
+    
+    $totalFunctionsFound = 0
+    $ignoredCount = 0
     foreach ($file in $pagesFiles) {
         $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
         if ($content) {
@@ -2143,6 +2174,32 @@ try {
             $functions = [regex]::Matches($content, "(const|function)\s+(\w+)\s*=", [System.Text.RegularExpressions.RegexOptions]::Multiline)
             foreach ($func in $functions) {
                 $funcName = $func.Groups[2].Value
+                $totalFunctionsFound++
+                
+                # Ignorer les noms génériques (faux positifs)
+                if ($ignoredFunctionNames -contains $funcName) {
+                    $ignoredCount++
+                    continue
+                }
+                
+                # Ignorer les fonctions qui commencent par "use" (hooks React)
+                if ($funcName -match '^use[A-Z]') {
+                    $ignoredCount++
+                    continue
+                }
+                
+                # Ignorer les noms qui se terminent par "Data", "List", "Items", "Array" (variables génériques)
+                if ($funcName -match '(Data|List|Items|Array|Map|Set|Ref|State|Props|Config|Options|Params|Args)$') {
+                    $ignoredCount++
+                    continue
+                }
+                
+                # Ignorer les noms très courts (1-3 caractères) - souvent des variables temporaires
+                if ($funcName.Length -le 3) {
+                    $ignoredCount++
+                    continue
+                }
+                
                 if ($allFunctionNames.ContainsKey($funcName)) {
                     $duplicateFunctions += "$funcName (dans $($allFunctionNames[$funcName]) et $($file.Name))"
                 } else {
@@ -2151,6 +2208,8 @@ try {
             }
         }
     }
+    
+    Write-Info "  Total fonctions analysées: $totalFunctionsFound (ignorées: $ignoredCount, uniques: $($allFunctionNames.Count))"
     if ($duplicateFunctions.Count -gt 0) {
         Write-Warn "  $($duplicateFunctions.Count) fonction(s) dupliquée(s) détectée(s)"
         foreach ($dup in $duplicateFunctions | Select-Object -First 5) {
@@ -2215,7 +2274,7 @@ try {
 # PHASE 10 : TESTS
 # ===============================================================================
 
-Write-Section "[10/18] Tests et Couverture"
+Write-Section "[11/23] Tests et Couverture"
 
 try {
     $testFiles = @(Get-ChildItem -Recurse -File -Include *.test.js,*.spec.js | Where-Object {
@@ -2266,7 +2325,7 @@ try {
 # PHASES 11-15 : AUTRES VERIFICATIONS
 # ===============================================================================
 
-Write-Section "[11/18] Documentation, Imports, Erreurs, Logs, Best Practices"
+Write-Section "[19/23] Documentation, Imports, Erreurs, Logs, Best Practices"
 
 # Documentation
 $auditResults.Scores["Documentation"] = if($stats.MD -le 5) { 10 } else { 7 }
@@ -3082,7 +3141,7 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # PHASE 16 : VÉRIFICATION EXHAUSTIVE - LIENS, IMPORTS, RÉFÉRENCES, CONTENUS
 # ===============================================================================
 
-Write-Section "[16/18] Vérification Exhaustive - Liens, Imports, Références, Contenus"
+Write-Section "[14/23] Vérification Exhaustive - Liens, Imports, Références, Contenus"
 
 $exhaustiveIssues = @()
 $exhaustiveWarnings = @()
@@ -3459,7 +3518,7 @@ if ($exhaustiveIssues.Count -eq 0 -and $exhaustiveWarnings.Count -eq 0) {
 # ===============================================================================
 # ===============================================================================
 
-Write-Section "[16/16] Uniformisation UI/UX - Badges, Tables, Modals"
+Write-Section "[17/23] Uniformisation UI/UX - Badges, Tables, Modals"
 
 $uiScore = 10.0
 $uiIssues = @()
@@ -3602,7 +3661,7 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 # ===============================================================================
 # PHASE 16 : ORGANISATION ET NETTOYAGE
 # ===============================================================================
-Write-Section "[18/18] Organisation Projet et Nettoyage"
+Write-Section "[3/23] Organisation Projet et Nettoyage"
 
 # Vérifier que tous les docs du menu existent et sont accessibles
 $docMapping = @{
@@ -3850,7 +3909,7 @@ if ($sidebarContent) {
 
 Write-Info "Documentation analysée"
 
-Write-Section "[18/18] Organisation Projet et Nettoyage"
+Write-Section "[3/23] Organisation Projet et Nettoyage"
 
 # Vérifier l'organisation des dossiers
 $expectedDirs = @("app", "components", "contexts", "hooks", "lib", "api", "sql", "scripts", "public")
@@ -4396,7 +4455,7 @@ $auditResults.Warnings += $uiWarnings
 # PHASE 19 : ÉLÉMENTS INUTILES (Fichiers obsolètes, redondants, mal organisés)
 # ===============================================================================
 
-Write-Section "[19/19] Éléments Inutiles - Fichiers Obsolètes et Redondants"
+Write-Section "[12/23] Éléments Inutiles - Fichiers Obsolètes et Redondants"
 
 $elementsInutilesScore = 10.0
 $elementsInutilesIssues = @()
@@ -4844,7 +4903,7 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 19) {
     Write-Host ""
-    Write-Section "[19/20] Vérification Synchronisation GitHub Pages"
+    Write-Section "[20/23] Vérification Synchronisation GitHub Pages"
     
     $deploymentScore = 10.0
     $deploymentIssues = @()
@@ -5076,7 +5135,7 @@ Write-Host ("=" * 80) -ForegroundColor Gray
 
 if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 20) {
     Write-Host ""
-    Write-Section "[20/20] Audit Firmware"
+    Write-Section "[21/23] Audit Firmware"
     
     $firmwareScore = 10.0
     $firmwareIssues = @()
