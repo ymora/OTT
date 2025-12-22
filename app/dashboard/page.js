@@ -160,9 +160,10 @@ export default function DashboardPage() {
     return devices.filter(d => !d.deleted_at)
   }, [devices])
 
-  // Mémoriser les dispositifs géolocalisés
+  // Mémoriser les dispositifs géolocalisés (GPS ou IP)
   const geolocatedDevices = useMemo(() => {
-    return activeDevices.filter(d => d.latitude && d.longitude)
+    // Inclure les dispositifs avec coordonnées GPS OU avec adresse IP (qui sera géolocalisée)
+    return activeDevices.filter(d => (d.latitude && d.longitude) || d.last_ip)
   }, [activeDevices])
 
   const unassignedDevices = useMemo(() => 
@@ -186,51 +187,39 @@ export default function DashboardPage() {
   )
 
   // Mémoriser la carte des dispositifs (doit être avant le return conditionnel)
-  // Utiliser une clé unique basée sur les devices géolocalisés pour forcer le remontage si nécessaire
+  // Utiliser une clé unique basée sur les devices pour forcer le remontage si nécessaire
   const mapKey = useMemo(() => {
-    return geolocatedDevices.map(d => `${d.id}-${d.latitude}-${d.longitude}`).join(',')
-  }, [geolocatedDevices])
+    return activeDevices.map(d => `${d.id}-${d.latitude}-${d.longitude}`).join(',')
+  }, [activeDevices])
   
   const mapComponent = useMemo(() => {
-    // Afficher la carte seulement si on a des dispositifs actifs
+    // Toujours afficher la carte, même sans dispositifs
     if (loading) return null
-    if (activeDevices.length === 0) {
-      return (
-        <div id="map-container" className="card p-0 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Aucun dispositif actif
-            </p>
-          </div>
-          <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
-            <p className="text-gray-500">Aucun dispositif à afficher sur la carte</p>
-          </div>
-        </div>
-      )
-    }
+    
     return (
-      <div id="map-container" className="card p-0 overflow-hidden">
+      <div id="map-container" className="card p-0 overflow-hidden" key={`map-wrapper-${mapKey}`}>
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">🗺️ Carte des Dispositifs</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            {geolocatedDevices.length > 0 
-              ? `${geolocatedDevices.length} dispositif(s) géolocalisé(s)`
-              : 'Aucun dispositif géolocalisé pour le moment'
+            {activeDevices.length === 0
+              ? 'Aucun dispositif actif'
+              : geolocatedDevices.length > 0 
+                ? `${geolocatedDevices.length} dispositif(s) géolocalisé(s) (GPS ou IP)`
+                : `${activeDevices.length} dispositif(s) actif(s) - géolocalisation en cours...`
             }
           </p>
         </div>
         <div style={{ height: '400px', width: '100%', position: 'relative', zIndex: 1 }}>
           <LeafletMap
-            key={`leaflet-map-${mapKey || 'empty'}`}
-            devices={devices}
+            key={`leaflet-map-${mapKey}`}
+            devices={activeDevices}
             focusDeviceId={focusDeviceId}
             onSelect={() => {}}
           />
         </div>
       </div>
     )
-  }, [activeDevices, geolocatedDevices, loading, focusDeviceId, devices, mapKey])
+  }, [activeDevices, geolocatedDevices, loading, focusDeviceId, mapKey])
 
   // Mémoriser les dispositifs en ligne
   const onlineDevicesList = useMemo(() => {

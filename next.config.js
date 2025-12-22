@@ -6,6 +6,7 @@ const basePath = (isDev || !isStaticExport) ? '' : '/OTT'
 
 const nextConfig = {
   output: isStaticExport ? 'export' : 'standalone',
+  reactStrictMode: false, // Désactiver StrictMode pour éviter les problèmes avec Leaflet
   images: {
     unoptimized: true
   },
