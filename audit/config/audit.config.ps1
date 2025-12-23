@@ -35,14 +35,14 @@
         )
     }
 
-    # Credentials API - À CONFIGURER
+    # Credentials API - CONFIGURÉ
     # IMPORTANT: Ne pas commiter ce fichier avec des credentials réels
     # Utiliser des variables d'environnement ou un fichier .env.local
     Credentials = @{
         # Email et mot de passe pour l'authentification API
         # Par défaut, utilise les variables d'environnement
-        Email = if ($env:AUDIT_API_EMAIL) { $env:AUDIT_API_EMAIL } else { "admin@happlyz.com" }
-        Password = if ($env:AUDIT_API_PASSWORD) { $env:AUDIT_API_PASSWORD } else { "" }
+        Email = if ($env:AUDIT_API_EMAIL) { $env:AUDIT_API_EMAIL } else { "ymora@free.fr" }
+        Password = if ($env:AUDIT_API_PASSWORD) { $env:AUDIT_API_PASSWORD } else { "Ym120879" }
     }
 
     # Routes de l'application (Next.js App Router)

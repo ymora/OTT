@@ -502,29 +502,44 @@ export default function DebugTab() {
         // Chercher parmi tous les devices celui qui a des logs USB très récents
         const thirtySecondsAgo = Date.now() - 30000
         
-        for (const device of allDevices) {
+        // OPTIMISATION N+1: Faire tous les appels en parallèle avec Promise.all au lieu d'une boucle séquentielle
+        const deviceChecks = allDevices.map(async (device) => {
           const deviceId = device.sim_iccid || device.device_serial || device.id
           
-          // Vérifier s'il y a des logs USB récents pour ce device
-          const response = await fetchJson(
-            fetchWithAuth,
-            API_URL,
-            `/api.php/usb-logs/${encodeURIComponent(deviceId)}?limit=1`,
-            {},
-            { requiresAuth: true }
-          )
-          
-          if (response.success && response.logs && response.logs.length > 0) {
-            const lastLog = response.logs[0]
-            const lastLogTime = new Date(lastLog.created_at).getTime()
+          try {
+            // Vérifier s'il y a des logs USB récents pour ce device
+            const response = await fetchJson(
+              fetchWithAuth,
+              API_URL,
+              `/api.php/usb-logs/${encodeURIComponent(deviceId)}?limit=1`,
+              {},
+              { requiresAuth: true }
+            )
             
-            // Si le dernier log a moins de 30s = device est LIVE (USB connecté ailleurs)
-            if (lastLogTime > thirtySecondsAgo) {
-              logger.log(`🔴 [AUTO-SELECT] Device LIVE détecté: ${device.device_name} (logs < 30s)`)
-              setUsbDevice({ ...device, isVirtual: true })
-              break // On prend le premier trouvé
+            if (response.success && response.logs && response.logs.length > 0) {
+              const lastLog = response.logs[0]
+              const lastLogTime = new Date(lastLog.created_at).getTime()
+              
+              // Si le dernier log a moins de 30s = device est LIVE (USB connecté ailleurs)
+              if (lastLogTime > thirtySecondsAgo) {
+                return { device, isLive: true }
+              }
             }
+          } catch (err) {
+            logger.debug(`Erreur vérification logs pour device ${deviceId}:`, err)
           }
+          
+          return { device, isLive: false }
+        })
+        
+        // Attendre tous les résultats en parallèle
+        const results = await Promise.all(deviceChecks)
+        
+        // Trouver le premier device LIVE
+        const liveDevice = results.find(r => r.isLive)
+        if (liveDevice) {
+          logger.log(`🔴 [AUTO-SELECT] Device LIVE détecté: ${liveDevice.device.device_name} (logs < 30s)`)
+          setUsbDevice({ ...liveDevice.device, isVirtual: true })
         }
       } catch (err) {
         logger.debug('Erreur détection device LIVE:', err)

@@ -164,7 +164,7 @@ function Invoke-Check-StructureAPI-Improved {
                     $apiContent = Get-Content $apiFile -Raw -ErrorAction SilentlyContinue
                     if ($apiContent) {
                         # Chercher des routes qui pourraient correspondre au nom du handler
-                        $handlerRoute = $handler -replace '^handle', '' -replace '([A-Z])', '/$1' -replace '^/', '' -toLower
+                        $handlerRoute = ($handler -replace '^handle', '' -replace '([A-Z])', '/$1' -replace '^/', '').ToLower()
                         if ($apiContent -match $handlerRoute) {
                             $potentialRoutes += $handlerRoute
                         }

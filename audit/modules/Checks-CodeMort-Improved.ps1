@@ -180,7 +180,8 @@ function Invoke-Check-CodeMort-Improved {
                     if (-not $content) { continue }
                     
                     # Chercher usage direct
-                    if ($content -match "from.*['\"]@/lib/$libName|from.*['\"]lib/$libName|import.*$libName") {
+                    $libPattern = "from.*['`"]@/lib/$libName|from.*['`"]lib/$libName|import.*$libName"
+                    if ($content -match $libPattern) {
                         $usage++
                     }
                     

@@ -26,13 +26,118 @@ param(
 )
 
 # ===============================================================================
-# FONCTIONS D'AFFICHAGE (définies en premier pour être disponibles partout)
+# CHARGEMENT DES MODULES
 # ===============================================================================
-function Write-Section { param([string]$Text) Write-Host "`n=== $Text ===" -ForegroundColor Cyan }
-function Write-OK { param([string]$Text) Write-Host "  [OK] $Text" -ForegroundColor Green }
-function Write-Warn { param([string]$Text) Write-Warning $Text }
-function Write-Err { param([string]$Text) Write-Host "  [ERROR] $Text" -ForegroundColor Red }
-function Write-Info { param([string]$Text) if($Verbose) { Write-Host "  [INFO] $Text" -ForegroundColor Gray } }
+# Détecter le répertoire des modules
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$modulesDir = Join-Path (Split-Path -Parent $scriptDir) "modules"
+
+# Charger les modules utilitaires en premier
+if (Test-Path (Join-Path $modulesDir "Utils.ps1")) {
+    . (Join-Path $modulesDir "Utils.ps1")
+    $script:Verbose = $Verbose  # Passer le flag Verbose au module
+} else {
+    # Fallback si les modules ne sont pas trouvés
+    function Write-Section { param([string]$Text) Write-Host "`n=== $Text ===" -ForegroundColor Cyan }
+    function Write-OK { param([string]$Text) Write-Host "  [OK] $Text" -ForegroundColor Green }
+    function Write-Warn { param([string]$Text) Write-Warning $Text }
+    function Write-Err { param([string]$Text) Write-Host "  [ERROR] $Text" -ForegroundColor Red }
+    function Write-Info { param([string]$Text) if($Verbose) { Write-Host "  [INFO] $Text" -ForegroundColor Gray } }
+}
+
+# Charger les autres modules utilitaires
+$utilityModules = @("ConfigLoader.ps1", "FileScanner.ps1", "ProjectDetector.ps1", "ReportGenerator.ps1")
+foreach ($module in $utilityModules) {
+    $modulePath = Join-Path $modulesDir $module
+    if (Test-Path $modulePath) {
+        try {
+            . $modulePath
+            Write-Info "Module chargé: $module"
+        } catch {
+            Write-Warn "Erreur chargement module $module : $($_.Exception.Message)"
+        }
+    }
+}
+
+# Charger les modules de vérification (Checks-*.ps1)
+$checkModules = Get-ChildItem -Path $modulesDir -Filter "Checks-*.ps1" -ErrorAction SilentlyContinue
+foreach ($module in $checkModules) {
+    try {
+        . $module.FullName
+        Write-Info "Module de vérification chargé: $($module.Name)"
+    } catch {
+        Write-Warn "Erreur chargement module $($module.Name) : $($_.Exception.Message)"
+    }
+}
+
+# ===============================================================================
+# FONCTION HELPER POUR APPELER LES MODULES SELON LA PHASE
+# ===============================================================================
+function Invoke-PhaseModule {
+    param(
+        [int]$PhaseNumber,
+        [hashtable]$Config,
+        [hashtable]$Results,
+        [array]$Files = @(),
+        [hashtable]$ProjectInfo = @{}
+    )
+    
+    # Mapping des phases aux modules
+    $phaseModuleMap = @{
+        4 = @("Invoke-Check-Security", "Invoke-Check-Security-Improved")
+        5 = @("Invoke-Check-API")
+        6 = @("Invoke-Check-Database")
+        8 = @("Invoke-Check-CodeMort", "Invoke-Check-CodeMort-Improved")
+        9 = @("Invoke-Check-Duplication", "Invoke-Check-Duplication-Improved")
+        10 = @("Invoke-Check-Complexity", "Invoke-Check-Complexity-Improved")
+        11 = @("Invoke-Check-Tests", "Invoke-Check-TestsComplets")
+        13 = @("Invoke-Check-Optimizations-Improved")
+        14 = @("Invoke-Check-Organization")
+        15 = @("Invoke-Check-Routes", "Invoke-Check-Routes-Improved")
+        17 = @("Invoke-Check-UI", "Invoke-Check-UI-Improved")
+        18 = @("Invoke-Check-Performance", "Invoke-Check-Performance-Improved")
+        19 = @("Invoke-Check-Documentation")
+        7 = @("Invoke-Check-StructureAPI", "Invoke-Check-StructureAPI-Improved")
+    }
+    
+    $moduleFunctions = $phaseModuleMap[$PhaseNumber]
+    if (-not $moduleFunctions) {
+        return $false  # Pas de module pour cette phase
+    }
+    
+    # Essayer chaque fonction du module (priorité aux versions "Improved")
+    foreach ($funcName in $moduleFunctions) {
+        if (Get-Command $funcName -ErrorAction SilentlyContinue) {
+            try {
+                # Préparer les paramètres selon la signature de la fonction
+                $func = Get-Command $funcName
+                $params = @{}
+                
+                # Vérifier quels paramètres la fonction attend
+                foreach ($param in $func.Parameters.Values) {
+                    if ($param.Name -eq "Files" -and $Files.Count -gt 0) {
+                        $params.Files = $Files
+                    } elseif ($param.Name -eq "Config") {
+                        $params.Config = $Config
+                    } elseif ($param.Name -eq "Results") {
+                        $params.Results = $Results
+                    } elseif ($param.Name -eq "ProjectInfo") {
+                        $params.ProjectInfo = $ProjectInfo
+                    }
+                }
+                
+                # Appeler la fonction du module
+                & $funcName @params
+                Write-Info "Phase $PhaseNumber exécutée avec module: $funcName"
+                return $true
+            } catch {
+                Write-Warn "Erreur lors de l'appel du module $funcName pour la phase $PhaseNumber : $($_.Exception.Message)"
+            }
+        }
+    }
+    
+    return $false  # Aucun module disponible ou erreur
+}
 
 # Fonction helper pour extraire un tableau depuis une réponse API
 function Get-ArrayFromApiResponse {
@@ -670,7 +775,7 @@ if ([string]::IsNullOrEmpty($Password)) {
     if ($env:AUDIT_PASSWORD) {
         $Password = $env:AUDIT_PASSWORD
     } else {
-        $Password = "YM120879"  # Mot de passe par défaut pour éviter le blocage
+        $Password = "Ym120879"  # Mot de passe par défaut pour éviter le blocage
     }
 }
 if ([string]::IsNullOrEmpty($ApiUrl)) { 
@@ -833,7 +938,7 @@ if ([string]::IsNullOrEmpty($Email)) {
 
 # Mot de passe par défaut pour éviter le blocage (peut être remplacé par variable d'environnement)
 if ([string]::IsNullOrEmpty($Password)) {
-    $Password = "YM120879"  # Mot de passe par défaut
+    $Password = "Ym120879"  # Mot de passe par défaut
 }
 
 Write-Host ""
@@ -1755,54 +1860,116 @@ if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 5) {
 }  # Fin if SelectedPhases -contains 5
 
 # ===============================================================================
-# PHASE 8 : SECURITE
+# PHASE 4 : SECURITE
 # ===============================================================================
 
-Write-Section "[4/23] Securite - Headers, SQL Injection, XSS"
-
-$securityScore = 10
-
-try {
-    # Headers de securite
-    Write-Info "Verification headers..."
-    
-    # SQL Injection
-    Write-Info "Verification SQL..."
-    $unsafeSQL = @(Get-ChildItem -Recurse -File -Include *.php -Exclude helpers.php | Where-Object {
-        $_.FullName -notmatch 'vendor'
-    } | Select-String -Pattern '\$pdo->query\(\$[^)]|\$pdo->exec\(\$[^)]' | Where-Object {
-        $_.Line -notmatch 'migration|sql file' -and
-        $_.Path -notmatch 'helpers\.php'
-    })
-    
-    if ($unsafeSQL.Count -gt 0) {
-        Write-Warn "$($unsafeSQL.Count) requetes SQL a verifier"
-        $securityScore -= 2
+if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 4) {
+    # Utiliser le module Checks-Security si disponible, sinon code inline
+    if (Get-Command Invoke-Check-Security -ErrorAction SilentlyContinue) {
+        # Préparer les fichiers pour le module
+        $allFiles = @(Get-ChildItem -Recurse -File | Where-Object {
+            -not (Test-ExcludedFile $_.FullName)
+        })
+        
+        # Préparer ProjectInfo
+        $projectInfo = @{
+            Language = @()
+            Type = ""
+        }
+        if ($allFiles | Where-Object { $_.Extension -eq ".php" }) {
+            $projectInfo.Language += "PHP"
+        }
+        if ($allFiles | Where-Object { $_.Extension -match "\.jsx?$" }) {
+            $projectInfo.Language += "JavaScript"
+            $projectInfo.Type = "React"
+        }
+        
+        # Préparer Config si nécessaire
+        if (-not $script:Config) {
+            $script:Config = @{
+                Checks = @{
+                    Security = @{ Enabled = $true }
+                }
+            }
+        }
+        
+        # Appeler le module
+        Invoke-Check-Security -Files $allFiles -Config $script:Config -Results $auditResults -ProjectInfo $projectInfo
+        $securityScore = if ($auditResults.Scores.ContainsKey("Security")) { $auditResults.Scores["Security"] } else { 10 }
     } else {
-        Write-OK "Requetes SQL preparees (PDO)"
+        # Fallback: code inline (version simplifiée)
+        Write-Section "[4/23] Securite - Headers, SQL Injection, XSS"
+        
+        $securityScore = 10
+        
+        try {
+            # Headers de securite
+            Write-Info "Verification headers..."
+            
+            # SQL Injection
+            Write-Info "Verification SQL..."
+            $unsafeSQL = @(Get-ChildItem -Recurse -File -Include *.php -Exclude helpers.php | Where-Object {
+                $_.FullName -notmatch 'vendor'
+            } | Select-String -Pattern '\$pdo->query\(\$[^)]|\$pdo->exec\(\$[^)]' | Where-Object {
+                $_.Line -notmatch 'migration|sql file' -and
+                $_.Path -notmatch 'helpers\.php'
+            })
+            
+            if ($unsafeSQL.Count -gt 0) {
+                Write-Warn "$($unsafeSQL.Count) requetes SQL a verifier"
+                $securityScore -= 2
+            } else {
+                Write-OK "Requetes SQL preparees (PDO)"
+            }
+            
+            # XSS
+            Write-Info "Verification XSS..."
+            $dangerousHTML = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
+                $_.FullName -notmatch 'node_modules' -and
+                $_.FullName -notmatch '\\\.next\\' -and
+                $_.FullName -notmatch '\\docs\\'
+            } | Select-String -Pattern 'dangerouslySetInnerHTML' | Where-Object {
+                # Exclure les scripts de service worker (statiques et sécurisés)
+                $_.Line -notmatch 'serviceWorker|Service Worker|Script.*id.*service-worker' -and
+                # Exclure les composants Script de Next.js (gèrent automatiquement la sécurité)
+                $_.Line -notmatch 'Script.*dangerouslySetInnerHTML'
+            })
+            
+            if ($dangerousHTML.Count -gt 0) {
+                Write-Warn "dangerouslySetInnerHTML detecte ($($dangerousHTML.Count))"
+                $securityScore -= 1
+            } else {
+                Write-OK "XSS protege"
+            }
+            
+            # Secrets dans le code (si pas déjà fait par le module)
+            Write-Info "Verification secrets..."
+            $secretPatterns = @(
+                @{Pattern='password\s*=\s*["''][^"''\s]+["'']'; Name="Password en dur"},
+                @{Pattern='api[_-]?key\s*=\s*["''][^"''\s]+["'']'; Name="API key en dur"},
+                @{Pattern='secret\s*=\s*["''][^"''\s]+["'']'; Name="Secret en dur"},
+                @{Pattern='token\s*=\s*["''][^"''\s]+["'']'; Name="Token en dur"}
+            )
+            
+            foreach ($pattern in $secretPatterns) {
+                $matches = @(Get-ChildItem -Recurse -File | Where-Object {
+                    -not (Test-ExcludedFile $_.FullName)
+                } | Select-String -Pattern $pattern.Pattern -CaseSensitive:$false)
+                if ($matches.Count -gt 0) {
+                    Write-Warn "$($pattern.Name): $($matches.Count) occurrence(s)"
+                    $securityScore -= 0.5
+                }
+            }
+            
+            $auditResults.Scores["Security"] = [Math]::Max($securityScore, 0)
+        } catch {
+            Write-Err "Erreur verification securite"
+            $securityScore = 7
+            $auditResults.Scores["Security"] = 7
+        }
     }
     
-    # XSS
-    Write-Info "Verification XSS..."
-    $dangerousHTML = @(Get-ChildItem -Recurse -File -Include *.js,*.jsx | Where-Object {
-        $_.FullName -notmatch 'node_modules' -and
-        $_.FullName -notmatch '\\\.next\\' -and
-        $_.FullName -notmatch '\\docs\\'
-    } | Select-String -Pattern 'dangerouslySetInnerHTML' | Where-Object {
-        # Exclure les scripts de service worker (statiques et sécurisés)
-        $_.Line -notmatch 'serviceWorker|Service Worker|Script.*id.*service-worker' -and
-        # Exclure les composants Script de Next.js (gèrent automatiquement la sécurité)
-        $_.Line -notmatch 'Script.*dangerouslySetInnerHTML'
-    })
-    
-    if ($dangerousHTML.Count -gt 0) {
-        Write-Warn "dangerouslySetInnerHTML detecte ($($dangerousHTML.Count))"
-        $securityScore -= 1
-    } else {
-        Write-OK "XSS protege"
-    }
-    
-    # INTÉGRATION NPM AUDIT - Vulnérabilités npm
+    # INTÉGRATION NPM AUDIT - Vulnérabilités npm (toujours exécuté)
     Write-Host "`n  Analyse avec npm audit (vulnérabilités npm)..." -ForegroundColor Yellow
     $npmAuditResult = Invoke-NpmAuditAnalysis -ProjectRoot (Get-Location).Path
     if ($npmAuditResult.Success) {
@@ -2036,14 +2203,15 @@ Exemple de correction:
         Write-OK "  Aucun secret hardcode detecte"
     }
     
-    Write-OK "Verification securite terminee"
+    # Mettre à jour le score final de sécurité
+    if ($auditResults.Scores.ContainsKey("Security")) {
+        $auditResults.Scores["Security"] = [Math]::Max([Math]::Min(10, $auditResults.Scores["Security"]), 0)
+    } else {
+        $auditResults.Scores["Security"] = [Math]::Max($securityScore, 0)
+    }
     
-} catch {
-    Write-Warn "Erreur verification securite"
-    $securityScore = 7
-}
-
-$auditResults.Scores["Securite"] = [Math]::Max($securityScore, 0)
+    Write-OK "Verification securite terminee"
+}  # Fin if SelectedPhases -contains 4
 
 # ===============================================================================
 # PHASE 9 : PERFORMANCE
@@ -5441,8 +5609,10 @@ if ($script:apiAuthFailed) {
     $maxRetries = 3
     $retryDelay = 5  # Secondes entre chaque tentative
     $authSuccess = $false
+    $shouldBreak = $false
     
     for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+        if ($shouldBreak) { break }
         Write-Host "`n  Tentative $attempt/$maxRetries..." -ForegroundColor Yellow
         
         try {
@@ -5457,12 +5627,23 @@ if ($script:apiAuthFailed) {
             
             Write-OK "Authentification réussie (tentative $attempt/$maxRetries)"
             $authSuccess = $true
-            
-            # Maintenant que l'authentification est réussie, compléter les phases API et BDD
-            Write-Host "`n  Complétion des phases API et BDD..." -ForegroundColor Cyan
-            
-            # Compléter Phase 6 : Endpoints API (seulement si phase 6 sélectionnée)
-            if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 6) {
+            $shouldBreak = $true
+            break  # Sortir de la boucle for pour éviter les try-catch imbriqués
+        } catch {
+            Write-Warn "  Échec authentification (tentative $attempt/$maxRetries): $($_.Exception.Message)"
+            if ($attempt -lt $maxRetries) {
+                Write-Info "  Attente de $retryDelay secondes avant la prochaine tentative..."
+                Start-Sleep -Seconds $retryDelay
+            }
+        }
+    }
+    
+    # Maintenant que l'authentification est réussie (si elle a réussi), compléter les phases API et BDD
+    if ($authSuccess) {
+        Write-Host "`n  Complétion des phases API et BDD..." -ForegroundColor Cyan
+        
+        # Compléter Phase 6 : Endpoints API (seulement si phase 6 sélectionnée)
+        if ($SelectedPhases.Count -eq 0 -or $SelectedPhases -contains 6) {
                 Write-Host "`n  === Tests Endpoints API ===" -ForegroundColor Yellow
                 $endpointsTotal = 0
                 $endpointsOK = 0
@@ -5638,22 +5819,12 @@ if ($script:apiAuthFailed) {
                         
                         $auditResults.Scores["Database"] = [Math]::Max(0, $dbScore)
                         Write-Host "  Score BDD (méthode alternative): $dbScore/10" -ForegroundColor $(if ($dbScore -ge 8) { "Green" } elseif ($dbScore -ge 6) { "Yellow" } else { "Red" })
-                    }  # Fin catch audit schéma (ferme le try de 5470)
+                    }  # Fin catch audit schéma (ferme le catch de 5602 qui ferme le try de 5511)
                 } catch {
                     Write-Err "  Erreur analyse BDD: $($_.Exception.Message)"
-                }  # Fin catch analyse BDD (ferme le try de 5467)
-            }  # Fin if phase 14 sélectionnée
-            
-            break  # Sortir de la boucle si l'authentification réussit
-            
-        } catch {
-            Write-Warn "  Échec authentification (tentative $attempt/$maxRetries): $($_.Exception.Message)"
-            if ($attempt -lt $maxRetries) {
-                Write-Info "  Attente de $retryDelay secondes avant la prochaine tentative..."
-                Start-Sleep -Seconds $retryDelay
-            }
-        }
-    }
+                }  # Fin catch analyse BDD (ferme le catch de 5644 qui ferme le try de 5508)
+        }  # Fin if phase 14 sélectionnée
+    }  # Fin if authSuccess
     
     if (-not $authSuccess) {
         Write-Err "`n  Échec définitif après $maxRetries tentatives"
@@ -5751,7 +5922,10 @@ if ($auditResults.CorrectionPlans.Count -gt 0) {
             }
             
             Export-CorrectionPlans -Plans $auditResults.CorrectionPlans -OutputFile $correctionPlansPath
-            Write-OK "Plans de correction exportes: $correctionPlansPath ($($auditResults.CorrectionPlans.Count) plan(s))"
+            $planCount = $auditResults.CorrectionPlans.Count
+            $planWord = if ($planCount -gt 1) { "plans" } else { "plan" }
+            $message = "Plans de correction exportes: " + $correctionPlansPath + " (" + $planCount.ToString() + " " + $planWord + ")"
+            Write-OK $message
             
             # Générer aussi un rapport texte lisible
             $textReportPath = $correctionPlansPath -replace '\.json$', '.txt'
