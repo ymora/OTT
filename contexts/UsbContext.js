@@ -212,47 +212,28 @@ export function UsbProvider({ children }) {
         const data = await response.json()
         if (!data.success || !data.commands || data.commands.length === 0) return
         
-        // Envoyer chaque commande UPDATE_CONFIG via USB et la marquer comme exécutée
+        // OPTIMISATION N+1: Envoyer les commandes USB séquentiellement (obligatoire pour port série)
+        // puis marquer toutes les commandes en parallèle avec Promise.all()
+        const commandsToAck = [] // Commandes à marquer comme exécutées (déjà envoyées)
+        const commandsToSend = [] // Nouvelles commandes à envoyer
+        
+        // Séparer les commandes déjà envoyées de celles à envoyer
         for (const cmd of data.commands) {
           if (cmd.command === 'UPDATE_CONFIG' && cmd.payload) {
-            // Vérifier si la commande a déjà été envoyée dans cette session (sécurité supplémentaire)
             const cmdKey = `${cmd.id}_${cmd.command}`
             if (sentCommandsCacheRef.current.has(cmdKey)) {
-              logger.debug(`[USB] Commande ${cmd.id} déjà envoyée dans cette session, marquage comme exécutée...`)
-              // Marquer quand même comme exécutée au cas où
-              try {
-                await fetchWithAuth(
-                  `${API_URL}/api.php/devices/commands/ack`,
-                  {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      command_id: cmd.id,
-                      device_sim_iccid: device
-                    })
-                  },
-                  { requiresAuth: true }
-                )
-              } catch (err) {
-                logger.debug('[USB] Erreur marquage commande déjà envoyée:', err)
-              }
-              continue
+              // Commande déjà envoyée, juste à marquer
+              commandsToAck.push(cmd)
+            } else {
+              // Nouvelle commande à envoyer puis marquer
+              commandsToSend.push(cmd)
             }
-            
-            const payload = typeof cmd.payload === 'string' 
-              ? JSON.parse(cmd.payload) 
-              : cmd.payload
-            
-            // Formater la commande pour le firmware (format: config {...})
-            const commandLine = `config ${JSON.stringify(payload)}\n`
-            await write(commandLine)
-            
-            logger.log(`📤 [USB] Commande UPDATE_CONFIG envoyée:`, payload)
-            
-            // Ajouter au cache pour éviter de renvoyer dans la même session
-            sentCommandsCacheRef.current.add(cmdKey)
-            
-            // Marquer la commande comme exécutée dans la base de données
+          }
+        }
+        
+        // Marquer les commandes déjà envoyées en parallèle (optimisation N+1)
+        if (commandsToAck.length > 0) {
+          const ackPromises = commandsToAck.map(async (cmd) => {
             try {
               const ackResponse = await fetchWithAuth(
                 `${API_URL}/api.php/devices/commands/ack`,
@@ -261,6 +242,55 @@ export function UsbProvider({ children }) {
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     command_id: cmd.id,
+                    device_sim_iccid: device
+                  })
+                },
+                { requiresAuth: true }
+              )
+              if (ackResponse.ok) {
+                const ackData = await ackResponse.json()
+                if (ackData.success) {
+                  logger.debug(`✅ [USB] Commande ${cmd.id} déjà envoyée, marquée comme exécutée`)
+                }
+              }
+            } catch (err) {
+              logger.debug(`[USB] Erreur marquage commande ${cmd.id} déjà envoyée:`, err)
+            }
+          })
+          await Promise.all(ackPromises)
+        }
+        
+        // Envoyer les nouvelles commandes séquentiellement (obligatoire pour port série)
+        // et collecter les IDs pour marquage en parallèle après
+        const sentCommandIds = []
+        for (const cmd of commandsToSend) {
+          const cmdKey = `${cmd.id}_${cmd.command}`
+          const payload = typeof cmd.payload === 'string' 
+            ? JSON.parse(cmd.payload) 
+            : cmd.payload
+          
+          // Formater la commande pour le firmware (format: config {...})
+          const commandLine = `config ${JSON.stringify(payload)}\n`
+          await write(commandLine)
+          
+          logger.log(`📤 [USB] Commande UPDATE_CONFIG envoyée:`, payload)
+          
+          // Ajouter au cache et à la liste pour marquage
+          sentCommandsCacheRef.current.add(cmdKey)
+          sentCommandIds.push(cmd.id)
+        }
+        
+        // OPTIMISATION N+1: Marquer toutes les commandes envoyées en parallèle
+        if (sentCommandIds.length > 0) {
+          const ackPromises = sentCommandIds.map(async (cmdId) => {
+            try {
+              const ackResponse = await fetchWithAuth(
+                `${API_URL}/api.php/devices/commands/ack`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    command_id: cmdId,
                     device_sim_iccid: device,
                     status: 'executed',
                     message: 'Commande envoyée via USB'
@@ -272,20 +302,19 @@ export function UsbProvider({ children }) {
               if (ackResponse.ok) {
                 const ackData = await ackResponse.json()
                 if (ackData.success) {
-                  logger.debug(`✅ [USB] Commande ${cmd.id} marquée comme exécutée`)
-                  // Garder la commande dans le cache pour éviter les renvois multiples
-                  // même après marquage réussi (sécurité supplémentaire)
+                  logger.debug(`✅ [USB] Commande ${cmdId} marquée comme exécutée`)
                 } else {
-                  logger.warn(`⚠️ [USB] Échec marquage commande ${cmd.id}:`, ackData.error)
+                  logger.warn(`⚠️ [USB] Échec marquage commande ${cmdId}:`, ackData.error)
                 }
               } else {
-                logger.warn(`⚠️ [USB] Erreur HTTP lors du marquage commande ${cmd.id}:`, ackResponse.status)
+                logger.warn(`⚠️ [USB] Erreur HTTP lors du marquage commande ${cmdId}:`, ackResponse.status)
               }
             } catch (err) {
-              logger.error(`❌ [USB] Erreur lors du marquage commande ${cmd.id} comme exécutée:`, err)
+              logger.error(`❌ [USB] Erreur lors du marquage commande ${cmdId} comme exécutée:`, err)
               // Ne pas bloquer si le marquage échoue, mais logger l'erreur
             }
-          }
+          })
+          await Promise.all(ackPromises)
         }
       } catch (err) {
         logger.debug('Erreur vérification commandes USB:', err)
@@ -1404,8 +1433,8 @@ export function UsbProvider({ children }) {
       const maxRetries = 10
       
       while (!portReady && retries < maxRetries) {
-        const currentPort = explicitPort || port
-        if (currentPort && currentPort.readable && currentPort.writable) {
+        // Utiliser le même portToUse qu'on a vérifié précédemment
+        if (portToUse && portToUse.readable && portToUse.writable) {
           portReady = true
           logger.log(`✅ [USB] Port vérifié et prêt (tentative ${retries + 1}/${maxRetries})`)
         } else {
@@ -1454,7 +1483,9 @@ export function UsbProvider({ children }) {
       appendUsbStreamLog('🚀 Démarrage du streaming USB...', 'dashboard')
       logger.log('🚀 [USB] Démarrage startReading avec handleUsbStreamChunk')
       
-      const stop = await startReading(handleUsbStreamChunk)
+      // Passer explicitement le port à utiliser pour éviter les problèmes de closure
+      // Utiliser le même portToUse qu'on a vérifié précédemment
+      const stop = await startReading(handleUsbStreamChunk, portToUse)
       if (!stop || typeof stop !== 'function') {
         const errorMsg = 'startReading n\'a pas retourné de fonction stop valide'
         appendUsbStreamLog(`❌ ${errorMsg}`, 'dashboard')

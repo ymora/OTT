@@ -126,12 +126,44 @@
 
 ---
 
+## ✅ 6. CORRECTION AUTHENTIFICATION API - DOCKER
+
+### 6.1 Amélioration du Script d'Audit pour Docker
+- ✅ **Utilisation des credentials de la config** : Le script utilise maintenant les credentials de `audit.config.ps1` si les paramètres ne sont pas fournis
+- ✅ **URL par défaut Docker** : Utilisation de `http://localhost:8000` (Docker) au lieu d'une chaîne vide
+- ✅ **Détection Docker** : Vérification automatique si le conteneur `ott-api` est démarré
+- ✅ **Instructions claires** : Messages d'aide pour démarrer Docker si nécessaire
+- ✅ **Gestion d'erreur améliorée** : Affichage des messages d'erreur détaillés avec la réponse du serveur
+- ✅ **Mécanisme de réessai amélioré** : Vérification des credentials et Docker avant de réessayer
+
+**Fichiers modifiés**:
+- `audit/scripts/Audit-Complet.ps1` (lignes 773-942, 1724-1831, 5658-5887)
+- `audit/config/audit.config.ps1` (documentation mise à jour pour Docker)
+
+**Améliorations**:
+1. Initialisation des credentials depuis la config si les paramètres sont vides
+2. Vérification que l'URL API et les credentials sont configurés avant de tenter l'authentification
+3. **Détection Docker** : Vérifie si le conteneur `ott-api` est en cours d'exécution
+4. **Instructions Docker** : Affiche des messages d'aide pour démarrer Docker (`docker-compose up -d` ou `.\scripts\dev\start_docker.ps1`)
+5. Affichage des messages d'erreur détaillés (URL testée, réponse du serveur)
+6. Réessai avec meilleure gestion d'erreur (3 tentatives avec délai de 5 secondes)
+
+**Résultat**: 
+- Le script d'audit peut maintenant utiliser les credentials configurés (`ymora@free.fr` / `Ym120879`) automatiquement depuis `audit.config.ps1`
+- **Détection Docker** : Le script vérifie si Docker est démarré et donne des instructions claires si ce n'est pas le cas
+- **Configuration Docker** : L'API est maintenant configurée pour Docker (`http://localhost:8000`) et non plus Render
+
+---
+
 ## 🎯 PROCHAINES ÉTAPES RECOMMANDÉES
 
 ### Court Terme (1-2 jours)
-1. ⚠️ **Résoudre le problème d'authentification API** (bloque les tests API et Database)
-   - Vérifier que le serveur API est démarré
-   - Vérifier les credentials dans `audit/config/audit.config.ps1`
+1. ✅ **Résoudre le problème d'authentification API** (CORRIGÉ)
+   - ✅ Script amélioré pour utiliser les credentials de la config
+   - ✅ Détection Docker automatique avec instructions claires
+   - ✅ Configuration mise à jour pour Docker (plus Render)
+   - ⚠️ **À faire** : Démarrer Docker avant l'audit : `docker-compose up -d` ou `.\scripts\dev\start_docker.ps1`
+   - ⚠️ **À faire** : Tester l'authentification avec les credentials fournis
 
 2. ⚠️ **Nettoyer les éléments inutilisés**
    - 2 fonctions non utilisées (à identifier et supprimer)
@@ -172,7 +204,7 @@
 ### Fichiers Modifiés
 1. `audit/modules/Checks-CodeMort-Improved.ps1`
 2. `audit/modules/Checks-StructureAPI-Improved.ps1`
-3. `audit/scripts/Audit-Complet.ps1`
+3. `audit/scripts/Audit-Complet.ps1` (modules + authentification API)
 4. `render.yaml`
 
 ### Fichiers Créés
@@ -204,5 +236,8 @@
 - Configuration complétée
 - Documentation validée
 
-**Prochaines Étapes**: Résoudre l'authentification API pour débloquer les tests API et Database, puis continuer avec les corrections de performance et de refactoring.
+**Prochaines Étapes**: 
+- ✅ Authentification API corrigée (script amélioré)
+- ⚠️ Vérifier que le serveur API est démarré lors de l'exécution de l'audit
+- ⚠️ Continuer avec les corrections de performance et de refactoring
 

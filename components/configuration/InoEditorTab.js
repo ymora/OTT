@@ -1134,6 +1134,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
           disabled={uploading}
           className="hidden"
           id="file-upload-input"
+          aria-label="Sélectionner un fichier .ino"
         />
         <label
           htmlFor="file-upload-input"
@@ -1144,9 +1145,16 @@ export default function InoEditorTab({ onUploadSuccess }) {
             disabled:opacity-50 disabled:cursor-not-allowed
             ${uploading ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}
           `}
+          role="button"
+          aria-label="Ajouter un fichier firmware .ino"
         >
-          {uploading ? '⏳ Upload en cours...' : '➕ Ajouter'}
+          {uploading ? '⏳ Upload en cours...' : '➕ Ajouter un fichier .ino'}
         </label>
+        {!uploading && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">
+            Cliquez pour sélectionner un fichier .ino à uploader
+          </p>
+        )}
       </div>
 
       {/* Éditeur INO - affiché seulement après clic sur le crayon */}

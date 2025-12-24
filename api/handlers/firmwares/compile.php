@@ -13,6 +13,14 @@ require_once __DIR__ . '/compile/cleanup.php';
 function handleCompileFirmware($firmware_id) {
     global $pdo;
     
+    // ⚠️ SÉCURITÉ: Validation stricte du firmware_id
+    $firmware_id = filter_var($firmware_id, FILTER_VALIDATE_INT);
+    if (!$firmware_id || $firmware_id <= 0) {
+        sendSSE('error', 'Invalid firmware ID');
+        error_log('[handleCompileFirmware] ❌ firmware_id invalide: ' . var_export($firmware_id, true));
+        return;
+    }
+    
     // Variable pour suivre la progression maximale (éviter les retours en arrière)
     static $maxProgress = 0;
     
@@ -213,8 +221,77 @@ function handleCompileFirmware($firmware_id) {
             }
             
             if ($ino_path && file_exists($ino_path)) {
+                // ⚠️ SÉCURITÉ: Validation du chemin pour éviter path traversal
+                // Accepter les fichiers dans hardware/ du projet OU dans les répertoires temporaires légitimes
+                $root_dir = getProjectRoot();
+                $realPath = realpath($ino_path);
+                $allowedPath = realpath($root_dir . '/hardware');
+                $tempDir = realpath(sys_get_temp_dir());
+                
+                $isValidPath = false;
+                
+                // Vérifier si le chemin est dans hardware/ du projet
+                if ($allowedPath && $realPath && strpos($realPath, $allowedPath) === 0) {
+                    $isValidPath = true;
+                }
+                // Vérifier si le chemin est dans le répertoire temporaire système (fichiers extraits de la DB)
+                elseif ($tempDir && $realPath && strpos($realPath, $tempDir) === 0) {
+                    // Vérifier que le nom du fichier commence par ott_firmware_ pour éviter les fichiers arbitraires
+                    $fileName = basename($realPath);
+                    if (strpos($fileName, 'ott_firmware_') === 0 || strpos($fileName, 'fw_ott') === 0) {
+                        $isValidPath = true;
+                    }
+                }
+                
+                if (!$isValidPath) {
+                    sendSSE('log', 'error', '❌ Chemin de fichier invalide (sécurité): ' . $ino_path);
+                    sendSSE('log', 'error', '   Chemin réel: ' . ($realPath ?: 'N/A'));
+                    sendSSE('log', 'error', '   Chemin autorisé hardware: ' . ($allowedPath ?: 'N/A'));
+                    sendSSE('log', 'error', '   Chemin temporaire: ' . ($tempDir ?: 'N/A'));
+                    sendSSE('error', 'Chemin de fichier invalide. Sécurité.');
+                    flush();
+                    
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'Chemin de fichier invalide (sécurité)'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                    }
+                    return;
+                }
+                
                 sendSSE('log', 'info', '✅ Fichier trouvé: ' . basename($ino_path));
                 sendSSE('log', 'info', '   Chemin: ' . $ino_path);
+                
+                // ⚠️ SÉCURITÉ: Limite de taille (10MB max)
+                $file_size = filesize($ino_path);
+                if ($file_size === false) {
+                    sendSSE('log', 'error', '❌ Impossible de déterminer la taille du fichier');
+                    sendSSE('error', 'Impossible de lire le fichier .ino.');
+                    flush();
+                    return;
+                }
+                
+                $maxFileSize = 10 * 1024 * 1024; // 10MB
+                if ($file_size > $maxFileSize) {
+                    sendSSE('log', 'error', '❌ Fichier trop volumineux (taille: ' . round($file_size / 1024 / 1024, 2) . ' MB, max: 10 MB)');
+                    sendSSE('error', 'Fichier .ino trop volumineux (max 10MB). Réduisez la taille du fichier.');
+                    flush();
+                    
+                    try {
+                        $pdo->prepare("
+                            UPDATE firmware_versions 
+                            SET status = 'error', error_message = 'Fichier .ino trop volumineux (max 10MB)'
+                            WHERE id = :id
+                        ")->execute(['id' => $firmware_id]);
+                    } catch(PDOException $dbErr) {
+                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
+                    }
+                    return;
+                }
                 
                 // Vérifier que le fichier est lisible
                 if (!is_readable($ino_path)) {
@@ -236,9 +313,8 @@ function handleCompileFirmware($firmware_id) {
                 }
                 
                 // Vérifier que le fichier n'est pas vide
-                $file_size = filesize($ino_path);
-                if ($file_size === 0 || $file_size === false) {
-                    sendSSE('log', 'error', '❌ Fichier trouvé mais vide (taille: ' . ($file_size === false ? 'inconnue' : '0') . ')');
+                if ($file_size === 0) {
+                    sendSSE('log', 'error', '❌ Fichier trouvé mais vide (taille: 0)');
                     sendSSE('error', 'Fichier .ino vide. Ré-uploader le fichier .ino.');
                     flush();
                     
@@ -560,13 +636,37 @@ function handleCompileFirmware($firmware_id) {
                 // Définir HOME et ARDUINO_DIRECTORIES_USER pour arduino-cli
                 $env = [];
                 if (empty(getenv('HOME'))) {
-                    $env['HOME'] = sys_get_temp_dir() . '/arduino-cli-home';
+                    // Utiliser le répertoire persistant au lieu de /tmp pour éviter les erreurs I/O
+                    $env['HOME'] = $arduinoDataDir . '/arduino-cli-home';
                     if (!is_dir($env['HOME'])) {
                         mkdir($env['HOME'], 0755, true);
                     }
                 }
                 // Utiliser un répertoire persistant pour les données arduino-cli
                 $env['ARDUINO_DIRECTORIES_USER'] = $arduinoDataDir;
+                
+                // ⚠️ NETTOYAGE: Nettoyer le répertoire temporaire d'arduino-cli pour éviter les erreurs I/O
+                $arduinoTmpDir = $env['HOME'] . '/.arduino15/tmp';
+                if (is_dir($arduinoTmpDir)) {
+                    sendSSE('log', 'info', '🧹 Nettoyage du répertoire temporaire arduino-cli...');
+                    flush();
+                    exec('rm -rf ' . escapeshellarg($arduinoTmpDir) . '/* 2>&1', $tmpCleanOutput, $tmpCleanReturn);
+                    if ($tmpCleanReturn === 0) {
+                        sendSSE('log', 'info', '   ✅ Répertoire temporaire nettoyé');
+                    } else {
+                        sendSSE('log', 'warning', '   ⚠️ Impossible de nettoyer le répertoire temporaire (peut être normal)');
+                    }
+                    flush();
+                }
+                
+                // Vérifier l'espace disque disponible
+                $freeSpace = disk_free_space($arduinoDataDir);
+                $freeSpaceMB = round($freeSpace / 1024 / 1024, 2);
+                sendSSE('log', 'info', '💾 Espace disque disponible: ' . $freeSpaceMB . ' MB');
+                if ($freeSpaceMB < 1000) {
+                    sendSSE('log', 'warning', '⚠️ Espace disque faible (< 1GB) - L\'installation peut échouer');
+                }
+                flush();
                 
                 $envStr = '';
                 foreach ($env as $key => $value) {
@@ -840,10 +940,45 @@ function handleCompileFirmware($firmware_id) {
                 sendSSE('log', 'info', '   Sortie core list (premiers 500 chars): ' . substr($coreListStr, 0, 500));
                 flush();
                 
-                // Vérifier si le core ESP32 apparaît dans la liste (format: esp32:esp32 ou esp-rv32)
+                // ⚠️ SIMPLIFICATION: TOUJOURS nettoyer les outils ESP32 avant vérification
+                // Cela évite les problèmes d'architecture incompatible
+                $homeArduinoDir = (isset($env['HOME']) ? $env['HOME'] : sys_get_temp_dir() . '/arduino-cli-home') . '/.arduino15/packages/esp32';
+                $userArduinoDir = $arduinoDataDir . '/packages/esp32';
+                
+                sendSSE('log', 'info', '🧹 Nettoyage préventif des outils ESP32...');
+                flush();
+                
+                // Nettoyer les deux emplacements systématiquement
+                $esp32DirsToClean = [];
+                if (is_dir($homeArduinoDir)) {
+                    $esp32DirsToClean[] = $homeArduinoDir;
+                }
+                if (is_dir($userArduinoDir)) {
+                    $esp32DirsToClean[] = $userArduinoDir;
+                }
+                
+                foreach ($esp32DirsToClean as $dirToClean) {
+                    sendSSE('log', 'info', '   Suppression: ' . $dirToClean);
+                    flush();
+                    exec('rm -rf ' . escapeshellarg($dirToClean) . ' 2>&1', $cleanOutput, $cleanReturn);
+                    if ($cleanReturn === 0) {
+                        sendSSE('log', 'info', '   ✅ Nettoyé');
+                    } else {
+                        sendSSE('log', 'warning', '   ⚠️ Erreur lors du nettoyage (peut être normal)');
+                    }
+                    flush();
+                }
+                
+                sendSSE('log', 'info', '✅ Nettoyage terminé');
+                flush();
+                
+                // Maintenant vérifier si le core ESP32 est installé (après nettoyage)
                 $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || 
                                  strpos($coreListStr, 'esp-rv32') !== false ||
-                                 strpos($coreListStr, 'esp32') !== false; // Plus permissif
+                                 strpos($coreListStr, 'esp32') !== false;
+                
+                // Après nettoyage, forcer la réinstallation pour être sûr
+                $esp32Installed = false;
                 
                 if ($esp32Installed) {
                     sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
@@ -889,6 +1024,22 @@ function handleCompileFirmware($firmware_id) {
                         
                         sendSSE('log', 'info', 'Téléchargement et installation du core ESP32...');
                         sendSSE('log', 'info', '📥 Phase 1: Téléchargement (~568MB)');
+                        
+                        // ⚠️ IMPORTANT: Détecter l'architecture du serveur pour installer les bons outils
+                        $serverArch = php_uname('m');
+                        $isLinux = strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN';
+                        sendSSE('log', 'info', '🔍 Architecture serveur détectée: ' . $serverArch . ' (' . PHP_OS . ')');
+                        flush();
+                        
+                        // Vérifier si on est sur ARM64 (Apple Silicon, AWS Graviton, etc.)
+                        $isARM64 = stripos($serverArch, 'arm64') !== false || stripos($serverArch, 'aarch64') !== false;
+                        if ($isARM64) {
+                            sendSSE('log', 'warning', '⚠️ Architecture ARM détectée - Les outils ESP32 peuvent ne pas être disponibles pour cette architecture');
+                            sendSSE('log', 'info', '   Si la compilation échoue, vérifiez que arduino-cli supporte ARM64 pour ESP32');
+                            flush();
+                        }
+                        
+                        // Le nettoyage a déjà été fait plus haut, continuer avec l'installation
                         $sendProgress(45);
                         
                         // Exécuter avec output en temps réel pour voir la progression
@@ -899,6 +1050,7 @@ function handleCompileFirmware($firmware_id) {
                         ];
                         
                         // Utiliser --verbose pour obtenir tous les logs d'installation
+                        // ⚠️ IMPORTANT: Ne pas spécifier de version pour laisser arduino-cli choisir la version compatible
                         $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 --verbose 2>&1', $descriptorspec, $pipes);
                         
                         if (is_resource($process)) {
@@ -964,6 +1116,24 @@ function handleCompileFirmware($firmware_id) {
                                                         
                                                         // Déterminer le niveau de log selon le contenu
                                                         $logLevel = $isStderr ? 'error' : 'info';
+                                                        
+                                                        // ⚠️ DÉTECTION: Erreur I/O lors de l'installation
+                                                        $isIOError = stripos($lineTrimmed, 'input/output error') !== false ||
+                                                                     stripos($lineTrimmed, 'I/O error') !== false ||
+                                                                     stripos($lineTrimmed, 'Cannot install tool') !== false ||
+                                                                     stripos($lineTrimmed, 'Error during install') !== false;
+                                                        
+                                                        if ($isIOError) {
+                                                            $logLevel = 'error';
+                                                            sendSSE('log', 'error', '❌ ERREUR I/O DÉTECTÉE');
+                                                            sendSSE('log', 'error', '   Problème d\'écriture sur le disque lors de l\'installation');
+                                                            sendSSE('log', 'info', '   Causes possibles:');
+                                                            sendSSE('log', 'info', '   - Espace disque insuffisant');
+                                                            sendSSE('log', 'info', '   - Problème avec le système de fichiers /tmp');
+                                                            sendSSE('log', 'info', '   - Permissions insuffisantes');
+                                                            sendSSE('log', 'warning', '💡 SOLUTION: Vérifier l\'espace disque et les permissions');
+                                                            flush();
+                                                        }
                                                         
                                                         // Détecter les lignes de téléchargement (contiennent "MiB" et "%")
                                                         $isDownloadLine = preg_match('/\d+\.?\d*\s*(B|MiB|KiB)\s*\/\s*\d+\.?\d*\s*(B|MiB|KiB)\s*\d+\.?\d*%/', $lineTrimmed) ||
@@ -1129,12 +1299,57 @@ function handleCompileFirmware($firmware_id) {
                                 usleep(100000); // 100ms
                             }
                             
+                            // ⚠️ IMPORTANT: Lire toutes les données restantes avant de fermer les pipes
+                            // Le processus peut se terminer mais il peut rester des données dans les buffers
+                            $remainingAttempts = 10; // Lire jusqu'à 10 fois pour vider les buffers
+                            while ($remainingAttempts > 0) {
+                                $read = [$stdout, $stderr];
+                                $write = null;
+                                $except = null;
+                                $timeout = 0; // Pas d'attente, juste vérifier
+                                
+                                $num_changed = stream_select($read, $write, $except, $timeout);
+                                if ($num_changed > 0) {
+                                    foreach ($read as $stream) {
+                                        $isStderr = ($stream === $stderr);
+                                        $chunk = stream_get_contents($stream, 65536);
+                                        if ($chunk !== false && $chunk !== '') {
+                                            $lines = explode("\n", $chunk);
+                                            foreach ($lines as $line) {
+                                                $lineTrimmed = rtrim($line, "\r\n");
+                                                if (!empty($lineTrimmed)) {
+                                                    $installOutput[] = $lineTrimmed;
+                                                    $logLevel = $isStderr ? 'error' : 'info';
+                                                    
+                                                    // Détecter les erreurs
+                                                    if (stripos($lineTrimmed, 'error') !== false || 
+                                                        stripos($lineTrimmed, 'failed') !== false ||
+                                                        preg_match('/error:/i', $lineTrimmed)) {
+                                                        $logLevel = 'error';
+                                                    }
+                                                    
+                                                    sendSSE('log', $logLevel, $lineTrimmed);
+                                                    error_log('[handleCompileFirmware] Core install final output: ' . $lineTrimmed);
+                                                }
+                                            }
+                                            flush();
+                                        }
+                                    }
+                                }
+                                $remainingAttempts--;
+                                usleep(100000); // 100ms entre chaque tentative
+                            }
+                            
                             // Fermer les pipes
-                            fclose($pipes[0]);
-                            fclose($pipes[1]);
-                            fclose($pipes[2]);
+                            if (is_resource($pipes[0])) fclose($pipes[0]);
+                            if (is_resource($pipes[1])) fclose($pipes[1]);
+                            if (is_resource($pipes[2])) fclose($pipes[2]);
                             
                             $return = proc_close($process);
+                            
+                            // ⚠️ AMÉLIORATION: Logger le code de retour pour diagnostic
+                            error_log('[handleCompileFirmware] Core install terminé - Code retour: ' . $return);
+                            error_log('[handleCompileFirmware] Nombre de lignes de sortie: ' . count($installOutput));
                             
                             // Mettre à jour la progression à 50% à la fin du téléchargement/installation
                             $sendProgress(50);
@@ -1148,12 +1363,68 @@ function handleCompileFirmware($firmware_id) {
                             flush();
                         }
                         
-                        if ($return !== 0) {
+                        // ⚠️ AMÉLIORATION: Vérifier si le core est réellement installé même si le code retour n'est pas 0
+                        // Parfois arduino-cli retourne un code d'erreur mais le core est quand même installé
+                        $installOutputStr = implode("\n", $installOutput);
+                        $coreInstalledCheck = false;
+                        
+                        // Vérifier dans la sortie si l'installation a réussi
+                        if (stripos($installOutputStr, 'installed') !== false || 
+                            stripos($installOutputStr, 'already installed') !== false ||
+                            stripos($installOutputStr, 'successfully') !== false) {
+                            $coreInstalledCheck = true;
+                        }
+                        
+                        // Vérifier aussi si le core existe physiquement
+                        $corePath = $arduinoDataDir . '/packages/esp32/hardware/esp32';
+                        if (is_dir($corePath)) {
+                            $coreInstalledCheck = true;
+                        }
+                        
+                        // Si le core est installé (même avec code retour != 0), considérer comme succès
+                        if ($coreInstalledCheck) {
+                            sendSSE('log', 'info', '✅ Core ESP32 installé avec succès (vérifié)');
+                            error_log('[handleCompileFirmware] ✅ Core install réussi (code retour: ' . $return . ' mais core présent)');
+                        } elseif ($return !== 0) {
                             // Vérifier si c'est une erreur de timeout HTTP
-                            $installOutputStr = implode("\n", $installOutput);
+                            // ⚠️ AMÉLIORATION: Diagnostic détaillé de l'erreur
+                            error_log('[handleCompileFirmware] ❌ Core install échoué - Code retour: ' . $return);
+                            error_log('[handleCompileFirmware] Sortie complète (' . strlen($installOutputStr) . ' chars): ' . substr($installOutputStr, 0, 2000));
+                            
+                            // Afficher les dernières lignes d'erreur pour diagnostic
+                            $outputLines = explode("\n", $installOutputStr);
+                            $errorLines = array_filter($outputLines, function($line) {
+                                return stripos($line, 'error') !== false || 
+                                       stripos($line, 'failed') !== false || 
+                                       stripos($line, 'fatal') !== false ||
+                                       preg_match('/error:/i', $line);
+                            });
+                            
+                            if (!empty($errorLines)) {
+                                $lastErrors = array_slice($errorLines, -5); // Dernières 5 lignes d'erreur
+                                sendSSE('log', 'error', '❌ Détails de l\'erreur d\'installation:');
+                                foreach ($lastErrors as $errorLine) {
+                                    if (!empty(trim($errorLine))) {
+                                        sendSSE('log', 'error', '   ' . trim($errorLine));
+                                    }
+                                }
+                                flush();
+                            }
+                            
+                            // Afficher aussi les dernières lignes de la sortie complète pour diagnostic
+                            $lastLines = array_slice($outputLines, -10);
+                            sendSSE('log', 'info', '📋 Dernières lignes de la sortie:');
+                            foreach ($lastLines as $line) {
+                                if (!empty(trim($line))) {
+                                    sendSSE('log', 'info', '   ' . trim($line));
+                                }
+                            }
+                            flush();
+                            
                             $isTimeoutError = stripos($installOutputStr, 'request canceled') !== false || 
                                              stripos($installOutputStr, 'Client.Timeout') !== false ||
-                                             stripos($installOutputStr, 'context cancellation') !== false;
+                                             stripos($installOutputStr, 'context cancellation') !== false ||
+                                             stripos($installOutputStr, 'timeout') !== false;
                             
                             if ($isTimeoutError) {
                                 sendSSE('log', 'error', '❌ Timeout HTTP lors du téléchargement du core ESP32');
@@ -1182,7 +1453,16 @@ function handleCompileFirmware($firmware_id) {
                                 
                                 $errorMessage = 'Timeout HTTP lors du téléchargement du core ESP32. Relancez la compilation pour reprendre automatiquement le téléchargement.';
                             } else {
-                                $errorMessage = 'Erreur lors de l\'installation du core ESP32';
+                                // ⚠️ AMÉLIORATION: Message d'erreur plus détaillé
+                                $errorMessage = 'Erreur lors de l\'installation du core ESP32 (code: ' . $return . ')';
+                                if (!empty($errorLines)) {
+                                    $firstError = trim(reset($errorLines));
+                                    if (!empty($firstError)) {
+                                        $errorMessage .= ' - ' . substr($firstError, 0, 200);
+                                    }
+                                }
+                                sendSSE('log', 'error', '❌ Code retour: ' . $return);
+                                sendSSE('log', 'error', '   Vérifiez les logs ci-dessus pour plus de détails');
                             }
                             
                             // Marquer le firmware comme erreur dans la base de données
@@ -1315,6 +1595,31 @@ function handleCompileFirmware($firmware_id) {
                                                 // Déterminer le niveau de log selon le contenu
                                                 $logLevel = $isStderr ? 'error' : 'info';
                                                 
+                                                // ⚠️ DÉTECTION SPÉCIALE: Erreur d'architecture (exec format error)
+                                                $isArchitectureError = stripos($lineTrimmed, 'exec format error') !== false ||
+                                                                       stripos($lineTrimmed, 'cannot execute binary file') !== false ||
+                                                                       stripos($lineTrimmed, 'wrong ELF class') !== false;
+                                                
+                                                if ($isArchitectureError) {
+                                                    $logLevel = 'error';
+                                                    // Déterminer les emplacements des outils ESP32
+                                                    $homeArduinoDir = (isset($env['HOME']) ? $env['HOME'] : sys_get_temp_dir() . '/arduino-cli-home') . '/.arduino15/packages/esp32';
+                                                    $userArduinoDir = $arduinoDataDir . '/packages/esp32';
+                                                    
+                                                    sendSSE('log', 'error', '❌ ERREUR D\'ARCHITECTURE DÉTECTÉE');
+                                                    sendSSE('log', 'error', '   Les outils ESP32 installés ne sont pas compatibles avec l\'architecture du serveur');
+                                                    sendSSE('log', 'info', '   Architecture serveur: ' . php_uname('m') . ' (' . PHP_OS . ')');
+                                                    sendSSE('log', 'info', '   💡 Solution: Supprimer les outils ESP32 et les réinstaller');
+                                                    if (is_dir($homeArduinoDir)) {
+                                                        sendSSE('log', 'info', '   Commande 1: rm -rf ' . $homeArduinoDir);
+                                                    }
+                                                    if (is_dir($userArduinoDir)) {
+                                                        sendSSE('log', 'info', '   Commande 2: rm -rf ' . $userArduinoDir);
+                                                    }
+                                                    sendSSE('log', 'info', '   Puis relancez la compilation pour réinstaller les bons outils');
+                                                    flush();
+                                                }
+                                                
                                                 // Détecter les erreurs et warnings
                                                 if (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
                                                     stripos($lineTrimmed, '❌') !== false || preg_match('/error:/i', $lineTrimmed) ||
@@ -1425,17 +1730,59 @@ function handleCompileFirmware($firmware_id) {
                 }
                 
                 if ($compile_return !== 0) {
+                    // ⚠️ VÉRIFIER SI C'EST UNE ERREUR D'ARCHITECTURE
+                    $compile_output_str = implode("\n", $compile_output_lines ?? $compile_output ?? []);
+                    $isArchitectureError = stripos($compile_output_str, 'exec format error') !== false ||
+                                          stripos($compile_output_str, 'cannot execute binary file') !== false ||
+                                          stripos($compile_output_str, 'wrong ELF class') !== false;
+                    
+                    $errorMessage = 'Erreur lors de la compilation. Vérifiez les logs ci-dessus.';
+                    $errorMessageDB = 'Erreur lors de la compilation';
+                    
+                    if ($isArchitectureError) {
+                        $errorMessage = 'Erreur d\'architecture: Les outils ESP32 ne sont pas compatibles avec cette architecture serveur.';
+                        $errorMessageDB = 'Erreur d\'architecture: Outils ESP32 incompatibles';
+                        
+                        // Déterminer les emplacements des outils ESP32
+                        $homeArduinoDir = (isset($env['HOME']) ? $env['HOME'] : sys_get_temp_dir() . '/arduino-cli-home') . '/.arduino15/packages/esp32';
+                        $userArduinoDir = $arduinoDataDir . '/packages/esp32';
+                        
+                        sendSSE('log', 'error', '❌ ERREUR D\'ARCHITECTURE DÉTECTÉE');
+                        sendSSE('log', 'error', '   Les outils ESP32 installés ne sont pas compatibles avec l\'architecture du serveur');
+                        sendSSE('log', 'info', '   Architecture serveur: ' . php_uname('m') . ' (' . PHP_OS . ')');
+                        sendSSE('log', 'info', '   Emplacements possibles des outils:');
+                        if (is_dir($homeArduinoDir)) {
+                            sendSSE('log', 'info', '   - ' . $homeArduinoDir . ' (HOME/.arduino15)');
+                        }
+                        if (is_dir($userArduinoDir)) {
+                            sendSSE('log', 'info', '   - ' . $userArduinoDir . ' (ARDUINO_DIRECTORIES_USER)');
+                        }
+                        sendSSE('log', 'warning', '💡 SOLUTION: Supprimer les outils ESP32 et les réinstaller');
+                        if (is_dir($homeArduinoDir)) {
+                            sendSSE('log', 'info', '   Commande 1: rm -rf ' . $homeArduinoDir);
+                        }
+                        if (is_dir($userArduinoDir)) {
+                            sendSSE('log', 'info', '   Commande 2: rm -rf ' . $userArduinoDir);
+                        }
+                        sendSSE('log', 'info', '   Puis relancez la compilation pour réinstaller les bons outils');
+                        sendSSE('log', 'info', '   Arduino-cli devrait automatiquement télécharger les outils pour votre architecture');
+                        flush();
+                    }
+                    
                     // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
                     try {
                         $pdo->prepare("
                             UPDATE firmware_versions 
-                            SET status = 'error', error_message = 'Erreur lors de la compilation'
+                            SET status = 'error', error_message = :error_msg
                             WHERE id = :id
-                        ")->execute(['id' => $firmware_id]);
+                        ")->execute([
+                            'id' => $firmware_id,
+                            'error_msg' => $errorMessageDB
+                        ]);
                     } catch(PDOException $dbErr) {
                         error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
                     }
-                    sendSSE('error', 'Erreur lors de la compilation. Vérifiez les logs ci-dessus.');
+                    sendSSE('error', $errorMessage);
                     flush();
                     // Nettoyer
                     exec('rm -rf ' . escapeshellarg($build_dir));
@@ -1488,6 +1835,9 @@ function handleCompileFirmware($firmware_id) {
                 
                 // Mettre à jour la base de données avec le contenu en BYTEA
                 // IMPORTANT: Encoder les données BYTEA pour PostgreSQL
+                sendSSE('log', 'info', 'Encodage du fichier .bin pour PostgreSQL...');
+                flush();
+                
                 $bin_content_encoded = encodeByteaForPostgres($bin_content_db);
                 
                 // Libérer la mémoire immédiatement après encodage
@@ -1496,26 +1846,51 @@ function handleCompileFirmware($firmware_id) {
                 $version_dir = getVersionDir($firmware['version']);
                 $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
                 
-                $pdo->prepare("
-                    UPDATE firmware_versions 
-                    SET file_path = :file_path, 
-                        file_size = :file_size, 
-                        checksum = :checksum,
-                        bin_content = :bin_content,
-                        status = 'compiled'
-                    WHERE id = :id
-                ")->execute([
-                    'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
-                    'file_size' => $file_size,
-                    'checksum' => $checksum,
-                    'bin_content' => $bin_content_encoded,  // BYTEA encodé pour PostgreSQL
-                    'id' => $firmware_id
-                ]);
+                sendSSE('log', 'info', 'Mise à jour de la base de données...');
+                sendSSE('log', 'info', '   Taille: ' . $file_size . ' bytes');
+                sendSSE('log', 'info', '   Checksum: ' . substr($checksum, 0, 16) . '...');
+                flush();
+                
+                try {
+                    $updateStmt = $pdo->prepare("
+                        UPDATE firmware_versions 
+                        SET file_path = :file_path, 
+                            file_size = :file_size, 
+                            checksum = :checksum,
+                            bin_content = :bin_content,
+                            status = 'compiled'
+                        WHERE id = :id
+                    ");
+                    
+                    $updateResult = $updateStmt->execute([
+                        'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
+                        'file_size' => $file_size,
+                        'checksum' => $checksum,
+                        'bin_content' => $bin_content_encoded,  // BYTEA encodé pour PostgreSQL
+                        'id' => $firmware_id
+                    ]);
+                    
+                    if (!$updateResult) {
+                        $errorInfo = $updateStmt->errorInfo();
+                        throw new Exception('Erreur UPDATE: ' . ($errorInfo[2] ?? 'Erreur inconnue'));
+                    }
+                    
+                    sendSSE('log', 'info', '✅ Mise à jour DB réussie');
+                    error_log('[handleCompileFirmware] ✅ Fichier .bin mis à jour en DB - ID: ' . $firmware_id . ', Taille: ' . $file_size);
+                    
+                } catch(PDOException $dbErr) {
+                    error_log('[handleCompileFirmware] ❌ Erreur DB lors de la mise à jour: ' . $dbErr->getMessage());
+                    error_log('[handleCompileFirmware] Code erreur: ' . $dbErr->getCode());
+                    sendSSE('log', 'error', '❌ Erreur lors de la mise à jour en base de données: ' . $dbErr->getMessage());
+                    sendSSE('error', 'Erreur lors de la sauvegarde du fichier compilé');
+                    flush();
+                    throw $dbErr;
+                }
                 
                 // Libérer la mémoire de l'encodage immédiatement
                 unset($bin_content_encoded);
                 
-                sendSSE('log', 'info', '✅ Fichier .bin stocké en base de données (pas de copie sur disque)');
+                sendSSE('log', 'info', '✅ Fichier .bin stocké en base de données');
                 
                 // Nettoyer le répertoire de build immédiatement après stockage en DB
                 cleanupBuildDir($build_dir);

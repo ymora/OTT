@@ -432,16 +432,21 @@ export function useSerialPort() {
   }, [port])
 
   // Démarrer la lecture en continu
-  const startReading = useCallback(async (onData) => {
+  const startReading = useCallback(async (onData, explicitPort = null) => {
+    // Utiliser le port explicite si fourni, sinon utiliser le port du contexte
+    const portToUse = explicitPort || port
+    
     // Vérifier directement le port au lieu de compter sur isConnected qui peut avoir un délai
-    const portIsAvailable = port && port.readable && port.writable
+    const portIsAvailable = portToUse && portToUse.readable && portToUse.writable
     const readerIsAvailable = readerRef.current
     
     logger.debug('[SerialPortManager] startReading: vérifications...')
+    logger.debug('[SerialPortManager] startReading: explicitPort fourni =', !!explicitPort)
+    logger.debug('[SerialPortManager] startReading: port du contexte =', !!port)
+    logger.debug('[SerialPortManager] startReading: portToUse =', !!portToUse)
     logger.debug('[SerialPortManager] startReading: isConnected =', isConnected)
-    logger.debug('[SerialPortManager] startReading: port existe =', !!port)
-    logger.debug('[SerialPortManager] startReading: port.readable =', !!port?.readable)
-    logger.debug('[SerialPortManager] startReading: port.writable =', !!port?.writable)
+    logger.debug('[SerialPortManager] startReading: portToUse.readable =', !!portToUse?.readable)
+    logger.debug('[SerialPortManager] startReading: portToUse.writable =', !!portToUse?.writable)
     logger.debug('[SerialPortManager] startReading: readerRef.current =', !!readerRef.current)
     
     // Si le port n'est pas disponible, attendre un peu et réessayer (avec retry)
@@ -454,7 +459,7 @@ export function useSerialPort() {
       while (retries < maxRetries && !portIsAvailable) {
         await new Promise(resolve => setTimeout(resolve, 200))
         retries++
-        const portCheck = port && port.readable && port.writable
+        const portCheck = portToUse && portToUse.readable && portToUse.writable
         if (portCheck) {
           logger.log(`✅ [SerialPortManager] Port disponible après ${retries} tentative(s)`)
           break
@@ -463,9 +468,9 @@ export function useSerialPort() {
       }
       
       // Vérifier une dernière fois
-      const finalCheck = port && port.readable && port.writable
+      const finalCheck = portToUse && portToUse.readable && portToUse.writable
       if (!finalCheck && !readerIsAvailable) {
-        logger.error('[SerialPortManager] startReading: Port non disponible après retries (port:', !!port, 'readable:', !!port?.readable, 'writable:', !!port?.writable, 'reader:', !!readerRef.current, ')')
+        logger.error('[SerialPortManager] startReading: Port non disponible après retries (portToUse:', !!portToUse, 'readable:', !!portToUse?.readable, 'writable:', !!portToUse?.writable, 'reader:', !!readerRef.current, ')')
         setError('Port non disponible. Le port doit être connecté avant de démarrer la lecture.')
         throw new Error('Port non disponible. Le port doit être connecté avant de démarrer la lecture.')
       }
@@ -475,12 +480,12 @@ export function useSerialPort() {
     if (!readerRef.current && portIsAvailable) {
       logger.debug('[SerialPortManager] startReading: création du reader...')
       try {
-        if (port.readable.locked) {
+        if (portToUse.readable.locked) {
           logger.error('[SerialPortManager] startReading: readable est verrouillé')
           setError('Port readable verrouillé. Déconnectez et reconnectez.')
           return () => {}
         }
-        readerRef.current = port.readable.getReader()
+        readerRef.current = portToUse.readable.getReader()
         logger.debug('[SerialPortManager] startReading: reader créé')
       } catch (err) {
         logger.error('[SerialPortManager] startReading: erreur création reader:', err)

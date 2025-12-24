@@ -218,11 +218,9 @@ const DeviceMeasurementsModal = memo(function DeviceMeasurementsModal({ isOpen, 
 
     try {
       const measurementIds = Array.from(selectedMeasurements)
-      let successCount = 0
-      let errorCount = 0
-
-      // Archiver les mesures une par une
-      for (const measurementId of measurementIds) {
+      
+      // OPTIMISATION N+1: Archiver toutes les mesures en parallèle avec Promise.all()
+      const archivePromises = measurementIds.map(async (measurementId) => {
         try {
           const data = await fetchJson(
             fetchWithAuth,
@@ -231,17 +229,16 @@ const DeviceMeasurementsModal = memo(function DeviceMeasurementsModal({ isOpen, 
             { method: 'DELETE' },
             { requiresAuth: true }
           )
-
-          if (data.success) {
-            successCount++
-          } else {
-            errorCount++
-          }
+          return { success: data.success, id: measurementId }
         } catch (err) {
           logger.error(`Erreur archivage mesure ${measurementId}:`, err)
-          errorCount++
+          return { success: false, id: measurementId }
         }
-      }
+      })
+      
+      const results = await Promise.all(archivePromises)
+      const successCount = results.filter(r => r.success).length
+      const errorCount = results.filter(r => !r.success).length
 
       if (successCount > 0) {
         // Retirer les mesures archivées de la liste
@@ -276,11 +273,9 @@ const DeviceMeasurementsModal = memo(function DeviceMeasurementsModal({ isOpen, 
 
     try {
       const measurementIds = Array.from(selectedMeasurements)
-      let successCount = 0
-      let errorCount = 0
-
-      // Supprimer les mesures une par une
-      for (const measurementId of measurementIds) {
+      
+      // OPTIMISATION N+1: Supprimer toutes les mesures en parallèle avec Promise.all()
+      const deletePromises = measurementIds.map(async (measurementId) => {
         try {
           const data = await fetchJson(
             fetchWithAuth,
@@ -289,17 +284,16 @@ const DeviceMeasurementsModal = memo(function DeviceMeasurementsModal({ isOpen, 
             { method: 'DELETE' },
             { requiresAuth: true }
           )
-
-          if (data.success) {
-            successCount++
-          } else {
-            errorCount++
-          }
+          return { success: data.success, id: measurementId }
         } catch (err) {
           logger.error(`Erreur suppression mesure ${measurementId}:`, err)
-          errorCount++
+          return { success: false, id: measurementId }
         }
-      }
+      })
+      
+      const results = await Promise.all(deletePromises)
+      const successCount = results.filter(r => r.success).length
+      const errorCount = results.filter(r => !r.success).length
 
       if (successCount > 0) {
         // Retirer les mesures supprimées de la liste

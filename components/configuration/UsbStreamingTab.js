@@ -272,7 +272,8 @@ export default function DebugTab() {
   useEffect(() => {
     if (!previousIsConnectedRef.current && isConnected) {
       invalidateCache()
-      setTimeout(() => refetchDevicesRef.current(), 200)
+      const timeoutId = setTimeout(() => refetchDevicesRef.current(), 200)
+      return () => clearTimeout(timeoutId)
     }
     previousIsConnectedRef.current = isConnected
   }, [isConnected, invalidateCache])
@@ -1046,7 +1047,8 @@ export default function DebugTab() {
     if (!wasConnectedRef.current) {
       wasConnectedRef.current = true
       invalidateCache()
-      setTimeout(() => refetchDevicesRef.current(), 200)
+      const timeoutId = createTimeoutWithCleanup(() => refetchDevicesRef.current(), 200)
+      // Utilise createTimeoutWithCleanup pour nettoyage automatique
     }
     
     // Si on a des identifiants, chercher en base

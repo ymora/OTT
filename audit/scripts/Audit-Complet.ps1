@@ -770,10 +770,18 @@ if ([string]::IsNullOrEmpty($AuditDir)) {
 $auditDir = $AuditDir  # Variable locale pour compatibilité
 
 # Utiliser les variables d'environnement si les paramètres sont vides
-if ([string]::IsNullOrEmpty($Email)) { $Email = $env:AUDIT_EMAIL }
+if ([string]::IsNullOrEmpty($Email)) { 
+    if ($env:AUDIT_EMAIL) {
+        $Email = $env:AUDIT_EMAIL
+    } elseif ($script:Config -and $script:Config.Credentials -and $script:Config.Credentials.Email) {
+        $Email = $script:Config.Credentials.Email
+    }
+}
 if ([string]::IsNullOrEmpty($Password)) { 
     if ($env:AUDIT_PASSWORD) {
         $Password = $env:AUDIT_PASSWORD
+    } elseif ($script:Config -and $script:Config.Credentials -and $script:Config.Credentials.Password) {
+        $Password = $script:Config.Credentials.Password
     } else {
         $Password = "Ym120879"  # Mot de passe par défaut pour éviter le blocage
     }
@@ -784,7 +792,7 @@ if ([string]::IsNullOrEmpty($ApiUrl)) {
     } elseif ($script:Config -and $script:Config.Api -and $script:Config.Api.BaseUrl) {
         $ApiUrl = $script:Config.Api.BaseUrl
     } else {
-        $ApiUrl = ""  # Pas d'API par défaut
+        $ApiUrl = "http://localhost:8000"  # URL par défaut pour développement local
     }
 }
 
@@ -924,21 +932,29 @@ if ($null -eq $script:Config) {
     }
 }
 
-# Utiliser la configuration ou les paramètres
+# Utiliser la configuration ou les paramètres (déjà initialisés plus haut, mais réappliquer si nécessaire)
 if ([string]::IsNullOrEmpty($ApiUrl)) {
     if ($script:Config -and $script:Config.Api -and $script:Config.Api.BaseUrl) {
         $ApiUrl = $script:Config.Api.BaseUrl
     } else {
-        $ApiUrl = ""  # Pas d'API par défaut
+        $ApiUrl = "http://localhost:8000"  # URL par défaut pour développement local
     }
 }
 if ([string]::IsNullOrEmpty($Email)) {
-    $Email = "ymora@free.fr"
+    if ($script:Config -and $script:Config.Credentials -and $script:Config.Credentials.Email) {
+        $Email = $script:Config.Credentials.Email
+    } else {
+        $Email = "ymora@free.fr"
+    }
 }
 
 # Mot de passe par défaut pour éviter le blocage (peut être remplacé par variable d'environnement)
 if ([string]::IsNullOrEmpty($Password)) {
-    $Password = "Ym120879"  # Mot de passe par défaut
+    if ($script:Config -and $script:Config.Credentials -and $script:Config.Credentials.Password) {
+        $Password = $script:Config.Credentials.Password
+    } else {
+        $Password = "Ym120879"  # Mot de passe par défaut
+    }
 }
 
 Write-Host ""
@@ -1723,56 +1739,126 @@ $script:apiAuthFailed = $false  # Marquer si l'authentification a échoué pour 
 
 try {
     Write-Info "Connexion API..."
-    $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
+    Write-Info "URL API: $ApiUrl"
+    Write-Info "Email: $Email"
     
-    $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
-    try {
-        $authResponse = Invoke-RestMethod -Uri "$ApiUrl$authEndpoint" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
-        $script:authToken = $authResponse.token
-        $script:authHeaders = @{Authorization = "Bearer $script:authToken"}
-        $token = $script:authToken  # Pour compatibilité
-        $headers = $script:authHeaders  # Pour compatibilité
-        Write-OK "Authentification reussie"
-        
-        # Utiliser la configuration ou valeurs par défaut
-        if ($script:Config.Api.Endpoints) {
-            $endpoints = $script:Config.Api.Endpoints
-        } else {
-            $endpoints = @(
-                @{Path="/api.php/devices"; Name="Dispositifs"},
-                @{Path="/api.php/patients"; Name="Patients"},
-                @{Path="/api.php/users"; Name="Utilisateurs"},
-                @{Path="/api.php/alerts"; Name="Alertes"},
-                @{Path="/api.php/firmwares"; Name="Firmwares"},
-                @{Path="/api.php/roles"; Name="Roles"},
-                @{Path="/api.php/permissions"; Name="Permissions"},
-                @{Path="/api.php/health"; Name="Healthcheck"}
-            )
-        }
-        
-        foreach ($endpoint in $endpoints) {
-            $endpointsTotal++
-            try {
-                $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 10
-                Write-OK $endpoint.Name
-                $endpointsOK++
-            } catch {
-                Write-Err "$($endpoint.Name) - Erreur"
+    # Vérifier si Docker est démarré (si l'URL est localhost:8000)
+    if ($ApiUrl -match "localhost:8000" -or $ApiUrl -match "127\.0\.0\.1:8000") {
+        Write-Info "Vérification Docker (API locale)..."
+        try {
+            $dockerPs = docker ps --filter "name=ott-api" --format "{{.Names}}" 2>$null
+            if ($dockerPs -match "ott-api") {
+                Write-OK "Conteneur Docker ott-api détecté"
+            } else {
+                Write-Warn "Conteneur Docker ott-api non détecté"
+                Write-Info "  💡 Pour démarrer Docker: docker-compose up -d"
+                Write-Info "  💡 Ou utilisez: .\scripts\dev\start_docker.ps1"
             }
+        } catch {
+            Write-Info "  Docker CLI non disponible ou erreur de vérification"
         }
-        
-        $apiScore = [math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
-        
-    } catch {
-        Write-Warn "Echec authentification (tentative 1/1)"
-        Write-Info "L'audit continue - Réessai à la fin de l'audit..."
+    }
+    
+    if ([string]::IsNullOrEmpty($ApiUrl)) {
+        Write-Warn "URL API non configurée - Impossible de tester l'API"
+        Write-Info "  💡 Configurez API_URL ou audit.config.ps1 avec Api.BaseUrl"
         $script:apiAuthFailed = $true
         $apiScore = 5
+    } elseif ([string]::IsNullOrEmpty($Email) -or [string]::IsNullOrEmpty($Password)) {
+        Write-Warn "Credentials non configurés - Impossible de tester l'API"
+        Write-Info "  💡 Configurez AUDIT_EMAIL/AUDIT_PASSWORD ou audit.config.ps1 avec Credentials"
+        $script:apiAuthFailed = $true
+        $apiScore = 5
+    } else {
+        $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
+        
+        $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
+        $fullAuthUrl = "$ApiUrl$authEndpoint"
+        Write-Info "Endpoint authentification: $fullAuthUrl"
+        
+        try {
+            $authResponse = Invoke-RestMethod -Uri $fullAuthUrl -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15 -ErrorAction Stop
+            $script:authToken = $authResponse.token
+            if ([string]::IsNullOrEmpty($script:authToken)) {
+                throw "Token non reçu dans la réponse"
+            }
+            $script:authHeaders = @{Authorization = "Bearer $script:authToken"}
+            $token = $script:authToken  # Pour compatibilité
+            $headers = $script:authHeaders  # Pour compatibilité
+            Write-OK "Authentification reussie"
+            
+            # Utiliser la configuration ou valeurs par défaut
+            if ($script:Config -and $script:Config.Api -and $script:Config.Api.Endpoints) {
+                $endpoints = $script:Config.Api.Endpoints
+            } else {
+                $endpoints = @(
+                    @{Path="/api.php/devices"; Name="Dispositifs"},
+                    @{Path="/api.php/patients"; Name="Patients"},
+                    @{Path="/api.php/users"; Name="Utilisateurs"},
+                    @{Path="/api.php/alerts"; Name="Alertes"},
+                    @{Path="/api.php/firmwares"; Name="Firmwares"},
+                    @{Path="/api.php/roles"; Name="Roles"},
+                    @{Path="/api.php/permissions"; Name="Permissions"},
+                    @{Path="/api.php/health"; Name="Healthcheck"}
+                )
+            }
+            
+            foreach ($endpoint in $endpoints) {
+                $endpointsTotal++
+                try {
+                    $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
+                    Write-OK $endpoint.Name
+                    $endpointsOK++
+                } catch {
+                    Write-Err "$($endpoint.Name) - Erreur: $($_.Exception.Message)"
+                }
+            }
+            
+            if ($endpointsTotal -gt 0) {
+                $apiScore = [math]::Round(($endpointsOK / $endpointsTotal) * 10, 1)
+            } else {
+                $apiScore = 10  # Aucun endpoint à tester = parfait
+            }
+            
+        } catch {
+            $errorMsg = $_.Exception.Message
+            if ($_.Exception.Response) {
+                try {
+                    $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                    $responseBody = $reader.ReadToEnd()
+                    $reader.Close()
+                    if ($responseBody) {
+                        $errorMsg = "$errorMsg - Réponse: $responseBody"
+                    }
+                } catch {
+                    # Ignorer les erreurs de lecture de la réponse
+                }
+            }
+            Write-Warn "Echec authentification: $errorMsg"
+            Write-Info "URL testée: $fullAuthUrl"
+            if ($ApiUrl -match "localhost:8000" -or $ApiUrl -match "127\.0\.0\.1:8000") {
+                Write-Info "💡 L'API est sur Docker - Vérifiez que Docker est démarré:"
+                Write-Info "   • docker-compose up -d"
+                Write-Info "   • Ou: .\scripts\dev\start_docker.ps1"
+                Write-Info "   • Vérifier: docker ps | findstr ott-api"
+            } else {
+                Write-Info "L'audit continue - Vérifiez que le serveur API est démarré et accessible"
+            }
+            $script:apiAuthFailed = $true
+            $apiScore = 5
+        }
     }
     
 } catch {
-    Write-Warn "Echec connexion API (tentative 1/1)"
-    Write-Info "L'audit continue - Réessai à la fin de l'audit..."
+    Write-Warn "Echec connexion API: $($_.Exception.Message)"
+    if ($ApiUrl -match "localhost:8000" -or $ApiUrl -match "127\.0\.0\.1:8000") {
+        Write-Info "💡 L'API est sur Docker - Vérifiez que Docker est démarré:"
+        Write-Info "   • docker-compose up -d"
+        Write-Info "   • Ou: .\scripts\dev\start_docker.ps1"
+        Write-Info "   • Vérifier: docker ps | findstr ott-api"
+    } else {
+        Write-Info "L'audit continue - Vérifiez que le serveur API est démarré et accessible"
+    }
     $script:apiAuthFailed = $true
     $apiScore = 5
 }
@@ -5611,29 +5697,71 @@ if ($script:apiAuthFailed) {
     $authSuccess = $false
     $shouldBreak = $false
     
-    for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
-        if ($shouldBreak) { break }
-        Write-Host "`n  Tentative $attempt/$maxRetries..." -ForegroundColor Yellow
-        
-        try {
-            $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
-            $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
+    # Vérifier que les credentials sont disponibles
+    if ([string]::IsNullOrEmpty($ApiUrl)) {
+        Write-Err "  URL API non configurée - Impossible de réessayer l'authentification"
+        Write-Info "  Configurez API_URL ou audit.config.ps1 avec Api.BaseUrl"
+    } elseif ([string]::IsNullOrEmpty($Email) -or [string]::IsNullOrEmpty($Password)) {
+        Write-Err "  Credentials non configurés - Impossible de réessayer l'authentification"
+        Write-Info "  Configurez AUDIT_EMAIL/AUDIT_PASSWORD ou audit.config.ps1 avec Credentials"
+    } else {
+        # Vérifier Docker si localhost
+        if ($ApiUrl -match "localhost:8000" -or $ApiUrl -match "127\.0\.0\.1:8000") {
+            Write-Info "  Vérification Docker avant réessai..."
+            try {
+                $dockerPs = docker ps --filter "name=ott-api" --format "{{.Names}}" 2>$null
+                if (-not ($dockerPs -match "ott-api")) {
+                    Write-Warn "  ⚠️  Conteneur Docker ott-api non détecté"
+                    Write-Info "     💡 Démarrer Docker: docker-compose up -d"
+                }
+            } catch {
+                # Ignorer les erreurs Docker
+            }
+        }
+        for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+            if ($shouldBreak) { break }
+            Write-Host "`n  Tentative $attempt/$maxRetries..." -ForegroundColor Yellow
+            Write-Info "  URL: $ApiUrl"
+            Write-Info "  Email: $Email"
             
-            $authResponse = Invoke-RestMethod -Uri "$ApiUrl$authEndpoint" -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15
-            $script:authToken = $authResponse.token
-            $script:authHeaders = @{Authorization = "Bearer $script:authToken"}
-            $token = $script:authToken
-            $headers = $script:authHeaders
-            
-            Write-OK "Authentification réussie (tentative $attempt/$maxRetries)"
-            $authSuccess = $true
-            $shouldBreak = $true
-            break  # Sortir de la boucle for pour éviter les try-catch imbriqués
-        } catch {
-            Write-Warn "  Échec authentification (tentative $attempt/$maxRetries): $($_.Exception.Message)"
-            if ($attempt -lt $maxRetries) {
-                Write-Info "  Attente de $retryDelay secondes avant la prochaine tentative..."
-                Start-Sleep -Seconds $retryDelay
+            try {
+                $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
+                $authEndpoint = if ($script:Config -and $script:Config.Api -and $script:Config.Api.AuthEndpoint) { $script:Config.Api.AuthEndpoint } else { "/api.php/auth/login" }
+                $fullAuthUrl = "$ApiUrl$authEndpoint"
+                
+                $authResponse = Invoke-RestMethod -Uri $fullAuthUrl -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15 -ErrorAction Stop
+                $script:authToken = $authResponse.token
+                if ([string]::IsNullOrEmpty($script:authToken)) {
+                    throw "Token non reçu dans la réponse"
+                }
+                $script:authHeaders = @{Authorization = "Bearer $script:authToken"}
+                $token = $script:authToken
+                $headers = $script:authHeaders
+                
+                Write-OK "Authentification réussie (tentative $attempt/$maxRetries)"
+                $authSuccess = $true
+                $shouldBreak = $true
+                break  # Sortir de la boucle for pour éviter les try-catch imbriqués
+            } catch {
+                $errorMsg = $_.Exception.Message
+                if ($_.Exception.Response) {
+                    try {
+                        $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                        $responseBody = $reader.ReadToEnd()
+                        $reader.Close()
+                        if ($responseBody) {
+                            $errorMsg = "$errorMsg - Réponse: $responseBody"
+                        }
+                    } catch {
+                        # Ignorer les erreurs de lecture de la réponse
+                    }
+                }
+                Write-Warn "  Échec authentification (tentative $attempt/$maxRetries): $errorMsg"
+                Write-Info "  URL testée: $fullAuthUrl"
+                if ($attempt -lt $maxRetries) {
+                    Write-Info "  Attente de $retryDelay secondes avant la prochaine tentative..."
+                    Start-Sleep -Seconds $retryDelay
+                }
             }
         }
     }
@@ -5924,7 +6052,7 @@ if ($auditResults.CorrectionPlans.Count -gt 0) {
             Export-CorrectionPlans -Plans $auditResults.CorrectionPlans -OutputFile $correctionPlansPath
             $planCount = $auditResults.CorrectionPlans.Count
             $planWord = if ($planCount -gt 1) { "plans" } else { "plan" }
-            $message = "Plans de correction exportes: " + $correctionPlansPath + " (" + $planCount.ToString() + " " + $planWord + ")"
+            $message = "Plans de correction exportes: $correctionPlansPath ($planCount $planWord)"
             Write-OK $message
             
             # Générer aussi un rapport texte lisible

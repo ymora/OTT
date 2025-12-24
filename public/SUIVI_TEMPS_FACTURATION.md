@@ -1,10 +1,10 @@
 # Suivi du Temps - Projet
 ## Journal de travail pour facturation (Genere automatiquement)
 
-**Periode analysee** : 2025-11-14 - 2025-12-20
+**Periode analysee** : 2025-11-14 - 2025-12-23
 **Developpeur** : ymora
 **Projet** : ott-dashboard
-**Total commits analyses** : 1112
+**Total commits analyses** : 1115
 
 ---
 
@@ -47,17 +47,20 @@
 | 2025-12-18 | ~10h | 67 | 9 | 46 | 3 | 8 | 7 | 0 | 7 | 3 |
 | 2025-12-19 | ~8h | 18 | 3 | 12 | 3 | 2 | 2 | 2 | 1 | 2 |
 | 2025-12-20 | ~6h | 6 | 1 | 1 | 0 | 2 | 2 | 0 | 0 | 0 |
+| 2025-12-21 | ~2h | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 2025-12-22 | ~2h | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 2025-12-23 | ~2h | 1 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 |
 
 ---
 
 ## Resume
 
-- **Total estime** : ~298 heures
-- **Jours travailles** : 36 jours
-- **Moyenne** : ~8.3h/jour
-- **Periode** : 2025-11-14 -> 2025-12-20
+- **Total estime** : ~304 heures
+- **Jours travailles** : 39 jours
+- **Moyenne** : ~7.8h/jour
+- **Periode** : 2025-11-14 -> 2025-12-23
 
 ---
 
-_Rapport genere automatiquement le 2025-12-21 00:04_
+_Rapport genere automatiquement le 2025-12-23 23:28_
 _Base sur l'analyse Git des commits de ymora_

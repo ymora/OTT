@@ -16,13 +16,13 @@ describe('useToggle', () => {
     const { result } = renderHook(() => useToggle(false))
     
     act(() => {
-      result.current[1].toggle()
+      result.current[1]() // toggle est une fonction, pas un objet
     })
     
     expect(result.current[0]).toBe(true)
     
     act(() => {
-      result.current[1].toggle()
+      result.current[1]() // toggle
     })
     
     expect(result.current[0]).toBe(false)
@@ -32,7 +32,7 @@ describe('useToggle', () => {
     const { result } = renderHook(() => useToggle(false))
     
     act(() => {
-      result.current[1].open()
+      result.current[2]() // setTrue est à l'index 2
     })
     
     expect(result.current[0]).toBe(true)
@@ -42,7 +42,7 @@ describe('useToggle', () => {
     const { result } = renderHook(() => useToggle(true))
     
     act(() => {
-      result.current[1].close()
+      result.current[3]() // setFalse est à l'index 3
     })
     
     expect(result.current[0]).toBe(false)
@@ -52,13 +52,13 @@ describe('useToggle', () => {
     const { result } = renderHook(() => useToggle(false))
     
     act(() => {
-      result.current[1].set(true)
+      result.current[2]() // setTrue
     })
     
     expect(result.current[0]).toBe(true)
     
     act(() => {
-      result.current[1].set(false)
+      result.current[3]() // setFalse
     })
     
     expect(result.current[0]).toBe(false)

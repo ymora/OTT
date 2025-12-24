@@ -509,9 +509,12 @@ function handleUploadFirmwareIno() {
         
         // IMPORTANT: PDO avec PostgreSQL nécessite un encodage spécifique pour BYTEA
         // Utiliser la fonction helper encodeByteaForPostgres() pour encoder correctement
+        error_log('[handleUploadFirmwareIno] Encodage du contenu pour PostgreSQL...');
         $ino_content_encoded = encodeByteaForPostgres($ino_content_db);
+        error_log('[handleUploadFirmwareIno] Contenu encodé, taille encodée: ' . strlen($ino_content_encoded) . ' bytes');
         
         try {
+            error_log('[handleUploadFirmwareIno] Exécution INSERT avec les paramètres...');
             $stmt->execute([
                 'version' => $version,
                 'file_path' => $temp_file_path,
@@ -522,9 +525,11 @@ function handleUploadFirmwareIno() {
                 'uploaded_by' => $user['id'],
                 'ino_content' => $ino_content_encoded  // BYTEA encodé pour PostgreSQL
             ]);
+            error_log('[handleUploadFirmwareIno] ✅ INSERT exécuté avec succès');
         } catch(PDOException $insertErr) {
             error_log('[handleUploadFirmwareIno] ❌ Erreur lors de l\'insertion: ' . $insertErr->getMessage());
             error_log('[handleUploadFirmwareIno] Code: ' . $insertErr->getCode());
+            error_log('[handleUploadFirmwareIno] ErrorInfo: ' . json_encode($stmt->errorInfo() ?? []));
             @unlink($temp_path);
             http_response_code(500);
             $errorMsg = getenv('DEBUG_ERRORS') === 'true' 
@@ -536,6 +541,16 @@ function handleUploadFirmwareIno() {
         
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         $firmware_id = $result['id'] ?? $pdo->lastInsertId();
+        
+        if (!$firmware_id) {
+            error_log('[handleUploadFirmwareIno] ❌ Aucun ID retourné après INSERT');
+            @unlink($temp_path);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Erreur: Aucun ID retourné après insertion']);
+            return;
+        }
+        
+        error_log('[handleUploadFirmwareIno] ✅ Firmware ID obtenu: ' . $firmware_id);
         
         // Renommer le fichier avec l'ID pour garantir l'unicité et la retrouvabilité
         // Format: fw_ott_v{version}_id{firmware_id}.ino
@@ -611,16 +626,16 @@ function handleUploadFirmwareIno() {
             'firmware_id' => $firmware_id,
             'upload_id' => $firmware_id,
             'version' => $version,
+            'file_path' => $final_file_path,
             'message' => 'Fichier .ino uploadé avec succès. Prêt pour compilation.'
         ];
         
         echo json_encode($response);
         flush(); // Forcer l'envoi immédiat de la réponse
         
-        // Log pour debug
-        if (getenv('DEBUG_ERRORS') === 'true') {
-            error_log('[handleUploadFirmwareIno] ✅ Upload réussi - Réponse: ' . json_encode($response));
-        }
+        // Log pour debug (toujours activé pour diagnostic)
+        error_log('[handleUploadFirmwareIno] ✅ Upload réussi - Firmware ID: ' . $firmware_id . ', Version: ' . $version);
+        error_log('[handleUploadFirmwareIno] Réponse JSON: ' . json_encode($response));
         
     } catch(PDOException $e) {
         // Nettoyer les fichiers temporaires

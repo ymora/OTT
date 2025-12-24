@@ -1,6 +1,5 @@
 'use client'
 
-import { Fragment } from 'react'
 
 export default function DayDetailsModal({ day, isOpen, onClose }) {
   if (!isOpen || !day) return null

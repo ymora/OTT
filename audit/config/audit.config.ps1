@@ -15,8 +15,9 @@
     # Configuration API
     Api = @{
         # URL de l'API - À CONFIGURER selon votre environnement
-        # En développement local (serveur PHP) : http://localhost:8000
+        # En développement local (Docker) : http://localhost:8000
         # En production (Render) : https://ott-jbln.onrender.com
+        # NOTE: L'API est maintenant sur Docker (port 8000), plus sur Render
         BaseUrl = if ($env:API_URL) { $env:API_URL } else { "http://localhost:8000" }
         
         # Endpoint d'authentification

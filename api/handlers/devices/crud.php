@@ -514,8 +514,17 @@ function handleCreateTestDevices() {
         $created = [];
         $errors = [];
         
+        // OPTIMISATION N+1: Vérifier tous les ICCIDs en une seule requête au lieu de N requêtes
+        $iccidList = array_column($testDevices, 'sim_iccid');
+        $existingIccids = [];
+        if (!empty($iccidList)) {
+            $placeholders = implode(',', array_fill(0, count($iccidList), '?'));
+            $checkAllStmt = $pdo->prepare("SELECT sim_iccid FROM devices WHERE sim_iccid IN ($placeholders) AND deleted_at IS NULL");
+            $checkAllStmt->execute($iccidList);
+            $existingIccids = array_column($checkAllStmt->fetchAll(PDO::FETCH_ASSOC), 'sim_iccid');
+        }
+        
         // Préparer toutes les requêtes une seule fois avant la boucle pour éviter N+1
-        $checkStmt = $pdo->prepare("SELECT id FROM devices WHERE sim_iccid = :sim_iccid AND deleted_at IS NULL");
         $insertStmt = $pdo->prepare("
             INSERT INTO devices (sim_iccid, device_serial, device_name, firmware_version, status, patient_id, installation_date, first_use_date)
             VALUES (:sim_iccid, :device_serial, :device_name, :firmware_version, :status, NULL, NULL, NULL)
@@ -525,8 +534,8 @@ function handleCreateTestDevices() {
         
         foreach ($testDevices as $testDevice) {
             try {
-                $checkStmt->execute(['sim_iccid' => $testDevice['sim_iccid']]);
-                if ($checkStmt->fetch()) {
+                // Vérifier si le dispositif existe déjà (utilise le résultat de la requête unique)
+                if (in_array($testDevice['sim_iccid'], $existingIccids)) {
                     $errors[] = "Dispositif {$testDevice['sim_iccid']} existe déjà";
                     continue;
                 }
