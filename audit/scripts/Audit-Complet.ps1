@@ -4161,6 +4161,186 @@ if ($sidebarContent) {
     Write-Warn "Impossible de vérifier Sidebar.js"
 }
 
+# Vérifier la cohérence entre la documentation et le code actuel
+Write-Host ""
+Write-Section "[DOCUMENTATION] Vérification Cohérence - Documentation vs Code"
+$coherenceIssues = @()
+$coherenceWarnings = @()
+
+# 1. Vérifier les endpoints API mentionnés dans la documentation
+Write-Info "Vérification endpoints API dans la documentation..."
+$apiPhpPath = if (Test-Path "api.php") { "api.php" } else { $null }
+if ($apiPhpPath) {
+    $apiContent = Get-Content $apiPhpPath -Raw -ErrorAction SilentlyContinue
+    if ($apiContent) {
+        # Extraire tous les endpoints de api.php
+        $endpointPatterns = @(
+            'preg_match\([^)]*#([^)]+)#',
+            '/api\.php/([a-z0-9/-]+)',
+            'path\s*===\s*[''"]/api\.php/([^''"]+)',
+            'path\s*===?\s*[''"]/([^''"]+)'
+        )
+        $actualEndpoints = @()
+        foreach ($pattern in $endpointPatterns) {
+            $matches = [regex]::Matches($apiContent, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            foreach ($match in $matches) {
+                if ($match.Groups.Count -gt 1) {
+                    $endpoint = $match.Groups[1].Value.Trim()
+                    if ($endpoint -and $endpoint -notmatch '^\s*$' -and $endpoint -notmatch '^\$') {
+                        $actualEndpoints += $endpoint
+                    }
+                }
+            }
+        }
+        
+        # Chercher les endpoints mentionnés dans la documentation
+        foreach ($docFile in $docFiles) {
+            if (Test-Path $docFile) {
+                $docName = Split-Path $docFile -Leaf
+                $docContent = Get-Content $docFile -Raw -ErrorAction SilentlyContinue
+                if ($docContent) {
+                    # Extraire les endpoints mentionnés dans la doc
+                    $docEndpointPattern = '/api\.php/([a-z0-9/-]+)'
+                    $docEndpoints = [regex]::Matches($docContent, $docEndpointPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                    $docEndpointsList = @()
+                    foreach ($match in $docEndpoints) {
+                        if ($match.Groups.Count -gt 1) {
+                            $endpoint = $match.Groups[1].Value.Trim()
+                            if ($endpoint -and $endpoint -notmatch '^\s*$') {
+                                $docEndpointsList += $endpoint
+                            }
+                        }
+                    }
+                    
+                    # Vérifier que les endpoints mentionnés existent dans api.php
+                    $missingEndpoints = @()
+                    foreach ($docEndpoint in $docEndpointsList) {
+                        $found = $false
+                        foreach ($actualEndpoint in $actualEndpoints) {
+                            if ($actualEndpoint -match [regex]::Escape($docEndpoint) -or $docEndpoint -match [regex]::Escape($actualEndpoint)) {
+                                $found = $true
+                                break
+                            }
+                        }
+                        if (-not $found) {
+                            $missingEndpoints += $docEndpoint
+                        }
+                    }
+                    
+                    if ($missingEndpoints.Count -gt 0) {
+                        Write-Warn "  $docName : $($missingEndpoints.Count) endpoint(s) mentionné(s) mais non trouvé(s) dans api.php"
+                        $coherenceWarnings += "$docName : Endpoints manquants: $($missingEndpoints -join ', ')"
+                    }
+                }
+            }
+        }
+    }
+}
+
+# 2. Vérifier les URLs d'infrastructure (Docker vs Render)
+Write-Info "Vérification URLs infrastructure..."
+$dockerComposeExists = Test-Path "docker-compose.yml"
+$renderYamlExists = Test-Path "render.yaml"
+
+foreach ($docFile in $docFiles) {
+    if (Test-Path $docFile) {
+        $docName = Split-Path $docFile -Leaf
+        $docContent = Get-Content $docFile -Raw -ErrorAction SilentlyContinue
+        if ($docContent) {
+            # Vérifier si la doc mentionne uniquement Render.com sans mentionner Docker
+            # (Docker est maintenant la configuration principale pour le développement)
+            if ($docContent -match "Render\.com|ott-jbln\.onrender\.com" -and $dockerComposeExists) {
+                # Vérifier si la doc mentionne aussi Docker
+                if ($docContent -notmatch "localhost:8000|Docker.*dev|Docker.*local") {
+                    Write-Warn "  $docName : Mentionne uniquement Render.com sans mentionner Docker (dev local)"
+                    $coherenceWarnings += "$docName : Devrait mentionner Docker (localhost:8000) pour le développement local"
+                }
+            }
+            
+            # Vérifier si la doc mentionne Docker alors que Render est utilisé
+            if ($docContent -match "localhost:8000|Docker" -and -not $dockerComposeExists -and $renderYamlExists) {
+                Write-Warn "  $docName : Mentionne Docker mais l'API est sur Render"
+                $coherenceWarnings += "$docName : URL infrastructure incorrecte (Docker → Render.com)"
+            }
+        }
+    }
+}
+
+# 3. Vérifier les versions mentionnées
+Write-Info "Vérification versions dans la documentation..."
+$packageJson = Get-Content "package.json" -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction SilentlyContinue
+$actualVersion = if ($packageJson -and $packageJson.version) { $packageJson.version } else { $null }
+
+foreach ($docFile in $docFiles) {
+    if (Test-Path $docFile) {
+        $docName = Split-Path $docFile -Leaf
+        $docContent = Get-Content $docFile -Raw -ErrorAction SilentlyContinue
+        if ($docContent -and $actualVersion) {
+            # Chercher les mentions de version dans la doc
+            $versionMatches = [regex]::Matches($docContent, 'v(\d+\.\d+(?:\.\d+)?)|Version\s+(\d+\.\d+(?:\.\d+)?)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            foreach ($match in $versionMatches) {
+                $docVersion = if ($match.Groups[1].Value) { $match.Groups[1].Value } else { $match.Groups[2].Value }
+                if ($docVersion -and $docVersion -ne $actualVersion) {
+                    Write-Warn "  $docName : Version mentionnée ($docVersion) différente de package.json ($actualVersion)"
+                    $coherenceWarnings += "$docName : Version obsolète ($docVersion vs $actualVersion)"
+                }
+            }
+        }
+    }
+}
+
+# 4. Vérifier les technologies mentionnées
+Write-Info "Vérification technologies mentionnées..."
+$nextConfig = Get-Content "next.config.js" -Raw -ErrorAction SilentlyContinue
+$phpVersion = if (Get-Command php -ErrorAction SilentlyContinue) { 
+    $phpVersionOutput = php -v 2>&1 | Select-Object -First 1
+    if ($phpVersionOutput -match "PHP (\d+\.\d+)") { $matches[1] } else { $null }
+} else { $null }
+
+foreach ($docFile in $docFiles) {
+    if (Test-Path $docFile) {
+        $docName = Split-Path $docFile -Leaf
+        $docContent = Get-Content $docFile -Raw -ErrorAction SilentlyContinue
+        if ($docContent) {
+            # Vérifier Next.js version
+            if ($docContent -match "Next\.js\s+(\d+)") {
+                $docNextVersion = $matches[1]
+                if ($nextConfig -and $nextConfig -match '"next":\s*"[\^~]?(\d+)') {
+                    $actualNextVersion = $matches[1]
+                    if ($docNextVersion -ne $actualNextVersion) {
+                        Write-Warn "  $docName : Next.js version mentionnée ($docNextVersion) différente de package.json ($actualNextVersion)"
+                        $coherenceWarnings += "$docName : Next.js version obsolète"
+                    }
+                }
+            }
+            
+            # Vérifier PHP version
+            if ($docContent -match "PHP\s+(\d+\.\d+)") {
+                $docPhpVersion = $matches[1]
+                if ($phpVersion -and $docPhpVersion -ne $phpVersion) {
+                    Write-Warn "  $docName : PHP version mentionnée ($docPhpVersion) différente de l'environnement ($phpVersion)"
+                    $coherenceWarnings += "$docName : PHP version obsolète"
+                }
+            }
+        }
+    }
+}
+
+if ($coherenceIssues.Count -eq 0 -and $coherenceWarnings.Count -eq 0) {
+    Write-OK "Documentation cohérente avec le code actuel"
+} else {
+    if ($coherenceIssues.Count -gt 0) {
+        Write-Err "$($coherenceIssues.Count) problème(s) de cohérence détecté(s)"
+        $coherenceIssues | ForEach-Object { Write-Err "  - $_" }
+        $auditResults.Issues += $coherenceIssues
+    }
+    if ($coherenceWarnings.Count -gt 0) {
+        Write-Warn "$($coherenceWarnings.Count) avertissement(s) de cohérence détecté(s)"
+        $coherenceWarnings | ForEach-Object { Write-Warn "  - $_" }
+        $auditResults.Warnings += $coherenceWarnings
+    }
+}
+
 Write-Info "Documentation analysée"
 
 Write-Section "[3/23] Organisation Projet et Nettoyage"

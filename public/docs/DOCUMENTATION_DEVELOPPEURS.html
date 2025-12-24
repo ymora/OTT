@@ -574,7 +574,7 @@
         <li><strong>Firmware</strong> : C++ / Arduino IDE / ESP32</li>
         <li><strong>Backend</strong> : PHP 8.2 / PostgreSQL 15</li>
         <li><strong>Frontend</strong> : Next.js 14 / React 18 / Tailwind CSS</li>
-        <li><strong>Infrastructure</strong> : Render.com (API) + GitHub Pages (Dashboard)</li>
+        <li><strong>Infrastructure</strong> : Docker (API locale) + GitHub Pages (Dashboard) | Production: Render.com (API) + GitHub Pages (Dashboard)</li>
         <li><strong>Communication</strong> : 4G/LTE (SIM7600) + HTTPS</li>
         <li><strong>Cache</strong> : Redis (optionnel) avec fallback mémoire</li>
         <li><strong>Monitoring</strong> : Sentry (optionnel)</li>
@@ -598,9 +598,9 @@
          │ 4G/LTE
          ↓
 ┌─────────────────┐
-│   API PHP       │  ← Backend Render.com
+│   API PHP       │  ← Backend Docker (dev) / Render.com (prod)
 │   PostgreSQL    │     • JWT Authentication
-│   (Render.com)  │     • Multi-users + Permissions
+│   (Docker/Render)│     • Multi-users + Permissions
 └────────┬────────┘     • OTA Management
          │
          │ REST API
@@ -628,8 +628,8 @@
     <ul>
         <li><strong>Montant (device → cloud)</strong> : le firmware mesure (débit, batterie) toutes les 5 min, propage via HTTPS/JSON vers <code>/api.php/devices/measurements</code> et <code>/logs</code>.</li>
         <li><strong>USB streaming</strong> : En mode USB, envoi toutes les secondes via Web Serial API, parsing JSON côté React, affichage temps réel dans terminal. <strong>⚠️ Important</strong> : Le mode USB sert uniquement à visualiser ce qui se passe en live. Le firmware continue de fonctionner normalement et d'envoyer en OTA. Aucun envoi séparé n'est effectué depuis le dashboard pour éviter les doublons.</li>
-        <li><strong>Persisté</strong> : l'API PHP (Render.com) écrit en PostgreSQL (tables <code>devices</code>, <code>measurements</code>, <code>alerts</code>, <code>audit_logs</code>…), via PDO.</li>
-        <li><strong>Descendant</strong> : le Dashboard Next.js (GitHub Pages) appelle l'API (<code>NEXT_PUBLIC_API_URL</code>) pour stats, cartes, notifications, OTA.</li>
+        <li><strong>Persisté</strong> : l'API PHP (Docker local ou Render.com en production) écrit en PostgreSQL (tables <code>devices</code>, <code>measurements</code>, <code>alerts</code>, <code>audit_logs</code>…), via PDO.</li>
+        <li><strong>Descendant</strong> : le Dashboard Next.js (GitHub Pages) appelle l'API (<code>NEXT_PUBLIC_API_URL</code>, par défaut <code>http://localhost:8000</code> en Docker) pour stats, cartes, notifications, OTA.</li>
         <li><strong>Auth</strong> : Next.js poste sur <code>/api.php/auth/login</code>, stocke le JWT (LocalStorage) et <code>fetchWithAuth</code> ajoute <code>Authorization: Bearer ...</code> à chaque requête.</li>
     </ul>
     
@@ -637,7 +637,7 @@
     <p>Le firmware affiche une séquence de logs pour confirmer l'envoi réussi des mesures :</p>
     <pre><code>[MODEM] ✅ Prêt pour envoi de données
 [MODEM] 📊 État connexion: Réseau=OK | GPRS=OK
-[API] 📤 URL: https://ott-jbln.onrender.com:443/api.php/devices/measurements
+[API] 📤 URL: http://localhost:8000/api.php/devices/measurements (Docker) ou https://ott-jbln.onrender.com/api.php/devices/measurements (Production)
 [HTTP] POST /api.php/devices/measurements → Status: 200
 [API] ✅ Mesure reçue par la base de données avec succès
 [MODEM] ✅ Envoi des données effectué !</code></pre>
@@ -834,7 +834,7 @@ arduino-cli upload --fqbn esp32:esp32:esp32 -p COM6 hardware/firmware/fw_ott_opt
     </ul>
     <p>Exemple de logs d'envoi réussi :</p>
     <pre><code>[OTA] 📤 Envoi mesure périodique (processus normal)...
-[API] 📤 URL: https://ott-jbln.onrender.com:443/api.php/devices/measurements
+[API] 📤 URL: http://localhost:8000/api.php/devices/measurements (Docker) ou https://ott-jbln.onrender.com/api.php/devices/measurements (Production)
 [API] ✅ Mesure reçue par la base de données avec succès
 [API] 📊 Données enregistrées: Débit=2.5 L/min | Batterie=62% | RSSI=-80 dBm
 [MODEM] ✅ Envoi des données effectué !
