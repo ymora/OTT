@@ -5,7 +5,6 @@ import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useApiData, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh } from '@/hooks'
-import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import { isArchived } from '@/lib/utils'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
@@ -14,6 +13,11 @@ import FlashModal from '@/components/FlashModal'
 import DeviceModal from '@/components/DeviceModal'
 import DeviceMeasurementsModal from '@/components/DeviceMeasurementsModal'
 import SuccessMessage from '@/components/SuccessMessage'
+// Nouveaux composants et hooks refactorisés
+import UsbConsole from '@/components/usb/UsbConsole'
+import { useDeviceRegistration } from '@/components/usb/hooks/useDeviceRegistration'
+import { useUsbStreaming } from '@/components/usb/hooks/useUsbStreaming'
+import { useUsbCallbacks } from '@/components/usb/hooks/useUsbCallbacks'
 
 export default function DebugTab() {
   const usbContext = useUsb()
@@ -69,6 +73,7 @@ export default function DebugTab() {
     startUsbStreaming,
     pauseUsbStreaming,
     appendUsbStreamLog,
+    clearUsbStreamLogs,
     setSendMeasurementCallback,
     setUpdateDeviceFirmwareCallback,
     checkOtaSync
@@ -93,156 +98,6 @@ export default function DebugTab() {
   
   // Helper pour normaliser les identifiants (fonction pure, mémorisée pour éviter les recréations)
   const normalizeId = useCallback((val) => val ? String(val).trim().replace(/\s+/g, '') : '', [])
-
-  // Fonction pour formater le JSON de manière lisible
-  const formatJsonLog = useCallback((logLine) => {
-    // Détecter si c'est un JSON compact (commence par { et contient usb_stream)
-    if (!logLine?.trim().startsWith('{') || !logLine.includes('usb_stream')) {
-      return null // Pas un JSON USB stream
-    }
-    
-    try {
-      const json = JSON.parse(logLine.trim())
-      
-      // Formater de manière concise et lisible sur une seule ligne
-      const parts = []
-      if (json.seq) parts.push(`Seq=${json.seq}`)
-      if (json.flow_lpm != null || json.flowrate != null) {
-        parts.push(`Flow=${((json.flow_lpm || json.flowrate || 0).toFixed(2))} L/min`)
-      }
-      if (json.battery_percent != null || json.battery != null) {
-        parts.push(`Bat=${((json.battery_percent || json.battery || 0).toFixed(1))}%`)
-      }
-      if (json.rssi != null) parts.push(`RSSI=${json.rssi} dBm`)
-      if (json.latitude != null && json.longitude != null) {
-        parts.push(`GPS=${json.latitude.toFixed(4)},${json.longitude.toFixed(4)}`)
-      }
-      if (json.device_name || json.device_serial) {
-        parts.push(`Device=${json.device_name || json.device_serial || 'N/A'}`)
-      }
-      
-      return parts.length > 0 ? `[USB_STREAM] ${parts.join(' | ')}` : null
-    } catch (e) {
-      return null // JSON invalide, afficher tel quel
-    }
-  }, [])
-
-  // Fonction pour analyser et catégoriser un log (comme le script PowerShell)
-  const analyzeLogCategory = useCallback((logLine) => {
-    if (!logLine) return 'default'
-    
-    const line = logLine.toUpperCase()
-    
-    // Erreurs (priorité haute) - Rouge
-    const errorPatterns = [
-      'ERROR', '❌', 'ÉCHEC', 'FAIL', 'FATAL', 'EXCEPTION',
-      'ERREUR JSON', 'ERREUR PARSING', 'DATABASE ERROR', 'ACCÈS REFUSÉ'
-    ]
-    if (errorPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
-      return 'error'
-    }
-    
-    // Avertissements - Rouge/Orange
-    const warningPatterns = [
-      'WARN', '⚠️', 'WARNING', 'ATTENTION', 'TIMEOUT',
-      'COMMANDE INCONNUE', 'NON DISPONIBLE', 'VÉRIFIER'
-    ]
-    if (warningPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
-      return 'warning'
-    }
-    
-    // Commandes envoyées - Violet
-    const commandPatterns = [
-      '📤', 'ENVOI', 'COMMANDE', 'SEND', 'REQUEST', 'DEMANDE',
-      'UPDATE_CONFIG', 'GET_CONFIG', 'RESET_CONFIG', 'FLASH'
-    ]
-    if (commandPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
-      return 'command'
-    }
-    
-    // Confirmations d'exécution - Vert
-    const successPatterns = [
-      '✅', 'SUCCESS', 'SUCCÈS', 'RÉUSSI', 'CONFIGURÉ', 'CONNECTÉ',
-      'ATTACHÉ', 'DÉMARRÉ', 'TERMINÉ', 'COMPLÉTÉ'
-    ]
-    if (successPatterns.some(pattern => logLine.includes(pattern) || line.includes(pattern))) {
-      return 'success'
-    }
-    
-    // Logs du dispositif (MODEM, SENSOR, GPS, etc.) - Bleu
-    // Détecter la provenance entre crochets
-    const provenanceMatch = logLine.match(/^\[([^\]]+)\]/)
-    if (provenanceMatch) {
-      const provenance = provenanceMatch[1].toUpperCase()
-      if (provenance.includes('MODEM') || provenance.includes('SENSOR') || 
-          provenance.includes('GPS') || provenance.includes('USB') ||
-          provenance.includes('CFG') || provenance.includes('NETWORK')) {
-        return 'device'
-      }
-    }
-    
-    // Modem (sans crochets)
-    const modemPatterns = [
-      'MODEM', 'SIM', 'CSQ', 'RSSI', 'SIGNAL',
-      'OPÉRATEUR', 'ATTACHÉ', 'ENREGISTREMENT', 'APN', 'GPRS', '4G', 'LTE'
-    ]
-    if (modemPatterns.some(pattern => line.includes(pattern))) {
-      return 'device'
-    }
-    
-    // GPS
-    const gpsPatterns = [
-      'GPS', 'LATITUDE', 'LONGITUDE', 'SATELLITE',
-      'FIX', 'COORDONNÉES', 'GÉOLOCALISATION'
-    ]
-    if (gpsPatterns.some(pattern => line.includes(pattern))) {
-      return 'device'
-    }
-    
-    // Sensor
-    const sensorPatterns = [
-      'AIRFLOW', 'FLOW', 'BATTERY', 'BATTERIE',
-      'MESURE', 'CAPTURE', 'ADC', 'V_ADC', 'V_BATT'
-    ]
-    if (sensorPatterns.some(pattern => line.includes(pattern))) {
-      return 'device'
-    }
-    
-    return 'default'
-  }, [])
-
-  // Fonction pour obtenir la classe CSS selon la catégorie
-  const getLogColorClass = useCallback((category, isDashboard) => {
-    if (isDashboard) {
-      // Logs du dashboard : différencier commandes, confirmations, etc.
-      if (category === 'command') {
-        return 'text-purple-400 dark:text-purple-300' // Violet pour commandes
-      }
-      if (category === 'success') {
-        return 'text-green-400 dark:text-green-300' // Vert pour confirmations
-      }
-      if (category === 'error' || category === 'warning') {
-        return 'text-red-400 dark:text-red-300' // Rouge pour erreurs/warnings
-      }
-      return 'text-blue-400 dark:text-blue-300' // Bleu par défaut pour dashboard
-    }
-    
-    // Logs du dispositif
-    switch (category) {
-      case 'error':
-        return 'text-red-400 dark:text-red-300' // Rouge pour erreurs
-      case 'warning':
-        return 'text-orange-400 dark:text-orange-300' // Orange pour warnings
-      case 'command':
-        return 'text-purple-400 dark:text-purple-300' // Violet pour commandes
-      case 'success':
-        return 'text-green-400 dark:text-green-300' // Vert pour confirmations
-      case 'device':
-        return 'text-blue-400 dark:text-blue-300' // Bleu pour logs dispositif
-      default:
-        return 'text-gray-300 dark:text-gray-400'
-    }
-  }, [])
   
   // Toggle pour afficher les archives
   const [showArchived, setShowArchived] = useState(false)
@@ -430,66 +285,17 @@ export default function DebugTab() {
     return displayList
     }, [showArchived, devices, archivedDevices, usbDevice, isUsbDeviceRegistered, allDevices, isConnected, usbDeviceInfo, normalizeId])
   
-  // ========== STREAMING LOGS EN TEMPS RÉEL (pour admin à distance) ==========
-  const [remoteLogs, setRemoteLogs] = useState([])
-  const [isStreamingRemote, setIsStreamingRemote] = useState(false)
-  const lastLogTimestampRef = useRef(0)
+  // ========== HOOKS REFACTORISÉS ==========
   
-  // Charger les logs distants depuis l'API - OPTIMISÉ avec useMemo pour les URLs
-  const loadRemoteLogs = useCallback(async (deviceIdentifier, sinceTimestamp = null) => {
-    if (!user || user.role_name !== 'admin' || !fetchWithAuth || !API_URL) {
-      return
-    }
-    
-    try {
-      // Charger uniquement les nouveaux logs (depuis le dernier timestamp)
-      const url = sinceTimestamp 
-        ? `/api.php/usb-logs/${encodeURIComponent(deviceIdentifier)}?limit=100&since=${sinceTimestamp}`
-        : `/api.php/usb-logs/${encodeURIComponent(deviceIdentifier)}?limit=100`
-      
-      const response = await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        url,
-        {},
-        { requiresAuth: true }
-      )
-      
-      if (response.success && response.logs) {
-        // OPTIMISATION : Transformation des logs
-        const formattedLogs = response.logs.map(log => ({
-          id: `remote-${log.id}`,
-          line: log.log_line,
-          timestamp: log.timestamp_ms || new Date(log.created_at).getTime(),
-          source: log.log_source,
-          isRemote: true
-        }))
-        
-        if (sinceTimestamp) {
-          // Ajouter uniquement les nouveaux logs
-          setRemoteLogs(prev => {
-            const merged = [...prev, ...formattedLogs]
-            // OPTIMISATION : Utiliser Map pour dédupliquer plus efficacement O(n) au lieu de O(n²)
-            const uniqueMap = new Map()
-            merged.forEach(log => uniqueMap.set(log.id, log))
-            const unique = Array.from(uniqueMap.values())
-            return unique.sort((a, b) => a.timestamp - b.timestamp).slice(-100)
-          })
-        } else {
-          // Remplacer tous les logs
-          setRemoteLogs(formattedLogs)
-        }
-        
-        // Mettre à jour le timestamp du dernier log
-        if (formattedLogs.length > 0) {
-          const lastTimestamp = Math.max(...formattedLogs.map(l => l.timestamp))
-          lastLogTimestampRef.current = lastTimestamp
-        }
-      }
-    } catch (err) {
-      logger.error('Erreur chargement logs distants:', err)
-    }
-  }, [user, fetchWithAuth, API_URL])
+  // Hook pour le streaming de logs (local et distant)
+  const { remoteLogs, isStreamingRemote } = useUsbStreaming({
+    user,
+    isConnected,
+    usbDevice,
+    usbStreamLogs,
+    fetchWithAuth,
+    API_URL
+  })
   
   // AUTO-SÉLECTION du device avec badge ● LIVE pour admin distant
   useEffect(() => {
@@ -497,18 +303,12 @@ export default function DebugTab() {
       return
     }
     
-    // Vérifier quel device a des logs USB récents (< 30s = LIVE streaming)
     const checkLiveDevices = async () => {
       try {
-        // Chercher parmi tous les devices celui qui a des logs USB très récents
         const thirtySecondsAgo = Date.now() - 30000
-        
-        // OPTIMISATION N+1: Faire tous les appels en parallèle avec Promise.all au lieu d'une boucle séquentielle
         const deviceChecks = allDevices.map(async (device) => {
           const deviceId = device.sim_iccid || device.device_serial || device.id
-          
           try {
-            // Vérifier s'il y a des logs USB récents pour ce device
             const response = await fetchJson(
               fetchWithAuth,
               API_URL,
@@ -516,12 +316,9 @@ export default function DebugTab() {
               {},
               { requiresAuth: true }
             )
-            
             if (response.success && response.logs && response.logs.length > 0) {
               const lastLog = response.logs[0]
               const lastLogTime = new Date(lastLog.created_at).getTime()
-              
-              // Si le dernier log a moins de 30s = device est LIVE (USB connecté ailleurs)
               if (lastLogTime > thirtySecondsAgo) {
                 return { device, isLive: true }
               }
@@ -529,14 +326,9 @@ export default function DebugTab() {
           } catch (err) {
             logger.debug(`Erreur vérification logs pour device ${deviceId}:`, err)
           }
-          
           return { device, isLive: false }
         })
-        
-        // Attendre tous les résultats en parallèle
         const results = await Promise.all(deviceChecks)
-        
-        // Trouver le premier device LIVE
         const liveDevice = results.find(r => r.isLive)
         if (liveDevice) {
           logger.log(`🔴 [AUTO-SELECT] Device LIVE détecté: ${liveDevice.device.device_name} (logs < 30s)`)
@@ -546,350 +338,8 @@ export default function DebugTab() {
         logger.debug('Erreur détection device LIVE:', err)
       }
     }
-    
     checkLiveDevices()
   }, [user, isConnected, usbDevice, allDevices, setUsbDevice, fetchWithAuth, API_URL])
-  
-  // Déterminer si on doit utiliser les logs distants (admin sans USB local)
-  const shouldUseRemoteLogs = useMemo(() => {
-    return user?.role_name === 'admin' && !isConnected && usbDevice
-  }, [user, isConnected, usbDevice])
-  
-  // Fusionner les logs locaux et distants et filtrer les logs trop verbeux
-  const allLogs = useMemo(() => {
-    logger.log(`🔵 [UsbStreamingTab] allLogs recalculé - usbStreamLogs: ${usbStreamLogs.length}, remoteLogs: ${remoteLogs.length}, isConnected: ${isConnected}, status: ${usbStreamStatus}`)
-    
-    let logs = []
-    
-    // Si on a une connexion USB locale ET des logs locaux, utiliser uniquement les logs locaux
-    // ⚠️ IMPORTANT: Utiliser les logs locaux même si isConnected est false temporairement
-    // car les logs peuvent être reçus avant que la connexion soit complètement établie
-    if (usbStreamLogs.length > 0) {
-      logs = usbStreamLogs
-      logger.log(`✅ [UsbStreamingTab] Utilisation de ${logs.length} log(s) local(aux)`)
-      if (logs.length > 0) {
-        logger.log(`📋 [UsbStreamingTab] Premier log: "${logs[0]?.line || String(logs[0])}"`)
-        logger.log(`📋 [UsbStreamingTab] Dernier log: "${logs[logs.length - 1]?.line || String(logs[logs.length - 1])}"`)
-      }
-    }
-    // Sinon, utiliser les logs distants (pour admin) s'il y en a
-    else if (shouldUseRemoteLogs && remoteLogs.length > 0) {
-      logs = remoteLogs
-      logger.log(`✅ [UsbStreamingTab] Utilisation de ${logs.length} log(s) distant(s)`)
-    } else {
-      logger.warn(`⚠️ [UsbStreamingTab] Aucun log disponible (usbStreamLogs: ${usbStreamLogs.length}, remoteLogs: ${remoteLogs.length})`)
-    }
-    
-    // ⚠️ AUCUN FILTRAGE : Afficher TOUS les logs reçus
-    // Limiter uniquement à 500 logs affichés pour éviter le blocage de l'interface
-    const limitedLogs = logs.slice(-500)
-    logger.log(`📊 [UsbStreamingTab] ${limitedLogs.length} log(s) affiché(s) (sur ${logs.length} total)`)
-    return limitedLogs
-  }, [usbStreamLogs, remoteLogs, isConnected, shouldUseRemoteLogs, usbStreamStatus])
-  
-  // Mémoriser les logs formatés pour éviter de refaire le traitement à chaque render
-  const formattedLogs = useMemo(() => {
-    logger.log(`🔵 [UsbStreamingTab] formattedLogs recalculé - allLogs: ${allLogs.length} log(s)`)
-    if (allLogs.length > 0) {
-      logger.log(`📋 [UsbStreamingTab] Premier log brut:`, allLogs[0])
-      logger.log(`📋 [UsbStreamingTab] Dernier log brut:`, allLogs[allLogs.length - 1])
-    }
-    
-    const formatted = allLogs.map((log) => {
-      // Gérer les cas où log peut être un string ou un objet
-      const logLine = typeof log === 'string' ? log : (log?.line || String(log) || '')
-      const logSource = typeof log === 'object' && log !== null ? (log.source || 'device') : 'device'
-      const isRemote = typeof log === 'object' && log !== null ? (log.isRemote || false) : false
-      
-      const isDashboard = logSource === 'dashboard'
-      
-      // Essayer de formater le JSON si c'est un USB stream
-      const formattedJson = formatJsonLog(logLine)
-      let displayLine = formattedJson || logLine
-      
-      // Extraire ou déterminer la provenance entre crochets
-      let provenance = null
-      let cleanLine = displayLine
-      
-      // Chercher si une provenance existe déjà dans le log
-      const provenanceMatch = displayLine.match(/^(\[[^\]]+\])/)
-      if (provenanceMatch) {
-        provenance = provenanceMatch[1]
-        cleanLine = displayLine.replace(/^\[[^\]]+\]\s*/, '')
-      } else {
-        // Si pas de provenance, en ajouter une selon le contexte
-        if (isDashboard) {
-          // Logs du dashboard : déterminer le type
-          if (displayLine.includes('📤') || displayLine.includes('ENVOI') || displayLine.includes('COMMANDE')) {
-            provenance = '[CMD]'
-          } else if (displayLine.includes('✅') || displayLine.includes('SUCCESS') || displayLine.includes('RÉUSSI')) {
-            provenance = '[OK]'
-          } else if (displayLine.includes('❌') || displayLine.includes('ERROR') || displayLine.includes('ÉCHEC')) {
-            provenance = '[ERR]'
-          } else if (displayLine.includes('⚠️') || displayLine.includes('WARN') || displayLine.includes('ATTENTION')) {
-            provenance = '[WARN]'
-          } else {
-            provenance = '[DASHBOARD]'
-          }
-        } else {
-          // Logs du dispositif : essayer de détecter le type
-          if (displayLine.includes('MODEM') || displayLine.includes('SIM') || displayLine.includes('APN') || displayLine.includes('RSSI')) {
-            provenance = '[MODEM]'
-          } else if (displayLine.includes('SENSOR') || displayLine.includes('AIRFLOW') || displayLine.includes('FLOW') || displayLine.includes('BATTERY')) {
-            provenance = '[SENSOR]'
-          } else if (displayLine.includes('GPS') || displayLine.includes('LATITUDE') || displayLine.includes('LONGITUDE')) {
-            provenance = '[GPS]'
-          } else if (displayLine.includes('CFG') || displayLine.includes('CONFIG')) {
-            provenance = '[CFG]'
-          } else if (displayLine.includes('USB') || displayLine.includes('STREAM')) {
-            provenance = '[USB]'
-          } else {
-            provenance = '[DEVICE]'
-          }
-        }
-      }
-      
-      const category = analyzeLogCategory(displayLine)
-      const colorClass = getLogColorClass(category, isDashboard)
-      
-      return {
-        id: typeof log === 'object' && log !== null ? (log.id || `${Date.now()}-${Math.random()}`) : `${Date.now()}-${Math.random()}`,
-        timestamp: typeof log === 'object' && log !== null ? (log.timestamp || Date.now()) : Date.now(),
-        source: logSource,
-        line: logLine,
-        isDashboard,
-        isRemote,
-        provenance,
-        cleanLine,
-        colorClass
-      }
-    })
-    
-    logger.log(`✅ [UsbStreamingTab] formattedLogs créé: ${formatted.length} log(s) formaté(s)`)
-    if (formatted.length > 0) {
-      logger.log(`📋 [UsbStreamingTab] Premier log formaté:`, formatted[0])
-    }
-    
-    return formatted
-  }, [allLogs, formatJsonLog, analyzeLogCategory, getLogColorClass])
-  
-  // Log quand les logs changent pour debug
-  useEffect(() => {
-    logger.log(`🔵 [UsbStreamingTab] RENDU - allLogs: ${allLogs.length}, formattedLogs: ${formattedLogs.length}, usbStreamStatus: ${usbStreamStatus}`)
-    if (allLogs.length > 0) {
-      logger.log(`📋 [UsbStreamingTab] Premier log:`, allLogs[0])
-    }
-    if (formattedLogs.length > 0) {
-      logger.log(`📋 [UsbStreamingTab] Premier log formaté:`, formattedLogs[0])
-    }
-  }, [allLogs.length, formattedLogs.length, usbStreamStatus])
-  
-  // STREAMING AUTOMATIQUE en temps réel pour les admins
-  useEffect(() => {
-    if (!shouldUseRemoteLogs || !usbDevice) {
-      setIsStreamingRemote(false)
-      setRemoteLogs([])
-      lastLogTimestampRef.current = 0
-      return
-    }
-    
-    const deviceId = usbDevice.sim_iccid || usbDevice.device_serial || usbDevice.device_name
-    
-    // Chargement initial
-    setIsStreamingRemote(true)
-    loadRemoteLogs(deviceId, null)
-    
-    // Polling toutes les 2 secondes pour un vrai streaming temps réel
-    const interval = setInterval(() => {
-      loadRemoteLogs(deviceId, lastLogTimestampRef.current)
-    }, 2000)
-    
-    return () => {
-      clearInterval(interval)
-      setIsStreamingRemote(false)
-    }
-  }, [shouldUseRemoteLogs, usbDevice, loadRemoteLogs])
-  
-  // ========== CONFIGURATION DES CALLBACKS USB ==========
-  // Configurer les callbacks pour enregistrer automatiquement les dispositifs dans la base
-  useEffect(() => {
-    if (!fetchWithAuth || !API_URL) {
-      return
-    }
-    
-    // Callback pour envoyer les mesures à l'API
-    const sendMeasurement = async (measurementData) => {
-      const apiUrl = `${API_URL}/api.php/devices/measurements`
-      logger.log('🚀 [CALLBACK] sendMeasurement APPELÉ !', measurementData)
-      appendUsbStreamLog(`🚀 Envoi mesure à l'API distante: ${apiUrl}`)
-      appendUsbStreamLog(`📤 Données: ICCID=${measurementData.sim_iccid || 'N/A'} | Débit=${measurementData.flowrate ?? 0} L/min | Batterie=${measurementData.battery ?? 'N/A'}% | RSSI=${measurementData.rssi ?? 'N/A'}`)
-      
-      try {
-        logger.log('📤 Envoi mesure USB à l\'API:', { apiUrl, measurementData })
-        
-        const response = await fetchWithAuth(
-          apiUrl,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(measurementData)
-          },
-          { requiresAuth: false }
-        )
-        
-        appendUsbStreamLog(`📡 Réponse API: HTTP ${response.status} ${response.statusText}`)
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          const errorMsg = errorData.error || `Erreur HTTP ${response.status}`
-          logger.error('❌ Réponse API erreur:', response.status, errorData)
-          appendUsbStreamLog(`❌ Erreur API: ${errorMsg}`)
-          throw new Error(errorMsg)
-        }
-        
-        const result = await response.json()
-        logger.log('✅ Mesure USB enregistrée:', result)
-        appendUsbStreamLog(`✅ [BASE DE DONNÉES] Mesure enregistrée avec succès (device_id: ${result.device_id || 'N/A'}, flowrate: ${measurement.flowrate || 'N/A'}, battery: ${measurement.battery || 'N/A'}%)`, 'dashboard')
-        
-        // Rafraîchir les données après l'enregistrement
-        createTimeoutWithCleanup(() => {
-          logger.log('🔄 Rafraîchissement des dispositifs...')
-          refetchDevicesRef.current()
-          notifyDevicesUpdated()
-        }, 500)
-        
-        return result
-      } catch (err) {
-        const errorMsg = err.message || 'Erreur inconnue'
-        logger.error('❌ Erreur envoi mesure USB:', err)
-        appendUsbStreamLog(`❌ ÉCHEC envoi mesure: ${errorMsg}`)
-        if (err.cause || err.stack) {
-          appendUsbStreamLog(`   Détails: ${err.cause || err.stack?.substring(0, 100) || ''}`)
-        }
-        throw err
-      }
-    }
-    
-    // Callback pour mettre à jour les informations du dispositif
-    const updateDevice = async (identifier, firmwareVersion, updateData = {}) => {
-      logger.log('🚀 [CALLBACK] updateDevice APPELÉ !', { identifier, firmwareVersion, updateData })
-      try {
-        // Récupérer la liste actuelle des dispositifs
-        const devicesResponse = await fetchWithAuth(
-          `${API_URL}/api.php/devices`,
-          { method: 'GET' },
-          { requiresAuth: true }
-        )
-        
-        if (!devicesResponse.ok) return
-        
-        const devicesData = await devicesResponse.json()
-        const devices = devicesData.devices || []
-        
-        const device = devices.find(d => 
-          d.sim_iccid === identifier || 
-          d.device_serial === identifier ||
-          d.device_name === identifier
-        )
-        
-        // ✨ AUTO-CRÉATION: Si le dispositif n'existe pas, le créer automatiquement
-        if (!device) {
-          logger.log(`🆕 [AUTO-CREATE] Dispositif non trouvé (${identifier}), création automatique...`)
-          
-          const createPayload = {
-            device_name: updateData.device_name || `USB-${identifier.slice(-4)}`,
-            sim_iccid: updateData.sim_iccid || (identifier.startsWith('89') ? identifier : null),
-            device_serial: updateData.device_serial || (!identifier.startsWith('89') ? identifier : null),
-            firmware_version: firmwareVersion || null,
-            status: updateData.status || 'active',
-            last_seen: updateData.last_seen || new Date().toISOString()
-          }
-          
-          // Ajouter les valeurs optionnelles si disponibles
-          if (updateData.last_battery !== undefined) createPayload.last_battery = updateData.last_battery
-          if (updateData.last_flowrate !== undefined) createPayload.last_flowrate = updateData.last_flowrate
-          if (updateData.last_rssi !== undefined) createPayload.last_rssi = updateData.last_rssi
-          
-          try {
-            const createResponse = await fetchWithAuth(
-              `${API_URL}/api.php/devices`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(createPayload)
-              },
-              { requiresAuth: true }
-            )
-            
-            if (createResponse.ok) {
-              const result = await createResponse.json()
-              logger.log('✅ [AUTO-CREATE] Dispositif créé avec succès:', result.device)
-              appendUsbStreamLog(`✅ [BASE DE DONNÉES] Dispositif créé automatiquement en base (ID: ${result.device?.id || identifier})`, 'dashboard')
-              
-              // Rafraîchir la liste des dispositifs
-              createTimeoutWithCleanup(() => {
-                refetchDevicesRef.current()
-                notifyDevicesUpdated()
-              }, 500)
-              
-              return result
-            } else {
-              logger.error('❌ [AUTO-CREATE] Échec création dispositif')
-              return
-            }
-          } catch (createErr) {
-            logger.error('❌ [AUTO-CREATE] Erreur:', createErr)
-            return
-          }
-        }
-        
-        // MISE À JOUR: Le dispositif existe, le mettre à jour
-        const updatePayload = { ...updateData }
-        if (firmwareVersion && firmwareVersion !== '') {
-          updatePayload.firmware_version = firmwareVersion
-        }
-        
-        const response = await fetchWithAuth(
-          `${API_URL}/api.php/devices/${device.id}`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatePayload)
-          },
-          { requiresAuth: true }
-        )
-        
-        if (response.ok) {
-          logger.log(`✅ [AUTO-UPDATE] Dispositif ${device.id} mis à jour`)
-          const updatedFields = Object.keys(updatePayload).filter(k => updatePayload[k] !== undefined)
-          if (updatedFields.length > 0) {
-            appendUsbStreamLog(`✅ [BASE DE DONNÉES] Dispositif ${device.id} mis à jour (${updatedFields.join(', ')})`, 'dashboard')
-          }
-          createTimeoutWithCleanup(() => {
-            refetchDevicesRef.current()
-            notifyDevicesUpdated()
-          }, 500)
-        }
-        
-        return await response.json()
-      } catch (err) {
-        logger.error('❌ Erreur mise à jour dispositif:', err)
-      }
-    }
-    
-    // Configurer les callbacks UNE SEULE FOIS
-    setSendMeasurementCallback(sendMeasurement)
-    setUpdateDeviceFirmwareCallback(updateDevice)
-    
-    logger.debug('[USB] Callbacks configurés', { API_URL })
-    
-    // Cleanup au démontage
-    return () => {
-      setSendMeasurementCallback(null)
-      setUpdateDeviceFirmwareCallback(null)
-    }
-  }, [fetchWithAuth, API_URL, setSendMeasurementCallback, setUpdateDeviceFirmwareCallback])
-  // NE PAS ajouter allDevices, refetchDevices dans les dépendances - ça causerait des re-renders infinis
   
   // Fonction pour notifier les autres composants que les dispositifs ont changé
   const notifyDevicesUpdated = useCallback(() => {
@@ -902,6 +352,18 @@ export default function DebugTab() {
       }
     }
   }, [])
+  
+  // Hook pour configurer les callbacks USB
+  useUsbCallbacks({
+    fetchWithAuth,
+    API_URL,
+    setSendMeasurementCallback,
+    setUpdateDeviceFirmwareCallback,
+    appendUsbStreamLog,
+    refetchDevicesRef,
+    notifyDevicesUpdated,
+    createTimeoutWithCleanup
+  })
   
   // Charger les patients pour l'assignation
   const { data: patientsData, loading: patientsLoading } = useApiData(
@@ -920,8 +382,6 @@ export default function DebugTab() {
   // États pour les messages de succès
   const [successMessage, setSuccessMessage] = useState(null)
   
-  // État pour le modal RAZ console
-  const [showClearLogsModal, setShowClearLogsModal] = useState(false)
   
   // États unifiés pour création et modification (comme pour patients et utilisateurs)
   
@@ -1006,113 +466,23 @@ export default function DebugTab() {
   // isDisabled : seulement pour les actions (pas pour l'affichage des données)
   const isDisabled = useMemo(() => !isConnected, [isConnected])
   
-  // ========== SYNCHRONISATION DISPOSITIF USB ==========
-  // Créer un dispositif virtuel temporaire pour que les callbacks soient appelés
-  // La création en base se fait automatiquement via callbacks → /api.php/devices/measurements
-  const wasConnectedRef = useRef(false)
-  // Références pour accéder aux dernières valeurs sans les inclure dans les dépendances (évite boucles infinies)
+  // Hook pour la synchronisation du dispositif USB avec la base
   const allDevicesRef = useRef([])
-  const usbDeviceRef = useRef(null)
-  
-  // Mettre à jour les références à chaque changement
   useEffect(() => {
     allDevicesRef.current = allDevices
   }, [allDevices])
   
-  useEffect(() => {
-    usbDeviceRef.current = usbDevice
-  }, [usbDevice])
-  
-  // Mémoriser les identifiants USB pour éviter les re-renders inutiles
-  const usbIdentifiers = useMemo(() => ({
-    iccid: normalizeId(usbDeviceInfo?.sim_iccid),
-    serial: normalizeId(usbDeviceInfo?.device_serial),
-    name: usbDeviceInfo?.device_name,
-    firmware: usbDeviceInfo?.firmware_version
-  }), [
-    usbDeviceInfo?.sim_iccid,
-    usbDeviceInfo?.device_serial,
-    usbDeviceInfo?.device_name,
-    usbDeviceInfo?.firmware_version
-  ])
-  
-  // Synchronisation simple du dispositif USB avec la base
-  useEffect(() => {
-    if (!isConnected) {
-      wasConnectedRef.current = false
-      return
-    }
-    
-    // Rafraîchir la liste à la première connexion
-    if (!wasConnectedRef.current) {
-      wasConnectedRef.current = true
-      invalidateCache()
-      const timeoutId = createTimeoutWithCleanup(() => refetchDevicesRef.current(), 200)
-      // Utilise createTimeoutWithCleanup pour nettoyage automatique
-    }
-    
-    // Si on a des identifiants, chercher en base
-    const normalizedIccid = usbIdentifiers.iccid
-    const normalizedSerial = usbIdentifiers.serial
-    
-    if (normalizedIccid || normalizedSerial) {
-      const existingDevice = allDevicesRef.current.find(d => {
-        const dbIccid = normalizeId(d.sim_iccid)
-        const dbSerial = normalizeId(d.device_serial)
-        return (normalizedIccid && dbIccid && normalizedIccid === dbIccid) ||
-               (normalizedSerial && dbSerial && normalizedSerial === dbSerial)
-      })
-      
-      if (existingDevice && (!usbDeviceRef.current || usbDeviceRef.current.id !== existingDevice.id)) {
-        setUsbDevice({ ...existingDevice, isVirtual: false })
-        return
-      }
-    }
-    
-    // Créer un dispositif virtuel si pas trouvé en base
-    // IMPORTANT: Ne créer le dispositif QUE si on a au moins l'ICCID ou le Serial
-    // Utiliser le device_name envoyé par le firmware (OTT-xxxx) au lieu de USB-xxxx
-    if (!usbDeviceRef.current || usbDeviceRef.current.id?.startsWith('usb_virtual')) {
-      // Attendre d'avoir au moins un identifiant (ICCID ou Serial) avant de créer le dispositif
-      if (!normalizedIccid && !normalizedSerial) {
-        // Pas encore d'identifiant, ne pas créer de dispositif
-        // Les logs USB continuent de s'afficher en bas de page
-        // Une fois l'ICCID détecté, le dispositif sera créé
-        return
-      }
-      
-      // On a l'ICCID ou le Serial, créer le dispositif
-      // IMPORTANT: Utiliser le device_name envoyé par le firmware (priorité 1)
-      // Le firmware envoie déjà le nom au format OTT-xxxx (buildDeviceName dans le firmware)
-      const deviceName = usbDeviceInfo?.device_name || 
-        (usbIdentifiers.iccid ? `USB-${usbIdentifiers.iccid.slice(-4)}` : 
-         usbIdentifiers.serial ? `USB-${usbIdentifiers.serial.slice(-4)}` : 
-         'USB-????')
-      
-      const newDevice = {
-        id: `usb_virtual_${Date.now()}`,
-        device_name: deviceName,
-        sim_iccid: usbDeviceInfo?.sim_iccid || null,
-        device_serial: usbDeviceInfo?.device_serial || null,
-        firmware_version: usbDeviceInfo?.firmware_version || null,
-        status: 'active',
-        last_seen: new Date().toISOString(),
-        isVirtual: true
-      }
-      
-      if (!usbDeviceRef.current || 
-          usbDeviceRef.current.sim_iccid !== newDevice.sim_iccid ||
-          usbDeviceRef.current.device_serial !== newDevice.device_serial) {
-        setUsbDevice(newDevice)
-      }
-    }
-  }, [isConnected, usbIdentifiers, invalidateCache, normalizeId])
-  // IMPORTANT: Surveiller isConnected et usbIdentifiers (mémorisé pour éviter les boucles)
-  // PAS allDevices, pas usbDevice, pas usbDeviceInfo directement (causerait boucle infinie)
-  // Les setters sont stables et n'ont pas besoin d'être dans les dépendances
-  // NOTE: allDevices est utilisé dans le useEffect mais pas dans les dépendances car il change
-  // trop souvent et causerait des boucles. On se fie aux identifiants USB uniquement.
-  // ========== FIN SYNCHRONISATION USB ==========
+  useDeviceRegistration({
+    isConnected,
+    usbDeviceInfo,
+    usbDevice,
+    setUsbDevice,
+    allDevices: allDevicesRef.current,
+    isUsbDeviceRegistered,
+    normalizeId,
+    invalidateCache,
+    refetchDevicesRef
+  })
   
   // Helper pour formater l'heure
   const formatTime = useCallback((timestamp) => {
@@ -2314,258 +1684,27 @@ export default function DebugTab() {
           })()}
         </div>
 
-        {/* Console de logs USB */}
-        <div className="mb-6">
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  📡 Console de Logs USB
-                </h2>
-                {/* Statut USB inline */}
-                <span className={`badge text-xs ${
-                  isConnected 
-                    ? 'badge-success' 
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400'
-                }`}>
-                  {isConnected ? 'USB Connecté' : 'USB Déconnecté'}
-                </span>
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Logs en temps réel du streaming USB et des actions du dashboard
-              </p>
-            </div>
-            
-            {/* Boutons d'action console */}
-            <div className="flex items-center gap-2">
-              {/* Bouton pour sélectionner un port USB si non connecté */}
-              {!isConnected && isSupported && (
-                <button
-                  onClick={async () => {
-                    try {
-                      appendUsbStreamLog('🔍 Sélection du port USB...', 'dashboard')
-                      const selectedPort = await requestPort()
-                      if (selectedPort) {
-                        // Afficher les informations du port sélectionné
-                        const portInfo = selectedPort.getInfo?.()
-                        const deviceLabel = getUsbDeviceLabel(portInfo)
-                        const portPath = portInfo?.path || 'Port inconnu'
-                        const portLabel = deviceLabel ? `${deviceLabel} (${portPath})` : portPath
-                        appendUsbStreamLog(`✅ Port sélectionné: ${portLabel}`, 'dashboard')
-                        logger.log(`[USB] Port sélectionné: ${portLabel}`, portInfo)
-                        
-                        appendUsbStreamLog('🔌 Connexion au port en cours...', 'dashboard')
-                        const connected = await connect(selectedPort, 115200)
-                        if (connected) {
-                          appendUsbStreamLog(`✅ Connexion USB établie sur ${portLabel} !`, 'dashboard')
-                          logger.log(`[USB] Connexion établie sur ${portLabel}`)
-                          
-                          // Démarrer automatiquement le streaming après connexion
-                          // Le useEffect gère déjà le démarrage automatique, donc on ne démarre que si pas déjà en cours
-                          const streamTimeoutId = setTimeout(async () => {
-                            // Vérifier si le streaming n'est pas déjà démarré par le useEffect
-                            if (usbStreamStatus !== 'idle' || isStartingStreamRef.current) {
-                              logger.debug('[USB] Streaming déjà démarré ou en cours, pas de démarrage manuel')
-                              timeoutRefs.current = timeoutRefs.current.filter(id => id !== streamTimeoutId)
-                              return
-                            }
-                            
-                            try {
-                              isStartingStreamRef.current = true
-                              logger.log('[USB] Démarrage streaming après connexion manuelle')
-                              await startUsbStreaming(selectedPort)
-                            } catch (streamErr) {
-                              logger.error('❌ Erreur démarrage streaming:', streamErr)
-                              appendUsbStreamLog(`❌ Erreur démarrage streaming: ${streamErr.message || streamErr}`, 'dashboard')
-                            } finally {
-                              isStartingStreamRef.current = false
-                              // Nettoyer le timeout de la liste
-                              timeoutRefs.current = timeoutRefs.current.filter(id => id !== streamTimeoutId)
-                            }
-                          }, 500)
-                          timeoutRefs.current.push(streamTimeoutId)
-                        } else {
-                          appendUsbStreamLog(`❌ Échec de la connexion au port ${portLabel}`, 'dashboard')
-                          logger.error(`[USB] Échec connexion au port ${portLabel}`)
-                        }
-                      } else {
-                        // requestPort() a retourné null sans lever d'erreur
-                        // Cela peut arriver si l'API n'est pas supportée ou si l'utilisateur a annulé silencieusement
-                        appendUsbStreamLog('ℹ️ Aucun port sélectionné. Vérifiez que votre navigateur supporte l\'API Web Serial (Chrome/Edge) et qu\'un périphérique USB est connecté.', 'dashboard')
-                        logger.warn('[USB] requestPort() a retourné null sans erreur')
-                      }
-                    } catch (err) {
-                      if (err.name === 'NotFoundError') {
-                        appendUsbStreamLog('ℹ️ Aucun port sélectionné (utilisateur a annulé)', 'dashboard')
-                      } else {
-                        logger.error('❌ Erreur sélection port:', err)
-                        appendUsbStreamLog(`❌ Erreur: ${err.message || err}`, 'dashboard')
-                      }
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
-                  title="Autoriser COM3 (une seule fois nécessaire) - Après autorisation, la connexion sera automatique"
-                >
-                  🔌 Autoriser COM3 (automatique après)
-                </button>
-              )}
-              <button
-                onClick={async () => {
-                  if (usbStreamStatus === 'running') {
-                    pauseUsbStreaming()
-                    logger.log('⏸️ Logs en pause')
-                  } else if (usbStreamStatus === 'paused' && !isStartingStreamRef.current) {
-                    isStartingStreamRef.current = true
-                    try {
-                      await startUsbStreaming(port)
-                      logger.log('▶️ Logs reprennent')
-                    } finally {
-                      isStartingStreamRef.current = false
-                    }
-                  }
-                }}
-                className={`px-3 py-1.5 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                  usbStreamStatus === 'paused' 
-                    ? 'bg-green-500 hover:bg-green-600' 
-                    : 'bg-orange-500 hover:bg-orange-600'
-                }`}
-                title={usbStreamStatus === 'paused' ? 'Reprendre les logs' : 'Mettre en pause les logs'}
-                disabled={!isConnected}
-              >
-                {usbStreamStatus === 'paused' ? (
-                  <>
-                    <span>▶️</span>
-                    <span>Reprendre</span>
-                  </>
-                ) : (
-                  <>
-                    <span>⏸️</span>
-                    <span>Pause</span>
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  // Extraire le texte de chaque log (propriété 'line') et les joindre
-                  const allLogsText = [...usbStreamLogs, ...remoteLogs]
-                    .map(log => log.line || String(log))
-                    .join('\n')
-                  navigator.clipboard.writeText(allLogsText)
-                    .then(() => {
-                      logger.log('📋 Logs copiés dans le presse-papiers')
-                    })
-                    .catch(err => {
-                      logger.error('❌ Erreur copie:', err)
-                    })
-                }}
-                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
-                title="Copier tous les logs"
-              >
-                📋 Copier
-              </button>
-              <button
-                onClick={() => setShowClearLogsModal(true)}
-                className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
-                title="Effacer la console"
-              >
-                🗑️ RAZ
-              </button>
-            </div>
-          </div>
-          <div 
-            className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 p-4 shadow-inner overflow-y-auto" 
-            style={{ minHeight: '500px', maxHeight: '600px' }}
-          >
-            {/* Indicateur de streaming distant pour admin */}
-            {isStreamingRemote && (
-              <div className="mb-3 flex items-center gap-2 text-xs">
-                <span className="flex items-center gap-1 text-purple-400">
-                  <span className="animate-pulse">📡</span>
-                  Streaming distant en temps réel
-                </span>
-                <span className="text-gray-500">
-                  ({remoteLogs.length} logs)
-                </span>
-              </div>
-            )}
-            
-            {allLogs.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-gray-500">
-                <span className="text-4xl">📡</span>
-                <p className="font-medium">
-                  {isStreamingRemote ? 'Chargement du streaming distant...' : 'En attente de logs USB...'}
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  {isStreamingRemote 
-                    ? 'Les logs apparaîtront ici dès qu\'ils seront disponibles'
-                    : 'Connectez un dispositif USB et démarrez le streaming pour voir les logs'
-                  }
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-1 font-mono text-sm tracking-tight">
-                {formattedLogs.map((log) => (
-                  <div key={log.id} className="whitespace-pre-wrap">
-                    <span className="text-gray-500 pr-3">{new Date(log.timestamp).toLocaleTimeString('fr-FR')}</span>
-                    {log.isRemote && <span className="text-purple-400 text-xs mr-2">📡</span>}
-                    <span className="text-gray-400 dark:text-gray-500 font-semibold mr-2">
-                      {log.provenance}
-                    </span>
-                    <span className={log.colorClass}>
-                      {log.cleanLine}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Console de logs USB - Composant refactorisé */}
+        <UsbConsole
+          isConnected={isConnected}
+          isSupported={isSupported}
+          usbStreamStatus={usbStreamStatus}
+          usbStreamLogs={usbStreamLogs}
+          remoteLogs={remoteLogs}
+          isStreamingRemote={isStreamingRemote}
+          port={port}
+          requestPort={requestPort}
+          connect={connect}
+          startUsbStreaming={startUsbStreaming}
+          pauseUsbStreaming={pauseUsbStreaming}
+          appendUsbStreamLog={appendUsbStreamLog}
+          clearUsbStreamLogs={clearUsbStreamLogs}
+          isStartingStreamRef={isStartingStreamRef}
+          timeoutRefs={timeoutRefs}
+          createTimeoutWithCleanup={createTimeoutWithCleanup}
+        />
 
       </div>
-
-      {/* Modal de confirmation RAZ console */}
-      {showClearLogsModal && (
-        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700">
-            <div className="p-6">
-              <div className="flex items-start gap-4 mb-4">
-                <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                  <span className="text-3xl">⚠️</span>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
-                    Effacer la console ?
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Cette action supprimera tous les logs affichés dans la console USB.
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setShowClearLogsModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={() => {
-                    // Effacer tous les logs (locaux et distants)
-                    clearUsbStreamLogs()
-                    setRemoteLogs([])
-                    setShowClearLogsModal(false)
-                    logger.log('🗑️ Console effacée')
-                  }}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-                >
-                  🗑️ Effacer
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

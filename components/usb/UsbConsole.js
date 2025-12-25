@@ -27,6 +27,7 @@ export default function UsbConsole({
   startUsbStreaming,
   pauseUsbStreaming,
   appendUsbStreamLog,
+  clearUsbStreamLogs,
   // Références pour éviter les re-renders
   isStartingStreamRef,
   timeoutRefs,
@@ -191,8 +192,11 @@ export default function UsbConsole({
   }
 
   const handleClearLogs = () => {
-    // Cette fonction sera passée depuis le parent pour vider les logs
+    if (clearUsbStreamLogs) {
+      clearUsbStreamLogs()
+    }
     setShowClearLogsModal(false)
+    logger.log('🗑️ Console effacée')
   }
 
   return (
