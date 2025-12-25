@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useApiData, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh } from '@/hooks'
 import { isArchived } from '@/lib/utils'
+import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 import ConfirmModal from '@/components/ConfirmModal'
@@ -27,8 +28,6 @@ export default function DebugTab() {
   const isMountedRef = useRef(true)
   // Flag pour éviter le double démarrage du streaming
   const isStartingStreamRef = useRef(false)
-  // Référence stable pour startUsbStreaming pour éviter les re-renders
-  const startUsbStreamingRef = useRef(null)
   
   // Nettoyer tous les timeouts au démontage
   useEffect(() => {
@@ -62,7 +61,6 @@ export default function DebugTab() {
     isConnected,
     port,
     usbStreamStatus,
-    usbStreamMeasurements,
     usbStreamLogs,
     usbStreamError,
     usbStreamLastMeasurement,
@@ -78,14 +76,6 @@ export default function DebugTab() {
     setUpdateDeviceFirmwareCallback,
     checkOtaSync
   } = usbContext
-  
-  // Mettre à jour la référence stable
-  useEffect(() => {
-    startUsbStreamingRef.current = startUsbStreaming
-  }, [startUsbStreaming])
-  
-  // NOTE: Le démarrage automatique du streaming est géré par UsbContext
-  // Pas besoin de le redémarrer ici pour éviter les doublons
   
   const { fetchWithAuth, API_URL, user } = useAuth()
   
