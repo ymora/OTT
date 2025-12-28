@@ -4,6 +4,33 @@ const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true'
 // En dev, pas de basePath. En production/export, utiliser /OTT
 const basePath = (isDev || !isStaticExport) ? '' : '/OTT'
 
+// Fonction pour obtenir l'URL API (même logique que lib/config.js)
+function getApiUrl() {
+  // Priorité absolue: Variable d'environnement explicite
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+  }
+  
+  // Détection du mode
+  let mode = 'development'
+  if (process.env.NEXT_PUBLIC_API_MODE) {
+    const envMode = process.env.NEXT_PUBLIC_API_MODE.toLowerCase()
+    if (envMode === 'production' || envMode === 'development') {
+      mode = envMode
+    }
+  } else if (process.env.NODE_ENV === 'production') {
+    mode = 'production'
+  }
+  
+  // URLs selon le mode
+  const apiUrls = {
+    production: 'https://ott-jbln.onrender.com',
+    development: 'http://localhost:8000',
+  }
+  
+  return apiUrls[mode]
+}
+
 const nextConfig = {
   output: isStaticExport ? 'export' : 'standalone',
   reactStrictMode: false, // Désactiver StrictMode pour éviter les problèmes avec Leaflet
@@ -20,9 +47,10 @@ const nextConfig = {
     NEXT_PUBLIC_STATIC_EXPORT: isStaticExport ? 'true' : 'false'
   },
   // Proxy API - fonctionne en dev et en production (sauf export statique)
+  // Utilise la configuration centralisée pour déterminer l'URL API
   async rewrites() {
     if (!isStaticExport) {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com'
+      const apiUrl = getApiUrl()
       return [
         {
           source: '/api.php/:path*',

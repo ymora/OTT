@@ -1,6 +1,8 @@
 # ===============================================================================
-# VÉRIFICATION : CODE MORT
+# VÉRIFICATION : CODE MORT (VERSION AMÉLIORÉE)
 # ===============================================================================
+# Détecte le code mort et génère un rapport pour l'IA
+# Évite les faux positifs en détectant les imports conditionnels et dynamiques
 
 function Invoke-Check-CodeMort {
     param(
@@ -18,7 +20,7 @@ function Invoke-Check-CodeMort {
         return
     }
     
-    Write-Section "[2/13] Code Mort - Détection Composants/Hooks/Libs Non Utilisés"
+    Write-Section "[7/21] Code Mort - Détection Composants/Hooks/Libs Non Utilisés (Amélioré)"
     
     try {
         $deadCode = @{
@@ -26,6 +28,7 @@ function Invoke-Check-CodeMort {
             Hooks = @()
             Libs = @()
         }
+        $aiContext = @()  # Contexte pour l'IA
         
         $searchFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$" }
         
@@ -35,148 +38,200 @@ function Invoke-Check-CodeMort {
             $searchFiles = $searchFiles + $appFiles
         }
         
-        # Analyser composants
+        # Analyser composants (AMÉLIORÉ - Détecte imports conditionnels)
         if (Test-Path "components") {
-            Write-Info "Analyse composants..."
+            Write-Info "Analyse composants avec détection imports conditionnels..."
             $allComponents = Get-ChildItem -Path components -Recurse -File -Include *.js,*.jsx -ErrorAction SilentlyContinue
             
             foreach ($compFile in $allComponents) {
                 $compName = $compFile.BaseName
                 
-                # Recherche améliorée : prendre en compte les alias d'imports (@/)
-                # Chercher l'import du composant (recherche simple sans échappement regex)
                 $allFiles = $searchFiles + $compFile
-                
-                # Exclure le fichier du composant lui-même des résultats
                 $allFiles = $allFiles | Where-Object { $_.FullName -ne $compFile.FullName }
+                
                 $importUsage = 0
                 $jsxUsage = 0
+                $conditionalUsage = 0
+                $dynamicUsage = 0
                 
-                # Patterns d'imports à chercher (recherche littérale)
+                # Patterns d'imports à chercher
                 $importStrings = @(
                     "from '@/components/$compName'",
                     "from '@/components/$compName.js'",
                     "from '@/components/$compName.jsx'",
                     "from `"@/components/$compName`"",
-                    "from `"@/components/$compName.js`"",
                     "from 'components/$compName'",
-                    "from 'components/$compName.js'",
                     "import $compName from",
                     "import { $compName } from"
                 )
                 
                 foreach ($file in $allFiles) {
                     $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($content) {
-                        # Chercher les imports (recherche littérale, pas regex)
-                        foreach ($importStr in $importStrings) {
-                            if ($content -like "*$importStr*") {
-                                $importUsage++
-                                break
-                            }
-                        }
-                        
-                        # Chercher les lazy loading (React.lazy, dynamic import, next/dynamic)
-                        if ($content -like "*React.lazy*$compName*" -or 
-                            $content -like "*lazy(() =>*$compName*" -or
-                            $content -like "*dynamic(() =>*$compName*" -or
-                            $content -like "*dynamic(*import*$compName*" -or
-                            $content -like "*from*next/dynamic*$compName*") {
+                    if (-not $content) { continue }
+                    
+                    # Chercher les imports directs
+                    foreach ($importStr in $importStrings) {
+                        if ($content -like "*$importStr*") {
                             $importUsage++
+                            break
                         }
-                        
-                        # Chercher les imports dynamiques avec await import()
-                        if ($content -like "*await import*$compName*" -or
-                            $content -like "*import(*$compName*") {
-                            $importUsage++
-                        }
-                        
-                        # Chercher les utilisations JSX (pattern simple)
-                        if ($content -like "*<$compName*" -or $content -like "*<$compName>*") {
-                            $jsxUsage++
-                        }
+                    }
+                    
+                    # Chercher les imports conditionnels (if, ternary, etc.)
+                    if ($content -match "if\s*\([^)]*\)\s*.*import.*$compName|ternary.*import.*$compName|\?\s*.*import.*$compName") {
+                        $conditionalUsage++
+                    }
+                    
+                    # Chercher les imports dynamiques
+                    if ($content -match "React\.lazy.*$compName|lazy\(.*$compName|dynamic.*$compName|await import.*$compName|import\(.*$compName") {
+                        $dynamicUsage++
+                    }
+                    
+                    # Chercher les utilisations JSX
+                    if ($content -like "*<$compName*" -or $content -like "*<$compName>*") {
+                        $jsxUsage++
                     }
                 }
                 
-                # Le composant est utilisé s'il y a au moins un import OU une utilisation JSX
-                # (on compte au moins 2 car le fichier lui-même contient l'export)
-                $totalUsage = $importUsage + $jsxUsage
+                $totalUsage = $importUsage + $jsxUsage + $conditionalUsage + $dynamicUsage
                 
                 if ($totalUsage -le 1) {
-                    # Moins de 1 = probablement juste l'export, considérer comme mort
+                    # Potentiellement mort, mais générer contexte pour l'IA
                     $deadCode.Components += $compName
-                    Write-Err "Composant mort: $compName (imports: $importUsage, JSX: $jsxUsage)"
-                    $Results.Issues += @{
-                        Type = "dead_code"
-                        Severity = $Config.Checks.DeadCode.Severity
-                        Description = "Composant non utilisé: $compName"
+                    
+                    $aiContext += @{
+                        Category = "Code Mort"
+                        Type = "Unused Component"
+                        Component = $compName
                         File = $compFile.FullName
-                        Line = 1
+                        ImportUsage = $importUsage
+                        JsxUsage = $jsxUsage
+                        ConditionalUsage = $conditionalUsage
+                        DynamicUsage = $dynamicUsage
+                        Severity = "medium"
+                        NeedsAICheck = $true
+                        Question = "Le composant '$compName' est-il vraiment inutilisé ou est-il importé de manière conditionnelle/dynamique non détectée automatiquement ?"
                     }
+                    
+                    Write-Warn "Composant potentiellement mort: $compName (imports: $importUsage, JSX: $jsxUsage, conditionnel: $conditionalUsage, dynamique: $dynamicUsage)"
                 } else {
-                    Write-Info "  $compName utilisé (imports: $importUsage, JSX: $jsxUsage)"
+                    Write-Info "  $compName utilisé (imports: $importUsage, JSX: $jsxUsage, conditionnel: $conditionalUsage, dynamique: $dynamicUsage)"
                 }
             }
         }
         
-        # Analyser hooks
+        # Analyser hooks (AMÉLIORÉ)
         if (Test-Path "hooks") {
-            Write-Info "Analyse hooks..."
+            Write-Info "Analyse hooks avec détection usage conditionnel..."
             $allHooks = Get-ChildItem -Path hooks -File -Include *.js -Exclude index.js -ErrorAction SilentlyContinue
             
             foreach ($hookFile in $allHooks) {
                 $hookName = $hookFile.BaseName
-                $usage = @($searchFiles | Select-String -Pattern $hookName).Count
+                $usage = 0
+                $conditionalUsage = 0
                 
-                if ($usage -le 1) {
-                    $deadCode.Hooks += $hookName
-                    Write-Err "Hook mort: $hookName"
-                    $Results.Issues += @{
-                        Type = "dead_code"
-                        Severity = $Config.Checks.DeadCode.Severity
-                        Description = "Hook non utilisé: $hookName"
-                        File = $hookFile.FullName
-                        Line = 1
+                foreach ($file in $searchFiles) {
+                    $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                    if (-not $content) { continue }
+                    
+                    # Chercher usage direct
+                    if ($content -match "\b$hookName\s*\(") {
+                        $usage++
                     }
+                    
+                    # Chercher usage conditionnel
+                    if ($content -match "if\s*\([^)]*\)\s*.*$hookName|ternary.*$hookName") {
+                        $conditionalUsage++
+                    }
+                }
+                
+                if ($usage -le 1 -and $conditionalUsage -eq 0) {
+                    $deadCode.Hooks += $hookName
+                    
+                    $aiContext += @{
+                        Category = "Code Mort"
+                        Type = "Unused Hook"
+                        Hook = $hookName
+                        File = $hookFile.FullName
+                        Usage = $usage
+                        ConditionalUsage = $conditionalUsage
+                        Severity = "medium"
+                        NeedsAICheck = $true
+                        Question = "Le hook '$hookName' est-il vraiment inutilisé ou est-il utilisé de manière conditionnelle non détectée ?"
+                    }
+                    
+                    Write-Warn "Hook potentiellement mort: $hookName"
                 }
             }
         }
         
-        # Analyser libs
+        # Analyser libs (AMÉLIORÉ)
         if (Test-Path "lib") {
-            Write-Info "Analyse libs..."
+            Write-Info "Analyse libs avec détection usage conditionnel..."
             $allLibs = Get-ChildItem -Path lib -File -Include *.js -ErrorAction SilentlyContinue
             
             foreach ($libFile in $allLibs) {
                 $libName = $libFile.BaseName
-                $usage = @($searchFiles | Where-Object { $_.FullName -notlike "*\lib\*" } | Select-String -Pattern $libName).Count
+                $usage = 0
+                $conditionalUsage = 0
                 
-                if ($usage -eq 0) {
-                    $deadCode.Libs += $libName
-                    Write-Err "Lib morte: $libName"
-                    $Results.Issues += @{
-                        Type = "dead_code"
-                        Severity = $Config.Checks.DeadCode.Severity
-                        Description = "Lib non utilisée: $libName"
-                        File = $libFile.FullName
-                        Line = 1
+                foreach ($file in $searchFiles) {
+                    $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                    if (-not $content) { continue }
+                    
+                    # Chercher usage direct
+                    $libPattern = "from.*['`"]@/lib/$libName|from.*['`"]lib/$libName|import.*$libName"
+                    if ($content -match $libPattern) {
+                        $usage++
                     }
+                    
+                    # Chercher usage conditionnel
+                    if ($content -match "if\s*\([^)]*\)\s*.*import.*$libName") {
+                        $conditionalUsage++
+                    }
+                }
+                
+                if ($usage -le 1 -and $conditionalUsage -eq 0) {
+                    $deadCode.Libs += $libName
+                    
+                    $aiContext += @{
+                        Category = "Code Mort"
+                        Type = "Unused Library"
+                        Library = $libName
+                        File = $libFile.FullName
+                        Usage = $usage
+                        ConditionalUsage = $conditionalUsage
+                        Severity = "low"
+                        NeedsAICheck = $true
+                        Question = "La librairie '$libName' est-elle vraiment inutilisée ou est-elle importée de manière conditionnelle non détectée ?"
+                    }
+                    
+                    Write-Warn "Lib potentiellement morte: $libName"
                 }
             }
         }
         
-        $totalDead = $deadCode.Components.Count + $deadCode.Hooks.Count + $deadCode.Libs.Count
+        # Sauvegarder le contexte pour l'IA
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        $Results.AIContext.DeadCode = @{
+            Components = $deadCode.Components.Count
+            Hooks = $deadCode.Hooks.Count
+            Libs = $deadCode.Libs.Count
+            Questions = $aiContext
+        }
         
-        if ($totalDead -eq 0) {
+        if ($deadCode.Components.Count -eq 0 -and $deadCode.Hooks.Count -eq 0 -and $deadCode.Libs.Count -eq 0) {
             Write-OK "Aucun code mort détecté"
-            $Results.Scores["CodeMort"] = 10
+            $Results.Scores["Code Mort"] = 10
         } else {
-            Write-Warn "$totalDead fichiers non utilisés détectés"
-            $Results.Scores["CodeMort"] = [Math]::Max(10 - $totalDead, 0)
+            Write-Warn "$($deadCode.Components.Count) composant(s), $($deadCode.Hooks.Count) hook(s), $($deadCode.Libs.Count) lib(s) potentiellement morts (nécessite vérification IA)"
+            $Results.Scores["Code Mort"] = [Math]::Max(10 - ($deadCode.Components.Count + $deadCode.Hooks.Count + $deadCode.Libs.Count) * 0.5, 5)
         }
     } catch {
         Write-Err "Erreur analyse code mort: $($_.Exception.Message)"
-        $Results.Scores["CodeMort"] = 5
+        $Results.Scores["Code Mort"] = 7
     }
 }
 

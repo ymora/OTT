@@ -14,11 +14,22 @@
 
     # Configuration API
     Api = @{
-        # URL de l'API - À CONFIGURER selon votre environnement
-        # En développement local (Docker) : http://localhost:8000
-        # En production (Render) : https://ott-jbln.onrender.com
-        # NOTE: L'API est maintenant sur Docker (port 8000), plus sur Render
-        BaseUrl = if ($env:API_URL) { $env:API_URL } else { "http://localhost:8000" }
+        # URL de l'API - Configuration générique selon le mode
+        # Mode production (Render) : https://ott-jbln.onrender.com
+        # Mode développement (Docker) : http://localhost:8000
+        # 
+        # Pour définir le mode, utilisez la variable d'environnement API_MODE:
+        #   - $env:API_MODE = "production"  -> Utilise Render
+        #   - $env:API_MODE = "development"  -> Utilise Docker (défaut)
+        # 
+        # Ou définissez directement l'URL avec $env:API_URL
+        BaseUrl = if ($env:API_URL) { 
+            $env:API_URL 
+        } elseif ($env:API_MODE -eq "production") { 
+            "https://ott-jbln.onrender.com" 
+        } else { 
+            "http://localhost:8000" 
+        }
         
         # Endpoint d'authentification
         AuthEndpoint = "/api.php/auth/login"

@@ -82,14 +82,16 @@ services:
       context: .
       dockerfile: Dockerfile.dashboard
       args:
-        # Docker local uniquement
+        # Docker local - Mode développement
+        NEXT_PUBLIC_API_MODE: development
         NEXT_PUBLIC_API_URL: http://localhost:8000
         NEXT_PUBLIC_ENABLE_DEMO_RESET: "false"
     container_name: ott-dashboard
     ports:
       - "3000:3000"
     environment:
-      # Docker local uniquement
+      # Docker local - Mode développement
+      NEXT_PUBLIC_API_MODE: development
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_ENABLE_DEMO_RESET: "false"
       NODE_ENV: production

@@ -156,7 +156,8 @@ git push origin main
 
 | Variable | Description | Valeur recommandée |
 |----------|-------------|--------------------|
-| `NEXT_PUBLIC_API_URL` | URL de l'API | `http://localhost:8000` (dev local) ou `https://ott-jbln.onrender.com` (production) |
+| `NEXT_PUBLIC_API_MODE` | Mode de l'API : `production` (Render) ou `development` (Docker) | `development` (dev local) ou `production` (production) |
+| `NEXT_PUBLIC_API_URL` | URL de l'API (optionnel - priorité absolue si défini) | `http://localhost:8000` (dev) ou `https://ott-jbln.onrender.com` (prod) |
 | `NEXT_PUBLIC_ENABLE_DEMO_RESET` | Activer le bouton "Réinitialiser démo" dans l'admin | `false` (ou `true` pour tests) |
 
 **Fichier `.env.local` pour développement local :**
@@ -220,17 +221,47 @@ DATABASE_URL="postgresql://..." ./scripts/db/db_migrate.sh
 
 #### 2. Configurer le frontend (`.env.local`)
 
-**Option A : Utiliser l'API Render (production)**
+**Système générique de configuration API :**
+
+Le projet utilise maintenant un système centralisé pour gérer les appels API. Vous pouvez choisir entre deux modes :
+
+**Option A : Mode Production (Render)**
 ```bash
+# Définir explicitement le mode
+NEXT_PUBLIC_API_MODE=production
+
+# OU définir directement l'URL (priorité absolue)
 NEXT_PUBLIC_API_URL=https://ott-jbln.onrender.com
 ```
 
-**Option B : Utiliser l'API locale (développement)**
+**Option B : Mode Développement (Docker)**
 ```bash
+# Définir explicitement le mode
+NEXT_PUBLIC_API_MODE=development
+
+# OU définir directement l'URL (priorité absolue)
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-**C'est tout !** Le frontend local utilisera l'API configurée (Render ou serveur PHP local).
+**Détection automatique :**
+- Si `NEXT_PUBLIC_API_MODE` n'est pas défini, le système détecte automatiquement le mode :
+  - `NODE_ENV=production` → Mode production (Render)
+  - `NODE_ENV=development` ou `localhost` → Mode développement (Docker)
+- Si `NEXT_PUBLIC_API_URL` est défini, il a la priorité absolue et le mode est détecté depuis l'URL
+
+**Pour les scripts PowerShell d'audit :**
+```powershell
+# Mode production
+$env:API_MODE = "production"
+
+# Mode développement (défaut)
+$env:API_MODE = "development"
+
+# OU définir directement l'URL
+$env:API_URL = "https://ott-jbln.onrender.com"
+```
+
+**C'est tout !** Tous les appels API utiliseront automatiquement la configuration appropriée selon le mode choisi.
 
 ### Base de données locale (Optionnel - Seulement si pas d'internet)
 

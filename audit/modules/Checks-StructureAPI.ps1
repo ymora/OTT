@@ -1,6 +1,8 @@
 # ===============================================================================
-# VÉRIFICATION : STRUCTURE API
+# VÉRIFICATION : STRUCTURE API (VERSION AMÉLIORÉE - GÉNÉRALISTE)
 # ===============================================================================
+# Détecte les patterns de routing dynamique et génère un rapport pour l'IA
+# Évite les faux positifs en analysant le contexte, pas seulement les appels directs
 
 function Invoke-Check-StructureAPI {
     param(
@@ -11,82 +13,183 @@ function Invoke-Check-StructureAPI {
         [string]$ProjectPath
     )
     
-    Write-Section "[15/18] Structure API - Cohérence Handlers"
+    Write-Section "[6/21] Structure API - Cohérence Handlers (Amélioré)"
     
     try {
         $structureScore = 10.0
         $criticalIssues = @()
         $warnings = @()
+        $aiContext = @()  # Contexte pour l'IA
         
-        $apiFile = Join-Path $ProjectPath "api.php"
-        if (-not (Test-Path $apiFile)) {
-            Write-Warn "api.php introuvable - vérification ignorée"
+        # Détection générique du fichier API principal (pas de nom fixe)
+        $apiFiles = @()
+        $possibleApiFiles = @("api.php", "router.php", "index.php", "app.php", "server.php")
+        foreach ($name in $possibleApiFiles) {
+            $file = Join-Path $ProjectPath $name
+            if (Test-Path $file) {
+                $apiFiles += $file
+            }
+        }
+        
+        # Si aucun fichier API standard trouvé, chercher des fichiers PHP à la racine
+        if ($apiFiles.Count -eq 0) {
+            $rootPhpFiles = Get-ChildItem -Path $ProjectPath -File -Filter "*.php" -ErrorAction SilentlyContinue | 
+                Where-Object { $_.Name -notmatch '^(config|bootstrap|init)' } |
+                Select-Object -First 3
+            $apiFiles = $rootPhpFiles | ForEach-Object { $_.FullName }
+        }
+        
+        if ($apiFiles.Count -eq 0) {
+            Write-Warn "Aucun fichier API détecté - vérification ignorée"
             $Results.Scores["Structure API"] = 5
             return
         }
         
-        $apiContent = Get-Content $apiFile -Raw -ErrorAction SilentlyContinue
-        
-        # Extraire handlers appelés (uniquement les appels de fonction, pas dans commentaires ou noms de variables)
+        $handlersDefined = @{}
         $handlersCalled = @{}
+        $routingPatterns = @()  # Patterns de routing détectés
         
-        # Chercher les patterns d'appel de fonction : handleXXX( ou handleXXX(); ou handleXXX();
-        $pattern = "(?:^|\s|;|\{|\()(handle[A-Z]\w+)\s*\("
-        $matches = [regex]::Matches($apiContent, $pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+        # 1. Détecter les handlers définis (pattern générique)
+        $handlerDirs = @(
+            (Join-Path $ProjectPath "api" "handlers"),
+            (Join-Path $ProjectPath "handlers"),
+            (Join-Path $ProjectPath "src" "handlers"),
+            (Join-Path $ProjectPath "app" "handlers")
+        )
         
-        foreach ($match in $matches) {
-            $handler = $match.Groups[1].Value
+        foreach ($dir in $handlerDirs) {
+            if (Test-Path $dir) {
+                $handlerFiles = Get-ChildItem -Path $dir -Recurse -File -Include *.php -ErrorAction SilentlyContinue
+                foreach ($file in $handlerFiles) {
+                    $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($content) {
+                        # Pattern générique : function handleXXX( ou public function handleXXX(
+                        $functions = [regex]::Matches($content, "(?:public\s+|private\s+|protected\s+)?function\s+(handle\w+)\s*\(")
+                        foreach ($func in $functions) {
+                            $handlerName = $func.Groups[1].Value
+                            $handlersDefined[$handlerName] = @{
+                                File = $file.Name
+                                Path = $file.FullName
+                                Line = ($content.Substring(0, $func.Index) -split "`n").Count
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        # 2. Analyser les fichiers API pour détecter les patterns de routing
+        foreach ($apiFile in $apiFiles) {
+            $apiContent = Get-Content $apiFile -Raw -ErrorAction SilentlyContinue
+            if (-not $apiContent) { continue }
             
-            # Exclure si c'est dans un commentaire
-            $lineStart = [Math]::Max(0, $match.Index - 200)
-            $remainingLength = $apiContent.Length - $lineStart
-            if ($remainingLength -gt 0) {
-                $contextLength = [Math]::Min(400, $remainingLength)
-                $context = $apiContent.Substring($lineStart, $contextLength)
-                
-                # Vérifier si c'est dans un commentaire - calcul simplifié et sécurisé
-                $matchPosInContext = $match.Index - $lineStart
-                if ($matchPosInContext -gt 0 -and $matchPosInContext -le $context.Length) {
-                    $beforeMatch = $context.Substring(0, $matchPosInContext)
-                    if ($beforeMatch -match '//.*handle|/\*.*handle|#.*handle') {
-                        continue
+            # Détecter les patterns de routing dynamique (génériques)
+            $routingPatternsDetected = @()
+            
+            # Pattern 1: preg_match avec appel de fonction
+            $pregMatches = [regex]::Matches($apiContent, "preg_match\s*\([^)]+\)\s*.*?(\w+)\s*\(\)", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+            foreach ($match in $pregMatches) {
+                $calledFunction = $match.Groups[1].Value
+                if ($calledFunction -match "^handle") {
+                    $handlersCalled[$calledFunction] = @{
+                        Type = "preg_match"
+                        Context = $match.Value
+                        File = Split-Path $apiFile -Leaf
+                    }
+                    $routingPatternsDetected += "preg_match"
+                }
+            }
+            
+            # Pattern 2: Routes avec switch/case ou if/elseif
+            $routePatterns = @(
+                @{Pattern = "case\s+['""]([^'""]+)['""].*?(\w+)\s*\(\)"; Name = "switch_case"},
+                @{Pattern = "if\s*\([^)]*['""]([^'""]+)['""].*?(\w+)\s*\(\)"; Name = "if_route"},
+                @{Pattern = "['""]/(\w+)['""].*?(\w+)\s*\(\)"; Name = "route_string"}
+            )
+            
+            foreach ($routePattern in $routePatterns) {
+                $matches = [regex]::Matches($apiContent, $routePattern.Pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                foreach ($match in $matches) {
+                    $route = $match.Groups[1].Value
+                    $calledFunction = $match.Groups[2].Value
+                    if ($calledFunction -match "^handle") {
+                        $handlersCalled[$calledFunction] = @{
+                            Type = $routePattern.Name
+                            Route = $route
+                            Context = $match.Value
+                            File = Split-Path $apiFile -Leaf
+                        }
+                        $routingPatternsDetected += $routePattern.Name
                     }
                 }
             }
             
-            # Exclure les faux positifs comme "handlers", "handlerFiles", etc.
-            if ($handler -eq "handlers" -or $handler -eq "handler" -or $handler.Length -lt 7) {
-                continue
+            # Pattern 3: Appels directs (fallback)
+            $directCalls = [regex]::Matches($apiContent, "(?:^|\s|;|\{|\()(handle[A-Z]\w+)\s*\(", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+            foreach ($match in $directCalls) {
+                $handler = $match.Groups[1].Value
+                # Exclure si dans commentaire
+                $lineStart = [Math]::Max(0, $match.Index - 200)
+                $context = $apiContent.Substring($lineStart, [Math]::Min(400, $apiContent.Length - $lineStart))
+                if ($context -notmatch '//.*handle|/\*.*handle|#.*handle') {
+                    if (-not $handlersCalled.ContainsKey($handler)) {
+                        $handlersCalled[$handler] = @{
+                            Type = "direct_call"
+                            Context = $match.Value
+                            File = Split-Path $apiFile -Leaf
+                        }
+                    }
+                }
             }
             
-            $handlersCalled[$handler] = $true
-        }
-        
-        # Extraire handlers définis (dans handlers/ ET dans api.php)
-        $handlersDefined = @{}
-        
-        # Handlers dans api/handlers/
-        $handlerFiles = Get-ChildItem -Path (Join-Path $ProjectPath "api" "handlers") -Recurse -File -Include *.php -ErrorAction SilentlyContinue
-        
-        foreach ($file in $handlerFiles) {
-            $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
-            if ($content) {
-                $functions = [regex]::Matches($content, "function (handle\w+)\(")
-                foreach ($func in $functions) {
-                    $handlersDefined[$func.Groups[1].Value] = $file.Name
+            if ($routingPatternsDetected.Count -gt 0) {
+                $routingPatterns += @{
+                    File = Split-Path $apiFile -Leaf
+                    Patterns = ($routingPatternsDetected | Select-Object -Unique)
                 }
             }
         }
         
-        # Handlers définis directement dans api.php
-        if ($apiContent) {
-            $functions = [regex]::Matches($apiContent, "function (handle\w+)\(")
-            foreach ($func in $functions) {
-                $handlersDefined[$func.Groups[1].Value] = "api.php"
+        # 3. Générer le rapport pour l'IA
+        $unusedHandlers = $handlersDefined.Keys | Where-Object { -not $handlersCalled.ContainsKey($_) }
+        
+        if ($unusedHandlers.Count -gt 0) {
+            # Construire le contexte pour l'IA
+            foreach ($handler in $unusedHandlers) {
+                $handlerInfo = $handlersDefined[$handler]
+                
+                # Chercher des patterns de routing qui pourraient utiliser ce handler
+                $potentialRoutes = @()
+                foreach ($apiFile in $apiFiles) {
+                    $apiContent = Get-Content $apiFile -Raw -ErrorAction SilentlyContinue
+                    if ($apiContent) {
+                        # Chercher des routes qui pourraient correspondre au nom du handler
+                        $handlerRoute = ($handler -replace '^handle', '' -replace '([A-Z])', '/$1' -replace '^/', '').ToLower()
+                        if ($apiContent -match $handlerRoute) {
+                            $potentialRoutes += $handlerRoute
+                        }
+                    }
+                }
+                
+                $aiContext += @{
+                    Handler = $handler
+                    DefinedIn = $handlerInfo.File
+                    DefinedAt = $handlerInfo.Path
+                    Line = $handlerInfo.Line
+                    RoutingPatterns = $routingPatterns
+                    PotentialRoutes = $potentialRoutes
+                    Severity = "warning"  # Pas critique, peut être un faux positif
+                    NeedsAICheck = $true
+                    Question = "Le handler '$handler' est-il utilisé via un routing dynamique non détecté automatiquement ?"
+                }
             }
+            
+            Write-Warn "$($unusedHandlers.Count) handlers potentiellement inutilisés (nécessite vérification IA)"
+            $warnings += "Handlers à vérifier: $($unusedHandlers -join ', ')"
+            $structureScore -= 0.2  # Pénalité réduite car peut être faux positif
         }
         
-        # Vérifier cohérence
+        # Handlers appelés mais non définis (critique)
         $missingHandlers = 0
         foreach ($handler in $handlersCalled.Keys) {
             if (-not $handlersDefined.ContainsKey($handler)) {
@@ -97,16 +200,19 @@ function Invoke-Check-StructureAPI {
             }
         }
         
-        # Handlers définis mais jamais appelés
-        $unusedHandlers = $handlersDefined.Keys | Where-Object { -not $handlersCalled.ContainsKey($_) }
-        if ($unusedHandlers.Count -gt 0) {
-            Write-Warn "$($unusedHandlers.Count) handlers définis mais jamais appelés"
-            $warnings += "Handlers inutilisés: $($unusedHandlers -join ', ')"
-            $structureScore -= 0.5
-        }
-        
         if ($missingHandlers -eq 0 -and $unusedHandlers.Count -eq 0) {
             Write-OK "Structure API cohérente"
+        }
+        
+        # Sauvegarder le contexte pour l'IA
+        $Results.AIContext = @{
+            StructureAPI = @{
+                HandlersDefined = $handlersDefined.Count
+                HandlersCalled = $handlersCalled.Count
+                UnusedHandlers = $unusedHandlers.Count
+                RoutingPatterns = $routingPatterns
+                Questions = $aiContext
+            }
         }
         
         $Results.Scores["Structure API"] = [Math]::Max($structureScore, 0)

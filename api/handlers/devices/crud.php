@@ -81,7 +81,7 @@ function handleGetDevices() {
         $total = intval($countStmt->fetchColumn());
         error_log('[handleGetDevices] Total dispositifs: ' . $total);
         
-        // Requête simplifiée et robuste - éviter duplication firmware_version
+        // Requête optimisée - éviter N+1 : remplacer sous-requête corrélée par LEFT JOIN
         // Ajouter le nombre de mesures par dispositif
         $stmt = $pdo->prepare("
             SELECT 
@@ -107,10 +107,15 @@ function handleGetDevices() {
                 COALESCE(d.firmware_version, dc.firmware_version) as firmware_version,
                 COALESCE(dc.ota_pending, FALSE) as ota_pending,
                 COALESCE(dc.gps_enabled, FALSE) as gps_enabled,
-                (SELECT COUNT(*) FROM measurements m WHERE m.device_id = d.id) as measurement_count
+                COALESCE(m_counts.measurement_count, 0) as measurement_count
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
+            LEFT JOIN (
+                SELECT device_id, COUNT(*) as measurement_count
+                FROM measurements
+                GROUP BY device_id
+            ) m_counts ON d.id = m_counts.device_id
             WHERE $whereClause
             ORDER BY " . ($includeDeleted ? "d.deleted_at DESC" : "d.last_seen DESC NULLS LAST, d.created_at DESC") . "
             LIMIT :limit OFFSET :offset
@@ -214,6 +219,7 @@ function handleGetDevice($device_id) {
     }
     
     try {
+        // Requête optimisée - éviter N+1 : remplacer sous-requête corrélée par LEFT JOIN
         $stmt = $pdo->prepare("
             SELECT 
                 d.id,
@@ -238,10 +244,15 @@ function handleGetDevice($device_id) {
                 COALESCE(d.firmware_version, dc.firmware_version) as firmware_version,
                 COALESCE(dc.ota_pending, FALSE) as ota_pending,
                 COALESCE(dc.gps_enabled, FALSE) as gps_enabled,
-                (SELECT COUNT(*) FROM measurements m WHERE m.device_id = d.id) as measurement_count
+                COALESCE(m_counts.measurement_count, 0) as measurement_count
             FROM devices d
             LEFT JOIN patients p ON d.patient_id = p.id AND p.deleted_at IS NULL
             LEFT JOIN device_configurations dc ON d.id = dc.device_id
+            LEFT JOIN (
+                SELECT device_id, COUNT(*) as measurement_count
+                FROM measurements
+                GROUP BY device_id
+            ) m_counts ON d.id = m_counts.device_id
             WHERE d.id = :id
         ");
         $stmt->execute(['id' => $device_id]);

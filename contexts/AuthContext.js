@@ -2,33 +2,38 @@
  
  import { createContext, useContext, useState, useEffect } from 'react'
  import logger from '@/lib/logger'
+ import { getApiUrl, getApiMode } from '@/lib/config'
  
  const AuthContext = createContext()
  
-// URL de l'API - Priorité: 1) variable d'environnement, 2) API Docker locale si localhost, 3) défaut Render
-// Si NEXT_PUBLIC_API_URL est défini, l'utiliser directement (même en localhost)
-// Sinon, en localhost, utiliser l'API Docker locale (http://localhost:8000)
-// En production, utiliser Render directement
+// URL de l'API - Utilise la configuration centralisée
+// Si NEXT_PUBLIC_API_URL est défini, l'utiliser directement
+// Sinon, en localhost, utiliser le proxy Next.js (URL relative vide = utilise le proxy)
+// En production, utiliser l'URL de production (Render)
 const API_URL = (() => {
-  // Priorité 1: Variable d'environnement (utilisée si définie, même en localhost)
+  // Priorité 1: Variable d'environnement explicite (utilisée si définie)
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
   }
   
-  // Priorité 2: En localhost, utiliser l'API Docker locale directement
+  // Priorité 2: En localhost, utiliser le proxy Next.js (URL relative)
+  // Le proxy Next.js redirige vers l'API configurée (voir next.config.js)
+  // Cela permet de fonctionner même si Docker n'est pas démarré
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    // Utiliser l'API Docker locale directement (http://localhost:8000)
-    return 'http://localhost:8000'
+    // URL vide = URL relative = utilise le proxy Next.js
+    return ''
   }
   
-  // Priorité 3: Défaut production
-  return 'https://ott-jbln.onrender.com'
-})().replace(/\/$/, '')
+  // Priorité 3: Utiliser la configuration centralisée
+  return getApiUrl()
+})()
  const isAbsoluteUrl = url => /^https?:\/\//i.test(url)
  
  const buildAbsoluteApiUrl = (input = '') => {
-   if (!input) return API_URL
+   if (!input) return API_URL || ''
    if (isAbsoluteUrl(input)) return input
+   // Si API_URL est vide (proxy Next.js), utiliser l'URL relative directement
+   if (!API_URL && input.startsWith('/')) return input
    if (input.startsWith('/')) return `${API_URL}${input}`
    return `${API_URL}/${input}`
  }
