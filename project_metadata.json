@@ -4,56 +4,88 @@
     "buildTool": "",
     "routes": [
       {
-        "route": "/",
         "name": "C:\\",
+        "route": "/",
         "file": "/app/page.js"
       },
       {
-        "route": "/dashboard",
         "name": "dashboard",
+        "route": "/dashboard",
         "file": "/app/dashboard/page.js"
       },
       {
-        "route": "/dashboard/admin-migrations",
         "name": "admin-migrations",
+        "route": "/dashboard/admin-migrations",
         "file": "/app/dashboard/admin-migrations/page.js"
       },
       {
-        "route": "/dashboard/dispositifs",
         "name": "dispositifs",
+        "route": "/dashboard/dispositifs",
         "file": "/app/dashboard/dispositifs/page.js"
       },
       {
-        "route": "/dashboard/documentation",
         "name": "documentation",
+        "route": "/dashboard/documentation",
         "file": "/app/dashboard/documentation/page.js"
       },
       {
-        "route": "/dashboard/patients",
         "name": "patients",
+        "route": "/dashboard/patients",
         "file": "/app/dashboard/patients/page.js"
       },
       {
-        "route": "/dashboard/users",
         "name": "users",
+        "route": "/dashboard/users",
         "file": "/app/dashboard/users/page.js"
       }
     ]
   },
-  "technologies": [
-    "PHP API"
-  ],
+  "detectedAt": "2025-12-31 16:14:14",
+  "database": {
+    "type": "PostgreSQL",
+    "expectedTables": [
+      "roles",
+      "permissions",
+      "role_permissions",
+      "users",
+      "patients",
+      "devices",
+      "measurements",
+      "alerts",
+      "device_logs",
+      "device_configurations",
+      "firmware_versions",
+      "user_notifications_preferences",
+      "patient_notifications_preferences",
+      "notifications_queue",
+      "audit_logs",
+      "device_commands",
+      "usb_logs"
+    ],
+    "schemaFile": "/sql/schema.sql"
+  },
+  "project": {
+    "company": "",
+    "version": "3.1.0",
+    "name": "ott-dashboard",
+    "description": "OTT Dashboard React - HAPPLYZ MEDICAL"
+  },
   "hasDatabase": true,
-  "hasFirmware": true,
   "github": {
-    "baseUrl": "https://ymora.github.io/OTT",
     "repo": "ymora/OTT",
+    "baseUrl": "https://ymora.github.io/OTT",
     "basePath": "/OTT"
   },
   "projectType": "nextjs",
-  "hasApi": true,
+  "firmware": {
+    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino",
+    "directory": "/hardware/firmware",
+    "version": "2.5"
+  },
+  "technologies": [
+    "PHP API"
+  ],
   "api": {
-    "baseUrl": "",
     "endpoints": [
       "/bootstrap/env_loader.php",
       "/bootstrap/database.php",
@@ -114,43 +146,11 @@
       "/migrations/history",
       "/api/openapi.json"
     ],
-    "authEndpoint": "/api.php/auth/login"
+    "authEndpoint": "/api.php/auth/login",
+    "baseUrl": ""
   },
-  "project": {
-    "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
-    "name": "ott-dashboard",
-    "version": "3.1.0",
-    "company": ""
-  },
+  "hasApi": true,
   "projectRoot": "C:\\Users\\ymora\\Desktop\\maxime",
-  "firmware": {
-    "directory": "/hardware/firmware",
-    "mainFile": "/hardware/firmware/fw_ott_optimized/fw_ott_optimized.ino",
-    "version": "2.5"
-  },
-  "database": {
-    "expectedTables": [
-      "roles",
-      "permissions",
-      "role_permissions",
-      "users",
-      "patients",
-      "devices",
-      "measurements",
-      "alerts",
-      "device_logs",
-      "device_configurations",
-      "firmware_versions",
-      "user_notifications_preferences",
-      "patient_notifications_preferences",
-      "notifications_queue",
-      "audit_logs",
-      "device_commands",
-      "usb_logs"
-    ],
-    "type": "PostgreSQL",
-    "schemaFile": "/sql/schema.sql"
-  },
-  "detectedAt": "2025-12-27 13:28:39",
+  "hasFirmware": true,
   "hasFrontend": true
 }

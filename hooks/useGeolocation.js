@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import logger from '@/lib/logger'
 
 /**
  * Hook pour obtenir la géolocalisation du PC
@@ -96,7 +97,7 @@ export function useGeolocation(options = {}) {
         throw new Error('Tous les services de géolocalisation IP ont échoué')
       } catch (err) {
         if (mounted) {
-          console.error('Erreur géolocalisation IP:', err)
+          logger.error('Erreur géolocalisation IP:', err)
           setError(err.message)
           setLoading(false)
         }

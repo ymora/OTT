@@ -16,11 +16,12 @@ function Invoke-Check-CodeMort {
         [hashtable]$Results
     )
     
-    if (-not $Config.Checks.DeadCode.Enabled) {
+    # Si Checks n'existe pas ou DeadCode.Enabled n'est pas défini, activer par défaut
+    if ($Config.Checks -and $Config.Checks.DeadCode -and $Config.Checks.DeadCode.Enabled -eq $false) {
         return
     }
     
-    Write-Section "[7/21] Code Mort - Détection Composants/Hooks/Libs Non Utilisés (Amélioré)"
+    Write-Section "[10/23] Code Mort"
     
     try {
         $deadCode = @{

@@ -1,4 +1,4 @@
-﻿# Suivi du Temps - Projet
+# Suivi du Temps - Projet
 ## Journal de travail pour facturation (Genere automatiquement)
 
 **Periode analysee** : 2025-11-14 - 2025-12-28
@@ -65,5 +65,5 @@
 
 ---
 
-_Rapport genere automatiquement le 2025-12-31 16:59_
+_Rapport genere automatiquement le 2025-12-30 07:29_
 _Base sur l'analyse Git des commits de ymora_

@@ -15,11 +15,12 @@ function Invoke-Check-Complexity {
         [hashtable]$Results
     )
     
-    if (-not $Config.Checks.Complexity.Enabled) {
+    # Si Checks n'existe pas ou Complexity.Enabled n'est pas défini, activer par défaut
+    if ($Config.Checks -and $Config.Checks.Complexity -and $Config.Checks.Complexity.Enabled -eq $false) {
         return
     }
     
-    Write-Section "[9/21] Complexité - Fichiers/Fonctions Volumineux (Amélioré)"
+    Write-Section "[12/23] Complexité"
     
     try {
         $maxFileLines = $Config.Checks.Complexity.MaxFileLines

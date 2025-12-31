@@ -2,6 +2,7 @@ import './globals.css'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import { AuthProvider } from '@/contexts/AuthContext'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import { withBasePath } from '@/lib/utils'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -42,9 +43,11 @@ export default function RootLayout({ children }) {
         {isProduction && <meta name="sw-path" content={swPath} />}
       </head>
       <body className={inter.className}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </ErrorBoundary>
         
         {/* Script de monitoring désactivé temporairement pour éviter les conflits */}
 

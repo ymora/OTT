@@ -14,24 +14,10 @@ function Invoke-Check-MarkdownFiles {
         [hashtable]$Results
     )
     
-    # Définir les fonctions d'affichage si elles n'existent pas
-    if (-not (Get-Command Write-Section -ErrorAction SilentlyContinue)) {
-        function Write-Section { param([string]$Text) Write-Host "`n=== $Text ===" -ForegroundColor Cyan }
-    }
-    if (-not (Get-Command Write-OK -ErrorAction SilentlyContinue)) {
-        function Write-OK { param([string]$Text) Write-Host "  [OK] $Text" -ForegroundColor Green }
-    }
-    if (-not (Get-Command Write-Info -ErrorAction SilentlyContinue)) {
-        function Write-Info { param([string]$Text) Write-Host "  [INFO] $Text" -ForegroundColor Gray }
-    }
-    if (-not (Get-Command Write-Warn -ErrorAction SilentlyContinue)) {
-        function Write-Warn { param([string]$Text) Write-Warning $Text }
-    }
-    if (-not (Get-Command Write-Err -ErrorAction SilentlyContinue)) {
-        function Write-Err { param([string]$Text) Write-Host "  [ERROR] $Text" -ForegroundColor Red }
-    }
+    # Les fonctions Write-* sont déjà disponibles depuis Utils.ps1 (chargé en premier)
+    # Pas besoin de les redéfinir ici
     
-    Write-Section "[MD] Analyse des Fichiers Markdown"
+    Write-Section "[5/23] Liens et Imports"
     
     try {
         # ================================================================================

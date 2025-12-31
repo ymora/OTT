@@ -1,17 +1,9 @@
-# ===============================================================================
+﻿# ===============================================================================
 # UTILITAIRES - Fonctions d'affichage et helpers
 # ===============================================================================
 
-function Write-Logo {
-    Write-Host ""
-    Write-Host ("=" * 80) -ForegroundColor Cyan
-    Write-Host "  AUDIT INTELLIGENT AUTOMATIQUE" -ForegroundColor Cyan
-    Write-Host ("=" * 80) -ForegroundColor Cyan
-    Write-Host "  Date    : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
-    Write-Host "  Version : 3.0 - Intelligent & Réutilisable" -ForegroundColor Gray
-    Write-Host ("=" * 80) -ForegroundColor Cyan
-    Write-Host ""
-}
+# Write-Logo supprimée (code mort - jamais utilisée)
+# Si nécessaire, utiliser au début de Audit-Complet.ps1 pour un affichage professionnel
 
 function Write-Section {
     param([string]$Text)
@@ -49,7 +41,7 @@ function Calculate-GlobalScore {
     
     $weights = $Config.ScoreWeights
     if (-not $weights) {
-        # Poids par défaut
+        # Poids par dÃ©faut
         $weights = @{
             "Architecture" = 1.0
             "CodeMort" = 1.5
@@ -78,39 +70,10 @@ function Calculate-GlobalScore {
     return [Math]::Round($weightedSum / $totalWeight, 1)
 }
 
-function Write-FinalScore {
-    param(
-        [double]$Score,
-        [hashtable]$Results
-    )
-    
-    $duration = ((Get-Date) - $Results.StartTime).TotalSeconds
-    
-    Write-Host ""
-    Write-Host ("=" * 80) -ForegroundColor Gray
-    Write-Host "  RÉSUMÉ FINAL" -ForegroundColor Cyan
-    Write-Host ("=" * 80) -ForegroundColor Gray
-    Write-Host "  Score Global     : $Score/10" -ForegroundColor $(if($Score -ge 9){"Green"}elseif($Score -ge 7){"Yellow"}else{"Red"})
-    Write-Host "  Problèmes        : $($Results.Issues.Count)" -ForegroundColor $(if($Results.Issues.Count -eq 0){"Green"}else{"Red"})
-    Write-Host "  Avertissements   : $($Results.Warnings.Count)" -ForegroundColor $(if($Results.Warnings.Count -eq 0){"Green"}else{"Yellow"})
-    Write-Host "  Recommandations  : $($Results.Recommendations.Count)" -ForegroundColor Yellow
-    Write-Host "  Durée            : $([Math]::Round($duration, 1))s" -ForegroundColor Gray
-    Write-Host ("=" * 80) -ForegroundColor Gray
-    Write-Host ""
-    
-    # Afficher les scores par catégorie
-    Write-Host "  Scores par catégorie:" -ForegroundColor Cyan
-    foreach ($key in ($Results.Scores.Keys | Sort-Object)) {
-        $score = $Results.Scores[$key]
-        $color = if($score -ge 9){"Green"}elseif($score -ge 7){"Yellow"}else{"Red"}
-        Write-Host "    $($key.PadRight(20)) : $score/10" -ForegroundColor $color
-    }
-    Write-Host ""
-}
+# Write-FinalScore supprimée (code mort - jamais utilisée)
+# Le résumé final est déjà affiché dans Audit-Complet.ps1 (lignes 1200-1230)
 
-# Fonction pour normaliser les chemins
-function Normalize-Path {
-    param([string]$Path)
-    return $Path -replace '\\', '/' -replace '//+', '/'
-}
+# Normalize-Path supprimée (code mort - jamais utilisée)
+# Si nécessaire pour comparaisons de chemins, réimplémenter
+
 

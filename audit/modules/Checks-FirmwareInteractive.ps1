@@ -17,11 +17,12 @@ function Invoke-Check-FirmwareInteractive {
         [hashtable]$Results
     )
     
-    if (-not $Config.Checks.FirmwareInteractive.Enabled) {
+    # Si Checks n'existe pas ou FirmwareInteractive.Enabled n'est pas défini, activer par défaut
+    if ($Config.Checks -and $Config.Checks.FirmwareInteractive -and $Config.Checks.FirmwareInteractive.Enabled -eq $false) {
         return
     }
     
-    Write-Section "[Firmware] Tests Interactifs USB (si dispositif connecté)"
+    Write-Section "[22/23] Firmware"
     
     try {
         # Vérifier si on est dans un environnement Node.js/Next.js (frontend)
@@ -86,9 +87,22 @@ function Invoke-Check-FirmwareInteractive {
         $Results.Recommendations += "Créer un endpoint API /api.php/devices/{id}/test-firmware pour tester le firmware via USB"
         $Results.Recommendations += "Utiliser le contexte USB React pour envoyer des commandes GET_CONFIG et vérifier les réponses"
         
+        # Calculer le score (basé sur la détection de version et commandes)
+        $firmwareScore = 10
+        if (-not $firmwareFile) {
+            $firmwareScore = 5
+        } elseif (-not $firmwareVersion) {
+            $firmwareScore = 7
+        } elseif ($supportedCommands.Count -eq 0) {
+            $firmwareScore = 8
+        }
+        
+        $Results.Scores["Firmware"] = $firmwareScore
+        
     } catch {
         Write-Warn "Erreur lors de la vérification interactive: $_"
         $Results.Warnings += "Erreur vérification interactive: $_"
+        $Results.Scores["Firmware"] = 5
     }
 }
 

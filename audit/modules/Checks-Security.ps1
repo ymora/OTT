@@ -18,11 +18,12 @@ function Invoke-Check-Security {
         [hashtable]$ProjectInfo
     )
     
-    if (-not $Config.Checks.Security.Enabled) {
+    # Vérifier si la sécurité est activée (optionnel, par défaut activée)
+    if ($Config.Checks -and $Config.Checks.Security -and -not $Config.Checks.Security.Enabled) {
         return
     }
     
-    Write-Section "[3/21] Sécurité - Headers, SQL Injection, XSS (Amélioré)"
+    Write-Section "[6/23] Sécurité"
     
     try {
         $securityScore = 10

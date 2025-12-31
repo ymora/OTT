@@ -15,26 +15,24 @@ function Invoke-Check-Inventory {
         [hashtable]$ProjectInfo = @{}
     )
     
-    Write-Section "[1/23] Inventaire Exhaustif - Tous les Fichiers et Répertoires"
+    Write-Section "[1/23] Inventaire Exhaustif"
     
     try {
         Write-Info "Parcours exhaustif de tous les fichiers..."
         
-        # Fonction helper pour exclure les fichiers
-        function Test-ExcludedFile {
-            param([string]$FilePath)
-            $excluded = @('node_modules', '.next', 'dist', 'build', '.git', 'out', 'docs/_next', 'docs/.next', 'vendor', '.venv')
-            foreach ($exclude in $excluded) {
-                if ($FilePath -match [regex]::Escape($exclude)) {
-                    return $true
+        # Parcourir TOUS les fichiers du projet (sauf exclusions build/cache)
+        # OPTIMISATION: Exclure les gros répertoires hardware pour accélérer
+        $excludedDirs = @('node_modules', '.next', 'dist', 'build', '.git', 'out', 'docs/_next', 'docs/.next', 'vendor', '.venv', 'hardware/arduino-data', 'hardware/lib')
+        $allFiles = @(Get-ChildItem -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+            $filePath = $_.FullName
+            $shouldExclude = $false
+            foreach ($exclude in $excludedDirs) {
+                if ($filePath -match [regex]::Escape($exclude)) {
+                    $shouldExclude = $true
+                    break
                 }
             }
-            return $false
-        }
-        
-        # Parcourir TOUS les fichiers du projet (sauf exclusions build/cache)
-        $allFiles = @(Get-ChildItem -Recurse -File | Where-Object {
-            -not (Test-ExcludedFile $_.FullName)
+            -not $shouldExclude
         })
         
         # Catégoriser tous les fichiers

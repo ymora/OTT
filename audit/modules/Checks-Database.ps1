@@ -11,7 +11,7 @@ function Invoke-Check-Database {
         [hashtable]$Results
     )
     
-    Write-Section "[8/23] Base de Donnees - Coherence et Integrite"
+    Write-Section "[9/23] Base de Données"
     
     try {
         $ApiUrl = if ($Config.API -and $Config.API.BaseUrl) { $Config.API.BaseUrl } else { $null }

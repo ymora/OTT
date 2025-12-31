@@ -188,8 +188,8 @@ export default function AdminMigrationsPage() {
       const fullErrorMessage = errorParts.join('\n')
       setError(fullErrorMessage)
       
-      // Afficher aussi dans la console pour debug avec tous les détails
-      console.error('Erreur migration complète:', {
+      // Logger l'erreur avec tous les détails
+      logger.error('Erreur migration complète:', {
         message: err.message,
         error: err.error,
         details: err.details,

@@ -14,15 +14,27 @@ function Invoke-Check-Organization {
         [hashtable]$Results
     )
     
-    if (-not $Config.Checks.Organization.Enabled) {
+    # Si Checks n'existe pas ou Organization.Enabled n'est pas défini, activer par défaut
+    if ($Config.Checks -and $Config.Checks.Organization -and $Config.Checks.Organization.Enabled -eq $false) {
         return
     }
     
-    Write-Section "[2/21] Organisation Projet et Nettoyage"
+    Write-Section "[3/23] Organisation"
     
     try {
+        # Filtrer les fichiers valides (exclure les répertoires et fichiers non lisibles)
+        $validFiles = $Files | Where-Object { 
+            $_ -and (Test-Path $_) -and (Get-Item $_ -ErrorAction SilentlyContinue) -is [System.IO.FileInfo]
+        }
+        
+        if ($validFiles.Count -eq 0) {
+            Write-Warn "Aucun fichier valide à analyser"
+            $Results.Scores["Organization"] = 10
+            return
+        }
+        
         # TODO/FIXME
-        $todoFiles = Select-String -Path $Files -Pattern "TODO|FIXME|XXX|HACK" -ErrorAction SilentlyContinue | 
+        $todoFiles = Select-String -Path $validFiles -Pattern "TODO|FIXME|XXX|HACK" -ErrorAction SilentlyContinue | 
             Group-Object Path
         
         # Générer contexte pour l'IA si nécessaire
@@ -45,7 +57,7 @@ function Invoke-Check-Organization {
         }
         
         # console.log
-        $consoleLogs = Select-String -Path $Files -Pattern "console\.(log|warn|error)" -ErrorAction SilentlyContinue | 
+        $consoleLogs = Select-String -Path $validFiles -Pattern "console\.(log|warn|error)" -ErrorAction SilentlyContinue | 
             Where-Object { $_.Path -notmatch "logger\.js|inject\.js|test|spec" }
         
         $consoleCount = ($consoleLogs | Measure-Object).Count
@@ -77,7 +89,10 @@ function Invoke-Check-Organization {
         
         $Results.Scores["Organization"] = 10
     } catch {
-        Write-Err "Erreur vérification organisation"
+        Write-Err "Erreur vérification organisation: $($_.Exception.Message)"
+        if ($script:Verbose) {
+            Write-Err "Stack trace: $($_.ScriptStackTrace)"
+        }
         $Results.Scores["Organization"] = 7
     }
 }

@@ -19,7 +19,7 @@ function Invoke-Check-Optimizations {
         [hashtable]$ProjectInfo
     )
     
-    Write-Section "[12/21] Optimisations Avancées - Backend (Amélioré)"
+    Write-Section "[13/23] Optimisations Avancées"
     
     try {
         $optimizationScore = 10.0
@@ -32,7 +32,14 @@ function Invoke-Check-Optimizations {
             $phpFiles = $Files | Where-Object { $_.Extension -eq ".php" }
             
             $nPlusOneCandidates = @()
-            foreach ($file in $phpFiles) {
+            # OPTIMISATION: Limiter l'analyse aux fichiers les plus pertinents (handlers, crud, etc.)
+            $relevantFiles = $phpFiles | Where-Object { 
+                $_.Name -match 'handler|crud|api|controller|service' -or 
+                $_.FullName -match 'api[/\\]handlers|api[/\\]crud'
+            }
+            if ($relevantFiles.Count -eq 0) { $relevantFiles = $phpFiles | Select-Object -First 30 }
+            
+            foreach ($file in $relevantFiles) {
                 $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
                 if (-not $content) { continue }
                 
@@ -122,9 +129,14 @@ function Invoke-Check-Optimizations {
             Write-Info "Aucun index SQL explicite trouvé (peut être normal si créés ailleurs)"
         }
         
-        # 3. Vérifier pagination API (générique)
+        # 3. Vérifier pagination API (générique) - OPTIMISATION: Limiter aux fichiers handlers
         if ($ProjectInfo.Language -contains "PHP") {
-            $phpFiles = $Files | Where-Object { $_.Extension -eq ".php" }
+            $phpFiles = $Files | Where-Object { 
+                $_.Extension -eq ".php" -and 
+                ($_.Name -match 'handler|api\.php' -or $_.FullName -match 'api[/\\]handlers')
+            }
+            if ($phpFiles.Count -eq 0) { $phpFiles = $Files | Where-Object { $_.Extension -eq ".php" } | Select-Object -First 20 }
+            
             $paginatedEndpoints = 0
             $endpointsWithoutPagination = @()
             

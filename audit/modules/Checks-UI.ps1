@@ -12,10 +12,17 @@ function Invoke-Check-UI {
         [hashtable]$Config,
         
         [Parameter(Mandatory=$true)]
-        [hashtable]$Results
+        [hashtable]$Results,
+        
+        [int]$PhaseNumber = 16
     )
     
-    Write-Section "[16/21] Uniformisation UI/UX (Amélioré)"
+    # Déterminer le titre selon la phase (16 = Accessibilité, 17 = Uniformisation UI/UX)
+    if ($PhaseNumber -eq 17) {
+        Write-Section "[18/23] Uniformisation UI/UX"
+    } else {
+        Write-Section "[17/23] Accessibilité (a11y)"
+    }
     
     try {
         $uiScore = 10.0
@@ -30,7 +37,8 @@ function Invoke-Check-UI {
         $classUsage = @{}
         
         foreach ($class in $commonClasses) {
-            $usage = @($uiFiles | Select-String -Pattern "className.*['\"]$class|class.*['\"]$class").Count
+            $pattern = 'className.*[''"]' + $class + '|class.*[''"]' + $class
+            $usage = @($uiFiles | Select-String -Pattern $pattern).Count
             if ($usage -gt 0) {
                 $classUsage[$class] = $usage
             }
@@ -71,19 +79,39 @@ function Invoke-Check-UI {
         }
         
         if ($classUsage.Count -gt 0) {
-            Write-OK "Classes CSS communes détectées: $($classUsage.Keys -join ', ')"
+            $classList = ""
+            $first = $true
+            foreach ($key in $classUsage.Keys) {
+                if ($first) {
+                    $classList = $key
+                    $first = $false
+                } else {
+                    $classList = "$classList, $key"
+                }
+            }
+            Write-OK "Classes CSS communes detectees: $classList"
         }
         
         if ($modalFiles.Count -gt 0) {
-            Write-OK "Modals détectés: $($modalFiles -join ', ')"
+            $modalList = ""
+            $first = $true
+            foreach ($modal in $modalFiles) {
+                if ($first) {
+                    $modalList = $modal
+                    $first = $false
+                } else {
+                    $modalList = "$modalList, $modal"
+                }
+            }
+            Write-OK "Modals detectes: $modalList"
         }
         
         if ($badgeUsage.Count -gt 0) {
-            Write-OK "Badges/Status détectés: $($badgeUsage.Count) pattern(s)"
+            Write-OK "Badges/Status detectes: $($badgeUsage.Count) pattern(s)"
         }
         
         if ($tableUsage.Count -gt 0) {
-            Write-OK "Tables détectées: $($tableUsage.Count) pattern(s)"
+            Write-OK "Tables detectees: $($tableUsage.Count) pattern(s)"
         }
         
         # Générer contexte pour l'IA si nécessaire
@@ -108,4 +136,3 @@ function Invoke-Check-UI {
         $Results.Scores["UI/UX"] = 7
     }
 }
-

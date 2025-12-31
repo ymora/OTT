@@ -25,64 +25,68 @@ $script:AuditPhases = @(
     @{ Number = 3; Name = "Organisation"; Description = "Structure fichiers, doublons"; Dependencies = @(1); Category = "Structure"; CategoryNumber = 3 }
     
     # ============================================================================
-    # SÉCURITÉ (4) - CRITIQUE - À FAIRE EN PRIORITÉ
+    # CONFIGURATION (4) - COHÉRENCE ENVIRONNEMENT
     # ============================================================================
-    @{ Number = 4; Name = "Sécurité"; Description = "SQL injection, XSS, secrets, modals unifiés"; Dependencies = @(1); Category = "Sécurité"; CategoryNumber = 1 }
+    @{ Number = 4; Name = "Cohérence Configuration"; Description = "Vérification Docker/Render/GitHub cohérence"; Dependencies = @(1); Category = "Configuration"; CategoryNumber = 1 }
     
     # ============================================================================
-    # BACKEND (5-7) - API ET BASE DE DONNÉES - PRIORITAIRE
+    # LIENS ET IMPORTS (5) - VÉRIFICATION BASE
     # ============================================================================
-    @{ Number = 5; Name = "Endpoints API"; Description = "Tests fonctionnels des endpoints API"; Dependencies = @(); Category = "Backend"; CategoryNumber = 1 }
-    @{ Number = 6; Name = "Base de Données"; Description = "Cohérence BDD, données, intégrité"; Dependencies = @(5); Category = "Backend"; CategoryNumber = 2 }
+    @{ Number = 5; Name = "Liens et Imports"; Description = "Liens cassés, imports manquants"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 7 }
+    
+    # ============================================================================
+    # SÉCURITÉ (6) - CRITIQUE - À FAIRE EN PRIORITÉ
+    # ============================================================================
+    @{ Number = 6; Name = "Sécurité"; Description = "SQL injection, XSS, secrets, modals unifiés"; Dependencies = @(1); Category = "Sécurité"; CategoryNumber = 1 }
+    
+    # ============================================================================
+    # BACKEND (7-9) - API ET BASE DE DONNÉES - PRIORITAIRE
+    # ============================================================================
     @{ Number = 7; Name = "Structure API"; Description = "Cohérence handlers, routes API"; Dependencies = @(1); Category = "Backend"; CategoryNumber = 3 }
+    @{ Number = 8; Name = "Endpoints API"; Description = "Tests fonctionnels des endpoints API"; Dependencies = @(7); Category = "Backend"; CategoryNumber = 1 }
+    @{ Number = 9; Name = "Base de Données"; Description = "Cohérence BDD, données, intégrité"; Dependencies = @(8); Category = "Backend"; CategoryNumber = 2 }
     
     # ============================================================================
-    # QUALITÉ (8-14) - CODE MORT, DUPLICATION, ETC.
+    # QUALITÉ (10-15) - CODE MORT, DUPLICATION, ETC.
     # ============================================================================
-    @{ Number = 8; Name = "Code Mort"; Description = "Fichiers, composants, fonctions non utilisés"; Dependencies = @(1, 2); Category = "Qualité"; CategoryNumber = 1 }
-    @{ Number = 9; Name = "Duplication de Code"; Description = "Code dupliqué, fonctions redondantes"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 2 }
-    @{ Number = 10; Name = "Complexité"; Description = "Complexité cyclomatique, fichiers volumineux"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 3 }
-    @{ Number = 11; Name = "Tests"; Description = "Tests unitaires, intégration, couverture"; Dependencies = @(); Category = "Qualité"; CategoryNumber = 4 }
-    @{ Number = 12; Name = "Gestion d'Erreurs"; Description = "Error boundaries, gestion erreurs API"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 5 }
-    @{ Number = 13; Name = "Optimisations Avancées"; Description = "Vérifications détaillées"; Dependencies = @(1, 8, 9, 10); Category = "Qualité"; CategoryNumber = 6 }
-    @{ Number = 14; Name = "Liens et Imports"; Description = "Liens cassés, imports manquants"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 7 }
+    @{ Number = 10; Name = "Code Mort"; Description = "Fichiers, composants, fonctions non utilisés"; Dependencies = @(1, 2); Category = "Qualité"; CategoryNumber = 1 }
+    @{ Number = 11; Name = "Duplication de Code"; Description = "Code dupliqué, fonctions redondantes"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 2 }
+    @{ Number = 12; Name = "Complexité"; Description = "Complexité cyclomatique, fichiers volumineux"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 3 }
+    @{ Number = 13; Name = "Optimisations Avancées"; Description = "Vérifications détaillées"; Dependencies = @(1, 10, 11, 12); Category = "Qualité"; CategoryNumber = 6 }
+    @{ Number = 14; Name = "Tests"; Description = "Tests unitaires, intégration, couverture"; Dependencies = @(); Category = "Qualité"; CategoryNumber = 4 }
+    @{ Number = 15; Name = "Gestion d'Erreurs"; Description = "Error boundaries, gestion erreurs API"; Dependencies = @(1); Category = "Qualité"; CategoryNumber = 5 }
     
     # ============================================================================
-    # FRONTEND (15-17) - UI/UX
+    # FRONTEND (16-18) - UI/UX
     # ============================================================================
-    @{ Number = 15; Name = "Routes et Navigation"; Description = "Routes Next.js, cohérence navigation"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 1 }
-    @{ Number = 16; Name = "Accessibilité (a11y)"; Description = "WCAG 2.1 AA, aria-labels, navigation clavier"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 2 }
-    @{ Number = 17; Name = "Uniformisation UI/UX"; Description = "Composants unifiés, modals"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 3 }
+    @{ Number = 16; Name = "Routes et Navigation"; Description = "Routes Next.js, cohérence navigation"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 1 }
+    @{ Number = 17; Name = "Accessibilité (a11y)"; Description = "WCAG 2.1 AA, aria-labels, navigation clavier"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 2 }
+    @{ Number = 18; Name = "Uniformisation UI/UX"; Description = "Composants unifiés, modals"; Dependencies = @(1); Category = "Frontend"; CategoryNumber = 3 }
     
     # ============================================================================
-    # PERFORMANCE (18)
+    # PERFORMANCE (19)
     # ============================================================================
-    @{ Number = 18; Name = "Performance"; Description = "Optimisations React, mémoire, re-renders"; Dependencies = @(1); Category = "Performance"; CategoryNumber = 1 }
+    @{ Number = 19; Name = "Performance"; Description = "Optimisations React, mémoire, re-renders"; Dependencies = @(1); Category = "Performance"; CategoryNumber = 1 }
     
     # ============================================================================
-    # DOCUMENTATION (19)
+    # DOCUMENTATION (20)
     # ============================================================================
-    @{ Number = 19; Name = "Documentation"; Description = "README, commentaires, documentation"; Dependencies = @(1); Category = "Documentation"; CategoryNumber = 1 }
+    @{ Number = 20; Name = "Documentation"; Description = "README, commentaires, documentation"; Dependencies = @(1); Category = "Documentation"; CategoryNumber = 1 }
     
     # ============================================================================
-    # DÉPLOIEMENT (20)
+    # DÉPLOIEMENT (21)
     # ============================================================================
-    @{ Number = 20; Name = "Synchronisation GitHub Pages"; Description = "Vérification déploiement"; Dependencies = @(1); Category = "Déploiement"; CategoryNumber = 1 }
+    @{ Number = 21; Name = "Synchronisation GitHub Pages"; Description = "Vérification déploiement"; Dependencies = @(1); Category = "Déploiement"; CategoryNumber = 1 }
     
     # ============================================================================
-    # HARDWARE (21)
+    # HARDWARE (22)
     # ============================================================================
-    @{ Number = 21; Name = "Firmware"; Description = "Fichiers firmware, versions, compilation, cohérence"; Dependencies = @(1); Category = "Hardware"; CategoryNumber = 1 }
-    
-    # ============================================================================
-    # CONFIGURATION (22) - COHÉRENCE ENVIRONNEMENT
-    # ============================================================================
-    @{ Number = 22; Name = "Cohérence Configuration"; Description = "Vérification Docker/Render/GitHub cohérence"; Dependencies = @(); Category = "Configuration"; CategoryNumber = 1 }
+    @{ Number = 22; Name = "Firmware"; Description = "Fichiers firmware, versions, compilation, cohérence"; Dependencies = @(1); Category = "Hardware"; CategoryNumber = 1 }
     
     # ============================================================================
     # TESTS COMPLETS (23) - APPLICATION OTT
     # ============================================================================
-    @{ Number = 23; Name = "Tests Complets Application"; Description = "Tests exhaustifs, corrections critiques, API, navigation"; Dependencies = @(5, 7); Category = "Tests"; CategoryNumber = 1 }
+    @{ Number = 23; Name = "Tests Complets Application"; Description = "Tests exhaustifs, corrections critiques, API, navigation"; Dependencies = @(7, 8); Category = "Tests"; CategoryNumber = 1 }
 )
 
 # Fonction pour obtenir toutes les dépendances récursives d'une phase
@@ -137,15 +141,16 @@ function Show-PhaseMenu {
     # Grouper par catégorie pour affichage (ordre logique)
     $categoryOrder = @(
         "Structure",
+        "Configuration",
+        "Qualité",
         "Sécurité",
         "Backend",
-        "Qualité",
         "Frontend",
         "Performance",
         "Documentation",
         "Déploiement",
         "Hardware",
-        "Configuration"
+        "Tests"
     )
     
     # Afficher les phases par catégorie dans l'ordre logique

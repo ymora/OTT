@@ -13,7 +13,7 @@ function Invoke-Check-StructureAPI {
         [string]$ProjectPath
     )
     
-    Write-Section "[6/21] Structure API - Cohérence Handlers (Amélioré)"
+    Write-Section "[7/23] Structure API"
     
     try {
         $structureScore = 10.0
@@ -50,6 +50,7 @@ function Invoke-Check-StructureAPI {
         $routingPatterns = @()  # Patterns de routing détectés
         
         # 1. Détecter les handlers définis (pattern générique)
+        # Chercher dans les répertoires handlers ET dans les fichiers API principaux
         $handlerDirs = @(
             (Join-Path $ProjectPath "api" "handlers"),
             (Join-Path $ProjectPath "handlers"),
@@ -57,6 +58,13 @@ function Invoke-Check-StructureAPI {
             (Join-Path $ProjectPath "app" "handlers")
         )
         
+        # Chercher aussi dans les fichiers API principaux (api.php, router.php, etc.)
+        $apiMainFiles = @()
+        foreach ($apiFile in $apiFiles) {
+            $apiMainFiles += $apiFile
+        }
+        
+        # Chercher dans les répertoires handlers
         foreach ($dir in $handlerDirs) {
             if (Test-Path $dir) {
                 $handlerFiles = Get-ChildItem -Path $dir -Recurse -File -Include *.php -ErrorAction SilentlyContinue
@@ -70,6 +78,28 @@ function Invoke-Check-StructureAPI {
                             $handlersDefined[$handlerName] = @{
                                 File = $file.Name
                                 Path = $file.FullName
+                                Line = ($content.Substring(0, $func.Index) -split "`n").Count
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        # Chercher aussi dans les fichiers API principaux (api.php contient souvent des handlers)
+        foreach ($apiFile in $apiMainFiles) {
+            if (Test-Path $apiFile) {
+                $content = Get-Content $apiFile -Raw -ErrorAction SilentlyContinue
+                if ($content) {
+                    # Pattern générique : function handleXXX( ou public function handleXXX(
+                    $functions = [regex]::Matches($content, "(?:public\s+|private\s+|protected\s+)?function\s+(handle\w+)\s*\(")
+                    foreach ($func in $functions) {
+                        $handlerName = $func.Groups[1].Value
+                        # Ne pas écraser si déjà trouvé dans un handler file
+                        if (-not $handlersDefined.ContainsKey($handlerName)) {
+                            $handlersDefined[$handlerName] = @{
+                                File = Split-Path $apiFile -Leaf
+                                Path = $apiFile
                                 Line = ($content.Substring(0, $func.Index) -split "`n").Count
                             }
                         }

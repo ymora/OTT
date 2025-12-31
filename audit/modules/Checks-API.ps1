@@ -11,7 +11,7 @@ function Invoke-Check-API {
         [hashtable]$Results
     )
     
-    Write-Section "[7/23] Endpoints API - Tests Fonctionnels"
+    Write-Section "[8/23] Endpoints API"
     
     $apiScore = 0
     $endpointsTotal = 0
@@ -19,9 +19,20 @@ function Invoke-Check-API {
     $script:apiAuthFailed = $false
     
     try {
-        $ApiUrl = if ($Config.API -and $Config.API.BaseUrl) { $Config.API.BaseUrl } else { $null }
-        $Email = if ($Config.API -and $Config.API.Credentials -and $Config.API.Credentials.Email) { $Config.API.Credentials.Email } else { $null }
-        $Password = if ($Config.API -and $Config.API.Credentials -and $Config.API.Credentials.Password) { $Config.API.Credentials.Password } else { $null }
+        # Support pour Config.Api (audit.config.ps1) et Config.API (normalisé)
+        $apiConfig = if ($Config.Api) { $Config.Api } elseif ($Config.API) { $Config.API } else { $null }
+        $ApiUrl = if ($apiConfig -and $apiConfig.BaseUrl) { $apiConfig.BaseUrl } else { $null }
+        
+        # Credentials peut être dans Api/API ou au niveau racine
+        $credentialsConfig = if ($apiConfig -and $apiConfig.Credentials) { 
+            $apiConfig.Credentials 
+        } elseif ($Config.Credentials) { 
+            $Config.Credentials 
+        } else { 
+            $null 
+        }
+        $Email = if ($credentialsConfig -and $credentialsConfig.Email) { $credentialsConfig.Email } else { $null }
+        $Password = if ($credentialsConfig -and $credentialsConfig.Password) { $credentialsConfig.Password } else { $null }
         
         Write-Info "Connexion API..."
         Write-Info "URL API: $ApiUrl"
@@ -62,14 +73,54 @@ function Invoke-Check-API {
             return
         }
         
+        # Test de connectivité rapide avant d'essayer l'authentification
+        Write-Info "Test de connectivité rapide (1s max)..."
+        $apiAccessible = $false
+        $apiMode = "inconnu"
+        
+        # Détecter le mode (Docker ou Render)
+        if ($ApiUrl -match "localhost:8000|127\.0\.0\.1:8000") {
+            $apiMode = "Docker"
+        } elseif ($ApiUrl -match "render\.com|onrender\.com") {
+            $apiMode = "Render"
+        }
+        
+        try {
+            $testUrl = "$ApiUrl/api.php/health"
+            # Timeout très court pour éviter les blocages
+            $testResponse = Invoke-WebRequest -Uri $testUrl -Method GET -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop
+            Write-OK "API accessible ($apiMode)"
+            $apiAccessible = $true
+        } catch {
+            # Si l'API n'est pas accessible, signaler clairement et passer
+            Write-Warn "API non accessible - $apiMode non démarré ou inaccessible"
+            if ($apiMode -eq "Docker") {
+                Write-Info "  💡 Pour démarrer Docker: docker-compose up -d"
+                Write-Info "  💡 Ou: .\scripts\dev\start_docker.ps1"
+                Write-Info "  💡 Vérifier: docker ps | findstr ott-api"
+            } elseif ($apiMode -eq "Render") {
+                Write-Info "  💡 Vérifiez que le service Render est actif"
+                Write-Info "  💡 URL testée: $ApiUrl"
+            } else {
+                Write-Info "  💡 Vérifiez que l'API est démarrée et accessible"
+                Write-Info "  💡 URL testée: $ApiUrl"
+            }
+            Write-Info "  ⏭️  L'audit continue sans tester les endpoints API (score: 5/10)"
+            $script:apiAuthFailed = $true
+            $apiScore = 5
+            $Results.Scores["API"] = $apiScore
+            return
+        }
+        
         $loginBody = @{email = $Email; password = $Password} | ConvertTo-Json
         
-        $authEndpoint = if ($Config.API -and $Config.API.AuthEndpoint) { $Config.API.AuthEndpoint } else { "/api.php/auth/login" }
+        $authEndpoint = if ($apiConfig -and $apiConfig.AuthEndpoint) { $apiConfig.AuthEndpoint } else { "/api.php/auth/login" }
         $fullAuthUrl = "$ApiUrl$authEndpoint"
         Write-Info "Endpoint authentification: $fullAuthUrl"
         
         try {
-            $authResponse = Invoke-RestMethod -Uri $fullAuthUrl -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 15 -ErrorAction Stop
+            # Timeout réduit à 5 secondes pour éviter les blocages
+            $authResponse = Invoke-RestMethod -Uri $fullAuthUrl -Method POST -Body $loginBody -ContentType "application/json" -TimeoutSec 5 -ErrorAction Stop
             $script:authToken = $authResponse.token
             if ([string]::IsNullOrEmpty($script:authToken)) {
                 throw "Token non reçu dans la réponse"
@@ -78,8 +129,8 @@ function Invoke-Check-API {
             Write-OK "Authentification reussie"
             
             # Utiliser la configuration ou valeurs par défaut
-            if ($Config.API -and $Config.API.Endpoints) {
-                $endpoints = $Config.API.Endpoints
+            if ($apiConfig -and $apiConfig.Endpoints) {
+                $endpoints = $apiConfig.Endpoints
             } else {
                 $endpoints = @(
                     @{Path="/api.php/devices"; Name="Dispositifs"},
@@ -93,14 +144,21 @@ function Invoke-Check-API {
                 )
             }
             
+            Write-Info "Test de $($endpoints.Count) endpoint(s) (timeout 3s chacun)..."
             foreach ($endpoint in $endpoints) {
                 $endpointsTotal++
                 try {
-                    $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 10 -ErrorAction Stop
+                    # Timeout très court (3s) pour éviter les blocages
+                    $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 3 -ErrorAction Stop
                     Write-OK $endpoint.Name
                     $endpointsOK++
                 } catch {
-                    Write-Err "$($endpoint.Name) - Erreur: $($_.Exception.Message)"
+                    $errorMsg = $_.Exception.Message
+                    # Raccourcir les messages d'erreur trop longs
+                    if ($errorMsg.Length -gt 80) {
+                        $errorMsg = $errorMsg.Substring(0, 80) + "..."
+                    }
+                    Write-Warn "$($endpoint.Name) - $errorMsg"
                 }
             }
             
@@ -139,15 +197,21 @@ function Invoke-Check-API {
         }
         
     } catch {
-        Write-Warn "Echec connexion API: $($_.Exception.Message)"
-        if ($ApiUrl -match "localhost:8000" -or $ApiUrl -match "127\.0\.0\.1:8000") {
-            Write-Info "💡 L'API est sur Docker - Vérifiez que Docker est démarré:"
-            Write-Info "   • docker-compose up -d"
+        Write-Warn "Échec connexion API: $($_.Exception.Message)"
+        
+        # Détecter le mode pour afficher le message approprié
+        if ($ApiUrl -and ($ApiUrl -match "localhost:8000|127\.0\.0\.1:8000")) {
+            Write-Info "💡 Docker non démarré ou API non accessible"
+            Write-Info "   • Démarrer: docker-compose up -d"
             Write-Info "   • Ou: .\scripts\dev\start_docker.ps1"
             Write-Info "   • Vérifier: docker ps | findstr ott-api"
+        } elseif ($ApiUrl -and ($ApiUrl -match "render\.com|onrender\.com")) {
+            Write-Info "💡 Render non accessible ou service arrêté"
+            Write-Info "   • Vérifiez le statut sur https://dashboard.render.com"
         } else {
-            Write-Info "L'audit continue - Vérifiez que le serveur API est démarré et accessible"
+            Write-Info "💡 API non accessible - Vérifiez que le serveur est démarré"
         }
+        Write-Info "⏭️  L'audit continue (score: 5/10)"
         $script:apiAuthFailed = $true
         $apiScore = 5
     }

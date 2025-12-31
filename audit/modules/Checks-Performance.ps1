@@ -19,11 +19,12 @@ function Invoke-Check-Performance {
         [hashtable]$ProjectInfo
     )
     
-    if (-not $Config.Checks.Performance.Enabled) {
+    # Si Checks n'existe pas ou Performance.Enabled n'est pas défini, activer par défaut
+    if ($Config.Checks -and $Config.Checks.Performance -and $Config.Checks.Performance.Enabled -eq $false) {
         return
     }
     
-    Write-Section "[17/21] Performance - Optimisations React et Cache (Amélioré)"
+    Write-Section "[19/23] Performance"
     
     try {
         $jsFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$" }

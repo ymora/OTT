@@ -18,7 +18,7 @@ function Invoke-Check-Architecture {
         [string]$ProjectPath
     )
     
-    Write-Section "[1/21] Architecture et Statistiques Code (Amélioré)"
+    Write-Section "[2/23] Architecture et Statistiques"
     
     try {
         Write-Info "Comptage des fichiers..."
@@ -94,15 +94,45 @@ function Invoke-Check-Architecture {
             }
         }
         
-        # Compter lignes
+        # Compter lignes (OPTIMISATION: Échantillonnage pour gros projets - max 50 fichiers)
         $jsLines = 0
-        foreach ($file in $jsFiles) {
-            try { $jsLines += (Get-Content $file.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines } catch {}
+        $jsFilesToCount = if ($jsFiles.Count -gt 50) { 
+            Write-Info "Échantillonnage: $($jsFiles.Count) fichiers JS -> 50 fichiers pour comptage"
+            $jsFiles | Select-Object -First 50 
+        } else { 
+            $jsFiles 
+        }
+        foreach ($file in $jsFilesToCount) {
+            try { 
+                $lines = (Get-Content $file.FullName -ErrorAction SilentlyContinue -TotalCount 10000 | Measure-Object -Line).Lines
+                $jsLines += $lines
+            } catch {}
+        }
+        # Estimer le total si échantillonnage
+        if ($jsFiles.Count -gt 50) {
+            $avgLines = if ($jsFilesToCount.Count -gt 0) { $jsLines / $jsFilesToCount.Count } else { 0 }
+            $jsLines = [Math]::Round($avgLines * $jsFiles.Count)
+            Write-Info "Lignes JS estimées: $jsLines (basé sur échantillon de $($jsFilesToCount.Count) fichiers)"
         }
         
         $phpLines = 0
-        foreach ($file in $phpFiles) {
-            try { $phpLines += (Get-Content $file.FullName -ErrorAction SilentlyContinue | Measure-Object -Line).Lines } catch {}
+        $phpFilesToCount = if ($phpFiles.Count -gt 30) { 
+            Write-Info "Échantillonnage: $($phpFiles.Count) fichiers PHP -> 30 fichiers pour comptage"
+            $phpFiles | Select-Object -First 30 
+        } else { 
+            $phpFiles 
+        }
+        foreach ($file in $phpFilesToCount) {
+            try { 
+                $lines = (Get-Content $file.FullName -ErrorAction SilentlyContinue -TotalCount 10000 | Measure-Object -Line).Lines
+                $phpLines += $lines
+            } catch {}
+        }
+        # Estimer le total si échantillonnage
+        if ($phpFiles.Count -gt 30) {
+            $avgLines = if ($phpFilesToCount.Count -gt 0) { $phpLines / $phpFilesToCount.Count } else { 0 }
+            $phpLines = [Math]::Round($avgLines * $phpFiles.Count)
+            Write-Info "Lignes PHP estimées: $phpLines (basé sur échantillon de $($phpFilesToCount.Count) fichiers)"
         }
         
         $stats = @{

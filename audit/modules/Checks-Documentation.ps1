@@ -14,11 +14,12 @@ function Invoke-Check-Documentation {
         [hashtable]$Results
     )
     
-    if (-not $Config.Checks.Documentation.Enabled) {
+    # Si Checks n'existe pas ou Documentation.Enabled n'est pas défini, activer par défaut
+    if ($Config.Checks -and $Config.Checks.Documentation -and $Config.Checks.Documentation.Enabled -eq $false) {
         return
     }
     
-    Write-Section "[18/21] Documentation"
+    Write-Section "[20/23] Documentation"
     
     try {
         $mdFiles = $Files | Where-Object { $_.Extension -eq ".md" }

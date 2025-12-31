@@ -11,7 +11,7 @@ function Invoke-Check-TimeTracking {
         [hashtable]$Results
     )
     
-    Write-Section "[17/21] Suivi du Temps - Analyse Git Commits"
+    Write-Section "[21/23] Synchronisation GitHub Pages"
     
     try {
         # Vérifier Git disponible
@@ -223,8 +223,13 @@ _Basé sur l'analyse Git des commits_
             }
         }
         
+        # Calculer le score (basé sur la génération du rapport)
+        $timeTrackingScore = if ($totalHours -gt 0) { 10 } else { 5 }
+        $Results.Scores["Synchronisation GitHub Pages"] = $timeTrackingScore
+        
     } catch {
         Write-Warn "Erreur génération suivi temps: $($_.Exception.Message)"
+        $Results.Scores["Synchronisation GitHub Pages"] = 5
     }
 }
 

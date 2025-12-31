@@ -21,7 +21,7 @@ function Invoke-Check-Routes {
         [string]$ProjectPath
     )
     
-    Write-Section "[14/21] Routes et Navigation (Amélioré)"
+    Write-Section "[16/23] Routes et Navigation"
     
     try {
         $missingPages = 0

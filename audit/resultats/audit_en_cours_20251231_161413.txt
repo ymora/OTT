@@ -1,0 +1,165 @@
+?? Projet détecté: C:\Users\ymora\Desktop\maxime
+
+?? Détection automatique du projet...
+
+?? Détection automatique du projet...
+Répertoire: C:\Users\ymora\Desktop\maxime
+  [INFO] Détection du type de projet...
+  [WARN] Erreur lecture package.json: A hash table can only be added to another hash table.
+  [OK] API PHP détectée (api.php)
+  [OK] Next.js détecté (next.config.js)
+  [INFO] Structure App Router détectée
+  [OK] 7 route(s) détectée(s)
+  [INFO] Détection de l'API...
+  [OK] 24 handler(s) API détecté(s)
+  [INFO] Détection de la base de données...
+  [OK] Schéma BDD détecté: /sql/schema.sql
+  [OK] 17 table(s) détectée(s)
+  [INFO] Détection GitHub...
+  [OK] GitHub détecté: ymora/OTT
+  [INFO] Détection firmware...
+  [OK] Firmware détecté: /hardware/firmware
+
+? Métadonnées du projet détectées et sauvegardées:
+   Fichier: C:\Users\ymora\Desktop\maxime\project_metadata.json
+
+?? Résumé:
+   Type: nextjs
+   Nom: ott-dashboard
+   Technologies: PHP API
+   API: Oui
+   Frontend: Next.js
+   Base de données: 17 tables
+   Firmware: Oui
+? Projet détecté: ott-dashboard
+   Type: nextjs
+   Technologies: PHP API
+
+?? Lancement de l'audit...
+════════════════════════════════════════════════════════════════
+
+?? Répertoire racine détecté: C:\Users\ymora\Desktop\maxime
+?? Répertoire audit: C:\Users\ymora\Desktop\maxime\audit
+
+  ? Phases à exécuter: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23
+     (dépendances incluses automatiquement)
+
+
+?? Exécution de l'audit avec affichage des logs en temps réel...
+═══════════════════════════════════════════════════════════════════════════════════
+
+
+?? Détection automatique du projet...
+
+?? Détection automatique du projet...
+Répertoire: C:\Users\ymora\Desktop\maxime
+  [INFO] Détection du type de projet...
+  [WARN] Erreur lecture package.json: A hash table can only be added to another hash table.
+  [OK] API PHP détectée (api.php)
+  [OK] Next.js détecté (next.config.js)
+  [INFO] Structure App Router détectée
+  [OK] 7 route(s) détectée(s)
+  [INFO] Détection de l'API...
+  [OK] 24 handler(s) API détecté(s)
+  [INFO] Détection de la base de données...
+  [OK] Schéma BDD détecté: /sql/schema.sql
+  [OK] 17 table(s) détectée(s)
+  [INFO] Détection GitHub...
+  [OK] GitHub détecté: ymora/OTT
+  [INFO] Détection firmware...
+  [OK] Firmware détecté: /hardware/firmware
+
+? Métadonnées du projet détectées et sauvegardées:
+   Fichier: C:\Users\ymora\Desktop\maxime\project_metadata.json
+
+?? Résumé:
+   Type: nextjs
+   Nom: ott-dashboard
+   Technologies: PHP API
+   API: Oui
+   Frontend: Next.js
+   Base de données: 17 tables
+   Firmware: Oui
+? Projet détecté: ott-dashboard
+  [WARN] Fichier de configuration spÃ©cifiÃ© introuvable: C:\Users\ymora\Desktop\maxime\audit\scripts\audit.config.ps1
+
+===============================================================================
+[AUDIT] AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL - OTT Dashboard
+===============================================================================
+Date     : 2025-12-31 16:14:15
+Projet   : OTT Dashboard (HAPPLYZ MEDICAL)
+Version  : 2.4 - Configuration modulaire (audit.config.ps1)
+Config   : C:\Users\ymora\Desktop\maxime\audit\scripts\audit.config.ps1
+===============================================================================
+
+
+=== [1/23] Inventaire Exhaustif ===
+  Total fichiers analysés: 2167
+  JavaScript: 98
+  PHP: 37
+  SQL: 6
+  Markdown: 122
+  HTML: 9
+  Config (JSON/YAML/ENV): 245
+  Scripts (PS1/SH): 78
+  Firmware (INO/H/TPP): 995
+  Assets (Images/Fonts): 25
+  Autres: 536
+  [OK] Inventaire exhaustif terminé
+  [WARN] Phase 1 (Inventaire Exhaustif) a pris 6.4013446s (> 5s) - peut être lente
+  [OK] Phase 1 (Inventaire Exhaustif) terminée (6.4113871s)
+
+=== [2/23] Architecture et Statistiques ===
+  JavaScript/React : 98 fichiers (34496 lignes)
+  PHP              : 37 fichiers (16239 lignes)
+  SQL              : 6 fichiers
+  Markdown root    : 2 fichiers
+  Composants       : 27
+  Pages            : 7
+  Scripts          : 41
+  [OK] Organisation fichiers MD OK
+  [WARN] Phase 2 (Architecture et Statistiques) a pris 47.0872009s (> 5s) - peut être lente
+  [OK] Phase 2 (Architecture et Statistiques) terminée (47.0883279s)
+
+=== [3/23] Organisation ===
+  [ERROR] Erreur vérification organisation
+  [OK] Phase 3 (Organisation) terminée (0.0221752s)
+
+=== [22/23] Cohérence Configuration ===
+  [OK] Aucune incohérence majeure détectée dans les fichiers actifs
+  [WARN] render.yaml peut être archivé (projet Docker uniquement)
+  [OK] Environnement principal: DOCKER (Local)
+  [OK] Vérification cohérence configuration terminée
+  [OK] Phase 4 (Cohérence Configuration) terminée (0.0689394s)
+
+=== [14/23] Liens et Imports ===
+  [OK] Tous les fichiers dashboard sont présents
+
+  ?? Statistiques:
+     Total fichiers MD: 25
+     Répertoires: 6
+
+  ? Tous les fichiers dashboard sont présents
+
+  ?? Doublons (1):
+     - README.md (4 occurrences)
+        README.md
+        audit\README.md
+        docs\README.md
+        hardware\lib\TinyGSM\README.md
+
+  ?? À consolider (1):
+     - audit (11 fichiers)
+  [WARN] Problèmes détectés: 0 obsolètes, 1 doublons, 1 à consolider
+  [OK] Rapport détaillé sauvegardé: C:\Users\ymora\Desktop\maxime\audit\resultats\ANALYSE_MARKDOWN_20251231_161512.md
+  [OK] Phase 5 (Liens et Imports) terminée (3.0638852s)
+
+=== [4/23] Sécurité ===
+  [OK] Vérification sécurité terminée
+  [OK] Phase 6 (Sécurité) terminée (0.0851865s)
+
+=== [7/23] Structure API ===
+  [WARN] 4 handlers potentiellement inutilisés (nécessite vérification IA)
+  [OK] Phase 7 (Structure API) terminée (0.2891978s)
+
+=== [5/23] Endpoints API ===

@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
 import { useApiData, useTimers, useApiCall, useActionState } from '@/hooks'
+import logger from '@/lib/logger'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import Modal from '@/components/Modal'
@@ -762,7 +763,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
             message: `⚠️ Message brut (parse error): ${event.data.substring(0, 200)}`,
             level: 'warning'
           }])
-          console.error('Erreur parsing SSE:', err, 'Data:', event.data)
+          logger.error('Erreur parsing SSE:', err, 'Data:', event.data)
         }
       }
 

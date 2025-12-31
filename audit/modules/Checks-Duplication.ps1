@@ -15,11 +15,12 @@ function Invoke-Check-Duplication {
         [hashtable]$Results
     )
     
-    if (-not $Config.Checks.Duplication.Enabled) {
+    # Si Checks n'existe pas ou Duplication.Enabled n'est pas défini, activer par défaut
+    if ($Config.Checks -and $Config.Checks.Duplication -and $Config.Checks.Duplication.Enabled -eq $false) {
         return
     }
     
-    Write-Section "[8/21] Duplication de Code et Refactoring (Amélioré)"
+    Write-Section "[11/23] Duplication de Code"
     
     try {
         $searchFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$|\.php$" }
