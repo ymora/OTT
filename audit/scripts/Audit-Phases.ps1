@@ -84,9 +84,10 @@ $script:AuditPhases = @(
     @{ Number = 22; Name = "Firmware"; Description = "Fichiers firmware, versions, compilation, cohérence"; Dependencies = @(1); Category = "Hardware"; CategoryNumber = 1 }
     
     # ============================================================================
-    # TESTS COMPLETS (23) - APPLICATION OTT
+    # TESTS COMPLETS (23-24) - APPLICATION OTT
     # ============================================================================
     @{ Number = 23; Name = "Tests Complets Application"; Description = "Tests exhaustifs, corrections critiques, API, navigation"; Dependencies = @(7, 8); Category = "Tests"; CategoryNumber = 1 }
+    @{ Number = 24; Name = "Tests Fonctionnels Complets"; Description = "Workflows complets, CRUD, compilation firmware, intégrations"; Dependencies = @(7, 8, 23); Category = "Tests"; CategoryNumber = 2 }
 )
 
 # Fonction pour obtenir toutes les dépendances récursives d'une phase

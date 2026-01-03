@@ -62,6 +62,7 @@ const DeviceModal = memo(function DeviceModal({
     isConnected: usbIsConnected, 
     port, 
     write: usbWrite,
+    isUsbReady, // État dérivé pour cohérence (isConnected && port && port.readable && port.writable)
     usbDevice,
     usbDeviceInfo // Données reçues du dispositif USB (inclut config)
   } = useUsb()
@@ -564,8 +565,8 @@ const DeviceModal = memo(function DeviceModal({
   
   // Envoyer la configuration UNIQUEMENT via USB (pas de fallback OTA)
   const sendConfigToDevice = async (configPayload, deviceId) => {
-    // Vérifier que USB est connecté
-    if (!usbIsConnected || !usbWrite || !port) {
+    // Vérifier que USB est connecté et prêt
+    if (!isUsbReady || !usbWrite) {
       throw new Error('Dispositif USB non connecté. Veuillez connecter le dispositif en USB pour envoyer la configuration.')
     }
 
@@ -1041,8 +1042,8 @@ const DeviceModal = memo(function DeviceModal({
         )) // Dispositif virtuel USB
       )
       
-      // Vérifier que USB est connecté (OBLIGATOIRE - plus de fallback OTA)
-      if (!usbIsConnected || !port || !usbWrite) {
+      // Vérifier que USB est connecté et prêt (OBLIGATOIRE - plus de fallback OTA)
+      if (!isUsbReady || !usbWrite) {
         throw new Error('Dispositif USB non connecté. Veuillez connecter le dispositif en USB pour envoyer la configuration.')
       }
 
@@ -1151,12 +1152,12 @@ const DeviceModal = memo(function DeviceModal({
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
               ⚙️ Configurer le dispositif
             </h2>
-            {usbIsConnected && port && usbWrite && (
+            {isUsbReady && usbWrite && (
               <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
                 🔌 USB connecté - Configuration envoyée directement au dispositif
               </p>
             )}
-            {(!usbIsConnected || !port || !usbWrite) && (
+            {(!isUsbReady || !usbWrite) && (
               <p className="text-xs text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
                 ⚠️ USB non connecté - Veuillez connecter le dispositif en USB
               </p>
@@ -1220,7 +1221,7 @@ const DeviceModal = memo(function DeviceModal({
               </div>
             )}
             {/* Message d'avertissement si USB non connecté */}
-            {(!usbIsConnected || !port || !usbWrite) && (
+            {(!isUsbReady || !usbWrite) && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
                 <p className="text-sm text-red-700 dark:text-red-300">
                   ⚠️ <strong>Dispositif USB non connecté</strong>
@@ -1675,7 +1676,7 @@ const DeviceModal = memo(function DeviceModal({
           {/* Boutons */}
           <div className="flex gap-2 justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
             {/* Bouton Reset (seulement en mode édition et si USB connecté) */}
-            {editingItem && isDeviceUsbConnected && usbWrite && port && (
+            {editingItem && isDeviceUsbConnected && isUsbReady && usbWrite && (
               <button
                 type="button"
                 className="btn-secondary text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -1687,7 +1688,7 @@ const DeviceModal = memo(function DeviceModal({
               </button>
             )}
             {/* Espaceur si pas de bouton reset */}
-            {!(editingItem && isDeviceUsbConnected && usbWrite && port) && <div />}
+            {!(editingItem && isDeviceUsbConnected && isUsbReady && usbWrite) && <div />}
             
             <div className="flex gap-2">
               <button
@@ -1701,9 +1702,9 @@ const DeviceModal = memo(function DeviceModal({
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={saving || !usbIsConnected || !port || !usbWrite || (editingItem && !hasChanges)}
+                disabled={saving || !isUsbReady || !usbWrite || (editingItem && !hasChanges)}
                 title={
-                  !usbIsConnected || !port || !usbWrite 
+                  !isUsbReady || !usbWrite 
                     ? 'Dispositif USB non connecté - Veuillez connecter le dispositif en USB'
                     : editingItem && !hasChanges 
                       ? 'Aucune modification détectée'

@@ -8,7 +8,6 @@ import logger from '@/lib/logger'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import Modal from '@/components/Modal'
-import logger from '@/lib/logger'
 
 export default function InoEditorTab({ onUploadSuccess }) {
   const { fetchWithAuth, API_URL, token } = useAuth()

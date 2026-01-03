@@ -753,16 +753,43 @@ function handleGetRoles() {
     requireAuth();
     
     try {
-        $stmt = $pdo->prepare("
+        // Pagination optionnelle (par défaut retourne tous les rôles pour compatibilité)
+        $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 100) : null;
+        $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+        
+        // Compter le total pour la pagination
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM roles");
+        $countStmt->execute();
+        $total = intval($countStmt->fetchColumn());
+        
+        $sql = "
             SELECT r.*, COALESCE(STRING_AGG(p.code, ','), '') as permissions
             FROM roles r
             LEFT JOIN role_permissions rp ON r.id = rp.role_id
             LEFT JOIN permissions p ON rp.permission_id = p.id
             GROUP BY r.id
             ORDER BY r.id
-        ");
+        ";
+        
+        if ($limit !== null) {
+            $sql .= " LIMIT :limit OFFSET :offset";
+        }
+        
+        $stmt = $pdo->prepare($sql);
+        if ($limit !== null) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
         $stmt->execute();
-        echo json_encode(['success' => true, 'roles' => $stmt->fetchAll()]);
+        
+        $roles = $stmt->fetchAll();
+        echo json_encode([
+            'success' => true, 
+            'roles' => $roles,
+            'total' => $total,
+            'limit' => $limit,
+            'offset' => $offset
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
@@ -776,9 +803,35 @@ function handleGetPermissions() {
     requirePermission('users.roles');
     
     try {
-        $stmt = $pdo->prepare("SELECT * FROM permissions ORDER BY category, code");
+        // Pagination optionnelle (par défaut retourne toutes les permissions pour compatibilité)
+        $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 200) : null;
+        $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+        
+        // Compter le total pour la pagination
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM permissions");
+        $countStmt->execute();
+        $total = intval($countStmt->fetchColumn());
+        
+        $sql = "SELECT * FROM permissions ORDER BY category, code";
+        if ($limit !== null) {
+            $sql .= " LIMIT :limit OFFSET :offset";
+        }
+        
+        $stmt = $pdo->prepare($sql);
+        if ($limit !== null) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
         $stmt->execute();
-        echo json_encode(['success' => true, 'permissions' => $stmt->fetchAll()]);
+        
+        $permissions = $stmt->fetchAll();
+        echo json_encode([
+            'success' => true, 
+            'permissions' => $permissions,
+            'total' => $total,
+            'limit' => $limit,
+            'offset' => $offset
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Database error']);

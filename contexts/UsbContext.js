@@ -1699,7 +1699,11 @@ export function UsbProvider({ children }) {
               const connected = await connect(availablePort, 115200)
               if (connected && isMounted) {
                 logger.log('✅ [USB] Connexion automatique réussie')
-                appendUsbStreamLog('✅ Connexion automatique au dispositif USB établie', 'dashboard')
+                // Ne pas logger si la connexion vient d'une connexion manuelle (éviter duplication)
+                // Le message sera déjà affiché par UsbConsole si connexion manuelle
+                const portInfo = availablePort?.getInfo?.()
+                const portLabel = portInfo?.path || 'port USB'
+                appendUsbStreamLog(`✅ Connexion automatique au dispositif USB établie (${portLabel})`, 'dashboard')
                 
                 // Démarrer automatiquement le streaming après connexion
                 // ⚠️ IMPORTANT: Attendre que le port soit dans le contexte avant de démarrer le streaming
@@ -1759,7 +1763,11 @@ export function UsbProvider({ children }) {
               const connected = await connect(availablePort, 115200)
               if (connected && isMounted) {
                 logger.log('✅ [USB] Connexion automatique réussie')
-                appendUsbStreamLog('✅ Connexion automatique au dispositif USB établie', 'dashboard')
+                // Ne pas logger si la connexion vient d'une connexion manuelle (éviter duplication)
+                // Le message sera déjà affiché par UsbConsole si connexion manuelle
+                const portInfo = availablePort?.getInfo?.()
+                const portLabel = portInfo?.path || 'port USB'
+                appendUsbStreamLog(`✅ Connexion automatique au dispositif USB établie (${portLabel})`, 'dashboard')
                 
                 consecutiveFailures = 0 // Réinitialiser le compteur en cas de succès
                 

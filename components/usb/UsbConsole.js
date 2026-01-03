@@ -7,7 +7,7 @@
  * Affiche les logs USB en temps réel avec formatage et catégorisation
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useUsbLogs } from './hooks/useUsbLogs'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
@@ -35,9 +35,18 @@ export default function UsbConsole({
 }) {
   const { formatJsonLog, analyzeLogCategory, getLogColorClass } = useUsbLogs()
   const [showClearLogsModal, setShowClearLogsModal] = useState(false)
+  const logsContainerRef = useRef(null)
+  const shouldAutoScrollRef = useRef(true)
 
   // Fusionner les logs locaux et distants
   const allLogs = [...usbStreamLogs, ...remoteLogs]
+  
+  // Scroll automatique vers le bas quand de nouveaux logs arrivent
+  useEffect(() => {
+    if (shouldAutoScrollRef.current && logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight
+    }
+  }, [allLogs.length]) // Se déclenche quand le nombre de logs change
 
   // Formater les logs pour l'affichage
   const formattedLogs = allLogs.map((log) => {
@@ -270,8 +279,15 @@ export default function UsbConsole({
           </div>
         </div>
         <div 
+          ref={logsContainerRef}
           className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-900 p-4 shadow-inner overflow-y-auto" 
           style={{ minHeight: '500px', maxHeight: '600px' }}
+          onScroll={(e) => {
+            // Désactiver le scroll auto si l'utilisateur scroll vers le haut
+            const { scrollTop, scrollHeight, clientHeight } = e.target
+            const isAtBottom = scrollHeight - scrollTop - clientHeight < 50 // 50px de marge
+            shouldAutoScrollRef.current = isAtBottom
+          }}
         >
           {isStreamingRemote && (
             <div className="mb-3 flex items-center gap-2 text-xs">

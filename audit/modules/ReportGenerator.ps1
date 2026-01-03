@@ -151,6 +151,82 @@ function Generate-Report {
     # Sauvegarder
     $report | Out-File -FilePath $reportFile -Encoding UTF8
     
+    Write-Host "`n📄 Rapport généré : $reportFile" -ForegroundColor Green
     return $reportFile
+}
+
+# ===============================================================================
+# EXPORT AICONTEXT POUR L'IA
+# ===============================================================================
+
+function Export-AIContext {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Results,
+        
+        [Parameter(Mandatory=$false)]
+        [string]$OutputDir = "audit/reports"
+    )
+    
+    # Vérifier si AIContext existe
+    if (-not $Results.AIContext -or $Results.AIContext.Count -eq 0) {
+        Write-Info "Aucun contexte IA à exporter"
+        return $null
+    }
+    
+    # Créer le dossier
+    if (-not (Test-Path $OutputDir)) {
+        New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+    }
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+    $jsonFile = Join-Path $OutputDir "ai-context-$timestamp.json"
+    
+    # Préparer l'export structuré
+    $export = @{
+        Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Version = "1.0"
+        TotalQuestions = 0
+        Categories = @{}
+    }
+    
+    # Parcourir toutes les catégories dans AIContext
+    foreach ($category in $Results.AIContext.Keys) {
+        $categoryData = $Results.AIContext[$category]
+        
+        if ($categoryData -and $categoryData.Questions) {
+            $questions = $categoryData.Questions
+            $export.TotalQuestions += $questions.Count
+            
+            $export.Categories[$category] = @{
+                QuestionCount = $questions.Count
+                Questions = $questions
+                Summary = @{
+                    Critical = ($questions | Where-Object { $_.Severity -eq "critical" }).Count
+                    High = ($questions | Where-Object { $_.Severity -eq "high" }).Count
+                    Medium = ($questions | Where-Object { $_.Severity -eq "medium" }).Count
+                    Low = ($questions | Where-Object { $_.Severity -eq "low" }).Count
+                }
+            }
+        }
+    }
+    
+    # Exporter en JSON
+    try {
+        $export | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonFile -Encoding UTF8 -Force
+        Write-Host "`n🤖 Contexte IA exporté : $jsonFile" -ForegroundColor Cyan
+        Write-Host "   Total questions : $($export.TotalQuestions)" -ForegroundColor Gray
+        
+        # Afficher le résumé par catégorie
+        foreach ($category in $export.Categories.Keys) {
+            $catData = $export.Categories[$category]
+            Write-Host "   - $category : $($catData.QuestionCount) question(s)" -ForegroundColor Gray
+        }
+        
+        return $jsonFile
+    } catch {
+        Write-Err "Erreur lors de l'export du contexte IA : $($_.Exception.Message)"
+        return $null
+    }
 }
 

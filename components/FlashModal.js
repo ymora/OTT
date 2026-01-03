@@ -8,6 +8,7 @@ import { useSerialPort } from '@/components/SerialPortManager'
 import { useTimers, useApiCall } from '@/hooks'
 import { ESPLoader } from 'esptool-js'
 import logger from '@/lib/logger'
+import ErrorMessage from '@/components/ErrorMessage'
 
 /**
  * Modal unifié pour le flash USB et OTA
@@ -156,10 +157,17 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
         } else if (serialError) {
           setError(serialError)
         }
+      } else {
+        // Aucun port sélectionné - peut être dû à l'annulation ou à l'absence d'appareil compatible
+        setError('Aucun appareil compatible n\'a été trouvé. Veuillez vérifier que votre dispositif USB est connecté et compatible.')
       }
     } catch (err) {
       logger.error('Erreur connexion port pour flash:', err)
-      setError(`Erreur de connexion: ${err.message}`)
+      if (err.name === 'NotFoundError') {
+        setError('Aucun appareil compatible n\'a été trouvé. Veuillez vérifier que votre dispositif USB est connecté et compatible.')
+      } else {
+        setError(`Erreur de connexion: ${err.message}`)
+      }
     }
   }, [requestPort, connect, startReading, pauseUsbStreaming, serialError, usbStreamStatus])
 
@@ -874,9 +882,13 @@ export default function FlashModal({ isOpen, onClose, device, preselectedFirmwar
 
           {/* Erreurs */}
           {(error || loadError || serialError) && (
-            <div className="alert alert-warning text-sm">
-              {error || loadError || serialError}
-            </div>
+            <ErrorMessage 
+              error={error || loadError || serialError} 
+              onClose={() => {
+                setError(null)
+              }}
+              autoClose={false}
+            />
           )}
         </div>
       </div>

@@ -7,9 +7,10 @@
 
 FROM php:8.2-apache
 
-# Installer extensions PHP requises et arduino-cli
+# Installer extensions PHP requises, client PostgreSQL et arduino-cli
 RUN apt-get update && apt-get install -y \
     libpq-dev \
+    postgresql-client \
     curl \
     unzip \
     && docker-php-ext-install pdo pdo_pgsql \
@@ -52,7 +53,9 @@ RUN ls -la /var/www/html/ && head -5 /var/www/html/index.php
 # Permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html \
-    && chmod 644 /var/www/html/*.php
+    && chmod 644 /var/www/html/*.php \
+    && chmod +x /var/www/html/scripts/start_api_with_migration.sh \
+    && chmod +x /var/www/html/scripts/db/init_database.sh || true
 
 # Créer dossier hardware/firmware pour les firmwares compilés
 RUN mkdir -p /var/www/html/hardware/firmware/v3.0 \

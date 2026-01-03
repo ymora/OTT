@@ -87,7 +87,15 @@ export default function DebugTab() {
   }
   
   // Helper pour normaliser les identifiants (fonction pure, mémorisée pour éviter les recréations)
-  const normalizeId = useCallback((val) => val ? String(val).trim().replace(/\s+/g, '') : '', [])
+  // IMPORTANT: Normalisation robuste pour éviter les doublons (espaces, casse, caractères spéciaux)
+  const normalizeId = useCallback((val) => {
+    if (!val) return ''
+    return String(val)
+      .trim()
+      .replace(/\s+/g, '') // Supprimer tous les espaces
+      .toLowerCase() // Normaliser la casse
+      .replace(/[^a-z0-9]/g, '') // Supprimer les caractères spéciaux (garder seulement alphanumérique)
+  }, [])
   
   // Toggle pour afficher les archives
   const [showArchived, setShowArchived] = useState(false)
@@ -214,10 +222,63 @@ export default function DebugTab() {
     return []
   }, [devicesData])
   
-  // Séparer les dispositifs actifs et archivés
+  // Dédupliquer les dispositifs : garder uniquement le plus récent par ICCID ou Serial
+  // IMPORTANT: Cette logique garantit qu'il n'y a JAMAIS de doublons dans le tableau
+  // Utilise une Map avec clé normalisée (ICCID prioritaire, puis Serial) pour une déduplication robuste
   const allDevices = useMemo(() => {
-    return allDevicesFromApi
-  }, [allDevicesFromApi])
+    if (!allDevicesFromApi || allDevicesFromApi.length === 0) return []
+    
+    const deviceMap = new Map() // Clé: normalized ICCID ou Serial, Valeur: device
+    const seenIds = new Set() // Pour éviter les doublons par ID de base de données
+    
+    allDevicesFromApi.forEach(device => {
+      // Ignorer les devices sans ID (ne devraient pas arriver, mais sécurité)
+      if (!device.id) return
+      
+      const dbId = String(device.id)
+      
+      // Éviter les doublons par ID de base de données (un même ID ne doit apparaître qu'une fois)
+      if (seenIds.has(dbId)) {
+        return // Ignorer ce doublon par ID
+      }
+      seenIds.add(dbId)
+      
+      // Normaliser les identifiants
+      const iccid = normalizeId(device.sim_iccid)
+      const serial = normalizeId(device.device_serial)
+      
+      // Créer une clé unique : ICCID prioritaire, puis Serial
+      // Si ni ICCID ni Serial, utiliser l'ID comme clé de secours
+      const key = iccid || serial || `id-${dbId}`
+      
+      if (!key) return // Ignorer les devices sans identifiant du tout
+      
+      // Vérifier si on a déjà un device avec cette clé (ICCID ou Serial)
+      const existing = deviceMap.get(key)
+      if (existing) {
+        // Conflit détecté : deux devices avec le même ICCID/Serial mais IDs différents
+        // Garder le plus récent (priorité : last_seen > updated_at > created_at)
+        const existingDate = new Date(existing.last_seen || existing.updated_at || existing.created_at || 0).getTime()
+        const currentDate = new Date(device.last_seen || device.updated_at || device.created_at || 0).getTime()
+        
+        if (currentDate > existingDate) {
+          // Le nouveau est plus récent : remplacer l'ancien
+          // Retirer l'ancien de seenIds pour permettre son remplacement
+          if (existing.id) {
+            seenIds.delete(String(existing.id))
+          }
+          deviceMap.set(key, device)
+        }
+        // Sinon, garder l'existant (ne rien faire)
+      } else {
+        // Nouveau device, l'ajouter
+        deviceMap.set(key, device)
+      }
+    })
+    
+    // Convertir la Map en tableau
+    return Array.from(deviceMap.values())
+  }, [allDevicesFromApi, normalizeId])
   
   const devices = useMemo(() => {
     return allDevices.filter(d => !isArchived(d))

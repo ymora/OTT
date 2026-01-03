@@ -4,7 +4,7 @@
 # SystÃƒÂ¨me d'audit gÃƒÂ©nÃƒÂ©rique et portable pour n'importe quel projet
 # Version 3.0 - SystÃƒÂ¨me consolidÃƒÂ© et portable
 #
-# Ce script effectue un audit 360 degrÃƒÂ©s couvrant 23 phases (numÃƒÂ©rotÃƒÂ©es de 1 ÃƒÂ  23)
+# Ce script effectue un audit 360 degres couvrant 24 phases (numerotees de 1 a 24)
 # DÃƒÂ©tecte automatiquement les caractÃƒÂ©ristiques du projet auditÃƒÂ©
 # Usage : .\audit\scripts\Audit-Complet.ps1 [-Verbose]
 # ===============================================================================
@@ -48,6 +48,11 @@ if (Test-Path (Join-Path $modulesDir "Utils.ps1")) {
 # Charger le module Tools-Analysis
 if (Test-Path (Join-Path $modulesDir "Tools-Analysis.ps1")) {
     . (Join-Path $modulesDir "Tools-Analysis.ps1")
+}
+
+# Charger le module ReportGenerator (pour Export-AIContext)
+if (Test-Path (Join-Path $modulesDir "ReportGenerator.ps1")) {
+    . (Join-Path $modulesDir "ReportGenerator.ps1")
 }
 
 
@@ -114,6 +119,7 @@ function Invoke-PhaseModule {
         21 = @("Invoke-Check-TimeTracking")                      # Phase 21: Synchronisation GitHub Pages
         22 = @("Invoke-Check-FirmwareInteractive")              # Phase 22: Firmware
         23 = @("Invoke-Check-TestsComplets")                     # Phase 23: Tests Complets Application
+        24 = @("Invoke-Check-FunctionalTests")                   # Phase 24: Tests Fonctionnels Complets
     }
     
     $moduleFunctions = $phaseModuleMap[$PhaseNumber]
@@ -941,6 +947,17 @@ try {
     }
 }
 
+# Phase 24 : Tests Fonctionnels Complets
+try {
+    Execute-Phase -PhaseNumber 24 -Files $script:allFiles -TimeoutSeconds 60
+} catch {
+    Write-Warn "Phase 24 (Tests Fonctionnels) - erreur mais continue: $($_.Exception.Message)"
+    $completedPhases += 24
+    if (-not $auditResults.Scores.ContainsKey("FunctionalTests")) {
+        $auditResults.Scores["FunctionalTests"] = 5
+    }
+}
+
 # ===============================================================================
 # GÉNÉRATION SUIVI TEMPS (INTÉGRÉ)
 # ===============================================================================
@@ -1117,7 +1134,7 @@ Write-Host ""
 
 # Afficher le statut de chaque phase
 $phasesStatus = @()
-for ($i = 1; $i -le 23; $i++) {
+for ($i = 1; $i -le 24; $i++) {
     $phaseInfo = $script:AuditPhases | Where-Object { $_.Number -eq $i } | Select-Object -First 1
     $phaseName = if ($phaseInfo) { $phaseInfo.Name } else { "Phase $i" }
     
@@ -1134,6 +1151,7 @@ for ($i = 1; $i -le 23; $i++) {
             "Structure API" { "Structure API" }
             "Cohérence Configuration" { "Cohérence Configuration" }
             "Tests Complets Application" { "TestsComplets" }
+            "Tests Fonctionnels Complets" { "FunctionalTests" }
             "Code Mort" { "Code Mort" }
             "Duplication de Code" { "Duplication" }
             "Complexité" { "Complexity" }
@@ -1228,7 +1246,7 @@ $phasesWarn = ($phasesStatus | Where-Object { $_.Status -eq "⚠️" }).Count
 $phasesError = ($phasesStatus | Where-Object { $_.Status -eq "❌" }).Count
 $phasesSkipped = ($phasesStatus | Where-Object { $_.Status -eq "⏭️" }).Count
 
-Write-Host "  Phases complétées : $phasesExecuted/23" -ForegroundColor $(if($phasesExecuted -eq 23){"Green"}elseif($phasesExecuted -ge 15){"Yellow"}else{"Red"})
+Write-Host "  Phases complétées : $phasesExecuted/24" -ForegroundColor $(if($phasesExecuted -eq 24){"Green"}elseif($phasesExecuted -ge 18){"Yellow"}else{"Red"})
 Write-Host "    ✅ OK          : $phasesOK" -ForegroundColor Green
 Write-Host "    ⚠️  Avertissements: $phasesWarn" -ForegroundColor Yellow
 Write-Host "    ❌ Erreurs     : $phasesError" -ForegroundColor Red
@@ -1239,6 +1257,29 @@ Write-Host "  Problèmes        : $($auditResults.Issues.Count)" -ForegroundColo
 Write-Host "  Avertissements   : $($auditResults.Warnings.Count)" -ForegroundColor $(if($auditResults.Warnings.Count -eq 0){"Green"}else{"Yellow"})
 Write-Host "  Recommandations  : $($auditResults.Recommendations.Count)" -ForegroundColor Yellow
 Write-Host "  Durée            : $([Math]::Round($duration, 1))s" -ForegroundColor Gray
+Write-Host ""
+Write-Host ("=" * 80) -ForegroundColor Gray
+Write-Host ""
+
+# ===============================================================================
+# EXPORT DU CONTEXTE IA
+# ===============================================================================
+if ($auditResults.AIContext -and $auditResults.AIContext.Count -gt 0) {
+    Write-Host "`n🤖 Export du contexte IA pour correction automatique..." -ForegroundColor Cyan
+    try {
+        $aiContextFile = Export-AIContext -Results $auditResults -OutputDir "audit/reports"
+        if ($aiContextFile) {
+            Write-Host "✅ Contexte IA exporté avec succès" -ForegroundColor Green
+            Write-Host "   Fichier : $aiContextFile" -ForegroundColor Gray
+            Write-Host "   L'IA peut utiliser ce fichier pour corriger automatiquement les problèmes détectés" -ForegroundColor Gray
+        }
+    } catch {
+        Write-Warn "Erreur lors de l'export du contexte IA : $($_.Exception.Message)"
+    }
+} else {
+    Write-Host "`nℹ️  Aucun contexte IA à exporter (aucune question générée)" -ForegroundColor Gray
+}
+
 Write-Host ""
 Write-Host ("=" * 80) -ForegroundColor Gray
 Write-Host ""

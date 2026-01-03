@@ -12,7 +12,7 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    startCommand: php -S 0.0.0.0:8000 -t .
+    startCommand: bash /var/www/html/scripts/start_api_with_migration.sh
     envVars:
       # Configuration Production Render
       - key: APP_ENV
