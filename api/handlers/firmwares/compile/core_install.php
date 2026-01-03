@@ -583,15 +583,15 @@ function installEsp32Core($arduinoCli, $arduinoDataDir, $envStr, $sendProgress, 
                                     }
                                     
                                     // Timeout sans sortie : 30 minutes sans sortie ET processus semble inactif
-                                    // Vérifier que le processus est toujours en cours d'exécution avant de déclencher le timeout
+                                    // Utiliser le $status déjà récupéré ci-dessus (pas besoin de le récupérer à nouveau)
                                     if ($noOutputElapsed > 1800) { // 30 minutes sans sortie
-                                        // Vérifier que le processus est toujours actif
-                                        $status = proc_get_status($process);
+                                        // Le $status est déjà récupéré ci-dessus, réutiliser cette valeur
                                         if ($status && $status['running'] === true) {
                                             // Le processus est toujours actif, continuer même sans sortie récente
                                             // (peut arriver pendant le téléchargement avec connexion très lente)
-                                            // Ne pas déclencher de timeout, mais envoyer un avertissement
-                                            if ($noOutputElapsed % 300 == 0) { // Toutes les 5 minutes
+                                            // Ne pas déclencher de timeout, mais envoyer un avertissement périodique
+                                            // Envoyer l'avertissement toutes les 5 minutes (300 secondes)
+                                            if ($noOutputElapsed % 300 < 5) { // Dans les 5 premières secondes de chaque période de 5 minutes
                                                 $minutesNoOutput = floor($noOutputElapsed / 60);
                                                 sendSSE('log', 'warning', "⚠️ Pas de sortie depuis {$minutesNoOutput} minutes, mais le processus est toujours actif (téléchargement en cours...)");
                                                 flush();
