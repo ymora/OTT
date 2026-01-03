@@ -556,16 +556,23 @@ function installEsp32Core($arduinoCli, $arduinoDataDir, $envStr, $sendProgress, 
                                         break;
                                     }
                                     
-                                    // Timeout de sécurité : si pas de sortie depuis 20 minutes, considérer comme bloqué
-                                    // (L'installation du core ESP32 peut prendre du temps : téléchargement ~568MB peut prendre 10-15 minutes selon la connexion)
-                                    if ($currentTime - $lastOutputTime > 1200) { // 20 minutes
-                                        sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 20 minutes, le processus semble bloqué');
-                                        sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
+                                    // Timeout de sécurité : vérifier si le processus est toujours actif
+                                    // (L'installation du core ESP32 peut prendre du temps : téléchargement ~568MB peut prendre 15-25 minutes selon la connexion)
+                                    // Utiliser deux critères :
+                                    // 1. Timeout absolu : 40 minutes maximum (temps total depuis le démarrage)
+                                    // 2. Timeout sans sortie : 30 minutes sans sortie (mais seulement si processus semble inactif)
+                                    $totalElapsed = $currentTime - $startTime;
+                                    $noOutputElapsed = $currentTime - $lastOutputTime;
+                                    
+                                    // Timeout absolu : 40 minutes maximum pour l'installation complète
+                                    if ($totalElapsed > 2400) { // 40 minutes
+                                        sendSSE('log', 'warning', '⚠️ Timeout absolu atteint (40 minutes), arrêt de l\'installation');
+                                        sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps (40 minutes maximum)');
                                         // Marquer le firmware comme erreur dans la base de données
                                         try {
                                             $pdo->prepare("
                                                 UPDATE firmware_versions 
-                                                SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32 (20 minutes)'
+                                                SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32 (40 minutes)'
                                                 WHERE id = :id
                                             ")->execute(['id' => $firmware_id]);
                                         } catch(PDOException $dbErr) {
@@ -573,6 +580,38 @@ function installEsp32Core($arduinoCli, $arduinoDataDir, $envStr, $sendProgress, 
                                         }
                                         proc_terminate($process);
                                         break;
+                                    }
+                                    
+                                    // Timeout sans sortie : 30 minutes sans sortie ET processus semble inactif
+                                    // Vérifier que le processus est toujours en cours d'exécution avant de déclencher le timeout
+                                    if ($noOutputElapsed > 1800) { // 30 minutes sans sortie
+                                        // Vérifier que le processus est toujours actif
+                                        $status = proc_get_status($process);
+                                        if ($status && $status['running'] === true) {
+                                            // Le processus est toujours actif, continuer même sans sortie récente
+                                            // (peut arriver pendant le téléchargement avec connexion très lente)
+                                            // Ne pas déclencher de timeout, mais envoyer un avertissement
+                                            if ($noOutputElapsed % 300 == 0) { // Toutes les 5 minutes
+                                                $minutesNoOutput = floor($noOutputElapsed / 60);
+                                                sendSSE('log', 'warning', "⚠️ Pas de sortie depuis {$minutesNoOutput} minutes, mais le processus est toujours actif (téléchargement en cours...)");
+                                                flush();
+                                            }
+                                        } else {
+                                            // Le processus n'est plus actif ET pas de sortie depuis 30 minutes = vraiment bloqué
+                                            sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 30 minutes et processus inactif, installation bloquée');
+                                            sendSSE('error', 'Timeout: L\'installation du core ESP32 semble bloquée (pas de sortie depuis 30 minutes)');
+                                            // Marquer le firmware comme erreur dans la base de données
+                                            try {
+                                                $pdo->prepare("
+                                                    UPDATE firmware_versions 
+                                                    SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32 (pas de sortie depuis 30 minutes)'
+                                                    WHERE id = :id
+                                                ")->execute(['id' => $firmware_id]);
+                                            } catch(PDOException $dbErr) {
+                                                error_log('[installEsp32Core] Erreur DB: ' . $dbErr->getMessage());
+                                            }
+                                            break;
+                                        }
                                     }
                                     
                                     // Détecter les erreurs de timeout HTTP dans la sortie et proposer un retry
