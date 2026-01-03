@@ -56,6 +56,75 @@ function Invoke-Check-Organization {
             Write-OK "Aucun TODO/FIXME en attente"
         }
         
+        # Code désactivé temporairement (commenté ou avec marqueurs)
+        Write-Info "Détection code désactivé temporairement..."
+        $disabledCodePatterns = @(
+            # Patterns pour code commenté avec marqueurs
+            "//\s*(TODO|FIXME|DISABLED|TEMP|TEMPORARY|OLD|DEPRECATED|REMOVE|DELETE).*"
+            "/\*\s*(TODO|FIXME|DISABLED|TEMP|TEMPORARY|OLD|DEPRECATED|REMOVE|DELETE).*\*/"
+            # Blocs de code commentés volumineux (> 5 lignes)
+            # Pattern pour détecter de gros blocs commentés (délicat sans parser AST, on utilise une heuristique)
+        )
+        
+        $disabledCodeFiles = @()
+        foreach ($file in $validFiles) {
+            if ($file -match '\.(js|jsx|ts|tsx|php)$') {
+                $content = Get-Content $file -Raw -ErrorAction SilentlyContinue
+                if ($content) {
+                    # Détecter les marqueurs DISABLED/TEMP dans les commentaires
+                    $hasDisabledMarker = $false
+                    foreach ($pattern in $disabledCodePatterns) {
+                        if ($content -match $pattern) {
+                            $hasDisabledMarker = $true
+                            break
+                        }
+                    }
+                    
+                    # Détecter de gros blocs commentés (heuristique: > 5 lignes consécutives commentées)
+                    # Compter les lignes consécutives commentées
+                    $lines = $content -split "`n"
+                    $consecutiveCommented = 0
+                    $maxConsecutiveCommented = 0
+                    foreach ($line in $lines) {
+                        $trimmedLine = $line.Trim()
+                        if ($trimmedLine -match '^\s*(//|/\*|\*)' -and $trimmedLine -notmatch '^\s*\*/\s*$') {
+                            $consecutiveCommented++
+                            if ($consecutiveCommented -gt $maxConsecutiveCommented) {
+                                $maxConsecutiveCommented = $consecutiveCommented
+                            }
+                        } else {
+                            $consecutiveCommented = 0
+                        }
+                    }
+                    
+                    # Considérer comme code désactivé si marqueur ou > 10 lignes commentées consécutives
+                    if ($hasDisabledMarker -or $maxConsecutiveCommented -gt 10) {
+                        $disabledCodeFiles += @{
+                            File = $file
+                            Reason = if ($hasDisabledMarker) { "Marqueur DISABLED/TEMP détecté" } else { "$maxConsecutiveCommented lignes commentées consécutives" }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if ($disabledCodeFiles.Count -gt 0) {
+            Write-Warn "$($disabledCodeFiles.Count) fichier(s) avec code désactivé temporairement"
+            $Results.Recommendations += "Vérifier code désactivé temporairement ($($disabledCodeFiles.Count) fichiers)"
+            $fileList = ($disabledCodeFiles | ForEach-Object { "$($_.File) ($($_.Reason))" }) -join ", "
+            $aiContext += @{
+                Category = "Organization"
+                Type = "Disabled Code Found"
+                Count = $disabledCodeFiles.Count
+                Files = $fileList
+                Severity = "medium"
+                NeedsAICheck = $true
+                Question = "$($disabledCodeFiles.Count) fichier(s) contiennent du code désactivé temporairement (commenté avec marqueurs DISABLED/TEMP ou gros blocs commentés). Ce code doit-il être supprimé, réactivé, ou laissé tel quel ? Fichiers: $fileList"
+            }
+        } else {
+            Write-OK "Aucun code désactivé temporairement détecté"
+        }
+        
         # console.log
         $consoleLogs = Select-String -Path $validFiles -Pattern "console\.(log|warn|error)" -ErrorAction SilentlyContinue | 
             Where-Object { $_.Path -notmatch "logger\.js|inject\.js|test|spec" }
