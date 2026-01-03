@@ -9,6 +9,67 @@
 // Charger les modules refactorisés
 require_once __DIR__ . '/compile/sse.php';
 require_once __DIR__ . '/compile/cleanup.php';
+require_once __DIR__ . '/compile/core_install.php';
+require_once __DIR__ . '/compile/firmware_compile.php';
+
+/**
+ * Vérifie et réinitialise les compilations bloquées (status='compiling' depuis trop longtemps)
+ * @param int $firmware_id ID du firmware à vérifier (null pour tous)
+ * @param int $maxAgeMinutes Âge maximum en minutes avant de considérer une compilation comme bloquée (défaut: 30)
+ * @return int Nombre de compilations réinitialisées
+ */
+/**
+ * Vérifie et réinitialise les compilations bloquées (status='compiling' depuis trop longtemps)
+ * @param int|null $firmware_id ID du firmware à vérifier (null pour tous)
+ * @param int $maxAgeMinutes Âge maximum en minutes avant de considérer une compilation comme bloquée (défaut: 30)
+ * @return int Nombre de compilations réinitialisées
+ */
+function recoverStuckCompilations($firmware_id = null, $maxAgeMinutes = 30) {
+    global $pdo;
+    
+    try {
+        $maxAgeSeconds = $maxAgeMinutes * 60;
+        $cutoffTime = date('Y-m-d H:i:s', time() - $maxAgeSeconds);
+        
+        if ($firmware_id) {
+            // Vérifier un firmware spécifique
+            // Note: La table n'a pas de colonne error_message, donc on met juste le statut à 'error'
+            $stmt = $pdo->prepare("
+                UPDATE firmware_versions 
+                SET status = 'error'
+                WHERE id = :id 
+                  AND status = 'compiling' 
+                  AND updated_at < :cutoff_time
+            ");
+            $stmt->execute([
+                'id' => $firmware_id,
+                'cutoff_time' => $cutoffTime
+            ]);
+            $recovered = $stmt->rowCount();
+        } else {
+            // Vérifier tous les firmwares bloqués
+            $stmt = $pdo->prepare("
+                UPDATE firmware_versions 
+                SET status = 'error'
+                WHERE status = 'compiling' 
+                  AND updated_at < :cutoff_time
+            ");
+            $stmt->execute([
+                'cutoff_time' => $cutoffTime
+            ]);
+            $recovered = $stmt->rowCount();
+        }
+        
+        if ($recovered > 0) {
+            error_log("[recoverStuckCompilations] Réinitialisé $recovered compilation(s) bloquée(s)");
+        }
+        
+        return $recovered;
+    } catch(PDOException $e) {
+        error_log('[recoverStuckCompilations] Erreur DB: ' . $e->getMessage());
+        return 0;
+    }
+}
 
 function handleCompileFirmware($firmware_id) {
     global $pdo;
@@ -20,6 +81,45 @@ function handleCompileFirmware($firmware_id) {
         error_log('[handleCompileFirmware] ❌ firmware_id invalide: ' . var_export($firmware_id, true));
         return;
     }
+    
+    // Variables pour le cleanup en cas de crash
+    $build_dir = null;
+    $build_dir_created = false;
+    $is_temp_ino = false;
+    $ino_path = null;
+    $compilation_started = false;
+    
+    // Fonction de cleanup en cas de crash/erreur fatale
+    $cleanupOnShutdown = function() use (&$firmware_id, &$build_dir, &$build_dir_created, &$is_temp_ino, &$ino_path, &$compilation_started) {
+        global $pdo;
+        
+        // Nettoyer le répertoire de build si créé
+        if ($build_dir_created && $build_dir && is_dir($build_dir)) {
+            cleanupBuildDir($build_dir);
+        }
+        
+        // Nettoyer le fichier .ino temporaire si créé
+        if ($is_temp_ino && $ino_path && file_exists($ino_path)) {
+            @unlink($ino_path);
+        }
+        
+        // Réinitialiser le statut si la compilation avait commencé
+        if ($compilation_started && $firmware_id) {
+            try {
+                $pdo->prepare("
+                    UPDATE firmware_versions 
+                    SET status = 'error', 
+                        error_message = 'Compilation interrompue - erreur fatale ou timeout'
+                    WHERE id = :id AND status = 'compiling'
+                ")->execute(['id' => $firmware_id]);
+                error_log("[handleCompileFirmware] Cleanup: Statut réinitialisé pour firmware ID $firmware_id (crash/timeout)");
+            } catch(PDOException $e) {
+                error_log('[handleCompileFirmware] Cleanup: Erreur DB: ' . $e->getMessage());
+            }
+        }
+    };
+    
+    register_shutdown_function($cleanupOnShutdown);
     
     // Variable pour suivre la progression maximale (éviter les retours en arrière)
     static $maxProgress = 0;
@@ -39,7 +139,12 @@ function handleCompileFirmware($firmware_id) {
     // CRITIQUE: Ignorer l'arrêt du script si la connexion client se ferme
     // Cela garantit que la compilation continue même si l'utilisateur change d'onglet
     ignore_user_abort(true);
-    set_time_limit(0); // Pas de limite de temps pour la compilation
+    
+    // Timeout de sécurité : 30 minutes maximum pour éviter les compilations infinies
+    // (set_time_limit(0) désactive le timeout, mais on veut un timeout de sécurité)
+    $maxCompilationTime = 30 * 60; // 30 minutes en secondes
+    $compilationStartTime = time();
+    set_time_limit($maxCompilationTime);
     
     // Désactiver la mise en buffer pour SSE
     while (ob_get_level() > 0) {
@@ -148,11 +253,26 @@ function handleCompileFirmware($firmware_id) {
                 return;
             }
             
+            // Vérifier et récupérer les compilations bloquées AVANT de démarrer une nouvelle compilation
+            // Si ce firmware est bloqué depuis plus de 30 minutes, le réinitialiser
+            $recovered = recoverStuckCompilations($firmware_id, 30);
+            if ($recovered > 0) {
+                sendSSE('log', 'warning', '⚠️ Compilation précédente bloquée détectée et réinitialisée');
+                flush();
+                error_log("[handleCompileFirmware] Compilation précédente réinitialisée pour firmware ID $firmware_id");
+                
+                // Recharger le firmware pour avoir le nouveau statut
+                $stmt = $pdo->prepare("SELECT *, ino_content, bin_content FROM firmware_versions WHERE id = :id");
+                $stmt->execute(['id' => $firmware_id]);
+                $firmware = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
+            
             // Marquer immédiatement comme "compiling" dans la base de données
             // Cela permet de savoir que la compilation est en cours même si la connexion SSE se ferme
             // Permettre de compiler même si déjà compilé (pour recompiler)
             try {
                 $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = :id")->execute(['id' => $firmware_id]);
+                $compilation_started = true; // Marquer que la compilation a commencé (pour cleanup)
                 error_log('[handleCompileFirmware] ✅ Statut mis à jour à "compiling"');
             } catch(PDOException $dbErr) {
                 error_log('[handleCompileFirmware] ⚠️ Erreur lors de la mise à jour du statut: ' . $dbErr->getMessage());
@@ -335,6 +455,9 @@ function handleCompileFirmware($firmware_id) {
                 sendSSE('log', 'info', '   Lisible: OUI');
                 flush();
                 
+                // Déterminer si le fichier .ino est temporaire (extrait de la DB)
+                $is_temp_ino = $tempDir && $realPath && strpos($realPath, $tempDir) === 0;
+                
                 // Continuer avec la compilation
                 sendSSE('log', 'info', '✅ Fichier .ino validé, démarrage de la compilation...');
                 flush();
@@ -447,6 +570,15 @@ function handleCompileFirmware($firmware_id) {
                 if (!empty($pathCli) && file_exists($pathCli)) {
                     $arduinoCli = $pathCli;
                     sendSSE('log', 'info', '✅ arduino-cli trouvé dans le PATH système');
+                }
+            }
+            
+            // 4. Pour Docker : vérifier /usr/local/bin/arduino-cli (installé par le Dockerfile)
+            if (empty($arduinoCli) && !$isWindows) {
+                $dockerArduinoCli = '/usr/local/bin/arduino-cli';
+                if (file_exists($dockerArduinoCli) && is_readable($dockerArduinoCli)) {
+                    $arduinoCli = $dockerArduinoCli;
+                    sendSSE('log', 'info', '✅ arduino-cli trouvé dans /usr/local/bin/ (Docker)');
                 }
             }
             
@@ -672,1245 +804,22 @@ function handleCompileFirmware($firmware_id) {
                 foreach ($env as $key => $value) {
                     $envStr .= $key . '=' . escapeshellarg($value) . ' ';
                 }
-                
-                sendSSE('log', 'info', 'Vérification du core ESP32...');
-                $sendProgress(40);
-                flush();
-                echo ": keep-alive\n\n";
-                flush();
-                
-                // Définir descriptorspec pour proc_open (nécessaire pour core list)
-                $descriptorspec = [
-                    0 => ["pipe", "r"],  // stdin
-                    1 => ["pipe", "w"],  // stdout
-                    2 => ["pipe", "w"]   // stderr
-                ];
-                
-                // Vérifier si le core ESP32 est déjà installé via arduino-cli core list
-                // C'est la méthode la plus fiable car elle vérifie la base de données d'arduino-cli
-                // La commande 'core list' retourne les cores installés, pas seulement téléchargés
-                // Utiliser proc_open avec stream_select pour éviter les blocages
-                $coreListProcess = false;
-                $coreListPipes = null;
-                $coreListOutput = [];
-                $coreListReturn = 0;
-                
-                try {
-                    $coreListProcess = @proc_open($envStr . $arduinoCli . ' core list 2>&1', $descriptorspec, $coreListPipes);
-                    
-                    if ($coreListProcess === false) {
-                        throw new Exception('proc_open a retourné false - fonction désactivée ou erreur système');
-                    }
-                    
-                    if (!isset($coreListPipes) || !is_array($coreListPipes) || count($coreListPipes) < 3) {
-                        throw new Exception('Pipes non créés par proc_open (count: ' . (isset($coreListPipes) ? count($coreListPipes) : 'null') . ')');
-                    }
-                    
-                    $coreListStdout = $coreListPipes[1];
-                    $coreListStderr = $coreListPipes[2];
-                    
-                    if (!is_resource($coreListStdout) || !is_resource($coreListStderr)) {
-                        throw new Exception('Pipes invalides après proc_open (stdout: ' . (is_resource($coreListStdout) ? 'OK' : 'INVALIDE') . ', stderr: ' . (is_resource($coreListStderr) ? 'OK' : 'INVALIDE') . ')');
-                    }
-                    
-                    stream_set_blocking($coreListStdout, false);
-                    stream_set_blocking($coreListStderr, false);
-                    
-                    $coreListStartTime = time();
-                    $coreListLastKeepAlive = $coreListStartTime;
-                    
-                    while (true) {
-                        $currentTime = time();
-                        $read = [$coreListStdout, $coreListStderr];
-                        $write = null;
-                        $except = null;
-                        $num_changed = stream_select($read, $write, $except, 1);
-                        
-                        if ($num_changed === false) {
-                            $lastError = error_get_last();
-                            $errorMsg = 'stream_select a échoué: ' . ($lastError ? $lastError['message'] : 'erreur inconnue');
-                            error_log('[handleCompileFirmware] ' . $errorMsg);
-                            sendSSE('log', 'error', '❌ Erreur stream_select pendant core list');
-                            sendSSE('log', 'error', '   Détails: ' . $errorMsg);
-                            $coreListReturn = 1;
-                            break;
-                        }
-                        
-                        if ($num_changed > 0) {
-                            foreach ($read as $stream) {
-                                $output = stream_get_contents($stream, 8192);
-                                if (!empty($output)) {
-                                    $coreListOutput[] = $output;
-                                }
-                            }
-                        }
-                        
-                        // Envoyer un keep-alive toutes les 1 seconde pendant la vérification (plus fréquent pour éviter les timeouts)
-                        if ($currentTime - $coreListLastKeepAlive >= 1) {
-                            echo ": keep-alive\n\n";
-                            flush();
-                            $coreListLastKeepAlive = $currentTime;
-                        }
-                        
-                        $status = proc_get_status($coreListProcess);
-                        if ($status === false) {
-                            $lastError = error_get_last();
-                            $errorMsg = 'proc_get_status a retourné false: ' . ($lastError ? $lastError['message'] : 'processus invalide');
-                            error_log('[handleCompileFirmware] ' . $errorMsg);
-                            sendSSE('log', 'error', '❌ Erreur proc_get_status pendant core list');
-                            sendSSE('log', 'error', '   Détails: ' . $errorMsg);
-                            $coreListReturn = 1;
-                            break;
-                        }
-                        
-                        if ($status['running'] === false) {
-                            $coreListReturn = $status['exitcode'] ?? 0;
-                            break;
-                        }
-                    }
-                    
-                    // Fermer les pipes seulement s'ils existent et sont valides
-                    if (isset($coreListPipes) && is_array($coreListPipes)) {
-                        if (isset($coreListPipes[0]) && is_resource($coreListPipes[0])) {
-                            fclose($coreListPipes[0]);
-                        }
-                        if (isset($coreListPipes[1]) && is_resource($coreListPipes[1])) {
-                            fclose($coreListPipes[1]);
-                        }
-                        if (isset($coreListPipes[2]) && is_resource($coreListPipes[2])) {
-                            fclose($coreListPipes[2]);
-                        }
-                    }
-                    if (is_resource($coreListProcess)) {
-                        proc_close($coreListProcess);
-                    }
-                } catch(Exception $procErr) {
-                    // Erreur lors de proc_open ou de la gestion des pipes
-                    // C'est NORMAL sur certains serveurs où proc_open est désactivé pour des raisons de sécurité
-                    // Le fallback sur popen() fonctionne parfaitement
-                    $errorDetails = [
-                        'message' => $procErr->getMessage(),
-                        'type' => get_class($procErr),
-                        'arduino_cli' => $arduinoCli,
-                        'env_str' => substr($envStr, 0, 100)
-                    ];
-                    error_log('[handleCompileFirmware] proc_open indisponible pour core list (fallback normal): ' . json_encode($errorDetails, JSON_UNESCAPED_UNICODE));
-                    // Ne pas afficher d'erreur à l'utilisateur, c'est normal et le fallback fonctionne
-                    $coreListProcess = false; // Forcer le fallback
                 }
                 
-                // Fallback sur popen() avec stream_select() si proc_open échoue (non-bloquant)
-                // C'est NORMAL sur certains serveurs (proc_open peut être désactivé pour sécurité)
-                // popen() fonctionne parfaitement comme alternative
-                if (!is_resource($coreListProcess) || empty($coreListOutput)) {
-                    // Ne plus afficher d'avertissement, c'est normal et le fallback fonctionne correctement
-                    // sendSSE('log', 'warning', '⚠️ proc_open indisponible ou échoué pour core list, fallback sur popen()');
-                    // flush();
-                    
-                    // Utiliser popen() au lieu de exec() pour permettre des keep-alive pendant l'exécution
-                    $popenHandle = @popen($envStr . $arduinoCli . ' core list 2>&1', 'r');
-                    
-                    if ($popenHandle === false || !is_resource($popenHandle)) {
-                        error_log('[handleCompileFirmware] popen() a échoué pour core list');
-                        sendSSE('log', 'error', '❌ popen() a échoué pour core list');
-                        $coreListReturn = 1;
-                    } else {
-                        // Lire la sortie de manière non-bloquante avec keep-alive
-                        stream_set_blocking($popenHandle, false);
-                        $popenStartTime = time();
-                        $popenLastKeepAlive = $popenStartTime;
-                        $popenOutput = '';
-                        $popenLastReadTime = $popenStartTime;
-                        
-                        while (true) {
-                            $currentTime = time();
-                            
-                            // Lire les données disponibles
-                            $read = [$popenHandle];
-                            $write = null;
-                            $except = null;
-                            $num_changed = stream_select($read, $write, $except, 1);
-                            
-                            if ($num_changed > 0 && in_array($popenHandle, $read)) {
-                                $chunk = fread($popenHandle, 8192);
-                                if ($chunk !== false && $chunk !== '') {
-                                    $popenOutput .= $chunk;
-                                    $coreListOutput[] = $chunk;
-                                    
-                                    // Envoyer les logs de popen via SSE pour diagnostic
-                                    $lines = explode("\n", trim($chunk));
-                                    foreach ($lines as $line) {
-                                        if (!empty(trim($line))) {
-                                            sendSSE('log', 'info', 'Core list (popen): ' . trim($line));
-                                            flush();
-                                            error_log('[handleCompileFirmware] Core list popen: ' . trim($line));
-                                        }
-                                    }
-                                    
-                                    $popenLastReadTime = $currentTime;
-                                }
-                            }
-                            
-                            // Vérifier si le processus est terminé (feof() après un délai)
-                            if (feof($popenHandle)) {
-                                break;
-                            }
-                            
-                            // Envoyer un keep-alive toutes les 1 seconde (plus fréquent pour éviter les timeouts)
-                            if ($currentTime - $popenLastKeepAlive >= 1) {
-                                echo ": keep-alive\n\n";
-                                flush();
-                                $popenLastKeepAlive = $currentTime;
-                            }
-                            
-                            // Timeout de sécurité : 30 secondes maximum
-                            if ($currentTime - $popenStartTime > 30) {
-                                error_log('[handleCompileFirmware] Timeout popen() core list (>30s)');
-                                sendSSE('log', 'warning', '⚠️ Timeout lors de la vérification du core (30s)');
-                                break;
-                            }
-                            
-                            // Si pas de données depuis 5 secondes, considérer comme terminé
-                            if ($currentTime - $popenLastReadTime > 5 && empty($popenOutput)) {
-                                break;
-                            }
-                            
-                            usleep(100000); // 100ms
-                        }
-                        
-                        $coreListReturn = pclose($popenHandle);
-                        
-                        if (empty($coreListOutput) && !empty($popenOutput)) {
-                            $coreListOutput = [trim($popenOutput)];
-                        }
-                        
-                        if (empty($coreListOutput)) {
-                            sendSSE('log', 'warning', '⚠️ popen() core list n\'a retourné aucune sortie');
-                        } else {
-                            sendSSE('log', 'info', '✅ Sortie reçue de popen() core list (' . count($coreListOutput) . ' lignes)');
-                        }
-                        
-                        // Envoyer un keep-alive final
-                        echo ": keep-alive\n\n";
-                        flush();
-                    }
-                }
-                
-                // Analyser la sortie pour déterminer si c'est une vraie erreur ou juste "pas de core installé"
-                $coreListStr = implode("\n", $coreListOutput);
-                $isNoPlatformsInstalled = stripos($coreListStr, 'No platforms installed') !== false;
-                
-                // Le code 141 (SIGPIPE) n'est pas une erreur fatale - c'est souvent juste que le processus s'est terminé normalement
-                // Le code 0 est OK, et 141 peut aussi être OK si la sortie indique "No platforms installed"
-                if ($coreListReturn !== 0 && $coreListReturn !== 141) {
-                    // Vraie erreur (code différent de 0 et 141)
-                    $coreListError = substr($coreListStr, 0, 4000);
-                    sendSSE('log', 'error', '❌ arduino-cli core list a échoué (code ' . $coreListReturn . ')');
-                    sendSSE('log', 'error', '   Sortie: ' . $coreListError);
-                    sendSSE('error', 'Échec de la vérification du core ESP32 (arduino-cli core list). Consultez les logs.');
-                    flush();
-                    try {
-                        $pdo->prepare("
-                            UPDATE firmware_versions 
-                            SET status = 'error', error_message = 'core list failed (code ' . $coreListReturn . ')'
-                            WHERE id = :id
-                        ")->execute(['id' => $firmware_id]);
-                    } catch(PDOException $dbErr) {
-                        error_log('[handleCompileFirmware] Erreur DB update status core list: ' . $dbErr->getMessage());
-                    }
+                // Installation du core ESP32 (refactorisé)
+                if (!installEsp32Core($arduinoCli, $arduinoDataDir, $envStr, $sendProgress, $firmware_id)) {
+                    // Erreur lors de l'installation, la fonction a déjà géré l'erreur et le cleanup
                     return;
-                } elseif ($coreListReturn === 141 && !$isNoPlatformsInstalled) {
-                    // Code 141 mais sortie inattendue - peut être une erreur
-                    sendSSE('log', 'warning', '⚠️ arduino-cli core list a retourné le code 141 (SIGPIPE)');
-                    sendSSE('log', 'info', '   Sortie: ' . substr($coreListStr, 0, 200));
-                    // Continuer quand même - ce n'est pas forcément une erreur fatale
                 }
                 
-                // Construire la chaîne de sortie si pas déjà fait
-                if (!isset($coreListStr)) {
-                    $coreListStr = implode("\n", $coreListOutput);
-                }
-                
-                // Log de diagnostic pour comprendre pourquoi le core n'est pas détecté
-                // Toujours afficher le diagnostic pour aider au débogage
-                sendSSE('log', 'info', '🔍 Diagnostic core ESP32:');
-                sendSSE('log', 'info', '   ARDUINO_DIRECTORIES_USER: ' . $arduinoDataDir);
-                sendSSE('log', 'info', '   Dossier existe: ' . (is_dir($arduinoDataDir) ? 'OUI' : 'NON'));
-                sendSSE('log', 'info', '   Code retour core list: ' . $coreListReturn);
-                sendSSE('log', 'info', '   Sortie core list (premiers 500 chars): ' . substr($coreListStr, 0, 500));
-                flush();
-                
-                // ⚠️ SIMPLIFICATION: TOUJOURS nettoyer les outils ESP32 avant vérification
-                // Cela évite les problèmes d'architecture incompatible
-                $homeArduinoDir = (isset($env['HOME']) ? $env['HOME'] : sys_get_temp_dir() . '/arduino-cli-home') . '/.arduino15/packages/esp32';
-                $userArduinoDir = $arduinoDataDir . '/packages/esp32';
-                
-                sendSSE('log', 'info', '🧹 Nettoyage préventif des outils ESP32...');
-                flush();
-                
-                // Nettoyer les deux emplacements systématiquement
-                $esp32DirsToClean = [];
-                if (is_dir($homeArduinoDir)) {
-                    $esp32DirsToClean[] = $homeArduinoDir;
-                }
-                if (is_dir($userArduinoDir)) {
-                    $esp32DirsToClean[] = $userArduinoDir;
-                }
-                
-                foreach ($esp32DirsToClean as $dirToClean) {
-                    sendSSE('log', 'info', '   Suppression: ' . $dirToClean);
-                    flush();
-                    exec('rm -rf ' . escapeshellarg($dirToClean) . ' 2>&1', $cleanOutput, $cleanReturn);
-                    if ($cleanReturn === 0) {
-                        sendSSE('log', 'info', '   ✅ Nettoyé');
-                    } else {
-                        sendSSE('log', 'warning', '   ⚠️ Erreur lors du nettoyage (peut être normal)');
-                    }
-                    flush();
-                }
-                
-                sendSSE('log', 'info', '✅ Nettoyage terminé');
-                flush();
-                
-                // Maintenant vérifier si le core ESP32 est installé (après nettoyage)
-                $esp32Installed = strpos($coreListStr, 'esp32:esp32') !== false || 
-                                 strpos($coreListStr, 'esp-rv32') !== false ||
-                                 strpos($coreListStr, 'esp32') !== false;
-                
-                // Après nettoyage, forcer la réinstallation pour être sûr
-                $esp32Installed = false;
-                
-                if ($esp32Installed) {
-                    sendSSE('log', 'info', '✅ Core ESP32 déjà installé - prêt pour compilation');
-                    sendSSE('log', 'info', '   Source: hardware/arduino-data/ (cache local ou disque persistant)');
-                    $sendProgress(50);
-                } else {
-                    // Vérifier si le core existe dans hardware/arduino-data/ mais n'est pas encore indexé
-                    $corePath = $arduinoDataDir . '/packages/esp32/hardware/esp32';
-                    if (is_dir($corePath)) {
-                        sendSSE('log', 'info', '✅ Core ESP32 trouvé dans hardware/arduino-data/ (cache local)');
-                        sendSSE('log', 'info', '   Le core est déjà dans le projet, pas besoin de téléchargement');
-                        sendSSE('log', 'info', '   ⚠️ Note: Le core existe mais n\'est pas indexé par arduino-cli');
-                        sendSSE('log', 'info', '   Le core sera utilisé directement sans re-téléchargement');
-                        $sendProgress(50);
-                    } else {
-                        sendSSE('log', 'info', 'Core ESP32 non installé, installation nécessaire...');
-                        sendSSE('log', 'info', '⏳ Cette étape peut prendre plusieurs minutes (téléchargement ~568MB, une seule fois)...');
-                        sendSSE('log', 'info', '   ✅ Le core sera stocké dans hardware/arduino-data/');
-                        sendSSE('log', 'info', '   💡 Pour éviter de retélécharger à chaque déploiement, configurez un Persistent Disk sur Render.com');
-                        sendSSE('log', 'info', '   📖 Voir: docs/RENDER_PERSISTENT_DISK.md');
-                        $sendProgress(42);
-                        
-                        // Vérifier si l'index est récent (moins de 24h) avant de le mettre à jour
-                        $indexFile = $arduinoDataDir . '/package_index.json';
-                        $shouldUpdateIndex = true;
-                        if (file_exists($indexFile)) {
-                            $indexAge = time() - filemtime($indexFile);
-                            // Mettre à jour l'index seulement s'il a plus de 24h
-                            if ($indexAge < 86400) {
-                                $shouldUpdateIndex = false;
-                                sendSSE('log', 'info', '✅ Index des cores récent (moins de 24h), pas besoin de mise à jour');
-                            }
-                        }
-                        
-                        // Mettre à jour l'index seulement si nécessaire
-                        if ($shouldUpdateIndex) {
-                            sendSSE('log', 'info', 'Mise à jour de l\'index des cores Arduino...');
-                            exec($envStr . $arduinoCli . ' core update-index 2>&1', $updateIndexOutput, $updateIndexReturn);
-                            if ($updateIndexReturn !== 0) {
-                                sendSSE('log', 'warning', 'Avertissement lors de la mise à jour de l\'index');
-                            }
-                        }
-                        
-                        sendSSE('log', 'info', 'Téléchargement et installation du core ESP32...');
-                        sendSSE('log', 'info', '📥 Phase 1: Téléchargement (~568MB)');
-                        
-                        // ⚠️ IMPORTANT: Détecter l'architecture du serveur pour installer les bons outils
-                        $serverArch = php_uname('m');
-                        $isLinux = strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN';
-                        sendSSE('log', 'info', '🔍 Architecture serveur détectée: ' . $serverArch . ' (' . PHP_OS . ')');
-                        flush();
-                        
-                        // Vérifier si on est sur ARM64 (Apple Silicon, AWS Graviton, etc.)
-                        $isARM64 = stripos($serverArch, 'arm64') !== false || stripos($serverArch, 'aarch64') !== false;
-                        if ($isARM64) {
-                            sendSSE('log', 'warning', '⚠️ Architecture ARM détectée - Les outils ESP32 peuvent ne pas être disponibles pour cette architecture');
-                            sendSSE('log', 'info', '   Si la compilation échoue, vérifiez que arduino-cli supporte ARM64 pour ESP32');
-                            flush();
-                        }
-                        
-                        // Le nettoyage a déjà été fait plus haut, continuer avec l'installation
-                        $sendProgress(45);
-                        
-                        // Exécuter avec output en temps réel pour voir la progression
-                        $descriptorspec = [
-                            0 => ["pipe", "r"],  // stdin
-                            1 => ["pipe", "w"],  // stdout
-                            2 => ["pipe", "w"]   // stderr
-                        ];
-                        
-                        // Utiliser --verbose pour obtenir tous les logs d'installation
-                        // ⚠️ IMPORTANT: Ne pas spécifier de version pour laisser arduino-cli choisir la version compatible
-                        $process = proc_open($envStr . $arduinoCli . ' core install esp32:esp32 --verbose 2>&1', $descriptorspec, $pipes);
-                        
-                        if (is_resource($process)) {
-                            // Lire la sortie ligne par ligne pour afficher la progression
-                            $installOutput = [];
-                            $stdout = $pipes[1];
-                            $stderr = $pipes[2];
-                            
-                            // Configurer les streams en non-bloquant
-                            stream_set_blocking($stdout, false);
-                            stream_set_blocking($stderr, false);
-                            
-                            $startTime = time();
-                            $lastOutputTime = $startTime;
-                            $lastHeartbeatTime = $startTime;
-                            $lastKeepAliveTime = $startTime;
-                            $lastLine = ''; // Dernière ligne de sortie pour détecter la phase (téléchargement vs installation)
-                            $currentlyDownloading = false; // Indicateur si on est actuellement en phase de téléchargement
-                            $currentlyDownloading = false; // Indicateur si on est actuellement en phase de téléchargement
-                            
-                            while (true) {
-                                $currentTime = time();
-                                
-                                // Utiliser stream_select pour vérifier si des données sont disponibles (non-bloquant)
-                                $read = [$stdout, $stderr];
-                                $write = null;
-                                $except = null;
-                                $timeout = 1; // Attendre 1 seconde maximum
-                                
-                                $num_changed_streams = stream_select($read, $write, $except, $timeout);
-                                
-                                if ($num_changed_streams === false) {
-                                    // Erreur stream_select
-                                    error_log('[handleCompileFirmware] Erreur stream_select lors de l\'installation du core');
-                                    break;
-                                } elseif ($num_changed_streams > 0) {
-                                    // Des données sont disponibles, les lire
-                                    foreach ($read as $stream) {
-                                        $isStderr = ($stream === $stderr);
-                                        
-                                        // Utiliser stream_get_contents pour lire TOUT ce qui est disponible
-                                        // stream_get_contents lit jusqu'à la fin du stream ou jusqu'à la limite
-                                        // Sur un stream non-bloquant, cela lit tout ce qui est disponible maintenant
-                                        $chunk = stream_get_contents($stream, 65536); // 64KB max par lecture
-                                        
-                                        if ($chunk !== false && $chunk !== '') {
-                                            // Logger immédiatement pour diagnostic
-                                            error_log('[handleCompileFirmware] Core install output reçu (' . strlen($chunk) . ' bytes) depuis ' . ($isStderr ? 'stderr' : 'stdout'));
-                                            
-                                            // Traiter ligne par ligne - IMPORTANT: ne pas trim avant de split pour garder les lignes vides intermédiaires
-                                            $lines = explode("\n", $chunk);
-                                            
-                                            // Traiter chaque ligne
-                                            foreach ($lines as $lineIndex => $line) {
-                                                // Ne pas trim avant de vérifier, car certaines lignes peuvent être importantes même si vides
-                                                $lineTrimmed = rtrim($line, "\r\n");
-                                                
-                                                // Envoyer toutes les lignes, même celles qui semblent vides (peuvent contenir des retours chariot)
-                                                // Mais ignorer les lignes vraiment vides après trim
-                                                if (!empty($lineTrimmed) || ($lineIndex === 0 && !empty($chunk))) {
-                                                    if (!empty($lineTrimmed)) {
-                                                        $installOutput[] = $lineTrimmed;
-                                                        
-                                                        // Déterminer le niveau de log selon le contenu
-                                                        $logLevel = $isStderr ? 'error' : 'info';
-                                                        
-                                                        // ⚠️ DÉTECTION: Erreur I/O lors de l'installation
-                                                        $isIOError = stripos($lineTrimmed, 'input/output error') !== false ||
-                                                                     stripos($lineTrimmed, 'I/O error') !== false ||
-                                                                     stripos($lineTrimmed, 'Cannot install tool') !== false ||
-                                                                     stripos($lineTrimmed, 'Error during install') !== false;
-                                                        
-                                                        if ($isIOError) {
-                                                            $logLevel = 'error';
-                                                            sendSSE('log', 'error', '❌ ERREUR I/O DÉTECTÉE');
-                                                            sendSSE('log', 'error', '   Problème d\'écriture sur le disque lors de l\'installation');
-                                                            sendSSE('log', 'info', '   Causes possibles:');
-                                                            sendSSE('log', 'info', '   - Espace disque insuffisant');
-                                                            sendSSE('log', 'info', '   - Problème avec le système de fichiers /tmp');
-                                                            sendSSE('log', 'info', '   - Permissions insuffisantes');
-                                                            sendSSE('log', 'warning', '💡 SOLUTION: Vérifier l\'espace disque et les permissions');
-                                                            flush();
-                                                        }
-                                                        
-                                                        // Détecter les lignes de téléchargement (contiennent "MiB" et "%")
-                                                        $isDownloadLine = preg_match('/\d+\.?\d*\s*(B|MiB|KiB)\s*\/\s*\d+\.?\d*\s*(B|MiB|KiB)\s*\d+\.?\d*%/', $lineTrimmed) ||
-                                                                     preg_match('/Downloading/', $lineTrimmed) ||
-                                                                     preg_match('/downloaded$/', $lineTrimmed);
-                                                        
-                                                        // Extraire le pourcentage de téléchargement pour mettre à jour la progression
-                                                        $downloadPercent = null;
-                                                        if (preg_match('/(\d+\.?\d*)%\s*(\d+m\d+s)?$/', $lineTrimmed, $matches)) {
-                                                            // Format: "432.93 MiB / 568.67 MiB   76.13% 00m10s"
-                                                            $downloadPercent = floatval($matches[1]);
-                                                        } elseif (preg_match('/(\d+\.?\d*)%\s*(\d+m\d+s)?/', $lineTrimmed, $matches)) {
-                                                            // Format alternatif
-                                                            $downloadPercent = floatval($matches[1]);
-                                                        }
-                                                        
-                                                        if ($isDownloadLine) {
-                                                            // Ligne de progression de téléchargement
-                                                            $logLevel = 'info';
-                                                            $currentlyDownloading = true; // On est en phase de téléchargement
-                                                            $skipRawLine = false; // Par défaut, on affiche la ligne brute
-                                                            
-                                                            // Mettre à jour la progression globale (45% à 50% pour le téléchargement du core)
-                                                            if ($downloadPercent !== null) {
-                                                                // Le téléchargement du core représente 5% de la compilation totale (45% à 50%)
-                                                                // On mappe 0-100% du téléchargement vers 45-50% de la compilation totale
-                                                                $globalProgress = 45 + ($downloadPercent / 100) * 5;
-                                                                $sendProgress(intval($globalProgress));
-                                                                // Ne pas afficher de message de progression dans les logs, seulement le % dans la barre
-                                                                $skipRawLine = true; // Ne pas afficher la ligne brute
-                                                                flush();
-                                                            } else {
-                                                                // Même sans pourcentage, envoyer un message pour montrer qu'on est en téléchargement
-                                                                // Ne pas spammer, seulement pour les lignes importantes
-                                                                if (preg_match('/Downloading packages|Starting download/i', $lineTrimmed)) {
-                                                                    sendSSE('log', 'info', '📥 Début du téléchargement du core ESP32...');
-                                                                    $skipRawLine = true; // Ne pas afficher la ligne brute
-                                                                    flush();
-                                                                }
-                                                            }
-                                                            
-                                                            // Si on voit "downloaded", on a fini le téléchargement
-                                                            if (preg_match('/downloaded$/', $lineTrimmed)) {
-                                                                $currentlyDownloading = false;
-                                                                $sendProgress(48); // Progression intermédiaire
-                                                                sendSSE('log', 'info', '✅ Téléchargement terminé');
-                                                                sendSSE('log', 'info', '🔧 Phase 2: Installation des outils et configuration...');
-                                                                $skipRawLine = true; // Ne pas afficher la ligne brute
-                                                                flush();
-                                                            }
-                                                            
-                                                            // Ne pas afficher la ligne brute si on a déjà envoyé un message formaté
-                                                            if ($skipRawLine) {
-                                                                continue; // Passer à la ligne suivante sans afficher celle-ci
-                                                            }
-                                                        } elseif (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
-                                                                  preg_match('/error:/i', $lineTrimmed) || preg_match('/fatal/i', $lineTrimmed)) {
-                                                            $logLevel = 'error';
-                                                        } elseif (stripos($lineTrimmed, 'warning') !== false || preg_match('/warning:/i', $lineTrimmed)) {
-                                                            $logLevel = 'warning';
-                                                        }
-                                                        
-                                                        // Envoyer immédiatement via SSE
-                                                        sendSSE('log', $logLevel, $lineTrimmed);
-                                                        flush();
-                                                        
-                                                        // Logger aussi dans error_log pour diagnostic serveur
-                                                        error_log('[handleCompileFirmware] Core install ' . ($isStderr ? 'stderr' : 'stdout') . ': ' . $lineTrimmed);
-                                                        
-                                                        $lastOutputTime = $currentTime;
-                                                        $lastLine = $lineTrimmed; // Garder la dernière ligne pour détecter la phase
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                // Vérifier si le processus est terminé
-                                $status = proc_get_status($process);
-                                if (!$status || $status['running'] === false) {
-                                    break;
-                                }
-                                
-                                // Timeout de sécurité : si pas de sortie depuis 20 minutes, considérer comme bloqué
-                                // (L'installation du core ESP32 peut prendre du temps : téléchargement ~568MB peut prendre 10-15 minutes selon la connexion)
-                                if ($currentTime - $lastOutputTime > 1200) { // 20 minutes
-                                    sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 20 minutes, le processus semble bloqué');
-                                    sendSSE('error', 'Timeout: L\'installation du core ESP32 a pris trop de temps');
-                                    // Marquer le firmware comme erreur dans la base de données
-                                    try {
-                                        $pdo->prepare("
-                                            UPDATE firmware_versions 
-                                            SET status = 'error', error_message = 'Timeout lors de l\'installation du core ESP32 (20 minutes)'
-                                            WHERE id = :id
-                                        ")->execute(['id' => $firmware_id]);
-                                    } catch(PDOException $dbErr) {
-                                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                                    }
-                                    proc_terminate($process);
-                                    break;
-                                }
-                                
-                                // Détecter les erreurs de timeout HTTP dans la sortie et proposer un retry
-                                if (stripos($lastLine, 'request canceled') !== false || 
-                                    stripos($lastLine, 'Client.Timeout') !== false ||
-                                    stripos($lastLine, 'context cancellation') !== false) {
-                                    sendSSE('log', 'warning', '⚠️ Timeout HTTP détecté pendant le téléchargement');
-                                    sendSSE('log', 'info', '   Le téléchargement du core ESP32 (~568MB) a été interrompu par un timeout');
-                                    sendSSE('log', 'info', '   Tentative de reprise...');
-                                    flush();
-                                    // Ne pas arrêter immédiatement, laisser arduino-cli gérer le retry si possible
-                                }
-                                
-                                // Envoyer un keep-alive SSE toutes les 1 seconde pendant l'installation pour maintenir la connexion active
-                                // (Les commentaires SSE `: keep-alive` maintiennent la connexion ouverte)
-                                // Intervalle réduit à 1 seconde pour éviter les timeouts (certains proxies/serveurs ont des timeouts courts)
-                                if ($currentTime - $lastKeepAliveTime >= 1) {
-                                    $lastKeepAliveTime = $currentTime;
-                                    echo ": keep-alive\n\n";
-                                    flush();
-                                }
-                                
-                                // Détecter si on est en phase de téléchargement (ligne contient un pourcentage) ou installation
-                                // Pattern de téléchargement: "esp32:xxx@yyy X MiB / Y MiB Z%" (avec ou sans temps à la fin comme "00m02s")
-                                // Les lignes de téléchargement contiennent toujours un pourcentage et "MiB /"
-                                $isDownloading = preg_match('/\d+\.\d+ MiB \/ \d+\.\d+ MiB \d+\.\d+%/', $lastLine) || 
-                                                 preg_match('/\d+ B \/ \d+\.\d+ MiB \d+\.\d+%/', $lastLine) ||
-                                                 preg_match('/downloaded$/', $lastLine) ||
-                                                 preg_match('/Downloading packages\.\.\./', $lastLine);
-                                
-                                // Si on voit "Installing" ou "Skipping", on est en phase d'installation (pas de téléchargement)
-                                // Ces lignes n'ont PAS de pourcentage de téléchargement
-                                $isInstalling = preg_match('/^Installing /', $lastLine) || 
-                                                preg_match('/Skipping tool configuration/', $lastLine) ||
-                                                (preg_match('/installed$/', $lastLine) && !$isDownloading);
-                                
-                                // Si on est en installation, ne pas considérer comme téléchargement
-                                if ($isInstalling) {
-                                    $isDownloading = false;
-                                }
-                                
-                                // Envoyer un heartbeat avec message toutes les 5 secondes UNIQUEMENT si on n'est PAS en phase de téléchargement
-                                // (Pendant le téléchargement, on voit déjà la progression, pas besoin du heartbeat)
-                                // Utiliser $currentlyDownloading qui est mis à jour en temps réel, pas seulement $isDownloading basé sur $lastLine
-                                if (!$currentlyDownloading && !$isDownloading && $currentTime - $lastHeartbeatTime >= 5) {
-                                    // Mettre à jour immédiatement pour éviter les multiples envois dans la même seconde
-                                    $lastHeartbeatTime = $currentTime;
-                                    $elapsedSeconds = $currentTime - $startTime;
-                                    $elapsedMinutes = floor($elapsedSeconds / 60);
-                                    $elapsedSecondsRemainder = $elapsedSeconds % 60;
-                                    
-                                    // Message avec timestamp pour montrer que le système est toujours actif
-                                    $timeStr = $elapsedMinutes > 0 
-                                        ? sprintf('%dm %ds', $elapsedMinutes, $elapsedSecondsRemainder)
-                                        : sprintf('%ds', $elapsedSecondsRemainder);
-                                    
-                                    sendSSE('log', 'info', '⏳ Installation en cours... (temps écoulé: ' . $timeStr . ' - le système est actif)');
-                                    flush();
-                                }
-                                
-                                // Attendre un peu avant de relire
-                                usleep(100000); // 100ms
-                            }
-                            
-                            // ⚠️ IMPORTANT: Lire toutes les données restantes avant de fermer les pipes
-                            // Le processus peut se terminer mais il peut rester des données dans les buffers
-                            $remainingAttempts = 10; // Lire jusqu'à 10 fois pour vider les buffers
-                            while ($remainingAttempts > 0) {
-                                $read = [$stdout, $stderr];
-                                $write = null;
-                                $except = null;
-                                $timeout = 0; // Pas d'attente, juste vérifier
-                                
-                                $num_changed = stream_select($read, $write, $except, $timeout);
-                                if ($num_changed > 0) {
-                                    foreach ($read as $stream) {
-                                        $isStderr = ($stream === $stderr);
-                                        $chunk = stream_get_contents($stream, 65536);
-                                        if ($chunk !== false && $chunk !== '') {
-                                            $lines = explode("\n", $chunk);
-                                            foreach ($lines as $line) {
-                                                $lineTrimmed = rtrim($line, "\r\n");
-                                                if (!empty($lineTrimmed)) {
-                                                    $installOutput[] = $lineTrimmed;
-                                                    $logLevel = $isStderr ? 'error' : 'info';
-                                                    
-                                                    // Détecter les erreurs
-                                                    if (stripos($lineTrimmed, 'error') !== false || 
-                                                        stripos($lineTrimmed, 'failed') !== false ||
-                                                        preg_match('/error:/i', $lineTrimmed)) {
-                                                        $logLevel = 'error';
-                                                    }
-                                                    
-                                                    sendSSE('log', $logLevel, $lineTrimmed);
-                                                    error_log('[handleCompileFirmware] Core install final output: ' . $lineTrimmed);
-                                                }
-                                            }
-                                            flush();
-                                        }
-                                    }
-                                }
-                                $remainingAttempts--;
-                                usleep(100000); // 100ms entre chaque tentative
-                            }
-                            
-                            // Fermer les pipes
-                            if (is_resource($pipes[0])) fclose($pipes[0]);
-                            if (is_resource($pipes[1])) fclose($pipes[1]);
-                            if (is_resource($pipes[2])) fclose($pipes[2]);
-                            
-                            $return = proc_close($process);
-                            
-                            // ⚠️ AMÉLIORATION: Logger le code de retour pour diagnostic
-                            error_log('[handleCompileFirmware] Core install terminé - Code retour: ' . $return);
-                            error_log('[handleCompileFirmware] Nombre de lignes de sortie: ' . count($installOutput));
-                            
-                            // Mettre à jour la progression à 50% à la fin du téléchargement/installation
-                            $sendProgress(50);
-                            flush();
-                        } else {
-                            // Fallback sur exec si proc_open échoue
-                            exec($envStr . $arduinoCli . ' core install esp32:esp32 2>&1', $installOutput, $return);
-                            sendSSE('log', 'info', implode("\n", $installOutput));
-                            // Mettre à jour la progression à 50% même en fallback
-                            $sendProgress(50);
-                            flush();
-                        }
-                        
-                        // ⚠️ AMÉLIORATION: Vérifier si le core est réellement installé même si le code retour n'est pas 0
-                        // Parfois arduino-cli retourne un code d'erreur mais le core est quand même installé
-                        $installOutputStr = implode("\n", $installOutput);
-                        $coreInstalledCheck = false;
-                        
-                        // Vérifier dans la sortie si l'installation a réussi
-                        if (stripos($installOutputStr, 'installed') !== false || 
-                            stripos($installOutputStr, 'already installed') !== false ||
-                            stripos($installOutputStr, 'successfully') !== false) {
-                            $coreInstalledCheck = true;
-                        }
-                        
-                        // Vérifier aussi si le core existe physiquement
-                        $corePath = $arduinoDataDir . '/packages/esp32/hardware/esp32';
-                        if (is_dir($corePath)) {
-                            $coreInstalledCheck = true;
-                        }
-                        
-                        // Si le core est installé (même avec code retour != 0), considérer comme succès
-                        if ($coreInstalledCheck) {
-                            sendSSE('log', 'info', '✅ Core ESP32 installé avec succès (vérifié)');
-                            error_log('[handleCompileFirmware] ✅ Core install réussi (code retour: ' . $return . ' mais core présent)');
-                        } elseif ($return !== 0) {
-                            // Vérifier si c'est une erreur de timeout HTTP
-                            // ⚠️ AMÉLIORATION: Diagnostic détaillé de l'erreur
-                            error_log('[handleCompileFirmware] ❌ Core install échoué - Code retour: ' . $return);
-                            error_log('[handleCompileFirmware] Sortie complète (' . strlen($installOutputStr) . ' chars): ' . substr($installOutputStr, 0, 2000));
-                            
-                            // Afficher les dernières lignes d'erreur pour diagnostic
-                            $outputLines = explode("\n", $installOutputStr);
-                            $errorLines = array_filter($outputLines, function($line) {
-                                return stripos($line, 'error') !== false || 
-                                       stripos($line, 'failed') !== false || 
-                                       stripos($line, 'fatal') !== false ||
-                                       preg_match('/error:/i', $line);
-                            });
-                            
-                            if (!empty($errorLines)) {
-                                $lastErrors = array_slice($errorLines, -5); // Dernières 5 lignes d'erreur
-                                sendSSE('log', 'error', '❌ Détails de l\'erreur d\'installation:');
-                                foreach ($lastErrors as $errorLine) {
-                                    if (!empty(trim($errorLine))) {
-                                        sendSSE('log', 'error', '   ' . trim($errorLine));
-                                    }
-                                }
-                                flush();
-                            }
-                            
-                            // Afficher aussi les dernières lignes de la sortie complète pour diagnostic
-                            $lastLines = array_slice($outputLines, -10);
-                            sendSSE('log', 'info', '📋 Dernières lignes de la sortie:');
-                            foreach ($lastLines as $line) {
-                                if (!empty(trim($line))) {
-                                    sendSSE('log', 'info', '   ' . trim($line));
-                                }
-                            }
-                            flush();
-                            
-                            $isTimeoutError = stripos($installOutputStr, 'request canceled') !== false || 
-                                             stripos($installOutputStr, 'Client.Timeout') !== false ||
-                                             stripos($installOutputStr, 'context cancellation') !== false ||
-                                             stripos($installOutputStr, 'timeout') !== false;
-                            
-                            if ($isTimeoutError) {
-                                sendSSE('log', 'error', '❌ Timeout HTTP lors du téléchargement du core ESP32');
-                                sendSSE('log', 'error', '   Le téléchargement de ~568MB a été interrompu par un timeout HTTP');
-                                sendSSE('log', 'info', '   💡 Solution GRATUITE: Relancez simplement la compilation');
-                                sendSSE('log', 'info', '   ✅ arduino-cli reprendra automatiquement le téléchargement là où il s\'est arrêté');
-                                sendSSE('log', 'info', '   ✅ Le core partiellement téléchargé sera réutilisé (pas de re-téléchargement complet)');
-                                
-                                // Vérifier si une partie du core a été téléchargée (peut être réutilisée)
-                                $corePath = $arduinoDataDir . '/packages/esp32';
-                                if (is_dir($corePath)) {
-                                    // Calculer la taille du core partiellement téléchargé
-                                    $coreSize = 0;
-                                    $iterator = new RecursiveIteratorIterator(
-                                        new RecursiveDirectoryIterator($corePath, RecursiveDirectoryIterator::SKIP_DOTS),
-                                        RecursiveIteratorIterator::SELF_FIRST
-                                    );
-                                    foreach ($iterator as $file) {
-                                        if ($file->isFile()) {
-                                            $coreSize += $file->getSize();
-                                        }
-                                    }
-                                    $coreSizeMB = round($coreSize / 1024 / 1024, 1);
-                                    sendSSE('log', 'info', "   ✅ Core partiellement téléchargé: {$coreSizeMB} MB (sera réutilisé)");
-                                }
-                                
-                                $errorMessage = 'Timeout HTTP lors du téléchargement du core ESP32. Relancez la compilation pour reprendre automatiquement le téléchargement.';
-                            } else {
-                                // ⚠️ AMÉLIORATION: Message d'erreur plus détaillé
-                                $errorMessage = 'Erreur lors de l\'installation du core ESP32 (code: ' . $return . ')';
-                                if (!empty($errorLines)) {
-                                    $firstError = trim(reset($errorLines));
-                                    if (!empty($firstError)) {
-                                        $errorMessage .= ' - ' . substr($firstError, 0, 200);
-                                    }
-                                }
-                                sendSSE('log', 'error', '❌ Code retour: ' . $return);
-                                sendSSE('log', 'error', '   Vérifiez les logs ci-dessus pour plus de détails');
-                            }
-                            
-                            // Marquer le firmware comme erreur dans la base de données
-                            try {
-                                $pdo->prepare("
-                                    UPDATE firmware_versions 
-                                    SET status = 'error', error_message = :error_message
-                                    WHERE id = :id
-                                ")->execute([
-                                    'id' => $firmware_id,
-                                    'error_message' => $errorMessage
-                                ]);
-                            } catch(PDOException $dbErr) {
-                                error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                            }
-                            sendSSE('error', $errorMessage);
-                            flush();
+                // Compilation du firmware (refactorisé)
+                if (!compileFirmware($arduinoCli, $envStr, $build_dir, $sketch_dir, $firmware_id, $firmware, $sendProgress, $compilationStartTime, $maxCompilationTime, $env, $arduinoDataDir, $build_dir_created, $is_temp_ino, $ino_path)) {
+                    // Erreur lors de la compilation, la fonction a déjà géré l'erreur et le cleanup
                             return;
                         }
                         
-                        sendSSE('log', 'info', '✅ Core ESP32 installé avec succès');
-                    }
-                }
-                
-                sendSSE('log', 'info', 'Compilation du firmware...');
-                sendSSE('log', 'info', 'Commande: ' . $compile_cmd);
-                $sendProgress(60);
-                flush();
-                
-                // Logger la commande pour diagnostic
-                error_log('[handleCompileFirmware] Démarrage compilation avec commande: ' . $compile_cmd);
-                error_log('[handleCompileFirmware] Build dir: ' . $build_dir);
-                error_log('[handleCompileFirmware] Sketch dir: ' . $sketch_dir);
-                
-                $fqbn = 'esp32:esp32:esp32';
-                // Utiliser --verbose pour obtenir tous les logs de compilation
-                $compile_cmd = $envStr . $arduinoCli . ' compile --verbose --fqbn ' . $fqbn . ' --build-path ' . escapeshellarg($build_dir) . ' ' . escapeshellarg($sketch_dir) . ' 2>&1';
-                
-                // Exécuter avec output en temps réel pour voir la progression et maintenir la connexion SSE
-                $descriptorspec = [
-                    0 => ["pipe", "r"],  // stdin
-                    1 => ["pipe", "w"],  // stdout
-                    2 => ["pipe", "w"]   // stderr
-                ];
-                
-                $compile_process = proc_open($compile_cmd, $descriptorspec, $compile_pipes);
-                
-                if (is_resource($compile_process)) {
-                    $compile_stdout = $compile_pipes[1];
-                    $compile_stderr = $compile_pipes[2];
-                    
-                    // Configurer les streams en non-bloquant
-                    stream_set_blocking($compile_stdout, false);
-                    stream_set_blocking($compile_stderr, false);
-                    
-                    $compile_start_time = time();
-                    $compile_last_heartbeat = $compile_start_time;
-                    $compile_last_keepalive = $compile_start_time;
-                    $compile_last_output_time = $compile_start_time;
-                    $compile_last_progress_update = $compile_start_time;
-                    $compile_output_lines = [];
-                    $compile_phase = 'initialization'; // 'initialization', 'compiling', 'linking', 'archiving'
-                    $compile_base_progress = 60; // Progression de base au début de la compilation
-                    
-                    while (true) {
-                        $current_time = time();
-                        $elapsed_seconds = $current_time - $compile_start_time;
-                        
-                        // Utiliser stream_select pour vérifier si des données sont disponibles (non-bloquant)
-                        $read = [$compile_stdout, $compile_stderr];
-                        $write = null;
-                        $except = null;
-                        $timeout = 1; // Attendre 1 seconde maximum
-                        
-                        $num_changed_streams = stream_select($read, $write, $except, $timeout);
-                        
-                        if ($num_changed_streams === false) {
-                            // Erreur stream_select
-                            error_log('[handleCompileFirmware] Erreur stream_select lors de la compilation');
-                            break;
-                        } elseif ($num_changed_streams > 0) {
-                            // Des données sont disponibles, les lire
-                            foreach ($read as $stream) {
-                                $isStderr = ($stream === $compile_stderr);
-                                
-                                // Utiliser stream_get_contents pour lire TOUT ce qui est disponible
-                                $chunk = stream_get_contents($stream, 65536); // 64KB max par lecture
-                                
-                                if ($chunk !== false && $chunk !== '') {
-                                    // Logger immédiatement pour diagnostic
-                                    error_log('[handleCompileFirmware] Compile output reçu (' . strlen($chunk) . ' bytes) depuis ' . ($isStderr ? 'stderr' : 'stdout'));
-                                    
-                                    // Traiter ligne par ligne
-                                    $lines = explode("\n", $chunk);
-                                    foreach ($lines as $lineIndex => $line) {
-                                        $lineTrimmed = rtrim($line, "\r\n");
-                                        
-                                        // Envoyer toutes les lignes non vides
-                                        if (!empty($lineTrimmed) || ($lineIndex === 0 && !empty($chunk))) {
-                                            if (!empty($lineTrimmed)) {
-                                                $compile_output_lines[] = $lineTrimmed;
-                                                
-                                                // Détecter la phase de compilation pour ajuster la progression
-                                                $newPhase = $compile_phase;
-                                                if (stripos($lineTrimmed, 'compiling') !== false && (stripos($lineTrimmed, '.cpp') !== false || stripos($lineTrimmed, '.c') !== false)) {
-                                                    $newPhase = 'compiling';
-                                                    // Phase compilation: 60-70%
-                                                    $compile_base_progress = 60;
-                                                } elseif (stripos($lineTrimmed, 'linking') !== false || stripos($lineTrimmed, 'Linking') !== false) {
-                                                    $newPhase = 'linking';
-                                                    // Phase linking: 70-75%
-                                                    $compile_base_progress = 70;
-                                                } elseif (stripos($lineTrimmed, 'archiving') !== false || stripos($lineTrimmed, 'Archiving') !== false) {
-                                                    $newPhase = 'archiving';
-                                                    // Phase archiving: 75-78%
-                                                    $compile_base_progress = 75;
-                                                } elseif (stripos($lineTrimmed, 'Building') !== false && stripos($lineTrimmed, 'firmware') !== false) {
-                                                    $newPhase = 'building';
-                                                    // Phase building finale: 78-80%
-                                                    $compile_base_progress = 78;
-                                                }
-                                                
-                                                // Si la phase a changé, mettre à jour la progression immédiatement
-                                                if ($newPhase !== $compile_phase) {
-                                                    $compile_phase = $newPhase;
-                                                    $sendProgress($compile_base_progress);
-                                                    flush();
-                                                }
-                                                
-                                                // Déterminer le niveau de log selon le contenu
-                                                $logLevel = $isStderr ? 'error' : 'info';
-                                                
-                                                // ⚠️ DÉTECTION SPÉCIALE: Erreur d'architecture (exec format error)
-                                                $isArchitectureError = stripos($lineTrimmed, 'exec format error') !== false ||
-                                                                       stripos($lineTrimmed, 'cannot execute binary file') !== false ||
-                                                                       stripos($lineTrimmed, 'wrong ELF class') !== false;
-                                                
-                                                if ($isArchitectureError) {
-                                                    $logLevel = 'error';
-                                                    // Déterminer les emplacements des outils ESP32
-                                                    $homeArduinoDir = (isset($env['HOME']) ? $env['HOME'] : sys_get_temp_dir() . '/arduino-cli-home') . '/.arduino15/packages/esp32';
-                                                    $userArduinoDir = $arduinoDataDir . '/packages/esp32';
-                                                    
-                                                    sendSSE('log', 'error', '❌ ERREUR D\'ARCHITECTURE DÉTECTÉE');
-                                                    sendSSE('log', 'error', '   Les outils ESP32 installés ne sont pas compatibles avec l\'architecture du serveur');
-                                                    sendSSE('log', 'info', '   Architecture serveur: ' . php_uname('m') . ' (' . PHP_OS . ')');
-                                                    sendSSE('log', 'info', '   💡 Solution: Supprimer les outils ESP32 et les réinstaller');
-                                                    if (is_dir($homeArduinoDir)) {
-                                                        sendSSE('log', 'info', '   Commande 1: rm -rf ' . $homeArduinoDir);
-                                                    }
-                                                    if (is_dir($userArduinoDir)) {
-                                                        sendSSE('log', 'info', '   Commande 2: rm -rf ' . $userArduinoDir);
-                                                    }
-                                                    sendSSE('log', 'info', '   Puis relancez la compilation pour réinstaller les bons outils');
-                                                    flush();
-                                                }
-                                                
-                                                // Détecter les erreurs et warnings
-                                                if (stripos($lineTrimmed, 'error') !== false || stripos($lineTrimmed, 'failed') !== false || 
-                                                    stripos($lineTrimmed, '❌') !== false || preg_match('/error:/i', $lineTrimmed) ||
-                                                    preg_match('/fatal/i', $lineTrimmed)) {
-                                                    $logLevel = 'error';
-                                                } elseif (stripos($lineTrimmed, 'warning') !== false || stripos($lineTrimmed, '⚠️') !== false || 
-                                                          preg_match('/warning:/i', $lineTrimmed)) {
-                                                    $logLevel = 'warning';
-                                                } elseif (stripos($lineTrimmed, 'compiling') !== false || stripos($lineTrimmed, 'linking') !== false || 
-                                                          stripos($lineTrimmed, 'archiving') !== false || stripos($lineTrimmed, 'sketch') !== false ||
-                                                          stripos($lineTrimmed, 'building') !== false) {
-                                                    $logLevel = 'info';
-                                                }
-                                                
-                                                // Envoyer immédiatement via SSE
-                                                sendSSE('log', $logLevel, $lineTrimmed);
-                                                flush();
-                                                
-                                                // Logger aussi dans error_log pour diagnostic serveur
-                                                error_log('[handleCompileFirmware] Compile ' . ($isStderr ? 'stderr' : 'stdout') . ': ' . $lineTrimmed);
-                                                
-                                                $compile_last_output_time = $current_time;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // PROGRESSION TEMPORELLE : Avancer la barre de progression même sans output
-                        // Cela évite que la barre reste bloquée pendant les phases longues
-                        if ($current_time - $compile_last_progress_update >= 2) { // Mise à jour toutes les 2 secondes
-                            $compile_last_progress_update = $current_time;
-                            
-                            // Calculer la progression basée sur le temps écoulé et la phase
-                            // Estimation: compilation complète prend généralement 2-5 minutes
-                            // On répartit 60-80% sur cette période
-                            $estimated_total_seconds = 180; // 3 minutes estimées
-                            $time_based_progress = min(80, $compile_base_progress + intval(($elapsed_seconds / $estimated_total_seconds) * (80 - $compile_base_progress)));
-                            
-                            // Ne pas dépasser 80% avant la fin de la compilation
-                            $sendProgress($time_based_progress);
-                            flush();
-                        }
-                        
-                        // Vérifier si le processus est terminé
-                        $compile_status = proc_get_status($compile_process);
-                        if (!$compile_status || $compile_status['running'] === false) {
-                            break;
-                        }
-                        
-                        // Timeout de sécurité : si pas de sortie depuis 5 minutes
-                        if ($current_time - $compile_last_output_time > 300) {
-                            sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 5 minutes, la compilation semble bloquée');
-                            sendSSE('error', 'Timeout: La compilation a pris trop de temps');
-                            proc_terminate($compile_process);
-                            // Nettoyer le répertoire de build en cas de timeout
-                            if (isset($build_dir) && $build_dir_created) {
-                                cleanupBuildDir($build_dir);
-                            }
-                            break;
-                        }
-                        
-                        // Envoyer un keep-alive SSE toutes les 1 seconde (plus fréquent pour éviter les timeouts)
-                        if ($current_time - $compile_last_keepalive >= 1) {
-                            $compile_last_keepalive = $current_time;
-                            echo ": keep-alive\n\n";
-                            flush();
-                        }
-                        
-                        // Envoyer un heartbeat toutes les 10 secondes pour maintenir la connexion SSE
-                        // (moins fréquent car on a déjà la progression temporelle toutes les 2 secondes)
-                        if ($current_time - $compile_last_heartbeat >= 10) {
-                            $compile_last_heartbeat = $current_time;
-                            $elapsed = $current_time - $compile_start_time;
-                            $minutes = floor($elapsed / 60);
-                            $seconds = $elapsed % 60;
-                            $timeStr = $minutes > 0 ? sprintf('%dm %ds', $minutes, $seconds) : sprintf('%ds', $seconds);
-                            // Ne plus afficher de message de progression dans les logs, seulement le % dans la barre
-                            flush();
-                        }
-                    }
-                    
-                    // Fermer les pipes
-                    if (isset($compile_pipes[0]) && is_resource($compile_pipes[0])) {
-                        fclose($compile_pipes[0]);
-                    }
-                    if (isset($compile_pipes[1]) && is_resource($compile_pipes[1])) {
-                        fclose($compile_pipes[1]);
-                    }
-                    if (isset($compile_pipes[2]) && is_resource($compile_pipes[2])) {
-                        fclose($compile_pipes[2]);
-                    }
-                    
-                    $compile_return = proc_close($compile_process);
-                    $compile_output = $compile_output_lines;
-                    
-                    error_log('[handleCompileFirmware] Compilation terminée, code de retour: ' . $compile_return);
-                    error_log('[handleCompileFirmware] Nombre de lignes de sortie: ' . count($compile_output));
-                } else {
-                    // Fallback sur exec si proc_open échoue
-                    exec($compile_cmd, $compile_output, $compile_return);
-                    
-                    foreach ($compile_output as $line) {
-                        sendSSE('log', 'info', $line);
-                    }
-                    flush();
-                }
-                
-                if ($compile_return !== 0) {
-                    // ⚠️ VÉRIFIER SI C'EST UNE ERREUR D'ARCHITECTURE
-                    $compile_output_str = implode("\n", $compile_output_lines ?? $compile_output ?? []);
-                    $isArchitectureError = stripos($compile_output_str, 'exec format error') !== false ||
-                                          stripos($compile_output_str, 'cannot execute binary file') !== false ||
-                                          stripos($compile_output_str, 'wrong ELF class') !== false;
-                    
-                    $errorMessage = 'Erreur lors de la compilation. Vérifiez les logs ci-dessus.';
-                    $errorMessageDB = 'Erreur lors de la compilation';
-                    
-                    if ($isArchitectureError) {
-                        $errorMessage = 'Erreur d\'architecture: Les outils ESP32 ne sont pas compatibles avec cette architecture serveur.';
-                        $errorMessageDB = 'Erreur d\'architecture: Outils ESP32 incompatibles';
-                        
-                        // Déterminer les emplacements des outils ESP32
-                        $homeArduinoDir = (isset($env['HOME']) ? $env['HOME'] : sys_get_temp_dir() . '/arduino-cli-home') . '/.arduino15/packages/esp32';
-                        $userArduinoDir = $arduinoDataDir . '/packages/esp32';
-                        
-                        sendSSE('log', 'error', '❌ ERREUR D\'ARCHITECTURE DÉTECTÉE');
-                        sendSSE('log', 'error', '   Les outils ESP32 installés ne sont pas compatibles avec l\'architecture du serveur');
-                        sendSSE('log', 'info', '   Architecture serveur: ' . php_uname('m') . ' (' . PHP_OS . ')');
-                        sendSSE('log', 'info', '   Emplacements possibles des outils:');
-                        if (is_dir($homeArduinoDir)) {
-                            sendSSE('log', 'info', '   - ' . $homeArduinoDir . ' (HOME/.arduino15)');
-                        }
-                        if (is_dir($userArduinoDir)) {
-                            sendSSE('log', 'info', '   - ' . $userArduinoDir . ' (ARDUINO_DIRECTORIES_USER)');
-                        }
-                        sendSSE('log', 'warning', '💡 SOLUTION: Supprimer les outils ESP32 et les réinstaller');
-                        if (is_dir($homeArduinoDir)) {
-                            sendSSE('log', 'info', '   Commande 1: rm -rf ' . $homeArduinoDir);
-                        }
-                        if (is_dir($userArduinoDir)) {
-                            sendSSE('log', 'info', '   Commande 2: rm -rf ' . $userArduinoDir);
-                        }
-                        sendSSE('log', 'info', '   Puis relancez la compilation pour réinstaller les bons outils');
-                        sendSSE('log', 'info', '   Arduino-cli devrait automatiquement télécharger les outils pour votre architecture');
-                        flush();
-                    }
-                    
-                    // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
-                    try {
-                        $pdo->prepare("
-                            UPDATE firmware_versions 
-                            SET status = 'error', error_message = :error_msg
-                            WHERE id = :id
-                        ")->execute([
-                            'id' => $firmware_id,
-                            'error_msg' => $errorMessageDB
-                        ]);
-                    } catch(PDOException $dbErr) {
-                        error_log('[handleCompileFirmware] Erreur DB lors de la mise à jour du statut: ' . $dbErr->getMessage());
-                    }
-                    sendSSE('error', $errorMessage);
-                    flush();
-                    // Nettoyer
-                    exec('rm -rf ' . escapeshellarg($build_dir));
-                    return;
-                }
-                
-                $sendProgress(80);
-                sendSSE('log', 'info', 'Recherche du fichier .bin généré...');
-                
-                // Trouver le fichier .bin
-                $bin_files = glob($build_dir . '/*.bin');
-                if (empty($bin_files)) {
-                    $bin_files = glob($build_dir . '/**/*.bin');
-                }
-                
-                if (empty($bin_files)) {
-                    // Marquer le firmware comme erreur dans la base de données
-                    try {
-                        $pdo->prepare("
-                            UPDATE firmware_versions 
-                            SET status = 'error', error_message = 'Fichier .bin introuvable après compilation'
-                            WHERE id = :id
-                        ")->execute(['id' => $firmware_id]);
-                    } catch(PDOException $dbErr) {
-                        error_log('[handleCompileFirmware] Erreur DB: ' . $dbErr->getMessage());
-                    }
-                    sendSSE('error', 'Fichier .bin introuvable après compilation');
-                    flush();
-                    if (isset($build_dir) && $build_dir_created) {
-                        cleanupBuildDir($build_dir);
-                    }
-                    return;
-                }
-                
-                $compiled_bin = $bin_files[0];
-                
-                $sendProgress(95);
-                sendSSE('log', 'info', 'Calcul des checksums et lecture du fichier .bin...');
-                
-                // Lire directement depuis le répertoire de build (pas de copie sur disque pour économiser l'espace)
-                $bin_content_db = file_get_contents($compiled_bin);
-                if ($bin_content_db === false) {
-                    throw new Exception('Impossible de lire le fichier .bin compilé');
-                }
-                
-                // Calculer les checksums depuis le contenu en mémoire (plus efficace)
-                $md5 = hash('md5', $bin_content_db);
-                $checksum = hash('sha256', $bin_content_db);
-                $file_size = strlen($bin_content_db);
-                
-                // Mettre à jour la base de données avec le contenu en BYTEA
-                // IMPORTANT: Encoder les données BYTEA pour PostgreSQL
-                sendSSE('log', 'info', 'Encodage du fichier .bin pour PostgreSQL...');
-                flush();
-                
-                $bin_content_encoded = encodeByteaForPostgres($bin_content_db);
-                
-                // Libérer la mémoire immédiatement après encodage
-                unset($bin_content_db);
-                
-                $version_dir = getVersionDir($firmware['version']);
-                $bin_filename = 'fw_ott_v' . $firmware['version'] . '.bin';
-                
-                sendSSE('log', 'info', 'Mise à jour de la base de données...');
-                sendSSE('log', 'info', '   Taille: ' . $file_size . ' bytes');
-                sendSSE('log', 'info', '   Checksum: ' . substr($checksum, 0, 16) . '...');
-                flush();
-                
-                try {
-                    $updateStmt = $pdo->prepare("
-                        UPDATE firmware_versions 
-                        SET file_path = :file_path, 
-                            file_size = :file_size, 
-                            checksum = :checksum,
-                            bin_content = :bin_content,
-                            status = 'compiled'
-                        WHERE id = :id
-                    ");
-                    
-                    $updateResult = $updateStmt->execute([
-                        'file_path' => 'hardware/firmware/' . $version_dir . '/' . $bin_filename,
-                        'file_size' => $file_size,
-                        'checksum' => $checksum,
-                        'bin_content' => $bin_content_encoded,  // BYTEA encodé pour PostgreSQL
-                        'id' => $firmware_id
-                    ]);
-                    
-                    if (!$updateResult) {
-                        $errorInfo = $updateStmt->errorInfo();
-                        throw new Exception('Erreur UPDATE: ' . ($errorInfo[2] ?? 'Erreur inconnue'));
-                    }
-                    
-                    sendSSE('log', 'info', '✅ Mise à jour DB réussie');
-                    error_log('[handleCompileFirmware] ✅ Fichier .bin mis à jour en DB - ID: ' . $firmware_id . ', Taille: ' . $file_size);
-                    
-                } catch(PDOException $dbErr) {
-                    error_log('[handleCompileFirmware] ❌ Erreur DB lors de la mise à jour: ' . $dbErr->getMessage());
-                    error_log('[handleCompileFirmware] Code erreur: ' . $dbErr->getCode());
-                    sendSSE('log', 'error', '❌ Erreur lors de la mise à jour en base de données: ' . $dbErr->getMessage());
-                    sendSSE('error', 'Erreur lors de la sauvegarde du fichier compilé');
-                    flush();
-                    throw $dbErr;
-                }
-                
-                // Libérer la mémoire de l'encodage immédiatement
-                unset($bin_content_encoded);
-                
-                sendSSE('log', 'info', '✅ Fichier .bin stocké en base de données');
-                
-                // Nettoyer le répertoire de build immédiatement après stockage en DB
-                cleanupBuildDir($build_dir);
-                
-                $sendProgress(100);
-                sendSSE('log', 'info', '✅ Compilation terminée avec succès !');
-                sendSSE('success', 'Firmware v' . $firmware['version'] . ' compilé avec succès', $firmware['version']);
-                
-                // Fermer la connexion après un court délai pour permettre au client de recevoir les messages
-                sleep(1);
-            }
+                // Compilation réussie - les fonctions modulaires ont déjà géré le nettoyage
         } catch(PDOException $e) {
-            // Erreur lors de la vérification du firmware
-            $errorMessage = 'Erreur base de données: ' . $e->getMessage();
-            sendSSE('log', 'error', '❌ ' . $errorMessage);
-            sendSSE('error', $errorMessage);
-            error_log('[handleCompileFirmware] Erreur DB: ' . $e->getMessage());
-            flush();
-            
-            // Marquer le firmware comme erreur si on a l'ID
             if (isset($firmware_id)) {
                 try {
                     $pdo->prepare("
@@ -1941,6 +850,15 @@ function handleCompileFirmware($firmware_id) {
         sendSSE('error', $errorMessage);
         flush();
         
+        // Nettoyer le répertoire de build si créé (CRITIQUE pour éviter l'accumulation de fichiers)
+        if (isset($build_dir) && isset($build_dir_created) && $build_dir_created) {
+            cleanupBuildDir($build_dir);
+        }
+        // Nettoyer le fichier .ino temporaire si créé depuis la DB
+        if (isset($is_temp_ino) && $is_temp_ino && isset($ino_path) && file_exists($ino_path)) {
+            @unlink($ino_path);
+        }
+        
         // Marquer le firmware comme erreur dans la base de données même si la connexion SSE est fermée
         if (isset($firmware_id)) {
             try {
@@ -1964,3 +882,4 @@ function handleCompileFirmware($firmware_id) {
     // S'assurer que la sortie est vidée
     flush();
 }
+

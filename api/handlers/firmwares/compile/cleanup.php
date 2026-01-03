@@ -5,6 +5,42 @@
  */
 
 /**
+ * Nettoie les anciens fichiers .ino temporaires pour éviter l'accumulation
+ */
+function cleanupOldTempInoFiles() {
+    $temp_dir = sys_get_temp_dir();
+    $pattern = $temp_dir . '/ott_firmware_*.ino';
+    
+    // Trouver tous les fichiers .ino temporaires de plus de 1 heure
+    $temp_files = glob($pattern);
+    if (!$temp_files) {
+        return;
+    }
+    
+    $now = time();
+    $cleaned = 0;
+    
+    foreach ($temp_files as $file) {
+        // Extraire le timestamp du nom du fichier
+        // Format: ott_firmware_{firmware_id}_{timestamp}.ino
+        if (preg_match('/ott_firmware_\d+_(\d+)\.ino$/', $file, $matches)) {
+            $file_time = (int)$matches[1];
+            $age = $now - $file_time;
+            
+            // Supprimer les fichiers de plus de 1 heure
+            if ($age > 3600) {
+                @unlink($file);
+                $cleaned++;
+            }
+        }
+    }
+    
+    if ($cleaned > 0) {
+        error_log("[cleanupOldTempInoFiles] Nettoyé $cleaned ancien(s) fichier(s) .ino temporaire(s)");
+    }
+}
+
+/**
  * Nettoie les anciens répertoires de build pour éviter l'accumulation
  */
 function cleanupOldBuildDirs() {
@@ -37,6 +73,9 @@ function cleanupOldBuildDirs() {
     if ($cleaned > 0) {
         error_log("[cleanupOldBuildDirs] Nettoyé $cleaned ancien(s) répertoire(s) de build");
     }
+    
+    // Nettoyer aussi les fichiers .ino temporaires
+    cleanupOldTempInoFiles();
 }
 
 /**
