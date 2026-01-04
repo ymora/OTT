@@ -219,20 +219,36 @@ function compileFirmware($arduinoCli, $envStr, $build_dir, $sketch_dir, $firmwar
                 break;
             }
             
-            // Timeout de sécurité : si pas de sortie depuis 5 minutes
-            if ($current_time - $compile_last_output_time > 300) {
-                sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 5 minutes, la compilation semble bloquée');
-                sendSSE('error', 'Timeout: La compilation a pris trop de temps');
-                proc_terminate($compile_process);
-                // Nettoyer le répertoire de build en cas de timeout
-                if (isset($build_dir) && $build_dir_created) {
-                    cleanupBuildDir($build_dir);
+            // Timeout de sécurité : si pas de sortie depuis 10 minutes ET processus semble inactif
+            // (La détection des bibliothèques peut prendre 5-10 minutes avec plusieurs bibliothèques)
+            $noOutputElapsed = $current_time - $compile_last_output_time;
+            if ($noOutputElapsed > 600) { // 10 minutes sans sortie
+                // Vérifier que le processus est vraiment inactif avant de déclencher le timeout
+                // Réutiliser $compile_status qui a déjà été récupéré plus haut
+                if ($compile_status && $compile_status['running'] === true) {
+                    // Le processus est toujours actif, continuer même sans sortie récente
+                    // (peut arriver pendant la détection des bibliothèques ou compilation)
+                    // Envoyer un avertissement toutes les 2 minutes pour rassurer l'utilisateur
+                    if ($noOutputElapsed % 120 == 0) { // Toutes les 2 minutes
+                        $minutesNoOutput = floor($noOutputElapsed / 60);
+                        sendSSE('log', 'warning', "⚠️ Pas de sortie depuis {$minutesNoOutput} minutes, mais le processus est toujours actif (détection bibliothèques en cours...)");
+                        flush();
+                    }
+                } else {
+                    // Le processus n'est plus actif ET pas de sortie depuis 10 minutes = vraiment bloqué
+                    sendSSE('log', 'warning', '⚠️ Pas de sortie depuis 10 minutes et processus inactif, compilation bloquée');
+                    sendSSE('error', 'Timeout: La compilation semble bloquée (pas de sortie depuis 10 minutes)');
+                    proc_terminate($compile_process);
+                    // Nettoyer le répertoire de build en cas de timeout
+                    if (isset($build_dir) && $build_dir_created) {
+                        cleanupBuildDir($build_dir);
+                    }
+                    // Nettoyer le fichier .ino temporaire si créé depuis la DB
+                    if (isset($is_temp_ino) && $is_temp_ino && isset($ino_path) && file_exists($ino_path)) {
+                        @unlink($ino_path);
+                    }
+                    break;
                 }
-                // Nettoyer le fichier .ino temporaire si créé depuis la DB
-                if (isset($is_temp_ino) && $is_temp_ino && isset($ino_path) && file_exists($ino_path)) {
-                    @unlink($ino_path);
-                }
-                break;
             }
             
             // Envoyer un keep-alive SSE toutes les 1 seconde (plus fréquent pour éviter les timeouts)
