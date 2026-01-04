@@ -28,11 +28,10 @@ function Get-ProjectInfo {
             $info.PackageManager = "npm"
             
             # Détecter React/Next.js
-            $deps = @{}
-            if ($package.dependencies) { $deps += $package.dependencies.PSObject.Properties }
-            if ($package.devDependencies) { $deps += $package.devDependencies.PSObject.Properties }
+            $depsList = @()
+            if ($package.dependencies) { $depsList += $package.dependencies.PSObject.Properties }
+            if ($package.devDependencies) { $depsList += $package.devDependencies.PSObject.Properties }
             
-            $depsList = if ($deps) { $deps } else { @() }
             foreach ($dep in $depsList) {
                 $name = $dep.Name
                 $version = $dep.Value

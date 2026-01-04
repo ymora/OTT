@@ -66,7 +66,7 @@ function Invoke-Check-API {
         
         if ([string]::IsNullOrEmpty($Email) -or [string]::IsNullOrEmpty($Password)) {
             Write-Warn "Credentials non configurés - Impossible de tester l'API"
-            Write-Info "  💡 Configurez AUDIT_EMAIL/AUDIT_PASSWORD ou audit.config.ps1 avec Credentials"
+            Write-Info "  💡 Configurez AUDIT_API_EMAIL/AUDIT_API_PASSWORD (ou AUDIT_EMAIL/AUDIT_PASSWORD) ou audit.config.ps1 avec Credentials"
             $script:apiAuthFailed = $true
             $apiScore = 5
             $Results.Scores["API"] = $apiScore
@@ -75,7 +75,6 @@ function Invoke-Check-API {
         
         # Test de connectivité rapide avant d'essayer l'authentification
         Write-Info "Test de connectivité rapide (1s max)..."
-        $apiAccessible = $false
         $apiMode = "inconnu"
         
         # Détecter le mode (Docker ou Render)
@@ -88,9 +87,8 @@ function Invoke-Check-API {
         try {
             $testUrl = "$ApiUrl/api.php/health"
             # Timeout très court pour éviter les blocages
-            $testResponse = Invoke-WebRequest -Uri $testUrl -Method GET -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop
+            $null = Invoke-WebRequest -Uri $testUrl -Method GET -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop
             Write-OK "API accessible ($apiMode)"
-            $apiAccessible = $true
         } catch {
             # Si l'API n'est pas accessible, signaler clairement et passer
             Write-Warn "API non accessible - $apiMode non démarré ou inaccessible"
@@ -149,7 +147,7 @@ function Invoke-Check-API {
                 $endpointsTotal++
                 try {
                     # Timeout très court (3s) pour éviter les blocages
-                    $result = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 3 -ErrorAction Stop
+                    $null = Invoke-RestMethod -Uri "$ApiUrl$($endpoint.Path)" -Headers $script:authHeaders -TimeoutSec 3 -ErrorAction Stop
                     Write-OK $endpoint.Name
                     $endpointsOK++
                 } catch {

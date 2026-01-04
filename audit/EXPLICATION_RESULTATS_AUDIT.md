@@ -1,144 +1,145 @@
-# 📊 Explication des Résultats de l'Audit
+# 📊 Explication des Résultats de l'Audit (12 phases)
 
-## 🔍 Structure de l'Audit
+Ce document décrit le format des résultats et le calcul du score pour le système d'audit basé sur `audit/audit.ps1`.
 
-L'audit est composé de **23 phases** qui vérifient différents aspects du projet. Cependant, ces phases ne sont pas toujours numérotées de 1 à 23 dans l'ordre d'exécution car :
+## 🔍 Structure de l'audit
 
-1. **Certaines phases ont été ajoutées plus tard** (ex: Phase 19, 20, 22, 23)
-2. **L'ordre d'exécution** peut être différent de la numérotation
-3. **Les phases dépendantes** sont exécutées automatiquement avant la phase principale
+L'audit est organisé en **12 phases** (avec dépendances). Chaque phase exécute une ou plusieurs vérifications (modules `Checks-*.ps1`).
 
-## 📈 Comment fonctionne le Scoring
+Les phases actuellement définies dans `audit.ps1` sont :
 
-### 1. Chaque phase calcule un score pour une catégorie
+| Phase | Nom | Catégorie | Modules |
+|------:|-----|-----------|---------|
+| 1 | Inventaire Complet | Structure | `Checks-Inventory.ps1` |
+| 2 | Architecture Projet | Structure | `Checks-Architecture.ps1`, `Checks-Organization.ps1` |
+| 3 | Sécurité | Sécurité | `Checks-Security.ps1` |
+| 4 | Configuration | Configuration | `Checks-ConfigConsistency.ps1` |
+| 5 | Backend API | Backend | `Checks-API.ps1`, `Checks-StructureAPI.ps1`, `Checks-Database.ps1` |
+| 6 | Frontend | Frontend | `Checks-Routes.ps1`, `Checks-UI.ps1` |
+| 7 | Qualité Code | Qualité | `Checks-CodeMort.ps1`, `Checks-Duplication.ps1`, `Checks-Complexity.ps1` |
+| 8 | Performance | Performance | `Checks-Performance.ps1`, `Checks-Optimizations.ps1` |
+| 9 | Documentation | Documentation | `Checks-Documentation.ps1`, `Checks-MarkdownFiles.ps1` |
+| 10 | Tests | Tests | `Checks-Tests.ps1`, `Checks-FunctionalTests.ps1` |
+| 11 | Déploiement | Déploiement | (aucun module pour le moment) |
+| 12 | Hardware/Firmware | Hardware | `Checks-FirmwareInteractive.ps1` |
 
-Chaque phase vérifie un aspect spécifique et attribue un score de 0 à 10 :
+## 📁 Fichiers générés
 
-- **Phase 1** → Score "Architecture"
-- **Phase 4** → Score "API" 
-- **Phase 5** → Score "Database"
-- **Phase 9** → Score "Complexité"
-- etc.
+Les résultats sont écrits dans `audit/resultats/`.
 
-### 2. Tous les scores sont stockés dans `$auditResults.Scores`
+### 1) Résultat par phase
 
-Par exemple :
+Pour chaque phase exécutée :
+
+`phase_<ID>_<timestamp>.json`
+
+Ce fichier contient :
+- la définition de la phase (id/nom/dépendances/modules)
+- l'état de chaque module exécuté (succès / erreur)
+
+Structure (extrait) :
+```json
+{
+  "Phase": {
+    "Id": 1,
+    "Name": "Inventaire Complet",
+    "Dependencies": [],
+    "Modules": ["Checks-Inventory.ps1"]
+  },
+  "Results": [
+    {
+      "Module": "Checks-Inventory.ps1",
+      "Status": "SUCCESS",
+      "DurationMs": 1234,
+      "Timestamp": "2026-01-04T20:00:00"
+    }
+  ],
+  "Timestamp": "2026-01-04T20:00:00"
+}
+```
+
+En cas d'erreur module :
+```json
+{
+  "Module": "Checks-MarkdownFiles.ps1",
+  "Status": "ERROR",
+  "Error": "...",
+  "DurationMs": 12
+}
+```
+
+### 2) Résumé global
+
+En fin d'audit :
+
+`audit_summary_<timestamp>.json`
+
+Structure (extrait) :
+```json
+{
+  "AuditVersion": "2.0.0",
+  "Target": "project",
+  "ProjectRoot": "...",
+  "PhasesExecuted": [1,2,3],
+  "Results": [ /* liste des phase_*.json (contenu en mémoire) */ ],
+  "Summary": {
+    "TotalPhases": 3,
+    "SuccessfulModules": 10,
+    "FailedModules": 1,
+    "GlobalScore": 6.7
+  }
+}
+```
+
+## 📈 Comment fonctionne le scoring
+
+### 1) Où sont stockés les scores ?
+
+Les modules alimentent un dictionnaire :
+
+`$Results.Scores["<Categorie>"] = <note sur 10>`
+
+Exemple :
 ```json
 {
   "Architecture": 10,
   "API": 4.5,
   "Database": 5,
   "CodeMort": 10,
-  "Complexité": 8,
-  ...
+  "Complexity": 8,
+  "Security": 10
 }
 ```
 
-### 3. Le score global est une moyenne pondérée
+### 2) Score global = moyenne pondérée
 
-**Tous les scores ne comptent pas pareil !** Chaque catégorie a un **poids** (weight) différent :
+Le score global est calculé par `Calculate-GlobalScore` (dans `audit/modules/Utils.ps1`).
 
-| Catégorie | Score | Poids | Impact sur le global |
-|-----------|-------|-------|---------------------|
-| Architecture | 10/10 | 1.0 | = 10.0 |
-| API | 4.5/10 | 1.5 | = 6.75 (pèse plus lourd !) |
-| Database | 5/10 | 1.5 | = 7.5 (pèse plus lourd !) |
-| Sécurité | 10/10 | 2.0 | = 20.0 (pèse TRÈS lourd !) |
-| CodeMort | 10/10 | 1.5 | = 15.0 |
-| Documentation | 10/10 | 0.5 | = 5.0 (pèse moins) |
+Les poids proviennent en priorité de :
 
-### Formule du score global
+`$AuditConfig.ScoreWeights`
 
+Puis un jeu de poids par défaut est utilisé si absent.
+
+Formule :
 ```
-Score Global = (Somme de tous les scores × poids) / (Somme de tous les poids)
+Score Global = (Somme(score_categorie × poids_categorie)) / (Somme(poids_categorie))
 ```
 
-**Exemple simplifié :**
-- Si vous avez seulement 3 catégories :
-  - Architecture : 10/10 (poids 1.0) → 10.0
-  - API : 4.5/10 (poids 1.5) → 6.75
-  - Database : 5/10 (poids 1.5) → 7.5
-  - Total = 24.25
-  - Poids total = 4.0
-  - **Score global = 24.25 / 4.0 = 6.06/10**
+### 3) Pourquoi le score global peut être bas avec beaucoup de 10/10 ?
 
-## 🎯 Pourquoi avoir beaucoup de 10/10 mais un score global de 6.7/10 ?
+Parce que :
+- certaines catégories ont un poids faible
+- d'autres catégories (souvent backend/sécurité/qualité) ont un poids plus fort
 
-C'est normal ! Voici pourquoi :
+Donc une note basse sur une catégorie “fortement pondérée” peut faire baisser significativement le global.
 
-### Les catégories avec 10/10 ont souvent un poids faible
-- Documentation : 10/10 mais poids = 0.5 (peu d'impact)
-- Routes : 10/10 mais poids = 0.8
-- Imports : 10/10 mais poids = 0.5
+## ✅ Conseils de lecture
 
-### Les catégories avec des scores faibles ont souvent un poids élevé
-- **API : 4.5/10 avec poids = 1.5** → Impact fort sur le global
-- **Database : 5/10 avec poids = 1.5** → Impact fort
-- **Sécurité : 2.0** (mais vous avez 10/10 donc OK)
-
-### Résultat
-Même si vous avez 15 catégories à 10/10, si vous avez 3-4 catégories importantes (API, Database, Performance) avec des scores faibles, le score global sera tiré vers le bas.
-
-## 📊 Les Poids Complets (dans l'ordre d'impact)
-
-| Poids | Catégorie | Explication |
-|-------|-----------|-------------|
-| **2.0** | Sécurité | Le plus important - impact critique |
-| **1.8** | Cohérence Configuration | Important pour le déploiement |
-| **1.5** | API | Backend critique |
-| **1.5** | Database | Données critiques |
-| **1.5** | CodeMort | Qualité du code |
-| **1.5** | Configuration | Configuration importante |
-| **1.2** | Duplication | Maintenabilité |
-| **1.2** | Complexité | Maintenabilité |
-| **1.2** | Vérification Exhaustive | Qualité globale |
-| **1.2** | Synchronisation GitHub Pages | Déploiement |
-| **1.0** | Architecture | Structure du projet |
-| **1.0** | Structure API | Organisation API |
-| **1.0** | Performance | Performance |
-| **1.0** | Éléments Inutiles | Propreté du code |
-| **1.0** | Firmware | Hardware |
-| **0.8** | Routes | Navigation |
-| **0.8** | Tests | Couverture tests |
-| **0.8** | GestionErreurs | Robustesse |
-| **0.8** | BestPractices | Bonnes pratiques |
-| **0.8** | Uniformisation UI/UX | Interface |
-| **0.6** | Logs | Monitoring |
-| **0.5** | Documentation | Documentation |
-| **0.5** | Imports | Organisation imports |
-
-## 🔢 Numérotation des Phases
-
-Les phases ne sont pas forcément numérotées 1-23 dans l'ordre. Voici l'ordre réel d'exécution :
-
-1. **Phase 0** : Inventaire exhaustif des fichiers
-2. **Phase 1** : Architecture et Statistiques
-3. **Phase 2** : (peut être manquante ou intégrée ailleurs)
-4. **Phase 3** : Organisation Projet et Nettoyage
-5. **Phase 4** : Endpoints API (Backend 1)
-6. **Phase 4** : Sécurité (différente phase 4 !)
-7. **Phase 5** : Routes et Navigation
-8. **Phase 5** : Base de Données (Backend 2 - différente phase 5 !)
-9. **Phase 7** : Code Mort
-10. **Phase 8** : Duplication de Code
-11. **Phase 9** : Complexité
-12. **Phase 9** : Performance (différente phase 9 !)
-13. **Phase 10** : Tests
-14. **Phase 11-15** : Autres vérifications
-15. **Phase 16** : Vérification Exhaustive
-16. **Phase 16** : Organisation et Nettoyage (différente phase 16 !)
-17. **Phase 17** : Uniformisation UI/UX
-18. **Phase 19** : Éléments Inutiles
-19. **Phase 20** : Audit Firmware
-20. **Phase 20** : Synchronisation GitHub Pages
-21. **Phase 22** : Cohérence Configuration
-22. **Phase 23** : Tests Complets Application
-
-**Note :** Il y a des doublons de numéros car certaines phases ont été ajoutées ou réorganisées au fil du temps.
-
-## ✅ Conclusion
-
-- **Vous avez beaucoup de 10/10** = excellente qualité sur ces aspects
-- **Score global 6.7/10** = les aspects critiques (API, Database, Performance) tirent le score vers le bas
-- **Priorité** = améliorer API (4.5/10) et Database (5/10) pour remonter le score global rapidement
+- Les fichiers `phase_*.json` permettent de voir rapidement si un module a crashé (statut `ERROR`).
+- Le fichier `audit_summary_*.json` permet de savoir :
+  - quelles phases ont été exécutées
+  - combien de modules ont échoué
+  - le score global
+- Pour diagnostiquer un module : relancer avec `-Verbose` et ne cibler qu'une phase via `-Phases "<id>"`.
 

@@ -1,97 +1,31 @@
 # Configuration Multiprojet pour l'Audit
 
-## 📋 Vue d'ensemble
+## Vue d'ensemble
 
-L'audit supporte maintenant la configuration multiprojet avec des fichiers de configuration par projet (JSON/YAML).
+L'audit supporte la configuration multiprojet via :
+- des profils d'auto-détection (`audit/projects/<project>/project.ps1`)
+- des surcharges de configuration PS1 (`audit.config.ps1` / `audit.config.local.ps1`)
+- des overrides de modules (`audit/projects/<project>/modules/`)
 
-## 🔧 Fichiers de Configuration
+## Fichiers de Configuration
 
 ### Configuration Globale (Audit)
-- **`audit/config/audit.config.ps1`** : Configuration globale par défaut (actuellement configuré pour OTT)
+- **`audit/config/audit.config.ps1`** : Configuration globale par défaut (générique)
+- **`audit/config/audit.config.local.ps1`** : surcharge locale (non versionnée)
 
-### Configuration par Projet (Recherche automatique)
+### Configuration par Projet
 
-L'audit cherche automatiquement les fichiers de configuration dans l'ordre suivant :
+Le lanceur `audit/audit.ps1` supporte les surcharges projet via :
+- `audit/projects/<project>/config/audit.config.ps1` (versionnée)
+- `audit/projects/<project>/config/audit.config.local.ps1` (non versionnée)
 
-1. **`[racine-projet]/project_metadata.json`**
-   - Métadonnées du projet (type, technologies, endpoints, etc.)
-   - Template disponible : `audit/data/project_metadata.example.json`
-   - Chargé automatiquement si présent
+La détection automatique est réalisée via des profils dans :
+- `audit/projects/<project>/project.ps1`
 
-2. **`[racine-projet]/audit.config.json`**
-   - Configuration spécifique au projet (API, endpoints, credentials, etc.)
-   - Format JSON simple
+## 📝 Exemple de profil de détection (`project.ps1`)
 
-3. **`[racine-projet]/audit.config.yaml`**
-   - Configuration spécifique au projet en YAML (alternatif)
-
-## 📝 Exemple de `project_metadata.json`
-
-```json
-{
-  "detectedAt": "2025-01-12 10:00:00",
-  "projectRoot": "C:\\Projets\\MonProjet",
-  "projectType": "nextjs",
-  "technologies": ["Next.js", "React", "PHP"],
-  "hasApi": true,
-  "hasFrontend": true,
-  "hasDatabase": true,
-  "hasFirmware": false,
-  "project": {
-    "name": "Mon Projet",
-    "description": "Description du projet",
-    "version": "1.0.0",
-    "company": "Ma Société"
-  },
-  "api": {
-    "baseUrl": "https://api.monprojet.com",
-    "authEndpoint": "/api.php/auth/login",
-    "endpoints": [
-      "/api.php/users",
-      "/api.php/posts"
-    ]
-  },
-  "database": {
-    "type": "PostgreSQL",
-    "schemaFile": "sql/schema.sql",
-    "expectedTables": ["users", "posts"]
-  },
-  "firmware": {
-    "directory": "hardware/firmware",
-    "mainFile": "hardware/firmware/main.ino",
-    "version": "1.0.0"
-  }
-}
-```
-
-## 📝 Exemple de `audit.config.json`
-
-```json
-{
-  "Project": {
-    "Name": "Mon Projet",
-    "Company": "Ma Société",
-    "Description": "Description"
-  },
-  "Api": {
-    "BaseUrl": "https://api.monprojet.com",
-    "AuthEndpoint": "/api.php/auth/login",
-    "Endpoints": [
-      { "Path": "/api.php/users", "Name": "Users" },
-      { "Path": "/api.php/posts", "Name": "Posts" }
-    ]
-  },
-  "Credentials": {
-    "Email": "admin@example.com",
-    "Password": "motdepasse"
-  },
-  "Database": {
-    "Type": "PostgreSQL",
-    "Host": "localhost",
-    "Name": "mabase"
-  }
-}
-```
+Un profil renvoie une hashtable et expose une fonction `Detect` qui retourne un score.
+Le profil avec le meilleur score (>0) est sélectionné.
 
 ## 🚀 Utilisation
 
@@ -105,10 +39,10 @@ REM Audit d'un projet spécifique
 audit.bat "C:\Projets\MonProjet"
 
 REM Audit complet
-audit.bat -All
+audit.bat -Phases "all" -Verbose
 
 REM Audit de phases spécifiques
-audit.bat -Phases "0,1,2"
+audit.bat -Phases "1,2,3" -Verbose
 ```
 
 ### Lancement avec `audit.ps1`
@@ -121,29 +55,23 @@ audit.bat -Phases "0,1,2"
 .\audit.ps1 "C:\Projets\MonProjet"
 
 # Audit complet
-.\audit.ps1 -All
+.\audit.ps1 -Phases "all" -Verbose
 ```
 
 ## 🔍 Détection Automatique
 
-L'audit détecte automatiquement :
-- Le type de projet (Next.js, React, PHP, etc.)
-- Les technologies utilisées
-- La présence d'API, frontend, base de données, firmware
-- Les fichiers de configuration projet
-
-Si `project_metadata.json` n'existe pas, l'audit le génère automatiquement via `Detect-Project.ps1`.
+L'audit détecte automatiquement le projet en testant les profils présents dans `audit/projects/*/project.ps1`.
 
 ## ⚙️ Priorité de Configuration
 
-1. **Variables d'environnement** (API_URL, AUDIT_EMAIL, etc.)
-2. **`[racine-projet]/audit.config.json`** (si existe)
-3. **`[racine-projet]/project_metadata.json`** (si existe)
-4. **`audit/config/audit.config.ps1`** (config globale par défaut)
+1. **`audit/config/audit.config.ps1`** (config globale)
+2. **`audit/config/audit.config.local.ps1`** (surcharge locale)
+3. **`audit/projects/<project>/config/audit.config.ps1`** (si projet détecté)
+4. **`audit/projects/<project>/config/audit.config.local.ps1`** (surcharge locale projet)
+
+Note : les variables d'environnement peuvent être utilisées directement dans les fichiers `audit.config.ps1`.
 
 ## 📚 Pour plus d'informations
 
-- Voir `audit/data/project_metadata.example.json` pour un template complet
 - Consulter `audit/config/audit.config.ps1` pour la configuration globale
-- Voir `audit/modules/ConfigLoader.ps1` pour la logique de chargement
-
+- Voir `audit/projects/<project>/project.ps1` pour la logique de détection

@@ -5,30 +5,42 @@
 # Write-Logo supprimée (code mort - jamais utilisée)
 # Si nécessaire, utiliser au début de Audit-Complet.ps1 pour un affichage professionnel
 
+function Convert-ToAsciiSafe {
+    param([string]$Text)
+    if ($null -eq $Text) { return $Text }
+
+    return $Text
+}
+
 function Write-Section {
     param([string]$Text)
     Write-Host ""
+    $Text = Convert-ToAsciiSafe -Text $Text
     Write-Host "=== $Text ===" -ForegroundColor Cyan
 }
 
 function Write-OK {
     param([string]$Text)
+    $Text = Convert-ToAsciiSafe -Text $Text
     Write-Host "  [OK] $Text" -ForegroundColor Green
 }
 
 function Write-Warn {
     param([string]$Text)
+    $Text = Convert-ToAsciiSafe -Text $Text
     Write-Host "  [WARN] $Text" -ForegroundColor Yellow
 }
 
 function Write-Err {
     param([string]$Text)
+    $Text = Convert-ToAsciiSafe -Text $Text
     Write-Host "  [ERROR] $Text" -ForegroundColor Red
 }
 
 function Write-Info {
     param([string]$Text)
     if ($script:Verbose) {
+        $Text = Convert-ToAsciiSafe -Text $Text
         Write-Host "  [INFO] $Text" -ForegroundColor Gray
     }
 }

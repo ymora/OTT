@@ -1,389 +1,735 @@
-﻿# ===============================================================================
-# LAUNCHER PRINCIPAL - SYSTÈME D'AUDIT COMPLET
 # ===============================================================================
-# Programme autonome et portable pour auditer n'importe quel projet
-# Usage: .\audit.ps1 [Options]
+# SYSTÈME D'AUDIT OTT v2.0 - ARCHITECTURE RECONÇUE
 # ===============================================================================
 
 param(
-    [Parameter(Position=0)]
-    [string]$ProjectPath = "",  # Chemin vers le projet à auditer (vide = détection auto)
-    
-    [Parameter(Position=1)]
-    [string]$TargetFile = "",   # Fichier spécifique à auditer (ex: firmware.ino)
-    
-    [string]$Phases = "",       # Phases à exécuter (vide = menu interactif)
-    [switch]$SkipMenu = $false, # Passer le menu interactif
-    [switch]$All = $false,      # Exécuter toutes les phases
-    [switch]$Help = $false,     # Afficher l'aide
-    [switch]$Setup = $false,    # Installation/setup initial
-    [switch]$Version = $false,  # Afficher la version
-    [switch]$ShowVerbose = $false   # Mode verbeux pour l'audit
+    [string]$Target = "project",  # project, file, directory
+    [string]$Path = "",           # Chemin spécifique pour file/directory
+    [string]$Phases = "all",      # all, ou liste: "1,2,3"
+    [switch]$Verbose = $false,
+    [switch]$Quiet = $false
 )
 
-# Version du système d'audit
-$AUDIT_VERSION = "3.1.0"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+try { & chcp 65001 > $null } catch { }
+$global:OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Répertoire du script (audit/)
-$AUDIT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SCRIPTS_DIR = Join-Path $AUDIT_DIR "scripts"
-$MODULES_DIR = Join-Path $AUDIT_DIR "modules"
-
-# ===============================================================================
-# FONCTIONS D'AFFICHAGE
-# ===============================================================================
-
-function Show-Help {
-    Write-Host @"
-═══════════════════════════════════════════════════════════════════════════════
-  SYSTÈME D'AUDIT COMPLET - Version $AUDIT_VERSION
-═══════════════════════════════════════════════════════════════════════════════
-
-USAGE:
-  .\audit.ps1 [Options] [CheminProjet] [FichierCible]
-
-EXEMPLES:
-  .\audit.ps1                          # Menu interactif (détection auto du projet)
-  .\audit.ps1 -All                     # Audit complet de tous les projets trouvés
-  .\audit.ps1 "C:\Projets\OTT"         # Auditer le projet OTT spécifique
-  .\audit.ps1 "" "firmware.ino"        # Auditer un fichier firmware spécifique
-  .\audit.ps1 -Phases "3,5,7"          # Exécuter phases 3, 5 et 7
-  .\audit.ps1 -Setup                   # Installation/setup initial
-
-OPTIONS:
-  -ProjectPath <chemin>    Chemin vers le projet à auditer (vide = auto)
-  -TargetFile <fichier>     Fichier spécifique à auditer (ex: firmware.ino)
-  -Phases <liste>           Phases à exécuter (ex: "0,1,3" ou "A" pour tout)
-  -SkipMenu                Passer le menu interactif
-  -All                     Exécuter toutes les phases
-  -Setup                   Installation/setup initial
-  -Version                 Afficher la version
-  -Help                    Afficher cette aide
-
-PHASES DISPONIBLES:
-  0-2   : Structure (Inventaire, Architecture, Organisation)
-  3     : Sécurité
-  4-6   : Backend (API, BDD, Structure API)
-  7-13  : Qualité (Code Mort, Duplication, Complexité, Tests, etc.)
-  14-16 : Frontend (Routes, Accessibilité, UI/UX)
-  17    : Performance
-  18    : Documentation
-  19    : Déploiement
-  20    : Firmware
-
-POUR PLUS D'INFORMATIONS:
-  Consultez README.md dans le répertoire audit/
-
-═══════════════════════════════════════════════════════════════════════════════
-"@ -ForegroundColor Cyan
+# Configuration
+$script:Config = @{
+    Version = "2.0.0"
+    ProjectRoot = ""
+    OutputDir = (Join-Path $PSScriptRoot "resultats")
+    Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 }
 
-function Show-Version {
-    Write-Host "Système d'Audit Complet - Version $AUDIT_VERSION" -ForegroundColor Green
-    Write-Host "Répertoire: $AUDIT_DIR" -ForegroundColor Gray
+$script:AuditConfig = $null
+$script:Results = $null
+$script:ProjectInfo = $null
+$script:Files = @()
+
+$script:Verbose = [bool]$Verbose
+
+$utilsPath = Join-Path $PSScriptRoot "modules\Utils.ps1"
+if (Test-Path $utilsPath) { . $utilsPath }
+$fileScannerPath = Join-Path $PSScriptRoot "modules\FileScanner.ps1"
+if (Test-Path $fileScannerPath) { . $fileScannerPath }
+$projectDetectorPath = Join-Path $PSScriptRoot "modules\ProjectDetector.ps1"
+if (Test-Path $projectDetectorPath) { . $projectDetectorPath }
+
+# Définition des phases avec dépendances et ordre logique
+$script:AuditPhases = @(
+    # PHASE 1: STRUCTURE DE BASE (fondation)
+    @{
+        Id = 1
+        Name = "Inventaire Complet"
+        Description = "Analyse de tous les fichiers et répertoires"
+        Category = "Structure"
+        Dependencies = @()
+        Priority = 1
+        Modules = @("Checks-Inventory.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 2: ARCHITECTURE (dépend de l'inventaire)
+    @{
+        Id = 2
+        Name = "Architecture Projet"
+        Description = "Structure, organisation, dépendances"
+        Category = "Structure"
+        Dependencies = @(1)
+        Priority = 2
+        Modules = @("Checks-Architecture.ps1", "Checks-Organization.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 3: SÉCURITÉ (critique, dépend de la structure)
+    @{
+        Id = 3
+        Name = "Sécurité"
+        Description = "Vulnérabilités, secrets, injections"
+        Category = "Sécurité"
+        Dependencies = @(1, 2)
+        Priority = 3
+        Modules = @("Checks-Security.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 4: CONFIGURATION (cohérence environnement)
+    @{
+        Id = 4
+        Name = "Configuration"
+        Description = "Docker, environnement, cohérence"
+        Category = "Configuration"
+        Dependencies = @(1)
+        Priority = 4
+        Modules = @("Checks-ConfigConsistency.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 5: BACKEND (API et base de données)
+    @{
+        Id = 5
+        Name = "Backend API"
+        Description = "Endpoints, handlers, base de données"
+        Category = "Backend"
+        Dependencies = @(1, 2)
+        Priority = 5
+        Modules = @("Checks-API.ps1", "Checks-StructureAPI.ps1", "Checks-Database.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 6: FRONTEND (interface utilisateur)
+    @{
+        Id = 6
+        Name = "Frontend"
+        Description = "Routes, navigation, accessibilité"
+        Category = "Frontend"
+        Dependencies = @(1, 2)
+        Priority = 6
+        Modules = @("Checks-Routes.ps1", "Checks-UI.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 7: QUALITÉ CODE (analyse statique)
+    @{
+        Id = 7
+        Name = "Qualité Code"
+        Description = "Code mort, duplication, complexité"
+        Category = "Qualité"
+        Dependencies = @(1, 2)
+        Priority = 7
+        Modules = @("Checks-CodeMort.ps1", "Checks-Duplication.ps1", "Checks-Complexity.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 8: PERFORMANCE
+    @{
+        Id = 8
+        Name = "Performance"
+        Description = "Optimisations, mémoire, vitesse"
+        Category = "Performance"
+        Dependencies = @(1, 2, 5, 6)
+        Priority = 8
+        Modules = @("Checks-Performance.ps1", "Checks-Optimizations.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 9: DOCUMENTATION
+    @{
+        Id = 9
+        Name = "Documentation"
+        Description = "README, commentaires, guides"
+        Category = "Documentation"
+        Dependencies = @(1, 2)
+        Priority = 9
+        Modules = @("Checks-Documentation.ps1", "Checks-MarkdownFiles.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 10: TESTS
+    @{
+        Id = 10
+        Name = "Tests"
+        Description = "Tests unitaires, intégration, fonctionnels"
+        Category = "Tests"
+        Dependencies = @(1, 2, 5)
+        Priority = 10
+        Modules = @("Checks-Tests.ps1", "Checks-FunctionalTests.ps1")
+        Target = "project"
+    },
+    
+    # PHASE 11: DÉPLOIEMENT
+    @{
+        Id = 11
+        Name = "Déploiement"
+        Description = "CI/CD, GitHub Pages, configuration"
+        Category = "Déploiement"
+        Dependencies = @(1, 4)
+        Priority = 11
+        Modules = @()
+        Target = "project"
+    },
+    
+    # PHASE 12: HARDWARE/FIRMWARE
+    @{
+        Id = 12
+        Name = "Hardware/Firmware"
+        Description = "Arduino, compilation, cohérence"
+        Category = "Hardware"
+        Dependencies = @(1)
+        Priority = 12
+        Modules = @("Checks-FirmwareInteractive.ps1")
+        Target = "project"
+    }
+)
+
+# Fonctions utilitaires
+function Write-Log {
+    param([string]$Message, [string]$Level = "INFO")
+    
+    if ($Quiet) { return }
+
+    if (Get-Command -Name Convert-ToAsciiSafe -ErrorAction SilentlyContinue) {
+        $Message = Convert-ToAsciiSafe -Text $Message
+    }
+    
+    $timestamp = Get-Date -Format "HH:mm:ss"
+    
+    switch ($Level) {
+        "INFO" { Write-Host "[$timestamp] [INFO] $Message" -ForegroundColor White }
+        "SUCCESS" { Write-Host "[$timestamp] [SUCCESS] $Message" -ForegroundColor Green }
+        "WARN" { Write-Host "[$timestamp] [WARN] $Message" -ForegroundColor Yellow }
+        "ERROR" { Write-Host "[$timestamp] [ERROR] $Message" -ForegroundColor Red }
+        default { Write-Host "[$timestamp] [$Level] $Message" }
+    }
 }
 
-# ===============================================================================
-# SETUP/INSTALLATION
-# ===============================================================================
+function Import-AuditDependencies {
+    $utilsPath = Join-Path $PSScriptRoot "modules\Utils.ps1"
+    if (Test-Path $utilsPath) {
+        . $utilsPath
+    }
 
-function Invoke-Setup {
-    Write-Host "`n🔧 Installation/Setup du Système d'Audit..." -ForegroundColor Cyan
-    Write-Host "════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-    
-    # Vérifier PowerShell version
-    $psVersion = $PSVersionTable.PSVersion
-    Write-Host "`n📋 Vérification des prérequis..." -ForegroundColor Yellow
-    Write-Host "   PowerShell: $psVersion" -ForegroundColor White
-    
-    if ($psVersion.Major -lt 5) {
-        Write-Host "   ⚠️  PowerShell 5.0+ recommandé" -ForegroundColor Yellow
-    } else {
-        Write-Host "   ✅ PowerShell version OK" -ForegroundColor Green
+    $fileScannerPath = Join-Path $PSScriptRoot "modules\FileScanner.ps1"
+    if (Test-Path $fileScannerPath) {
+        . $fileScannerPath
     }
-    
-    # Vérifier les modules PowerShell nécessaires
-    $requiredModules = @("PSScriptAnalyzer")
-    foreach ($module in $requiredModules) {
-        if (Get-Module -ListAvailable -Name $module) {
-            Write-Host "   ✅ Module $module installé" -ForegroundColor Green
-        } else {
-            Write-Host "   ⚠️  Module $module non installé (optionnel)" -ForegroundColor Yellow
-            Write-Host "      Installation: Install-Module -Name $module -Scope CurrentUser" -ForegroundColor Gray
-        }
+
+    $projectDetectorPath = Join-Path $PSScriptRoot "modules\ProjectDetector.ps1"
+    if (Test-Path $projectDetectorPath) {
+        . $projectDetectorPath
     }
-    
-    # Créer les répertoires nécessaires
-    Write-Host "`n📁 Création des répertoires..." -ForegroundColor Yellow
-    $dirs = @("resultats", "plans", "data")
-    foreach ($dir in $dirs) {
-        $dirPath = Join-Path $AUDIT_DIR $dir
-        if (-not (Test-Path $dirPath)) {
-            New-Item -ItemType Directory -Path $dirPath -Force | Out-Null
-            Write-Host "   ✅ Créé: $dir" -ForegroundColor Green
-        } else {
-            Write-Host "   ✓ Existe: $dir" -ForegroundColor Gray
-        }
-    }
-    
-    # Copier le fichier de configuration exemple si nécessaire
-    $configExample = Join-Path $SCRIPTS_DIR "audit.config.example.ps1"
-    $configFile = Join-Path $SCRIPTS_DIR "audit.config.ps1"
-    if (-not (Test-Path $configFile) -and (Test-Path $configExample)) {
-        Copy-Item $configExample $configFile
-        Write-Host "`n📝 Fichier de configuration créé: scripts/audit.config.ps1" -ForegroundColor Green
-        Write-Host "   ⚠️  Veuillez le configurer selon vos besoins" -ForegroundColor Yellow
-    }
-    
-    # Vérifier les fichiers nécessaires
-    Write-Host "`n📋 Vérification des fichiers..." -ForegroundColor Yellow
-    $requiredFiles = @(
-        "scripts\Launch-Audit.ps1",
-        "scripts\Audit-Complet.ps1",
-        "scripts\Audit-Phases.ps1"
+}
+
+function Get-ProjectProfile {
+    param(
+        [Parameter(Mandatory=$true)][string]$ProjectRoot
     )
-    $allOk = $true
-    foreach ($file in $requiredFiles) {
-        $filePath = Join-Path $AUDIT_DIR $file
-        if (Test-Path $filePath) {
-            Write-Host "   ✅ $file" -ForegroundColor Green
-        } else {
-            Write-Host "   ❌ $file (MANQUANT)" -ForegroundColor Red
-            $allOk = $false
+
+    $projectsDir = Join-Path $PSScriptRoot "projects"
+    if (-not (Test-Path $projectsDir)) { return $null }
+
+    $best = $null
+    $bestScore = -1
+
+    $projectFiles = Get-ChildItem -Path $projectsDir -Filter "project.ps1" -Recurse -File -ErrorAction SilentlyContinue
+    foreach ($file in $projectFiles) {
+        try {
+            $profile = . $file.FullName
+            if (-not ($profile -is [hashtable])) { continue }
+            if (-not $profile.ContainsKey('Id')) { continue }
+            if (-not $profile.ContainsKey('Detect')) { continue }
+
+            $detect = $profile.Detect
+            $score = 0
+            if ($detect -is [scriptblock]) {
+                $score = & $detect $ProjectRoot
+            }
+
+            if ($score -gt $bestScore) {
+                $bestScore = $score
+                $best = $profile
+                $best.ProjectFile = $file.FullName
+            }
+        } catch {
         }
     }
-    
-    if ($allOk) {
-        Write-Host "`n✅ Setup terminé avec succès !" -ForegroundColor Green
-        Write-Host "`n💡 Pour commencer:" -ForegroundColor Cyan
-        Write-Host "   .\audit.ps1                    # Menu interactif" -ForegroundColor White
-        Write-Host "   .\audit.ps1 -All              # Audit complet" -ForegroundColor White
-        Write-Host "   .\audit.ps1 -Help             # Aide" -ForegroundColor White
-    } else {
-        Write-Host "`n⚠️  Certains fichiers sont manquants. Vérifiez l'installation." -ForegroundColor Yellow
-    }
+
+    if ($bestScore -le 0) { return $null }
+    return $best
 }
 
-# ===============================================================================
-# DÉTECTION DU PROJET
-# ===============================================================================
-
-function Find-Project {
-    param([string]$SearchPath = "")
-    
-    if ([string]::IsNullOrEmpty($SearchPath)) {
-        $SearchPath = Get-Location
-    }
-    
-    # Chercher les indicateurs de projet avec logique améliorée
-    $indicators = @(
-        @{File = "package.json"; Weight = 3},
-        @{File = "composer.json"; Weight = 3},
-        @{File = "api.php"; Weight = 2},
-        @{File = "next.config.js"; Weight = 2},
-        @{File = ".git"; Weight = 1},
-        @{File = "README.md"; Weight = 1}
+function Merge-Hashtable {
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Base,
+        [Parameter(Mandatory=$true)][hashtable]$Override
     )
-    
-    $found = $false
-    $projectPath = $SearchPath
-    $maxDepth = 5
-    $depth = 0
-    $bestScore = 0
-    $bestPath = $SearchPath
-    
-    while ($depth -lt $maxDepth) {
-        $currentScore = 0
-        foreach ($indicator in $indicators) {
-            $indicatorPath = Join-Path $projectPath $indicator.File
-            if (Test-Path $indicatorPath) {
-                $currentScore += $indicator.Weight
+
+    $merged = $Base.Clone()
+    foreach ($key in $Override.Keys) {
+        if ($merged.ContainsKey($key) -and ($merged[$key] -is [hashtable]) -and ($Override[$key] -is [hashtable])) {
+            $merged[$key] = Merge-Hashtable -Base $merged[$key] -Override $Override[$key]
+        } else {
+            $merged[$key] = $Override[$key]
+        }
+    }
+    return $merged
+}
+
+function Load-AuditConfig {
+    $base = @{
+        Exclude = @{
+            Directories = @()
+            Files = @()
+        }
+        Checks = @{ }
+    }
+
+    $configPath = Join-Path $PSScriptRoot "config\audit.config.ps1"
+    if (Test-Path $configPath) {
+        try {
+            $cfg = . $configPath
+            if ($cfg -is [hashtable]) {
+                $base = Merge-Hashtable -Base $base -Override $cfg
+            }
+        } catch {
+            Write-Log "Erreur chargement config globale: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    $configLocalPath = Join-Path $PSScriptRoot "config\audit.config.local.ps1"
+    if (Test-Path $configLocalPath) {
+        try {
+            $cfgLocal = . $configLocalPath
+            if ($cfgLocal -is [hashtable]) {
+                $base = Merge-Hashtable -Base $base -Override $cfgLocal
+            }
+        } catch {
+            Write-Log "Erreur chargement config locale: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    $profile = Get-ProjectProfile -ProjectRoot $script:Config.ProjectRoot
+    if ($profile) {
+        $script:ProjectProfile = $profile
+        $projectId = $profile.Id
+        Write-Log "Projet detecte: $projectId" "SUCCESS"
+
+        $projectConfigPath = Join-Path $PSScriptRoot ("projects\" + $projectId + "\config\audit.config.ps1")
+        if (Test-Path $projectConfigPath) {
+            try {
+                $pcfg = . $projectConfigPath
+                if ($pcfg -is [hashtable]) {
+                    $base = Merge-Hashtable -Base $base -Override $pcfg
+                }
+            } catch {
+                Write-Log "Erreur chargement config projet ($projectId): $($_.Exception.Message)" "WARN"
             }
         }
-        
-        if ($currentScore -gt $bestScore) {
-            $bestScore = $currentScore
-            $bestPath = $projectPath
+
+        $projectConfigLocalPath = Join-Path $PSScriptRoot ("projects\" + $projectId + "\config\audit.config.local.ps1")
+        if (Test-Path $projectConfigLocalPath) {
+            try {
+                $plocal = . $projectConfigLocalPath
+                if ($plocal -is [hashtable]) {
+                    $base = Merge-Hashtable -Base $base -Override $plocal
+                }
+            } catch {
+                Write-Log "Erreur chargement config locale projet ($projectId): $($_.Exception.Message)" "WARN"
+            }
         }
-        
-        if ($currentScore -ge 3) {
-            $found = $true
-            break
-        }
-        
-        $parent = Split-Path -Parent $projectPath
-        if ($parent -eq $projectPath) {
-            break
-        }
-        $projectPath = $parent
-        $depth++
     }
-    
-    if ($bestScore -ge 2) {
-        return $bestPath
+
+    return $base
+}
+
+function Resolve-AuditModulePath {
+    param(
+        [Parameter(Mandatory=$true)][string]$Module
+    )
+
+    if ($script:ProjectProfile -and $script:ProjectProfile.Id) {
+        $projectModulePath = Join-Path $PSScriptRoot ("projects\" + $script:ProjectProfile.Id + "\modules\" + $Module)
+        if (Test-Path $projectModulePath) { return $projectModulePath }
     }
-    
-    return $null
+
+    $coreModulePath = Join-Path $PSScriptRoot ("modules\" + $Module)
+    return $coreModulePath
 }
 
-# ===============================================================================
-# EXÉCUTION PRINCIPALE
-# ===============================================================================
-
-# Aide
-if ($Help) {
-    Show-Help
-    exit 0
+function Resolve-TargetRoot {
+    if ($Target -eq "project") {
+        # Par défaut: le projet est le parent du dossier "audit"
+        $repoRoot = Split-Path -Parent $PSScriptRoot
+        return $repoRoot
+    }
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Le paramètre -Path est requis pour Target=$Target"
+    }
+    if (-not (Test-Path $Path)) {
+        throw "Chemin introuvable: $Path"
+    }
+    $resolved = (Resolve-Path $Path -ErrorAction Stop).Path
+    $item = Get-Item $resolved -ErrorAction Stop
+    if ($Target -eq "file") {
+        return $item.Directory.FullName
+    }
+    if ($Target -eq "directory") {
+        return $item.FullName
+    }
+    return (Get-Location).Path
 }
 
-# Version
-if ($Version) {
-    Show-Version
-    exit 0
-}
+function Initialize-AuditContext {
+    $script:Verbose = [bool]$Verbose
 
-# Setup
-if ($Setup) {
-    Invoke-Setup
-    exit 0
-}
+    $script:AuditConfig = Load-AuditConfig
 
-# Détecter le projet à auditer
-$projectRoot = $null
-
-if (-not [string]::IsNullOrEmpty($ProjectPath)) {
-    # Chemin spécifié
-    if (Test-Path $ProjectPath) {
-        $projectRoot = Resolve-Path $ProjectPath
-        Write-Host "📁 Projet spécifié: $projectRoot" -ForegroundColor Cyan
+    if (Get-Command Get-ProjectInfo -ErrorAction SilentlyContinue) {
+        try {
+            $script:ProjectInfo = Get-ProjectInfo -Path $script:Config.ProjectRoot
+        } catch {
+            $script:ProjectInfo = @{ }
+        }
     } else {
-        Write-Host "❌ Chemin introuvable: $ProjectPath" -ForegroundColor Red
-        exit 1
+        $script:ProjectInfo = @{ }
     }
-} else {
-    # Détection automatique
-    $projectRoot = Find-Project
-    if ($projectRoot) {
-        Write-Host "📁 Projet détecté: $projectRoot" -ForegroundColor Cyan
+
+    $script:Results = @{
+        Scores = @{ }
+        Recommendations = @()
+        Statistics = @{ }
+        API = @{ }
+    }
+
+    if ($Target -eq "file") {
+        $script:Files = @((Get-Item $Path -ErrorAction Stop))
+    } elseif (Get-Command Get-ProjectFiles -ErrorAction SilentlyContinue) {
+        $script:Files = @(Get-ProjectFiles -Path $script:Config.ProjectRoot -Config $script:AuditConfig)
     } else {
-        Write-Host "⚠️  Aucun projet détecté automatiquement." -ForegroundColor Yellow
-        Write-Host "   Utilisez: .\audit.ps1 <chemin-projet>" -ForegroundColor Yellow
-        Write-Host "   Ou: .\audit.ps1 -Help" -ForegroundColor Yellow
-        exit 1
+        $script:Files = @(Get-ChildItem -Path $script:Config.ProjectRoot -Recurse -File -ErrorAction SilentlyContinue)
     }
 }
 
-# Changer vers le répertoire du projet
-Push-Location $projectRoot
+function Invoke-AuditModule {
+    param(
+        [Parameter(Mandatory=$true)][string]$Module
+    )
 
-# Détecter automatiquement le projet avant de lancer l'audit
-Write-Host "`n🔍 Détection automatique du projet..." -ForegroundColor Cyan
-$detectScript = Join-Path $SCRIPTS_DIR "Detect-Project.ps1"
-if (Test-Path $detectScript) {
+    $modulePath = Resolve-AuditModulePath -Module $Module
+    if (-not (Test-Path $modulePath)) {
+        throw "Module introuvable: $Module"
+    }
+
+    . $modulePath
+
+    $suffix = ($Module -replace '^Checks-','' -replace '\.ps1$','')
+    $functionName = "Invoke-Check-$suffix"
+    $cmd = Get-Command $functionName -ErrorAction SilentlyContinue
+    if (-not $cmd) {
+        throw "Fonction introuvable pour $Module (attendue: $functionName)"
+    }
+
+    $invokeParams = @{ }
+    if ($cmd.Parameters.ContainsKey('Config')) { $invokeParams.Config = $script:AuditConfig }
+    if ($cmd.Parameters.ContainsKey('Results')) { $invokeParams.Results = $script:Results }
+    if ($cmd.Parameters.ContainsKey('Files')) { $invokeParams.Files = $script:Files }
+    if ($cmd.Parameters.ContainsKey('ProjectPath')) { $invokeParams.ProjectPath = $script:Config.ProjectRoot }
+    if ($cmd.Parameters.ContainsKey('ProjectRoot')) { $invokeParams.ProjectRoot = $script:Config.ProjectRoot }
+    if ($cmd.Parameters.ContainsKey('ProjectInfo')) { $invokeParams.ProjectInfo = $script:ProjectInfo }
+
+    & $functionName @invokeParams
+}
+
+function Test-ModuleExists {
+    param([string]$ModuleName)
+    $modulePath = Resolve-AuditModulePath -Module $ModuleName
+    return Test-Path $modulePath
+}
+
+function Get-PhaseDependencies {
+    param([int]$PhaseId, [hashtable]$Visited = @{ })
+
+    if ($Visited.ContainsKey($PhaseId)) {
+        return @()
+    }
+
+    $phase = $script:AuditPhases | Where-Object { $_.Id -eq $PhaseId }
+    if (-not $phase) {
+        return @()
+    }
+
+    $Visited[$PhaseId] = $true
+    $allDeps = @()
+
+    foreach ($depId in $phase.Dependencies) {
+        $allDeps += Get-PhaseDependencies -PhaseId $depId -Visited $Visited
+        $allDeps += $depId
+    }
+
+    return ($allDeps | Sort-Object -Unique)
+}
+
+function Resolve-PhaseExecution {
+    param([array]$RequestedPhases)
+
+    $allPhases = @()
+    foreach ($phaseId in $RequestedPhases) {
+        $deps = Get-PhaseDependencies -PhaseId $phaseId
+        foreach ($dep in $deps) {
+            if ($allPhases -notcontains $dep) {
+                $allPhases += $dep
+            }
+        }
+        if ($allPhases -notcontains $phaseId) {
+            $allPhases += $phaseId
+        }
+    }
+
+    # Trier par priorité
+    $sortedPhases = @()
+    foreach ($phase in $script:AuditPhases | Sort-Object Priority) {
+        if ($allPhases -contains $phase.Id) {
+            $sortedPhases += $phase.Id
+        }
+    }
+
+    return $sortedPhases
+}
+
+function Invoke-InteractiveMenu {
+    Write-Host "" 
+    Write-Host "==============================" -ForegroundColor Cyan
+    Write-Host "Menu Audit" -ForegroundColor Cyan
+    Write-Host "==============================" -ForegroundColor Cyan
+
+    $targetChoice = Read-Host "Cible (1=projet, 2=fichier, 3=repertoire) [1]"
+    if ([string]::IsNullOrWhiteSpace($targetChoice)) { $targetChoice = "1" }
+
+    switch ($targetChoice) {
+        "2" { $script:Target = "file" }
+        "3" { $script:Target = "directory" }
+        default { $script:Target = "project" }
+    }
+
+    if ($script:Target -ne "project") {
+        $p = Read-Host "Chemin (relatif ou absolu)"
+        if ([string]::IsNullOrWhiteSpace($p)) {
+            throw "Chemin requis pour Target=$script:Target"
+        }
+        $script:Path = $p
+    }
+
+    Write-Host "" 
+    Write-Host "Phases disponibles:" -ForegroundColor Gray
+    foreach ($ph in ($script:AuditPhases | Sort-Object Id)) {
+        Write-Host ("  " + $ph.Id + " - " + $ph.Name) -ForegroundColor Gray
+    }
+
+    $phasesChoice = Read-Host "Phases (all ou liste ex: 1,2,3) [all]"
+    if ([string]::IsNullOrWhiteSpace($phasesChoice)) { $phasesChoice = "all" }
+    $script:Phases = $phasesChoice
+
+    $verboseChoice = Read-Host "Verbose ? (o/n) [n]"
+    $script:Verbose = ($verboseChoice -match '^(o|oui|y|yes)$')
+
+    $quietChoice = Read-Host "Silencieux ? (o/n) [n]"
+    $script:Quiet = ($quietChoice -match '^(o|oui|y|yes)$')
+
+    Write-Host "" 
+    Write-Host "Résumé:" -ForegroundColor Cyan
+    Write-Host ("  Target: " + $script:Target) -ForegroundColor Cyan
+    if ($script:Target -ne "project") {
+        Write-Host ("  Path: " + $script:Path) -ForegroundColor Cyan
+    }
+    Write-Host ("  Phases: " + $script:Phases) -ForegroundColor Cyan
+    Write-Host ("  Verbose: " + [bool]$script:Verbose) -ForegroundColor Cyan
+    Write-Host ("  Quiet: " + [bool]$script:Quiet) -ForegroundColor Cyan
+
+    $confirm = Read-Host "Lancer l'audit ? (o/n) [o]"
+    if ([string]::IsNullOrWhiteSpace($confirm)) { $confirm = "o" }
+    if ($confirm -notmatch '^(o|oui|y|yes)$') {
+        Write-Host "Audit annulé." -ForegroundColor Yellow
+        exit 0
+    }
+}
+
+function Initialize-AuditEnvironment {
+    Write-Log "Initialisation de l'environnement d'audit..." "INFO"
+
+    $script:Config.ProjectRoot = Resolve-TargetRoot
+
+    $script:OriginalLocation = (Get-Location).Path
+
     try {
-        $projectMetadata = & $detectScript -ProjectRoot $projectRoot -OutputFile "project_metadata.json"
-        Write-Host "✅ Projet détecté: $($projectMetadata.project.name)" -ForegroundColor Green
-        Write-Host "   Type: $($projectMetadata.projectType)" -ForegroundColor Gray
-        Write-Host "   Technologies: $($projectMetadata.technologies -join ', ')" -ForegroundColor Gray
+        Push-Location -Path $script:Config.ProjectRoot
     } catch {
-        Write-Warning "Détection automatique échouée (continuation avec valeurs par défaut)"
+        throw "Impossible de se placer dans le répertoire projet '$($script:Config.ProjectRoot)': $($_.Exception.Message)"
     }
-}
 
-# Préparer les paramètres pour LANCER_AUDIT.ps1
-$launchParams = @{
-    ConfigFile = "audit.config.ps1"
-    SkipMenu = $SkipMenu
-}
-
-# Gérer les phases
-if ($All) {
-    $launchParams.Phases = "A"
-    $launchParams.SkipMenu = $true
-} elseif (-not [string]::IsNullOrEmpty($Phases)) {
-    $launchParams.Phases = $Phases
-    $launchParams.SkipMenu = $true
-}
-
-# Si un fichier spécifique est ciblé, utiliser l'audit spécialisé
-if (-not [string]::IsNullOrEmpty($TargetFile)) {
-    Write-Host "📄 Fichier ciblé: $TargetFile" -ForegroundColor Cyan
-    
-    # Vérifier que le fichier existe
-    $targetPath = Join-Path $projectRoot $TargetFile
-    if (-not (Test-Path $targetPath)) {
-        Write-Host "❌ Fichier introuvable: $TargetFile" -ForegroundColor Red
-        Pop-Location
-        exit 1
+    # Création du répertoire de résultats
+    if (-not (Test-Path $script:Config.OutputDir)) {
+        New-Item -ItemType Directory -Path $script:Config.OutputDir -Force | Out-Null
+        Write-Log "Création du répertoire de résultats: $($script:Config.OutputDir)" "INFO"
     }
-    
-    # Utiliser le script unifié qui réutilise tous les modules d'audit
-    # Plus efficace : un seul script qui charge les modules pertinents selon le type de fichier
-    Write-Host "📄 Audit fichier unique: $TargetFile" -ForegroundColor Cyan
-    
-    # Résoudre le chemin du fichier (relatif ou absolu)
-    $resolvedFilePath = $TargetFile
-    if (-not [System.IO.Path]::IsPathRooted($TargetFile)) {
-        # Chemin relatif - utiliser le chemin relatif au projet
-        $resolvedFilePath = $TargetFile
-    } else {
-        # Chemin absolu - convertir en chemin relatif au projet si possible
+
+    Write-Log "Projet: $($script:Config.ProjectRoot)" "SUCCESS"
+    Write-Log "Cible: $Target" "INFO"
+
+    Import-AuditDependencies
+    Initialize-AuditContext
+}
+
+function Execute-Phase {
+    param([object]$Phase)
+
+    Write-Log "Début Phase $($Phase.Id): $($Phase.Name)" "INFO"
+    Write-Log "Description: $($Phase.Description)" "INFO"
+
+    if ($Phase.Dependencies.Count -gt 0) {
+        Write-Log "Dépendances: $($Phase.Dependencies -join ', ')" "INFO"
+    }
+
+    $results = @()
+    foreach ($module in $Phase.Modules) {
+        if (-not (Test-ModuleExists $module)) {
+            Write-Log "Module $module introuvable, ignoré" "WARN"
+            continue
+        }
+
+        Write-Log "Exécution module: $module" "INFO"
+
         try {
-            $relativePath = [System.IO.Path]::GetRelativePath($projectRoot, $TargetFile)
-            if ($relativePath -notlike "..*") {
-                $resolvedFilePath = $relativePath
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            Invoke-AuditModule -Module $module
+            $sw.Stop()
+            $results += @{
+                Module = $module
+                Status = "SUCCESS"
+                DurationMs = $sw.ElapsedMilliseconds
+                Timestamp = Get-Date
+            }
+            Write-Log "Module $module terminé avec succès" "SUCCESS"
+        } catch {
+            Write-Log "Erreur module $module : $($_.Exception.Message)" "ERROR"
+            $results += @{
+                Module = $module
+                Status = "ERROR"
+                Error = $_.Exception.Message
+                DurationMs = $sw.ElapsedMilliseconds
+                Timestamp = Get-Date
+            }
+        }
+    }
+
+    # Sauvegarde des résultats de la phase
+    $phaseResult = @{
+        Phase = $Phase
+        Results = $results
+        Timestamp = Get-Date
+    }
+
+    $resultFile = Join-Path $script:Config.OutputDir "phase_$($Phase.Id)_$($script:Config.Timestamp).json"
+    $phaseResult | ConvertTo-Json -Depth 10 | Out-File -FilePath $resultFile -Encoding UTF8
+
+    Write-Log "Phase $($Phase.Id) terminée - Résultats: $resultFile" "SUCCESS"
+    return $phaseResult
+}
+
+# Programme principal
+function Main {
+    try {
+        Write-Host "================================================================" -ForegroundColor Cyan
+        Write-Host "SYSTEME D'AUDIT v$($script:Config.Version)" -ForegroundColor Cyan
+        Write-Host "================================================================" -ForegroundColor Cyan
+
+        Initialize-AuditEnvironment
+
+        # Résolution des phases à exécuter
+        $requestedPhases = @()
+        if ($Phases -eq "all") {
+            $requestedPhases = $script:AuditPhases | ForEach-Object { $_.Id }
+        } else {
+            $requestedPhases = $Phases -split ',' | ForEach-Object { 
+                $num = [int]($_.Trim())
+                if ($script:AuditPhases | Where-Object { $_.Id -eq $num }) {
+                    $num
+                } else {
+                    Write-Log "Phase $num invalide, ignorée" "WARN"
+                }
+            }
+        }
+
+        if ($requestedPhases.Count -eq 0) {
+            Write-Log "Aucune phase valide à exécuter" "ERROR"
+            return
+        }
+
+        $executionPlan = Resolve-PhaseExecution -RequestedPhases $requestedPhases
+
+        Write-Log "Plan d'exécution: $($executionPlan -join ', ')" "INFO"
+        Write-Log "Nombre de phases: $($executionPlan.Count)" "INFO"
+
+        # Exécution des phases
+        $allResults = @()
+        foreach ($phaseId in $executionPlan) {
+            $phase = $script:AuditPhases | Where-Object { $_.Id -eq $phaseId }
+            $result = Execute-Phase -Phase $phase
+            $allResults += $result
+        }
+
+        # Rapport final
+        $globalScore = $null
+        if (Get-Command Calculate-GlobalScore -ErrorAction SilentlyContinue) {
+            try {
+                $globalScore = Calculate-GlobalScore -Results $script:Results -Config $script:AuditConfig
+            } catch {
+                $globalScore = $null
+            }
+        }
+
+        $summary = @{
+            AuditVersion = $script:Config.Version
+            Timestamp = Get-Date
+            Target = $Target
+            ProjectRoot = $script:Config.ProjectRoot
+            PhasesExecuted = $executionPlan
+            Results = $allResults
+            Summary = @{
+                TotalPhases = $executionPlan.Count
+                SuccessfulModules = ($allResults.Results | Where-Object { $_.Status -eq "SUCCESS" }).Count
+                FailedModules = ($allResults.Results | Where-Object { $_.Status -eq "ERROR" }).Count
+                GlobalScore = $globalScore
+            }
+        }
+
+        $summaryFile = Join-Path $script:Config.OutputDir "audit_summary_$($script:Config.Timestamp).json"
+        $summary | ConvertTo-Json -Depth 10 | Out-File -FilePath $summaryFile -Encoding UTF8
+
+        Write-Host "================================================================" -ForegroundColor Green
+        Write-Host "AUDIT TERMINE AVEC SUCCES" -ForegroundColor Green
+        Write-Host "Rapport complet: $summaryFile" -ForegroundColor Cyan
+        Write-Host "================================================================" -ForegroundColor Green
+        
+    } catch {
+        Write-Log "Erreur fatale: $($_.Exception.Message)" "ERROR"
+        if ($Verbose) {
+            Write-Log "Stack trace: $($_.ScriptStackTrace)" "ERROR"
+        }
+        exit 1
+    } finally {
+        try {
+            if ($script:Config -and $script:Config.ProjectRoot) {
+                Pop-Location -ErrorAction SilentlyContinue
             }
         } catch {
-            # Si la conversion échoue, utiliser le chemin absolu
-            $resolvedFilePath = $TargetFile
         }
     }
-    
-    $singleFileScript = Join-Path $SCRIPTS_DIR "Audit-SingleFile.ps1"
-    if (Test-Path $singleFileScript) {
-        try {
-            & $singleFileScript -FilePath $resolvedFilePath -ProjectRoot $projectRoot -ShowVerbose:$ShowVerbose -AllChecks:$true
-            $exitCode = $LASTEXITCODE
-        } catch {
-            Write-Host "`n❌ Erreur lors de l'audit du fichier: $($_.Exception.Message)" -ForegroundColor Red
-            $exitCode = 1
-        }
-        Pop-Location
-        exit $exitCode
-    } else {
-        Write-Host "❌ Script d'audit unifié introuvable: $singleFileScript" -ForegroundColor Red
-        Write-Host "⚠️  Impossible d'effectuer l'audit du fichier" -ForegroundColor Yellow
-        Pop-Location
-        exit 1
-    }
 }
 
-# Exécuter l'audit
-$launcherScript = Join-Path $SCRIPTS_DIR "Launch-Audit.ps1"
-
-if (-not (Test-Path $launcherScript)) {
-    Write-Host "❌ Script de lancement introuvable: $launcherScript" -ForegroundColor Red
-    Pop-Location
-    exit 1
+# Lancement du programme
+if ($PSBoundParameters.Count -eq 0) {
+    Invoke-InteractiveMenu
 }
-
-Write-Host "`n🚀 Lancement de l'audit..." -ForegroundColor Green
-Write-Host "════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host ""
-
-# Exécuter le script de lancement
-try {
-    & $launcherScript @launchParams
-    $exitCode = $LASTEXITCODE
-} catch {
-    Write-Host "`n❌ Erreur lors de l'execution: $($_.Exception.Message)" -ForegroundColor Red
-    $exitCode = 1
-} finally {
-    Pop-Location
-    if ($env:AUDIT_TARGET_FILE) {
-        Remove-Item Env:\AUDIT_TARGET_FILE
-    }
-}
-
-exit $exitCode
-
+Main

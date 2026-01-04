@@ -6,20 +6,20 @@ Optimiser l'audit pour :
 - **CPU** : Détecte les patterns suspects (rapide, reproductible)
 - **IA** : Vérifie seulement les cas douteux avec contexte (efficace, précise)
 
-## 📋 Workflow
+## Workflow
 
 ### 1. Audit CPU (Automatique)
 ```powershell
-.\audit\audit.ps1 -All
+.\audit\audit.ps1 -Phases "all" -Verbose
 ```
 
 L'audit détecte :
-- ✅ Patterns évidents (code mort, doublons, sécurité basique)
-- ⚠️ Cas douteux (handlers "inutilisés", imports "inutilisés", timers)
+- Patterns évidents (code mort, doublons, sécurité basique)
+- Cas douteux (handlers "inutilisés", imports "inutilisés", timers)
 
 ### 2. Génération du Rapport IA
 ```powershell
-# Le rapport est généré automatiquement dans audit/resultats/ai-context.json
+# Le rapport peut être exporté si des modules ajoutent du contenu dans Results.AIContext
 ```
 
 Le rapport contient :
@@ -36,24 +36,23 @@ Get-Content audit/resultats/ai-verification-prompt.txt
 $context = Get-Content audit/resultats/ai-context.json | ConvertFrom-Json
 ```
 
-## 🔧 Modules Améliorés
+## Modules Améliorés
 
-### `Checks-StructureAPI-Improved.ps1`
-- ✅ Détection générique des patterns de routing (preg_match, switch/case, if/elseif)
-- ✅ Pas de noms de fichiers fixes (détecte api.php, router.php, etc.)
-- ✅ Génère contexte pour l'IA au lieu de faux positifs
+### `Checks-StructureAPI.ps1`
+- Analyse de structure API / routing (détection de handlers, routes potentielles)
+- Peut alimenter un contexte à faire valider par l'IA si nécessaire
 
 ### `AI-ContextGenerator.ps1`
-- ✅ Génère rapport structuré avec contexte de code
-- ✅ Inclut patterns de routing et routes potentielles
-- ✅ Questions spécifiques pour l'IA
+- Génère rapport structuré avec contexte de code
+- Inclut patterns de routing et routes potentielles
+- Questions spécifiques pour l'IA
 
 ### `AI-VerificationPrompt.ps1`
-- ✅ Génère prompt optimisé pour minimiser les tokens
-- ✅ Contexte ciblé (seulement ce qui est nécessaire)
-- ✅ Format structuré pour réponse facile
+- Génère prompt optimisé pour minimiser les tokens
+- Contexte ciblé (seulement ce qui est nécessaire)
+- Format structuré pour réponse facile
 
-## 📊 Exemple de Rapport IA
+## Exemple de Rapport IA
 
 ```json
 {
@@ -76,7 +75,7 @@ $context = Get-Content audit/resultats/ai-context.json | ConvertFrom-Json
 }
 ```
 
-## 🚀 Avantages
+## Avantages
 
 1. **Moins de tokens** : L'IA vérifie seulement les cas douteux
 2. **Plus précis** : Contexte fourni pour chaque cas
@@ -84,58 +83,20 @@ $context = Get-Content audit/resultats/ai-context.json | ConvertFrom-Json
 4. **Réutilisable** : Modules utilisables pour d'autres projets
 5. **Performant** : CPU fait le travail lourd, IA vérifie efficacement
 
-## 📝 Intégration dans Audit-Complet.ps1
+## Intégration dans audit.ps1
 
-Pour activer les modules améliorés, remplacer dans `Audit-Complet.ps1` :
+Les modules IA sont présents dans `audit/modules/AI-*.ps1`.
+L'intégration automatique au lanceur `audit/audit.ps1` n'est pas activée par défaut :
+- l'audit CPU peut générer des éléments dans `Results.AIContext`.
+- tu peux ensuite exploiter ce contexte (JSON) pour faire valider les cas douteux par l'IA.
 
-```powershell
-# Ancien
-. "$MODULES_DIR\Checks-StructureAPI.ps1"
-Invoke-Check-StructureAPI -Results $Results -ProjectPath $ProjectRoot
+## Modules de tests exhaustifs (spécifiques projet)
 
-# Nouveau
-. "$MODULES_DIR\Checks-StructureAPI-Improved.ps1"
-Invoke-Check-StructureAPI-Improved -Results $Results -ProjectPath $ProjectRoot
+Certains modules de tests “end-to-end” sont spécifiques à un projet (ex: OTT : endpoints, routes, fichiers critiques).
+Ils ne font pas partie du **socle réutilisable** des 12 phases.
 
-# Après toutes les vérifications
-. "$MODULES_DIR\AI-ContextGenerator.ps1"
-$aiReport = Generate-AIContext -Results $Results -ProjectPath $ProjectRoot -OutputFile "$ResultDir\ai-context.json"
+Exemples (OTT) :
+- `audit/projects/ott/modules/Checks-TestsComplets.ps1`
+- `audit/projects/ott/modules/AI-TestsComplets.ps1`
 
-. "$MODULES_DIR\AI-VerificationPrompt.ps1"
-$prompt = Generate-AIVerificationPrompt -AIReport $aiReport -OutputFile "$ResultDir\ai-verification-prompt.txt"
-```
-
-## 🧪 Module Tests Complets Application OTT (Phase 21)
-
-### Description
-
-Module spécialisé pour tester exhaustivement l'application OTT :
-- ✅ Vérification fichiers critiques
-- ✅ Vérification corrections critiques (whereClause, display_errors, urldecode)
-- ✅ Tests API (health check, endpoints)
-- ✅ Vérification sécurité SQL
-- ✅ Génération contexte IA pour analyse approfondie
-
-### Utilisation
-
-```powershell
-# Exécuter uniquement la phase 21
-.\audit\audit.ps1 -Phases 21
-
-# Ou inclure dans l'audit complet
-.\audit\audit.ps1 -All
-```
-
-### Contexte IA Généré
-
-Le module génère automatiquement un contexte IA structuré avec :
-- Questions spécifiques pour chaque problème détecté
-- Contexte de code pour analyse approfondie
-- Recommandations basées sur les résultats
-- Score de qualité global
-
-### Fichiers
-
-- `audit/modules/Checks-TestsComplets.ps1` - Module de vérification
-- `audit/modules/AI-TestsComplets.ps1` - Générateur de contexte IA
-
+Recommandation : placer ces modules dans un dossier projet dédié (ex: `audit/projects/ott/modules/`) et n'activer ces tests que lorsqu'on audite ce projet.

@@ -7,14 +7,20 @@ Système d'audit générique et portable pour analyser la qualité, la sécurit�
 ## 🚀 Utilisation rapide
 
 ```powershell
-# Lancer l'audit complet
-.\audit\audit.ps1 -All
+# Audit complet (12 phases, dépendances automatiques)
+.\audit\audit.ps1 -Phases "all" -Verbose
+
+# Audit de phases spécifiques (les dépendances sont ajoutées automatiquement)
+.\audit\audit.ps1 -Phases "3,7" -Verbose
+
+# Audit d'un fichier spécifique
+.\audit\audit.ps1 -Target "file" -Path ".\api.php" -Phases "3,7" -Verbose
+
+# Audit d'un répertoire spécifique
+.\audit\audit.ps1 -Target "directory" -Path ".\app" -Phases "2,6,7" -Verbose
 
 # Ou via le script batch
-.\audit\audit.bat -All
-
-# Lancer des phases spécifiques
-.\audit\audit.ps1 -Phases "1,2,3"
+.\audit\audit.bat -Phases "all" -Verbose
 ```
 
 ## 📚 Documentation
@@ -27,47 +33,43 @@ Système d'audit générique et portable pour analyser la qualité, la sécurit�
 
 ```
 audit/
-├── scripts/           # Scripts principaux d'audit
-│   ├── Audit-Complet.ps1    # Script principal (23 phases)
-│   ├── Audit-Phases.ps1     # Définition des phases
-│   └── Launch-Audit.ps1     # Lanceur avec menu
-├── modules/           # Modules de vérification (23 phases)
+├── audit.ps1          # Point d'entrée unique (12 phases)
+├── modules/           # Modules de vérification (Invoke-Check-*)
 │   ├── Checks-*.ps1         # Modules de vérification
 │   ├── AI-*.ps1             # Modules d'intégration IA
 │   └── Utils.ps1            # Utilitaires
 ├── config/            # Configuration
-│   └── audit.config.ps1      # Configuration globale
+│   ├── audit.config.ps1         # Configuration globale (générique)
+│   ├── audit.config.local.ps1   # Surcharge locale (non versionnée)
+│   └── audit.config.example.ps1 # Exemple
+├── projects/          # Spécificités projet (auto-détection)
+│   └── ott/
+│       ├── project.ps1               # Détection (retourne un score)
+│       ├── config/
+│       │   ├── audit.config.ps1       # Surcharge projet (versionnée)
+│       │   └── audit.config.local.ps1 # Surcharge locale projet (non versionnée)
+│       └── modules/                  # Overrides modules pour ce projet
 ├── data/              # Données de référence
 │   └── expected_tables.txt   # Tables attendues
-└── resultats/         # Résultats d'audit
-    └── audit_state.json      # État actuel
+└── resultats/         # Résultats d'audit (générés, non versionnés)
+    ├── phase_<id>_<timestamp>.json
+    └── audit_summary_<timestamp>.json
 ```
 
-## 🎯 Les 23 Phases d'Audit
+## 🎯 Les 12 Phases d'Audit (ordre logique)
 
-1. **Inventaire Exhaustif** - Tous les fichiers et répertoires
-2. **Architecture et Statistiques** - Structure du projet
-3. **Organisation** - Structure fichiers, doublons
-4. **Sécurité** - SQL injection, XSS, secrets
-5. **Endpoints API** - Tests fonctionnels API
-6. **Base de Données** - Cohérence BDD, intégrité
-7. **Structure API** - Cohérence handlers, routes
-8. **Code Mort** - Fichiers/composants non utilisés
-9. **Duplication de Code** - Code dupliqué
-10. **Complexité** - Complexité cyclomatique
-11. **Tests** - Tests unitaires, couverture
-12. **Gestion d'Erreurs** - Error boundaries, try/catch
-13. **Optimisations Avancées** - Vérifications détaillées
-14. **Liens et Imports** - Liens cassés, imports manquants
-15. **Routes et Navigation** - Routes Next.js
-16. **Accessibilité (a11y)** - WCAG 2.1 AA
-17. **Uniformisation UI/UX** - Composants unifiés
-18. **Performance** - Optimisations React
-19. **Documentation** - README, commentaires
-20. **Synchronisation GitHub Pages** - Déploiement
-21. **Firmware** - Fichiers firmware, versions
-22. **Cohérence Configuration** - Docker/Render/GitHub
-23. **Tests Complets Application** - Tests exhaustifs
+1. **Inventaire Complet**
+2. **Architecture Projet** (dépendance: 1)
+3. **Sécurité** (dépendances: 1,2)
+4. **Configuration** (dépendance: 1)
+5. **Backend API** (dépendances: 1,2)
+6. **Frontend** (dépendances: 1,2)
+7. **Qualité Code** (dépendances: 1,2)
+8. **Performance** (dépendances: 1,2,5,6)
+9. **Documentation** (dépendances: 1,2)
+10. **Tests** (dépendances: 1,2,5)
+11. **Déploiement** (dépendances: 1,4)
+12. **Hardware/Firmware** (dépendance: 1)
 
 ## ⚙️ Configuration
 
