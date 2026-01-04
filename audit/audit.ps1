@@ -22,7 +22,7 @@ param(
 )
 
 # Version du système d'audit
-$AUDIT_VERSION = "3.0.0"
+$AUDIT_VERSION = "3.1.0"
 
 # Répertoire du script (audit/)
 $AUDIT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -175,34 +175,52 @@ function Find-Project {
         $SearchPath = Get-Location
     }
     
-    # Chercher les indicateurs de projet
-    $indicators = @("package.json", "composer.json", "api.php", "next.config.js", ".git")
+    # Chercher les indicateurs de projet avec logique améliorée
+    $indicators = @(
+        @{File = "package.json"; Weight = 3},
+        @{File = "composer.json"; Weight = 3},
+        @{File = "api.php"; Weight = 2},
+        @{File = "next.config.js"; Weight = 2},
+        @{File = ".git"; Weight = 1},
+        @{File = "README.md"; Weight = 1}
+    )
+    
     $found = $false
     $projectPath = $SearchPath
     $maxDepth = 5
     $depth = 0
+    $bestScore = 0
+    $bestPath = $SearchPath
     
-    while ($depth -lt $maxDepth -and -not $found) {
+    while ($depth -lt $maxDepth) {
+        $currentScore = 0
         foreach ($indicator in $indicators) {
-            $indicatorPath = Join-Path $projectPath $indicator
+            $indicatorPath = Join-Path $projectPath $indicator.File
             if (Test-Path $indicatorPath) {
-                $found = $true
-                break
+                $currentScore += $indicator.Weight
             }
         }
         
-        if (-not $found) {
-            $parent = Split-Path -Parent $projectPath
-            if ($parent -eq $projectPath) {
-                break
-            }
-            $projectPath = $parent
-            $depth++
+        if ($currentScore -gt $bestScore) {
+            $bestScore = $currentScore
+            $bestPath = $projectPath
         }
+        
+        if ($currentScore -ge 3) {
+            $found = $true
+            break
+        }
+        
+        $parent = Split-Path -Parent $projectPath
+        if ($parent -eq $projectPath) {
+            break
+        }
+        $projectPath = $parent
+        $depth++
     }
     
-    if ($found) {
-        return $projectPath
+    if ($bestScore -ge 2) {
+        return $bestPath
     }
     
     return $null

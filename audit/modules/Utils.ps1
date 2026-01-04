@@ -41,7 +41,7 @@ function Calculate-GlobalScore {
     
     $weights = $Config.ScoreWeights
     if (-not $weights) {
-        # Poids par dÃ©faut
+        # Poids par défaut
         $weights = @{
             "Architecture" = 1.0
             "CodeMort" = 1.5

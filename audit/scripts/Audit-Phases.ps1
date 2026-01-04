@@ -278,9 +278,9 @@ function Parse-PhaseSelection {
         $depNames = $allDependencies | ForEach-Object {
             $depPhase = $script:AuditPhases | Where-Object { $_.Number -eq $_ } | Select-Object -First 1
             if ($depPhase) {
-                "Phase $_ ($($depPhase.Name))"
+                "Phase $($_) ($($depPhase.Name))"
             } else {
-                "Phase $_"
+                "Phase $($_)"
             }
         }
         Write-Host ""
@@ -387,7 +387,7 @@ Recommandation:
 $($Plan.RecommendedFix)
 
 Étapes de vérification:
-$($Plan.VerificationSteps | ForEach-Object { "  $($_.ToString())" } | Out-String)
+$($Plan.VerificationSteps | ForEach-Object { "  $($_)" } | Out-String)
 
 Dépendances:
 $($Plan.Dependencies | ForEach-Object { "  - $_" } | Out-String)

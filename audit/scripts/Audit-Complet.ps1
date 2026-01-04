@@ -1,11 +1,11 @@
 ﻿# ===============================================================================
 # AUDIT COMPLET AUTOMATIQUE PROFESSIONNEL
 # ===============================================================================
-# SystÃƒÂ¨me d'audit gÃƒÂ©nÃƒÂ©rique et portable pour n'importe quel projet
-# Version 3.0 - SystÃƒÂ¨me consolidÃƒÂ© et portable
+# Système d'audit générique et portable pour n'importe quel projet
+# Version 3.0 - Système consolidé et portable
 #
 # Ce script effectue un audit 360 degres couvrant 24 phases (numerotees de 1 a 24)
-# DÃƒÂ©tecte automatiquement les caractÃƒÂ©ristiques du projet auditÃƒÂ©
+# Détecte automatiquement les caractéristiques du projet audité
 # Usage : .\audit\scripts\Audit-Complet.ps1 [-Verbose]
 # ===============================================================================
 
@@ -17,64 +17,72 @@ param(
     [switch]$Verbose = $false,
     [int]$MaxFileLines = 500,
     [array]$SelectedPhases = @(),
-    [array]$UserSelectedPhases = @(),  # Phases explicitement sÃƒÂ©lectionnÃƒÂ©es par l'utilisateur (sans dÃƒÂ©pendances)
+    [array]$UserSelectedPhases = @(),  # Phases explicitement sélectionnées par l'utilisateur (sans dépendances)
     [string]$StateFile = "",
     [string]$ResultFile = "",
     [string]$CorrectionPlansFile = "",
-    [string]$ProjectRoot = "",  # RÃƒÂ©pertoire racine du projet (dÃƒÂ©tectÃƒÂ© automatiquement)
-    [string]$AuditDir = ""      # RÃƒÂ©pertoire audit (dÃƒÂ©tectÃƒÂ© automatiquement)
+    [string]$ProjectRoot = "",  # Répertoire racine du projet (détecté automatiquement)
+    [string]$AuditDir = ""      # Répertoire audit (détecté automatiquement)
 )
 
 # ===============================================================================
 # CHARGEMENT DES MODULES
 # ===============================================================================
-# DÃƒÂ©tecter le rÃƒÂ©pertoire des modules
+# Détecter le répertoire des modules
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $modulesDir = Join-Path (Split-Path -Parent $scriptDir) "modules"
 
-# Charger les modules utilitaires en premier
-if (Test-Path (Join-Path $modulesDir "Utils.ps1")) {
-    . (Join-Path $modulesDir "Utils.ps1")
-    $script:Verbose = $Verbose  # Passer le flag Verbose au module
-} else {
-    # Fallback si les modules ne sont pas trouvÃƒÂ©s
-    function Write-Section { param([string]$Text) Write-Host "`n=== $Text ===" -ForegroundColor Cyan }
-    function Write-OK { param([string]$Text) Write-Host "  [OK] $Text" -ForegroundColor Green }
-    function Write-Warn { param([string]$Text) Write-Warning $Text }
-    function Write-Err { param([string]$Text) Write-Host "  [ERROR] $Text" -ForegroundColor Red }
-    function Write-Info { param([string]$Text) if($Verbose) { Write-Host "  [INFO] $Text" -ForegroundColor Gray } }
+# Gestion d'erreurs améliorée pour le chargement des modules
+$ErrorActionPreference = "Stop"
+
+try {
+    # Charger les modules utilitaires en premier
+    $utilsPath = Join-Path $modulesDir "Utils.ps1"
+    if (Test-Path $utilsPath) {
+        . $utilsPath
+        $script:Verbose = $Verbose  # Passer le flag Verbose au module
+        Write-Info "Modules Utils chargé avec succès"
+    } else {
+        throw "Module Utils.ps1 introuvable"
+    }
+
+    # Charger le module Tools-Analysis
+    $toolsPath = Join-Path $modulesDir "Tools-Analysis.ps1"
+    if (Test-Path $toolsPath) {
+        . $toolsPath
+        Write-Info "Module Tools-Analysis chargé avec succès"
+    } else {
+        throw "Module Tools-Analysis.ps1 introuvable"
+    }
+} catch {
+    Write-Host "❌ Erreur critique lors du chargement des modules: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Vérifiez que tous les fichiers requis existent dans le répertoire modules/" -ForegroundColor Yellow
+    exit 1
+}
 }
 
-# Charger le module Tools-Analysis
-if (Test-Path (Join-Path $modulesDir "Tools-Analysis.ps1")) {
-    . (Join-Path $modulesDir "Tools-Analysis.ps1")
-}
-
-# Charger le module ReportGenerator (pour Export-AIContext)
-if (Test-Path (Join-Path $modulesDir "ReportGenerator.ps1")) {
-    . (Join-Path $modulesDir "ReportGenerator.ps1")
-}
-
-
+# Charger les modules utilitaires restants avec gestion d'erreurs
 $utilityModules = @("ConfigLoader.ps1", "FileScanner.ps1", "ProjectDetector.ps1", "ReportGenerator.ps1")
 foreach ($module in $utilityModules) {
     $modulePath = Join-Path $modulesDir $module
     if (Test-Path $modulePath) {
         try {
             . $modulePath
-            Write-Info "Module chargÃƒÂ©: $module"
+            Write-Info "Module $module chargé avec succès"
         } catch {
-            Write-Warn "Erreur chargement module $module : $($_.Exception.Message)"
+            Write-Warn "Impossible de charger le module $module : $($_.Exception.Message)"
         }
+    } else {
+        Write-Warn "Module $module introuvable"
     }
 }
 
-# Charger les modules de vÃƒÂ©rification (Checks-*.ps1)
+# Charger les modules de vérification (Checks-*.ps1) avec gestion d'erreurs
 $checkModules = Get-ChildItem -Path $modulesDir -Filter "Checks-*.ps1" -ErrorAction SilentlyContinue
 foreach ($module in $checkModules) {
     try {
         . $module.FullName
-        Write-Info "Module de vÃƒÂ©rification chargÃƒÂ©: $($module.Name)"
+        Write-Info "Module de vérification chargé: $($module.Name)"
     } catch {
         Write-Warn "Erreur chargement module $($module.Name) : $($_.Exception.Message)"
     }
