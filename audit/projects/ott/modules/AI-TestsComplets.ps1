@@ -61,7 +61,14 @@ function Invoke-Check-AI-TestsComplets {
     # 2. Analyser les scores globaux
     Write-Host "`n[2] Analyse scores globaux" -ForegroundColor Yellow
     if ($Results.Scores) {
-        $lowScores = $Results.Scores.GetEnumerator() | Where-Object { $_.Value -lt 7 }
+        $lowScores = $Results.Scores.GetEnumerator() | Where-Object { 
+            $val = $_.Value
+            if ($val -is [int] -or $val -is [double]) {
+                $val -lt 7
+            } else {
+                $false
+            }
+        }
         if ($lowScores.Count -gt 0) {
             Write-Warn "Scores faibles detectes:"
             foreach ($lowScore in $lowScores) {
