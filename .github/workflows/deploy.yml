@@ -203,6 +203,40 @@ jobs:
           echo "✅ Fichier de version créé:"
           cat out/.version.json
       
+      # CRITIQUE: Créer la structure OTT/ pour que GitHub Pages serve correctement
+      # GitHub Pages cherche un dossier OTT/ à la racine pour servir ymora.github.io/OTT
+      - name: Create OTT directory structure for GitHub Pages
+        run: |
+          echo "📁 Création de la structure OTT/ pour GitHub Pages..."
+          # Créer le dossier OTT/ dans out/
+          mkdir -p out/OTT
+          
+          # Déplacer TOUT le contenu de out/ vers out/OTT/ (sauf le dossier OTT lui-même)
+          echo "📦 Déplacement du contenu vers out/OTT/..."
+          # Utiliser find pour éviter de déplacer le dossier OTT dans lui-même
+          find out -maxdepth 1 -mindepth 1 ! -name OTT -exec mv {} out/OTT/ \;
+          
+          # Vérifier que index.html est bien dans OTT/
+          if [ -f "out/OTT/index.html" ]; then
+            echo "✅ index.html trouvé dans out/OTT/"
+            # Vérifier que index.html contient bien l'application React
+            if grep -q "OTT Dashboard\|root\|__next" out/OTT/index.html; then
+              echo "✅ index.html contient l'application React"
+            else
+              echo "⚠️  index.html ne semble pas contenir l'application React"
+            fi
+          else
+            echo "❌ ERREUR: index.html manquant dans out/OTT/"
+            exit 1
+          fi
+          
+          # Vérifier la structure finale
+          echo "📋 Structure finale de out/:"
+          ls -la out/ | head -10
+          echo ""
+          echo "📋 Contenu de out/OTT/:"
+          ls -la out/OTT/ | head -10
+      
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

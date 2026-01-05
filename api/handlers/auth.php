@@ -246,7 +246,8 @@ function handleGetUsers() {
     try {
         // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
         // Condition WHERE selon le paramètre include_deleted
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE deleted_at " . ($includeDeleted ? "IS NOT NULL" : "IS NULL"));
+        $whereClause = $includeDeleted ? "IS NOT NULL" : "IS NULL";
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE deleted_at $whereClause");
         $countStmt->execute();
         $total = $countStmt->fetchColumn();
         

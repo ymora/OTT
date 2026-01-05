@@ -78,11 +78,29 @@ npx eslint@8 . --ext .js,.jsx
 
 Cree `scripts/fix-audit-issues-detail.ps1` pour analyser automatiquement les problemes.
 
+### Corrections Recentes (2026-01-05)
+
+1. **Modules d'audit manquants**: 
+   - ✅ Cree `audit/projects/ott/modules/Checks-TimeTracking.ps1` (verification suivi temps)
+   - ✅ Cree `audit/projects/ott/modules/AI-TestsComplets.ps1` (analyse IA tests complets)
+   - Les modules sont maintenant fonctionnels et peuvent etre executes par l'audit
+
+2. **API pagination**: 
+   - ✅ **DEJA CORRIGE**: `handleGetRoles()` et `handleGetPermissions()` ont deja la pagination optionnelle
+   - Pagination avec LIMIT/OFFSET, par defaut sans limite pour compatibilite
+   - LIMIT maximum: 100 pour roles, 200 pour permissions
+
+3. **Timers cleanup**: 
+   - ✅ **VERIFIE**: `UsbConsole.js` gere correctement les timers via `timeoutRefs.current`
+   - Le cleanup est gere par le parent (UsbContext) qui nettoie tous les timers au demontage
+   - Aucune correction necessaire
+
 ### Prochaines Etapes
 
 1. **Imports inutilises**: Executer ESLint pour identifier et corriger automatiquement
-2. **API pagination**: Ajouter pagination optionnelle a handleGetRoles et handleGetPermissions
-3. **Timers**: Verifier UsbContext pour s'assurer que timeoutRefs est correctement nettoye
+   ```bash
+   npx eslint@8 . --ext .js,.jsx
+   ```
 
 ## Notes
 
