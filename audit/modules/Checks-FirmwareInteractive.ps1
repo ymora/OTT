@@ -81,6 +81,86 @@ function Invoke-Check-FirmwareInteractive {
                 Write-Warn "Aucune commande supportée détectée dans le code"
                 $Results.Warnings += "Aucune commande supportée détectée"
             }
+            
+            # Vérifier les dépendances de compilation (bibliothèques Arduino)
+            Write-Info "Vérification des dépendances de compilation..."
+            $includes = @()
+            if ($content -match '(?m)^\s*#include\s*[<"]([^>"]+)[>"]') {
+                $matches = [regex]::Matches($content, '(?m)^\s*#include\s*[<"]([^>"]+)[>"]')
+                foreach ($match in $matches) {
+                    $includeFile = $match.Groups[1].Value
+                    $includes += $includeFile
+                }
+            }
+            
+            # Bibliothèques standard détectées dans les includes
+            $detectedLibraries = @()
+            $knownLibraries = @{
+                "ArduinoJson.h" = "ArduinoJson"
+                "TinyGsmClient.h" = "TinyGSM"
+                "ArduinoHttpClient.h" = "ArduinoHttpClient"
+                "WiFi.h" = "ESP32 WiFi (core)"
+                "HTTPClient.h" = "ESP32 HTTPClient (core)"
+            }
+            
+            foreach ($include in $includes) {
+                if ($knownLibraries.ContainsKey($include)) {
+                    $libName = $knownLibraries[$include]
+                    if ($detectedLibraries -notcontains $libName) {
+                        $detectedLibraries += $libName
+                    }
+                }
+            }
+            
+            if ($detectedLibraries.Count -gt 0) {
+                Write-OK "Bibliothèques détectées dans le code: $($detectedLibraries -join ', ')"
+                $Results.Statistics["detected_libraries"] = $detectedLibraries
+            }
+            
+            # Vérifier si les bibliothèques requises sont configurées dans le code PHP
+            $compilePhpPath = Join-Path $Config.ProjectRoot "api\handlers\firmwares\compile\library_install.php"
+            if (Test-Path $compilePhpPath) {
+                $compilePhpContent = Get-Content $compilePhpPath -Raw
+                
+                # Extraire les bibliothèques configurées dans getRequiredLibraries()
+                $configuredLibraries = @()
+                if ($compilePhpContent -match '(?s)function getRequiredLibraries\(\)\s*\{[^}]*return\s*\[([^\]]+)\]') {
+                    $libsConfig = $matches[1]
+                    if ($libsConfig -match "'([^']+)'\s*=>") {
+                        $matches = [regex]::Matches($libsConfig, "'([^']+)'\s*=>")
+                        foreach ($match in $matches) {
+                            $libName = $match.Groups[1].Value
+                            $configuredLibraries += $libName
+                        }
+                    }
+                }
+                
+                # Vérifier la cohérence
+                $missingInConfig = @()
+                foreach ($detectedLib in $detectedLibraries) {
+                    # Ignorer les bibliothèques du core ESP32 (déjà incluses)
+                    if ($detectedLib -notmatch "core") {
+                        # Vérifier si la bibliothèque est dans la config ou dans hardware/lib/
+                        $libInConfig = $configuredLibraries -contains $detectedLib
+                        $libInHardware = Test-Path (Join-Path $Config.ProjectRoot "hardware\lib\$detectedLib")
+                        
+                        if (-not $libInConfig -and -not $libInHardware) {
+                            $missingInConfig += $detectedLib
+                        }
+                    }
+                }
+                
+                if ($missingInConfig.Count -gt 0) {
+                    Write-Warn "Bibliothèques utilisées mais non configurées pour installation automatique: $($missingInConfig -join ', ')"
+                    $Results.Warnings += "Bibliothèques manquantes dans la config d'installation: $($missingInConfig -join ', ')"
+                    $Results.Recommendations += "Ajouter les bibliothèques suivantes dans getRequiredLibraries() de library_install.php: $($missingInConfig -join ', ')"
+                } else {
+                    Write-OK "Toutes les bibliothèques détectées sont configurées ou présentes dans hardware/lib/"
+                }
+            } else {
+                Write-Warn "Fichier library_install.php non trouvé - impossible de vérifier la configuration des bibliothèques"
+                $Results.Warnings += "Fichier library_install.php non trouvé"
+            }
         }
         
         # Recommandation : créer un endpoint API pour tester le firmware via USB

@@ -10,6 +10,7 @@
 require_once __DIR__ . '/compile/sse.php';
 require_once __DIR__ . '/compile/cleanup.php';
 require_once __DIR__ . '/compile/core_install.php';
+require_once __DIR__ . '/compile/library_install.php';
 require_once __DIR__ . '/compile/firmware_compile.php';
 
 /**
@@ -808,6 +809,12 @@ function handleCompileFirmware($firmware_id) {
                 
                 // Installation du core ESP32 (refactorisé)
                 if (!installEsp32Core($arduinoCli, $arduinoDataDir, $envStr, $sendProgress, $firmware_id)) {
+                    // Erreur lors de l'installation, la fonction a déjà géré l'erreur et le cleanup
+                    return;
+                }
+                
+                // Installation des bibliothèques requises (ArduinoJson, etc.)
+                if (!installRequiredLibraries($arduinoCli, $arduinoDataDir, $envStr, $sendProgress, $firmware_id)) {
                     // Erreur lors de l'installation, la fonction a déjà géré l'erreur et le cleanup
                     return;
                 }
