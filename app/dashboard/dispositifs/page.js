@@ -3,7 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo} from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUsb } from '@/contexts/UsbContext'
 import { useUsbAutoDetection, useApiData, useEntityArchive } from '@/hooks'
@@ -379,4 +379,3 @@ export default function OutilsPage() {
     </div>
   )
 }
-

@@ -10,7 +10,7 @@ import logger from '@/lib/logger'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiCall } from '@/hooks'
 import { isAdmin as checkIsAdmin } from '@/lib/userUtils'
-import { Bar, Doughnut, Line } from 'react-chartjs-2'
+import { Bar, Doughnut, Line} from 'react-chartjs-2'
 import MetadataCard from '@/components/MetadataCard'
 import DayDetailsModal from '@/components/DayDetailsModal'
 import {
@@ -1449,4 +1449,3 @@ function MarkdownViewer({ fileName }) {
     </div>
   )
 }
-

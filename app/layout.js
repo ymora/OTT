@@ -1,7 +1,7 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
-import { AuthProvider } from '@/contexts/AuthContext'
+import { AuthProvider} from '@/contexts/AuthContext'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { withBasePath } from '@/lib/utils'
 

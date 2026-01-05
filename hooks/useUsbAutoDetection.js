@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef} from 'react'
 import logger from '@/lib/logger'
 
 /**
@@ -27,4 +27,3 @@ export function useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting
     }
   }, [isSupported, autoDetecting, setAutoDetecting, usbDevice])
 }
-

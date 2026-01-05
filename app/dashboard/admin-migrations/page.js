@@ -5,10 +5,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useApiCall } from '@/hooks'
 import logger from '@/lib/logger'
 import { fetchJson } from '@/lib/api'
-import Modal from '@/components/Modal'
-import ErrorMessage from '@/components/ErrorMessage'
-import SuccessMessage from '@/components/SuccessMessage'
-import LoadingSpinner from '@/components/LoadingSpinner'
 import { isAdmin as checkIsAdmin } from '@/lib/userUtils'
 
 export default function AdminMigrationsPage() {

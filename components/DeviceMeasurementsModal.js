@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, memo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useApiCall, useModalState, useEntityArchive, useEntityPermanentDelete, useEntityRestore } from '@/hooks'
+import { useApiCall, useModalState, useEntityArchive, useEntityPermanentDelete, useEntityRestore} from '@/hooks'
 import { fetchJson } from '@/lib/api'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'

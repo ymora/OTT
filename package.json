@@ -9,6 +9,7 @@
     "export": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy/export_static.ps1",
     "deploy": "npm run export",
     "lint": "next lint",
+    "lint:fix": "npx eslint@8 . --ext .js,.jsx --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

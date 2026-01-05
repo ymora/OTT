@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { withBasePath } from '@/lib/utils'
+import { withBasePath} from '@/lib/utils'
 
 // Menu simplifié - 5 pages principales avec fonctionnalités regroupées
 const menuStructure = [
@@ -273,4 +273,3 @@ export default function Sidebar() {
     </aside>
   )
 }
-

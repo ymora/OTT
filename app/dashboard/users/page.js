@@ -3,7 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo } from 'react'
+import { useMemo} from 'react'
 import { useEntityPage } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
@@ -306,4 +306,3 @@ export default function UsersPage() {
     </div>
   )
 }
-

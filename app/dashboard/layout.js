@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
 import { useAuth } from '@/contexts/AuthContext'
-import { UsbProvider } from '@/contexts/UsbContext'
+import { UsbProvider} from '@/contexts/UsbContext'
 import logger from '@/lib/logger'
 
 // Authentification toujours requise
@@ -85,4 +85,3 @@ function DashboardLayoutContent({ children }) {
 export default function DashboardLayout({ children }) {
   return <DashboardLayoutContent>{children}</DashboardLayoutContent>
 }
-
