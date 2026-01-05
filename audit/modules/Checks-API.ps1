@@ -17,6 +17,7 @@ function Invoke-Check-API {
     $endpointsTotal = 0
     $endpointsOK = 0
     $script:apiAuthFailed = $false
+    $aiContext = @()  # Contexte pour l'IA
     
     try {
         # Support pour Config.Api (audit.config.ps1) et Config.API (normalisé)
@@ -60,6 +61,14 @@ function Invoke-Check-API {
             Write-Info "  💡 Configurez API_URL ou audit.config.ps1 avec Api.BaseUrl"
             $script:apiAuthFailed = $true
             $apiScore = 5
+            $aiContext += @{
+                Category = "Configuration API"
+                Type = "URL API non configurée"
+                Severity = "high"
+                NeedsAICheck = $true
+                Question = "L'URL de l'API doit-elle être configurée dans audit.config.ps1 ou via variable d'environnement API_URL ?"
+                Recommendation = "Configurer Api.BaseUrl dans audit.config.ps1 ou définir API_URL"
+            }
             $Results.Scores["API"] = $apiScore
             return
         }
@@ -69,6 +78,14 @@ function Invoke-Check-API {
             Write-Info "  💡 Configurez AUDIT_API_EMAIL/AUDIT_API_PASSWORD (ou AUDIT_EMAIL/AUDIT_PASSWORD) ou audit.config.ps1 avec Credentials"
             $script:apiAuthFailed = $true
             $apiScore = 5
+            $aiContext += @{
+                Category = "Configuration API"
+                Type = "Credentials non configurés"
+                Severity = "high"
+                NeedsAICheck = $true
+                Question = "Les credentials API doivent-ils être configurés pour les tests d'audit ou peut-on tester sans authentification ?"
+                Recommendation = "Configurer Credentials.Email et Credentials.Password dans audit.config.ps1"
+            }
             $Results.Scores["API"] = $apiScore
             return
         }
@@ -157,6 +174,16 @@ function Invoke-Check-API {
                         $errorMsg = $errorMsg.Substring(0, 80) + "..."
                     }
                     Write-Warn "$($endpoint.Name) - $errorMsg"
+                    $aiContext += @{
+                        Category = "Endpoints API"
+                        Type = "Endpoint en échec"
+                        Endpoint = $endpoint.Path
+                        EndpointName = $endpoint.Name
+                        Error = $errorMsg
+                        Severity = "medium"
+                        NeedsAICheck = $true
+                        Question = "L'endpoint '$($endpoint.Path)' échoue. Est-ce normal (permissions, endpoint désactivé) ou y a-t-il un problème à corriger ?"
+                    }
                 }
             }
             
@@ -224,6 +251,19 @@ function Invoke-Check-API {
             ApiUrl = $ApiUrl
             EndpointsOK = $endpointsOK
             EndpointsTotal = $endpointsTotal
+        }
+    }
+    
+    # Sauvegarder le contexte pour l'IA
+    if ($aiContext.Count -gt 0) {
+        if (-not $Results.AIContext) {
+            $Results.AIContext = @{}
+        }
+        $Results.AIContext["API"] = @{
+            Questions = $aiContext
+            EndpointsOK = $endpointsOK
+            EndpointsTotal = $endpointsTotal
+            ApiScore = $apiScore
         }
     }
 }
