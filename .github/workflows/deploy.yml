@@ -149,65 +149,27 @@ jobs:
             echo "⚠️  Service worker non trouvé dans out/"
           fi
       
-      - name: Clean output directory
-        run: |
-          # Supprimer README.md s'il existe dans out/ (pour éviter que GitHub Pages le serve)
-          if [ -f "out/README.md" ]; then
-            rm out/README.md
-          fi
-          
-          # PROTECTION: Vérifier qu'il n'y a pas de fichiers HTML à la racine sauf index.html et 404.html
-          echo "🔍 Vérification des fichiers HTML à la racine..."
-          html_files=$(find out -maxdepth 1 -name "*.html" -type f ! -name "index.html" ! -name "404.html")
-          if [ -n "$html_files" ]; then
-            echo "❌ ERREUR: Fichiers HTML trouvés à la racine de out/ (sauf index.html et 404.html):"
-            echo "$html_files"
-            echo "⚠️  Ces fichiers peuvent être servis par GitHub Pages au lieu de index.html"
-            echo "📝 Solution: Déplacer ces fichiers dans un sous-dossier (ex: docs/)"
-            exit 1
-          else
-            echo "✅ Aucun fichier HTML indésirable à la racine"
-          fi
-          
-          # Vérifier que index.html existe et contient l'application
-          if [ -f "out/index.html" ]; then
-            echo "✅ index.html trouvé"
-            # Vérifier que index.html contient bien l'application React
-            if ! grep -q "OTT Dashboard\|root\|__next" out/index.html; then
-              echo "⚠️  index.html ne semble pas contenir l'application React"
-              echo "⚠️  Vérifiez que le build Next.js s'est bien déroulé"
-            else
-              echo "✅ index.html contient l'application React"
-            fi
-          else
-            echo "❌ ERREUR: index.html manquant"
-            exit 1
-          fi
-          
-          # Vérifier que les fichiers de documentation sont bien dans docs/
-          if [ -d "out/docs" ]; then
-            doc_count=$(find out/docs -name "DOCUMENTATION_*.html" -type f | wc -l)
-            if [ "$doc_count" -gt 0 ]; then
-              echo "✅ $doc_count fichier(s) de documentation trouvé(s) dans out/docs/"
-            fi
-          fi
-      
-      # Ajouter un fichier de version pour vérifier la synchronisation
-      - name: Create version file
-        run: |
-          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          COMMIT_SHA=$(git rev-parse HEAD)
-          COMMIT_SHORT=$(git rev-parse --short HEAD)
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          echo "{\"version\":\"$COMMIT_SHORT\",\"timestamp\":\"$BUILD_TIMESTAMP\",\"commit\":\"$COMMIT_SHA\",\"message\":\"$COMMIT_MESSAGE\"}" > out/.version.json
-          echo "✅ Fichier de version créé:"
-          cat out/.version.json
-      
       # CRITIQUE: Créer la structure OTT/ pour que GitHub Pages serve correctement
       # GitHub Pages cherche un dossier OTT/ à la racine pour servir ymora.github.io/OTT
+      # IMPORTANT: Cette étape doit être faite AVANT les vérifications
       - name: Create OTT directory structure for GitHub Pages
         run: |
           echo "📁 Création de la structure OTT/ pour GitHub Pages..."
+          
+          # Vérifier d'abord que index.html existe à la racine (avant déplacement)
+          if [ ! -f "out/index.html" ]; then
+            echo "❌ ERREUR: index.html manquant dans out/ avant déplacement"
+            exit 1
+          fi
+          
+          # Vérifier que index.html contient bien l'application React
+          if ! grep -q "OTT Dashboard\|root\|__next" out/index.html; then
+            echo "⚠️  index.html ne semble pas contenir l'application React"
+            echo "⚠️  Vérifiez que le build Next.js s'est bien déroulé"
+          else
+            echo "✅ index.html contient l'application React"
+          fi
+          
           # Créer le dossier OTT/ dans out/
           mkdir -p out/OTT
           
@@ -219,14 +181,8 @@ jobs:
           # Vérifier que index.html est bien dans OTT/
           if [ -f "out/OTT/index.html" ]; then
             echo "✅ index.html trouvé dans out/OTT/"
-            # Vérifier que index.html contient bien l'application React
-            if grep -q "OTT Dashboard\|root\|__next" out/OTT/index.html; then
-              echo "✅ index.html contient l'application React"
-            else
-              echo "⚠️  index.html ne semble pas contenir l'application React"
-            fi
           else
-            echo "❌ ERREUR: index.html manquant dans out/OTT/"
+            echo "❌ ERREUR: index.html manquant dans out/OTT/ après déplacement"
             exit 1
           fi
           
@@ -234,8 +190,47 @@ jobs:
           echo "📋 Structure finale de out/:"
           ls -la out/ | head -10
           echo ""
-          echo "📋 Contenu de out/OTT/:"
+          echo "📋 Contenu de out/OTT/ (premiers fichiers):"
           ls -la out/OTT/ | head -10
+      
+      - name: Clean output directory
+        run: |
+          # Supprimer README.md s'il existe dans out/OTT/ (pour éviter que GitHub Pages le serve)
+          if [ -f "out/OTT/README.md" ]; then
+            rm out/OTT/README.md
+          fi
+          
+          # PROTECTION: Vérifier qu'il n'y a pas de fichiers HTML indésirables à la racine de out/OTT/
+          echo "🔍 Vérification des fichiers HTML dans out/OTT/..."
+          html_files=$(find out/OTT -maxdepth 1 -name "*.html" -type f ! -name "index.html" ! -name "404.html")
+          if [ -n "$html_files" ]; then
+            echo "❌ ERREUR: Fichiers HTML trouvés à la racine de out/OTT/ (sauf index.html et 404.html):"
+            echo "$html_files"
+            echo "⚠️  Ces fichiers peuvent être servis par GitHub Pages au lieu de index.html"
+            echo "📝 Solution: Déplacer ces fichiers dans un sous-dossier (ex: docs/)"
+            exit 1
+          else
+            echo "✅ Aucun fichier HTML indésirable à la racine de out/OTT/"
+          fi
+          
+          # Vérifier que les fichiers de documentation sont bien dans docs/
+          if [ -d "out/OTT/docs" ]; then
+            doc_count=$(find out/OTT/docs -name "DOCUMENTATION_*.html" -type f | wc -l)
+            if [ "$doc_count" -gt 0 ]; then
+              echo "✅ $doc_count fichier(s) de documentation trouvé(s) dans out/OTT/docs/"
+            fi
+          fi
+      
+      # Ajouter un fichier de version pour vérifier la synchronisation
+      - name: Create version file
+        run: |
+          BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          echo "{\"version\":\"$COMMIT_SHORT\",\"timestamp\":\"$BUILD_TIMESTAMP\",\"commit\":\"$COMMIT_SHA\",\"message\":\"$COMMIT_MESSAGE\"}" > out/OTT/.version.json
+          echo "✅ Fichier de version créé dans out/OTT/:"
+          cat out/OTT/.version.json
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
