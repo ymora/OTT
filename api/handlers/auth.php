@@ -241,13 +241,13 @@ function handleGetUsers() {
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
     
     // Définir la clause WHERE
-    $whereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
+    $whereClause = $includeDeleted ? "u.deleted_at IS NOT NULL" : "u.deleted_at IS NULL";
     
     try {
         // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
         // Condition WHERE selon le paramètre include_deleted
-        $whereClause = $includeDeleted ? "IS NOT NULL" : "IS NULL";
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE deleted_at $whereClause");
+        $countWhereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE $countWhereClause");
         $countStmt->execute();
         $total = $countStmt->fetchColumn();
         
@@ -275,7 +275,7 @@ function handleGetUsers() {
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN permissions p ON rp.permission_id = p.id
                 LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
-                WHERE u.$whereClause
+                WHERE $whereClause
                 GROUP BY u.id, u.email, u.first_name, u.last_name, u.phone, u.password_hash,
                          u.is_active, u.last_login, u.created_at, u.deleted_at, r.name, r.description,
                          unp.email_enabled, unp.sms_enabled, unp.push_enabled,
@@ -305,7 +305,7 @@ function handleGetUsers() {
                 LEFT JOIN role_permissions rp ON r.id = rp.role_id
                 LEFT JOIN permissions p ON rp.permission_id = p.id
                 LEFT JOIN user_notifications_preferences unp ON u.id = unp.user_id
-                WHERE u.$whereClause
+                WHERE $whereClause
                 GROUP BY u.id, u.email, u.first_name, u.last_name, u.password_hash,
                          u.is_active, u.last_login, u.created_at, u.deleted_at, r.name, r.description,
                          unp.email_enabled, unp.sms_enabled, unp.push_enabled,
