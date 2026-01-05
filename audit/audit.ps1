@@ -959,10 +959,34 @@ function Main {
             TotalWarnings = $totalWarnings
             Timestamp = $script:Config.Timestamp
             OutputDir = $script:Config.OutputDir
+            AIContext = $script:Results.AIContext  # Inclure le contexte IA dans le summary
         }
 
         $summaryFile = Join-Path $script:Config.OutputDir "audit_summary_$($script:Config.Timestamp).json"
         $summary | ConvertTo-Json -Depth 10 | Out-File -FilePath $summaryFile -Encoding UTF8
+        
+        # Export du contexte IA pour l'IA (rapport séparé)
+        if ($script:Results.AIContext -and $script:Results.AIContext.Count -gt 0) {
+            try {
+                # Importer le module ReportGenerator si nécessaire
+                $reportGeneratorPath = Join-Path $PSScriptRoot "modules\ReportGenerator.ps1"
+                if (Test-Path $reportGeneratorPath) {
+                    . $reportGeneratorPath
+                    
+                    # Exporter le contexte IA
+                    $aiContextFile = Export-AIContext -Results $script:Results -OutputDir $script:Config.OutputDir
+                    if ($aiContextFile) {
+                        Write-Log "Rapport IA généré: $aiContextFile" "SUCCESS"
+                    }
+                } else {
+                    Write-Log "Module ReportGenerator.ps1 non trouvé, export IA ignoré" "WARN"
+                }
+            } catch {
+                Write-Log "Erreur lors de l'export du contexte IA: $($_.Exception.Message)" "WARN"
+            }
+        } else {
+            Write-Log "Aucun contexte IA à exporter" "INFO"
+        }
 
     } catch {
         Write-Log "Erreur fatale: $($_.Exception.Message)" "ERROR"

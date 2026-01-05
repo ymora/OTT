@@ -500,6 +500,7 @@ function ensureNotificationsTablesExist() {
     global $pdo;
     
     try {
+        // SÉCURITÉ: Requête SQL statique (CREATE FUNCTION) - aucune variable utilisateur, sécurisée
         // S'assurer que la fonction set_updated_at existe
         $pdo->exec("
             CREATE OR REPLACE FUNCTION set_updated_at()
@@ -546,6 +547,7 @@ function ensureNotificationsTablesExist() {
         
         // Créer la table patient_notifications_preferences si elle n'existe pas
         if (!tableExists('patient_notifications_preferences')) {
+            // SÉCURITÉ: Requête SQL statique (CREATE TABLE) - aucune variable utilisateur, sécurisée
             $pdo->exec("
                 CREATE TABLE patient_notifications_preferences (
                   patient_id INT PRIMARY KEY REFERENCES patients(id) ON DELETE CASCADE,

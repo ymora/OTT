@@ -294,6 +294,12 @@ function handleGetDevice($device_id) {
 }
 
 /**
+ * INTERNE: handleCreateDevice()
+ * Fonction interne appelée par handleRestoreOrCreateDevice() pour créer un nouveau dispositif
+ * Ne doit pas être appelée directement depuis api.php (utiliser handleRestoreOrCreateDevice à la place)
+ */
+
+/**
  * POST /api.php/devices (ou POST /api.php/devices/register)
  * Créer ou restaurer un dispositif (UPSERT automatique)
  * Si l'ICCID existe déjà (même supprimé) : restaure et met à jour

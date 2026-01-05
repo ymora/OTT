@@ -1111,6 +1111,7 @@ function handleRepairDatabase() {
         error_log("[handleRepairDatabase] ✅ Réparation réussie en {$duration}ms");
         
         // Vérifier le résultat
+        // SÉCURITÉ: Requête SQL statique (COUNT) - aucune variable utilisateur, sécurisée
         $checkStmt = $pdo->query("
             SELECT 
                 (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) as users_actifs,
@@ -1434,6 +1435,7 @@ EXECUTE FUNCTION update_device_min_max();
             $logs[] = "✅ Migration terminée en {$duration}ms";
             
             // Vérifier le résultat
+            // SÉCURITÉ: Requête SQL statique (COUNT) - aucune variable utilisateur, sécurisée
             $checkStmt = $pdo->query("
                 SELECT 
                     'MIGRATION COMPLÈTE' as status,
@@ -1522,6 +1524,7 @@ function handleMigrateFirmwareStatus() {
         $results = [];
         
         // 1. Vérifier si la colonne status existe
+        // SÉCURITÉ: Requête SQL statique (information_schema) - aucune variable utilisateur, sécurisée
         $checkStmt = $pdo->query("
             SELECT EXISTS (
                 SELECT FROM information_schema.columns
@@ -1534,6 +1537,7 @@ function handleMigrateFirmwareStatus() {
         $columnExists = ($columnExists === true || $columnExists === 't' || $columnExists === 1 || $columnExists === '1');
         
         if (!$columnExists) {
+            // SÉCURITÉ: Requête SQL statique (ALTER TABLE) - valeurs hardcodées, sécurisée
             $pdo->exec("
                 ALTER TABLE firmware_versions 
                 ADD COLUMN status VARCHAR(50) DEFAULT 'compiled' 
@@ -1545,20 +1549,24 @@ function handleMigrateFirmwareStatus() {
         }
         
         // 2. Mettre à jour les firmwares existants sans status
+        // SÉCURITÉ: Requête SQL statique (UPDATE avec valeur hardcodée) - aucune variable utilisateur, sécurisée
         $updateCount = $pdo->exec("UPDATE firmware_versions SET status = 'compiled' WHERE status IS NULL");
         $results['updated_count'] = intval($updateCount);
         
         // 3. Compter les firmwares
+        // SÉCURITÉ: Requête SQL statique (COUNT) - aucune variable utilisateur, sécurisée
         $countStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
         $countBefore = intval($countStmt->fetchColumn());
         $results['firmwares_before'] = $countBefore;
         
         // 4. Supprimer tous les firmwares fictifs
         if ($countBefore > 0) {
+            // SÉCURITÉ: Requête SQL statique (DELETE sans WHERE) - aucune variable utilisateur, sécurisée
             $deleteCount = $pdo->exec("DELETE FROM firmware_versions");
             $results['deleted_count'] = intval($deleteCount);
             
             // Vérification finale
+            // SÉCURITÉ: Requête SQL statique (COUNT) - aucune variable utilisateur, sécurisée
             $finalCountStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
             $finalCount = intval($finalCountStmt->fetchColumn());
             $results['firmwares_after'] = $finalCount;
@@ -1586,6 +1594,7 @@ function handleClearFirmwares() {
     requireAdmin();
     
     try {
+        // SÉCURITÉ: Requêtes SQL statiques (COUNT, DELETE) - aucune variable utilisateur, sécurisées
         $countStmt = $pdo->query("SELECT COUNT(*) FROM firmware_versions");
         $countBefore = intval($countStmt->fetchColumn());
         

@@ -170,7 +170,7 @@ function Export-AIContext {
     
     # Vérifier si AIContext existe
     if (-not $Results.AIContext -or $Results.AIContext.Count -eq 0) {
-        Write-Info "Aucun contexte IA à exporter"
+        Write-Host "Aucun contexte IA à exporter" -ForegroundColor Gray
         return $null
     }
     
@@ -225,7 +225,7 @@ function Export-AIContext {
         
         return $jsonFile
     } catch {
-        Write-Err "Erreur lors de l'export du contexte IA : $($_.Exception.Message)"
+        Write-Host "Erreur lors de l'export du contexte IA : $($_.Exception.Message)" -ForegroundColor Red
         return $null
     }
 }

@@ -34,6 +34,7 @@ function initDatabaseIfEmpty() {
             error_log('[initDatabase] Base vide détectée - Initialisation minimale...');
             
             // Créer les rôles (fallback si le schéma n'a pas été appliqué)
+            // SÉCURITÉ: Requête SQL statique (initialisation BDD) - valeurs hardcodées, sécurisée
             $pdo->exec("
                 INSERT INTO roles (id, name, description) VALUES
                 (1, 'admin', 'Administrateur systeme - Acces complet'),

@@ -51,6 +51,7 @@ function createUsbLogs($pdo, $body, $userId) {
         // Vérifier si la colonne user_id existe avant de l'utiliser (une seule fois)
         static $hasUserIdColumnCache = null;
         if ($hasUserIdColumnCache === null) {
+            // SÉCURITÉ: Requête SQL statique (information_schema) - aucune variable utilisateur, sécurisée
             $checkColumnStmt = $pdo->query("
                 SELECT column_name 
                 FROM information_schema.columns 
@@ -191,6 +192,7 @@ function getUsbLogs($pdo, $query, $userRole) {
         // Vérifier si la colonne user_id existe (peut ne pas exister dans certaines versions du schéma)
         static $hasUserIdColumnCacheGet = null;
         if ($hasUserIdColumnCacheGet === null) {
+            // SÉCURITÉ: Requête SQL statique (information_schema) - aucune variable utilisateur, sécurisée
             $checkColumnStmt = $pdo->query("
                 SELECT column_name 
                 FROM information_schema.columns 

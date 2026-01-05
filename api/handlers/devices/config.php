@@ -94,13 +94,25 @@ function handleUpdateDeviceConfig($device_id) {
         foreach ($columnsToAdd as $column => $type) {
             if (!columnExists('device_configurations', $column)) {
                 try {
-                    // Sécuriser le nom de colonne et le type (validation)
+                    // SÉCURITÉ: Validation stricte du nom de colonne (seulement alphanumérique et underscore)
                     if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $column)) {
                         throw new InvalidArgumentException("Invalid column name: $column");
                     }
-                    // Utiliser un placeholder pour le nom de colonne (échappement PostgreSQL)
+                    // SÉCURITÉ: Validation stricte du type SQL (whitelist)
+                    $allowedTypes = ['VARCHAR', 'TEXT', 'INTEGER', 'BIGINT', 'BOOLEAN', 'REAL', 'DOUBLE', 'NUMERIC', 'TIMESTAMP', 'DATE', 'TIME', 'JSONB', 'JSON'];
+                    $typeValid = false;
+                    foreach ($allowedTypes as $allowedType) {
+                        if (preg_match('/^' . preg_quote($allowedType, '/') . '(\\([0-9]+\\))?$/i', $type)) {
+                            $typeValid = true;
+                            break;
+                        }
+                    }
+                    if (!$typeValid) {
+                        throw new InvalidArgumentException("Invalid column type: $type");
+                    }
+                    // SÉCURITÉ: Échappement PostgreSQL pour identifiants (requis car ALTER TABLE ne supporte pas les paramètres préparés pour les identifiants)
                     $escapedColumn = '"' . str_replace('"', '""', $column) . '"';
-                    $escapedType = preg_match('/^(VARCHAR|TEXT|INTEGER|BIGINT|BOOLEAN|REAL|DOUBLE|NUMERIC|TIMESTAMP|DATE|TIME|JSONB|JSON)(\([0-9]+\))?$/i', $type) ? $type : 'TEXT';
+                    $escapedType = $type; // Type déjà validé
                     $pdo->exec("ALTER TABLE device_configurations ADD COLUMN IF NOT EXISTS $escapedColumn $escapedType");
                     error_log("[Config] Colonne $column ajoutée automatiquement");
                 } catch (PDOException $e) {
