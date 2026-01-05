@@ -207,28 +207,24 @@ function Invoke-Check-TestsComplets {
     
     # Ajouter le contexte IA aux résultats
     if ($aiContext.Count -gt 0) {
-        # S'assurer que AIContext est un tableau
+        # S'assurer que AIContext est une hashtable (format standard)
         if (-not $Results.AIContext) {
-            $Results.AIContext = @()
+            $Results.AIContext = @{}
         }
-        # Vérifier que AIContext est bien un tableau (pas une hashtable)
-        if ($Results.AIContext -isnot [array]) {
-            $Results.AIContext = @($Results.AIContext)
-        }
-        # Ajouter chaque élément individuellement pour éviter l'erreur "hash table can only be added to another hash table"
-        foreach ($contextItem in $aiContext) {
-            if ($contextItem -is [hashtable]) {
-                # Créer une copie de la hashtable pour éviter les problèmes de référence
-                $contextCopy = @{}
-                foreach ($key in $contextItem.Keys) {
-                    $contextCopy[$key] = $contextItem[$key]
+        # Vérifier que AIContext est bien une hashtable (pas un tableau)
+        if ($Results.AIContext -is [array]) {
+            # Convertir le tableau en hashtable si nécessaire
+            $tempHash = @{}
+            foreach ($item in $Results.AIContext) {
+                if ($item -is [hashtable] -and $item.Category) {
+                    $tempHash[$item.Category] = @{ Questions = @($item) }
                 }
-                # Utiliser += avec une virgule pour forcer l'ajout comme élément de tableau
-                $Results.AIContext = $Results.AIContext + @(,$contextCopy)
-            } else {
-                # Si ce n'est pas une hashtable, l'ajouter tel quel
-                $Results.AIContext = $Results.AIContext + @(,$contextItem)
             }
+            $Results.AIContext = $tempHash
+        }
+        # Ajouter le contexte TestsComplets au format hashtable standard
+        $Results.AIContext["TestsComplets"] = @{
+            Questions = $aiContext
         }
     }
     
