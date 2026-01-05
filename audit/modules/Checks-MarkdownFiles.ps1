@@ -490,7 +490,7 @@ function Invoke-Check-MarkdownFiles {
             Write-Host ""
             Write-Host "  🔄 Doublons ($($mdAnalysis.Duplicates.Count)):" -ForegroundColor Yellow
             foreach ($dup in $mdAnalysis.Duplicates) {
-                Write-Host "     - $($dup.Name) ($($dup.Count) occurrences)" -ForegroundColor Gray
+                Write-Host "     - $($dup.Name) ($($dup.Count) occurrence(s))" -ForegroundColor Gray
                 foreach ($file in $dup.Files) {
                     $relativePath = $file
                     if ($relativePath.StartsWith($ProjectRoot)) {
@@ -511,7 +511,7 @@ function Invoke-Check-MarkdownFiles {
                     $relativePath = $relativePath.TrimStart('\').TrimStart('/')
                     Write-Host "     - $relativePath ($($item.Reason))" -ForegroundColor Gray
                 } elseif ($item.ContainsKey("Directory")) {
-                    Write-Host "     - $($item.Directory) ($($item.Count) fichiers)" -ForegroundColor Gray
+                    Write-Host "     - $($item.Directory) ($($item.Count) fichier(s))" -ForegroundColor Gray
                 }
             }
         }
@@ -576,7 +576,7 @@ function Invoke-Check-MarkdownFiles {
         $reportContent += "## Doublons ($($mdAnalysis.Duplicates.Count))" + $nl + $nl
         
         foreach ($dup in $mdAnalysis.Duplicates) {
-            $reportContent += "### $($dup.Name) ($($dup.Count) occurrences)" + $nl + $nl
+            $reportContent += "### $($dup.Name) ($($dup.Count) occurrence(s))" + $nl + $nl
             foreach ($file in $dup.Files) {
                 $relativePath = $file.Replace($ProjectRoot, "")
                 $relativePath = $relativePath.TrimStart('\').TrimStart('/')

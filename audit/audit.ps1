@@ -587,12 +587,51 @@ function Resolve-PhaseExecution {
         }
     }
 
-    # Trier par prioritÃ©
+    # Trier par prioritÃ© en respectant les dÃ©pendances (tri topologique)
     $sortedPhases = @()
-    foreach ($phase in $script:AuditPhases | Sort-Object Priority) {
-        if ($availablePhases -contains $phase.Id) {
-            $sortedPhases += $phase.Id
+    $processed = @{}
+    
+    # Tri topologique : traiter les phases dans l'ordre de prioritÃ©, mais seulement si leurs dÃ©pendances sont dÃ©jÃ  traitÃ©es
+    $remainingPhases = $availablePhases | ForEach-Object { $_ }
+    while ($remainingPhases.Count -gt 0) {
+        $found = $false
+        # Parcourir les phases par ordre de prioritÃ©
+        foreach ($phase in $script:AuditPhases | Sort-Object Priority, Id) {
+            if ($remainingPhases -contains $phase.Id) {
+                # VÃ©rifier si toutes les dÃ©pendances sont traitÃ©es
+                $allDepsProcessed = $true
+                foreach ($depId in $phase.Dependencies) {
+                    if ($availablePhases -contains $depId -and -not $processed.ContainsKey($depId)) {
+                        $allDepsProcessed = $false
+                        break
+                    }
+                }
+                
+                if ($allDepsProcessed) {
+                    $sortedPhases += $phase.Id
+                    $processed[$phase.Id] = $true
+                    $remainingPhases = $remainingPhases | Where-Object { $_ -ne $phase.Id }
+                    $found = $true
+                    break
+                }
+            }
         }
+        if (-not $found) {
+            # Si aucune phase ne peut Ãªtre traitÃ©e (cycle de dÃ©pendances), prendre la suivante par prioritÃ©
+            $nextPhase = $script:AuditPhases | Where-Object { $remainingPhases -contains $_.Id } | Sort-Object Priority, Id | Select-Object -First 1
+            if ($nextPhase) {
+                $sortedPhases += $nextPhase.Id
+                $processed[$nextPhase.Id] = $true
+                $remainingPhases = $remainingPhases | Where-Object { $_ -ne $nextPhase.Id }
+            } else {
+                break
+            }
+        }
+    }
+
+    # VÃ©rifier que l'ordre est correct (debug)
+    if ($script:Verbose) {
+        Write-Log "Ordre des phases aprÃ¨s tri topologique: $($sortedPhases -join ', ')" "DETAIL"
     }
 
     return $sortedPhases
@@ -623,7 +662,10 @@ function Invoke-InteractiveMenu {
 
     Write-Host "" 
     Write-Host "Phases disponibles:" -ForegroundColor Gray
-    foreach ($ph in ($script:AuditPhases | Sort-Object Id)) {
+    # Trier par Priority puis Id pour garantir l'ordre correct (synchronisé avec l'exécution)
+    # Forcer le tri numérique explicite pour éviter les problèmes de type
+    $sortedPhases = $script:AuditPhases | Sort-Object @{Expression={[int]$_.Priority}}, @{Expression={[int]$_.Id}}
+    foreach ($ph in $sortedPhases) {
         Write-Host ("  " + $ph.Id + " - " + $ph.Name) -ForegroundColor Gray
     }
 
@@ -793,10 +835,11 @@ function Main {
 
         Initialize-AuditEnvironment
 
-        # RÃ©solution des phases Ã  exÃ©cuter
+        # RÃ©solution des phases Ã  exÃ©cuter
         $requestedPhases = @()
         if ($Phases -eq "all") {
-            $requestedPhases = $script:AuditPhases | ForEach-Object { $_.Id }
+            # Trier par Priority pour garantir l'ordre correct
+            $requestedPhases = $script:AuditPhases | Sort-Object Priority, Id | ForEach-Object { $_.Id }
             Write-Log "Mode: Audit complet (toutes les phases)" "INFO"
         } else {
             $requestedPhases = $Phases -split ',' | ForEach-Object { 
@@ -819,6 +862,20 @@ function Main {
 
         Write-Log "Plan d'exÃ©cution: $($executionPlan -join ', ')" "INFO"
         Write-Log "Nombre de phases: $($executionPlan.Count)" "INFO"
+        # VÃ©rifier l'ordre des phases (debug)
+        if ($executionPlan.Count -gt 1) {
+            $isOrdered = $true
+            for ($i = 1; $i -lt $executionPlan.Count; $i++) {
+                if ($executionPlan[$i] -lt $executionPlan[$i-1]) {
+                    $isOrdered = $false
+                    break
+                }
+            }
+            if (-not $isOrdered) {
+                Write-Log "⚠️  ATTENTION: L'ordre des phases n'est pas strictement croissant" "WARN"
+                Write-Log "   Ordre actuel: $($executionPlan -join ', ')" "WARN"
+            }
+        }
         
         if ($script:ProjectProfile) {
             Write-Log "Projet dÃ©tectÃ©: $($script:ProjectProfile.Id) (score: $($script:ProjectProfile.Score))" "SUCCESS"
