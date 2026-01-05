@@ -74,6 +74,8 @@ static constexpr uint32_t WATCHDOG_TIMEOUT_DEFAULT_SEC = 30;  // Fallback unique
 static constexpr uint8_t MIN_WATCHDOG_TIMEOUT_SEC = 5;
 static constexpr uint32_t OTA_STREAM_TIMEOUT_MS = 20000;
 
+static constexpr uint32_t USB_BOOT_DETECT_WINDOW_MS = 2000;  // Fenêtre au boot pour laisser le temps au PC d'ouvrir le port série
+
 // --- Paramètres modifiables localement (puis écrasés via UPDATE_CONFIG) ---
 // VALEURS PAR DÉFAUT RETIRÉES - Les valeurs par défaut sont maintenant gérées par le frontend
 // et envoyées via USB lors de la configuration
@@ -369,6 +371,29 @@ void setup() {
   loadConfig();
   feedWatchdog();
 
+  // Fallbacks de sécurité si la config n'a jamais été envoyée via USB/OTA
+  if (configuredSleepMinutes == 0) {
+    configuredSleepMinutes = DEFAULT_SLEEP_MINUTES;
+  }
+  if (sendEveryNWakeups == 0) {
+    sendEveryNWakeups = 1;
+  }
+  if (modemBootTimeoutMs == 0) {
+    modemBootTimeoutMs = MODEM_BOOT_TIMEOUT_DEFAULT_MS;
+  }
+  if (simReadyTimeoutMs == 0) {
+    simReadyTimeoutMs = SIM_READY_TIMEOUT_DEFAULT_MS;
+  }
+  if (networkAttachTimeoutMs == 0) {
+    networkAttachTimeoutMs = NETWORK_ATTACH_TIMEOUT_DEFAULT_MS;
+  }
+  if (modemMaxReboots == 0) {
+    modemMaxReboots = MODEM_MAX_REBOOTS_DEFAULT;
+  }
+  if (watchdogTimeoutSeconds == 0) {
+    watchdogTimeoutSeconds = WATCHDOG_TIMEOUT_DEFAULT_SEC;
+  }
+
   // Vérifier si on doit faire un rollback (si le boot a échoué plusieurs fois)
   checkBootFailureAndRollback();
   feedWatchdog();
@@ -397,8 +422,16 @@ void setup() {
   // DÉTECTION USB EN PRIORITÉ (avant modem pour ne pas bloquer)
   // =========================================================================
   // Méthode de détection USB plus stable au boot
-  uint32_t availableWrite = Serial.availableForWrite();
-  bool usbConnected = (availableWrite > 0 && availableWrite >= 64);  // Buffer doit avoir au moins 64 bytes disponibles
+  // Laisser une fenêtre de temps au PC/dashboard pour ouvrir le port série
+  // (sinon availableForWrite peut rester à 0 alors que l'USB est bien branché)
+  unsigned long usbDetectStart = millis();
+  bool usbConnected = false;
+  while (!usbConnected && (millis() - usbDetectStart) < USB_BOOT_DETECT_WINDOW_MS) {
+    feedWatchdog();
+    uint32_t availableWrite = Serial.availableForWrite();
+    usbConnected = (availableWrite >= 64);
+    delay(20);
+  }
   usbModeActive = usbConnected;
   if (usbConnected) {
     usbStateCounter = USB_STATE_THRESHOLD * 2;  // Initialiser avec valeur élevée pour éviter oscillations
