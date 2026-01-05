@@ -7,10 +7,10 @@
 function Invoke-Check-StructureAPI {
     param(
         [Parameter(Mandatory=$true)]
-        [hashtable]$Results,
+        [hashtable]$Config,
         
         [Parameter(Mandatory=$true)]
-        [string]$ProjectPath
+        [hashtable]$Results
     )
     
     Write-PhaseSection -PhaseNumber 5 -Title "Structure API"
@@ -20,6 +20,11 @@ function Invoke-Check-StructureAPI {
         $criticalIssues = @()
         $warnings = @()
         $aiContext = @()  # Contexte pour l'IA
+        
+        # Récupérer le chemin du projet depuis Config
+        $ProjectPath = if ($Config.ProjectRoot) { $Config.ProjectRoot } 
+                      elseif ($Config.ProjectPath) { $Config.ProjectPath }
+                      else { Get-Location }
         
         # Détection générique du fichier API principal (pas de nom fixe)
         $apiFiles = @()
@@ -52,10 +57,10 @@ function Invoke-Check-StructureAPI {
         # 1. Détecter les handlers définis (pattern générique)
         # Chercher dans les répertoires handlers ET dans les fichiers API principaux
         $handlerDirs = @(
-            (Join-Path $ProjectPath "api" "handlers"),
+            (Join-Path (Join-Path $ProjectPath "api") "handlers"),
             (Join-Path $ProjectPath "handlers"),
-            (Join-Path $ProjectPath "src" "handlers"),
-            (Join-Path $ProjectPath "app" "handlers")
+            (Join-Path (Join-Path $ProjectPath "src") "handlers"),
+            (Join-Path (Join-Path $ProjectPath "app") "handlers")
         )
         
         # Chercher aussi dans les fichiers API principaux (api.php, router.php, etc.)

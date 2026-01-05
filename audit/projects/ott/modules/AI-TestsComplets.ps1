@@ -103,10 +103,10 @@ function Invoke-Check-AI-TestsComplets {
     
     # Résumé
     Write-Host "`n[RESUME] Resume Analyse IA Tests Complets:" -ForegroundColor Cyan
-    Write-Host "   ✅ Succes: $($success.Count)" -ForegroundColor Green
-    Write-Host "   ⚠️  Avertissements: $($warnings.Count)" -ForegroundColor Yellow
-    Write-Host "   ❌ Erreurs: $($errors.Count)" -ForegroundColor Red
-    Write-Host "   📊 Score: $score/10" -ForegroundColor Cyan
+    Write-Host "   [OK] Succes: $($success.Count)" -ForegroundColor Green
+    Write-Host "   [WARN] Avertissements: $($warnings.Count)" -ForegroundColor Yellow
+    Write-Host "   [ERR] Erreurs: $($errors.Count)" -ForegroundColor Red
+    Write-Host "   [SCORE] Score: $score/10" -ForegroundColor Cyan
     
     return @{
         Success = $true

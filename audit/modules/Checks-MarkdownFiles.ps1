@@ -415,19 +415,19 @@ function Invoke-Check-MarkdownFiles {
         # Afficher le statut des docs dashboard
         if ($dashboardStatus.Missing.Count -gt 0) {
             Write-Host ""
-            Write-Host "  ⚠️  Fichiers Dashboard Manquants ($($dashboardStatus.Missing.Count)):" -ForegroundColor Red
+            Write-Host "  [WARN] Fichiers Dashboard Manquants ($($dashboardStatus.Missing.Count)):" -ForegroundColor Red
             foreach ($missing in $dashboardStatus.Missing) {
                 Write-Host "     - $missing" -ForegroundColor Red
             }
         } else {
             Write-Host ""
-            Write-Host "  ✅ Tous les fichiers dashboard sont présents" -ForegroundColor Green
+            Write-Host "  [OK] Tous les fichiers dashboard sont presents" -ForegroundColor Green
         }
         
         # Afficher les problèmes de cohérence
         if ($coherenceIssues.HooksMissingInDoc.Count -gt 0) {
             Write-Host ""
-            Write-Host "  ⚠️  Hooks Manquants dans la Documentation:" -ForegroundColor Yellow
+            Write-Host "  [WARN] Hooks Manquants dans la Documentation:" -ForegroundColor Yellow
             foreach ($hook in $coherenceIssues.HooksMissingInDoc) {
                 Write-Host "     - $hook" -ForegroundColor Gray
             }
@@ -436,7 +436,7 @@ function Invoke-Check-MarkdownFiles {
         # Afficher les groupes de consolidation
         if ($mdAnalysis.ConsolidationGroups.Count -gt 0) {
             Write-Host ""
-            Write-Host "  📦 Groupes de Consolidation ($($mdAnalysis.ConsolidationGroups.Count)):" -ForegroundColor Cyan
+            Write-Host "  [PACK] Groupes de Consolidation ($($mdAnalysis.ConsolidationGroups.Count)):" -ForegroundColor Cyan
             foreach ($group in $mdAnalysis.ConsolidationGroups) {
                 Write-Host "     - $($group.Name) → $($group.TargetPath)" -ForegroundColor Gray
                 Write-Host "       Fichiers: $($group.Files.Count)" -ForegroundColor DarkGray
@@ -446,7 +446,7 @@ function Invoke-Check-MarkdownFiles {
         # Afficher les fichiers à archiver
         if ($mdAnalysis.ToArchive.Count -gt 0) {
             Write-Host ""
-            Write-Host "  🗄️  Fichiers à Archiver ($($mdAnalysis.ToArchive.Count)):" -ForegroundColor Yellow
+            Write-Host "  [ARCHIVE] Fichiers a Archiver ($($mdAnalysis.ToArchive.Count)):" -ForegroundColor Yellow
             foreach ($item in $mdAnalysis.ToArchive) {
                 $relativePath = $item.File
                 if ($relativePath.StartsWith($ProjectRoot)) {
@@ -504,7 +504,7 @@ function Invoke-Check-MarkdownFiles {
         
         if ($mdAnalysis.ToConsolidate.Count -gt 0) {
             Write-Host ""
-            Write-Host "  📦 À consolider ($($mdAnalysis.ToConsolidate.Count)):" -ForegroundColor Yellow
+            Write-Host "  [PACK] A consolider ($($mdAnalysis.ToConsolidate.Count)):" -ForegroundColor Yellow
             foreach ($item in $mdAnalysis.ToConsolidate) {
                 if ($item.ContainsKey("File")) {
                     $relativePath = $item.File.Replace($ProjectRoot, "")
@@ -645,13 +645,13 @@ function Invoke-Check-MarkdownFiles {
         $reportContent += "## Statut Dashboard" + $nl + $nl
         
         if ($dashboardStatus.Missing.Count -gt 0) {
-            $reportContent += "**⚠️ FICHIERS MANQUANTS**:" + $nl
+            $reportContent += "**[WARN] FICHIERS MANQUANTS**:" + $nl
             foreach ($missing in $dashboardStatus.Missing) {
                 $reportContent += "- $missing" + $nl
             }
             $reportContent += $nl
         } else {
-            $reportContent += "✅ Tous les fichiers requis sont présents" + $nl + $nl
+            $reportContent += "[OK] Tous les fichiers requis sont presents" + $nl + $nl
         }
         
         $reportContent += "## Problemes de Coherence" + $nl + $nl
@@ -659,7 +659,7 @@ function Invoke-Check-MarkdownFiles {
         if ($coherenceIssues.HooksMissingInDoc.Count -gt 0) {
             $reportContent += "**Hooks manquants dans la documentation**: $($coherenceIssues.HooksMissingInDoc -join ', ')" + $nl + $nl
         } else {
-            $reportContent += "✅ Aucun problème de cohérence détecté" + $nl + $nl
+            $reportContent += "[OK] Aucun probleme de coherence detecte" + $nl + $nl
         }
         
         $reportContent += "## Recommandations" + $nl + $nl

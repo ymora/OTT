@@ -1,10 +1,10 @@
-# ===============================================================================
-# SYSTÈME D'AUDIT OTT v2.0 - ARCHITECTURE RECONÇUE
+﻿# ===============================================================================
+# SYSTÃˆME D'AUDIT OTT v2.0 - ARCHITECTURE RECONÃ‡UE
 # ===============================================================================
 
 param(
     [string]$Target = "project",  # project, file, directory
-    [string]$Path = "",           # Chemin spécifique pour file/directory
+    [string]$Path = "",           # Chemin spÃ©cifique pour file/directory
     [string]$Phases = "all",      # all, ou liste: "1,2,3"
     [switch]$Verbose = $false,
     [switch]$Quiet = $false
@@ -37,13 +37,13 @@ if (Test-Path $fileScannerPath) { . $fileScannerPath }
 $projectDetectorPath = Join-Path $PSScriptRoot "modules\ProjectDetector.ps1"
 if (Test-Path $projectDetectorPath) { . $projectDetectorPath }
 
-# Définition des phases avec dépendances et ordre logique
+# DÃ©finition des phases avec dÃ©pendances et ordre logique
 $script:AuditPhases = @(
     # PHASE 1: STRUCTURE DE BASE (fondation)
     @{
         Id = 1
         Name = "Inventaire Complet"
-        Description = "Analyse de tous les fichiers et répertoires"
+        Description = "Analyse de tous les fichiers et rÃ©pertoires"
         Category = "Structure"
         Dependencies = @()
         Priority = 1
@@ -51,11 +51,11 @@ $script:AuditPhases = @(
         Target = "project"
     },
     
-    # PHASE 2: ARCHITECTURE (dépend de l'inventaire)
+    # PHASE 2: ARCHITECTURE (dÃ©pend de l'inventaire)
     @{
         Id = 2
         Name = "Architecture Projet"
-        Description = "Structure, organisation, dépendances"
+        Description = "Structure, organisation, dÃ©pendances"
         Category = "Structure"
         Dependencies = @(1)
         Priority = 2
@@ -63,23 +63,23 @@ $script:AuditPhases = @(
         Target = "project"
     },
     
-    # PHASE 3: SÉCURITÉ (critique, dépend de la structure)
+    # PHASE 3: SÃ‰CURITÃ‰ (critique, dÃ©pend de la structure)
     @{
         Id = 3
-        Name = "Sécurité"
-        Description = "Vulnérabilités, secrets, injections"
-        Category = "Sécurité"
+        Name = "SÃ©curitÃ©"
+        Description = "VulnÃ©rabilitÃ©s, secrets, injections"
+        Category = "SÃ©curitÃ©"
         Dependencies = @(1, 2)
         Priority = 3
         Modules = @("Checks-Security.ps1")
         Target = "project"
     },
     
-    # PHASE 4: CONFIGURATION (cohérence environnement)
+    # PHASE 4: CONFIGURATION (cohÃ©rence environnement)
     @{
         Id = 4
         Name = "Configuration"
-        Description = "Docker, environnement, cohérence"
+        Description = "Docker, environnement, cohÃ©rence"
         Category = "Configuration"
         Dependencies = @(1)
         Priority = 4
@@ -87,11 +87,11 @@ $script:AuditPhases = @(
         Target = "project"
     },
     
-    # PHASE 5: BACKEND (API et base de données)
+    # PHASE 5: BACKEND (API et base de donnÃ©es)
     @{
         Id = 5
         Name = "Backend API"
-        Description = "Endpoints, handlers, base de données"
+        Description = "Endpoints, handlers, base de donnÃ©es"
         Category = "Backend"
         Dependencies = @(1, 2)
         Priority = 5
@@ -103,7 +103,7 @@ $script:AuditPhases = @(
     @{
         Id = 6
         Name = "Frontend"
-        Description = "Routes, navigation, accessibilité"
+        Description = "Routes, navigation, accessibilitÃ©"
         Category = "Frontend"
         Dependencies = @(1, 2)
         Priority = 6
@@ -111,12 +111,12 @@ $script:AuditPhases = @(
         Target = "project"
     },
     
-    # PHASE 7: QUALITÉ CODE (analyse statique)
+    # PHASE 7: QUALITÃ‰ CODE (analyse statique)
     @{
         Id = 7
-        Name = "Qualité Code"
-        Description = "Code mort, duplication, complexité"
-        Category = "Qualité"
+        Name = "QualitÃ© Code"
+        Description = "Code mort, duplication, complexitÃ©"
+        Category = "QualitÃ©"
         Dependencies = @(1, 2)
         Priority = 7
         Modules = @("Checks-CodeMort.ps1", "Checks-Duplication.ps1", "Checks-Complexity.ps1")
@@ -127,7 +127,7 @@ $script:AuditPhases = @(
     @{
         Id = 8
         Name = "Performance"
-        Description = "Optimisations, mémoire, vitesse"
+        Description = "Optimisations, mÃ©moire, vitesse"
         Category = "Performance"
         Dependencies = @(1, 2, 5, 6)
         Priority = 8
@@ -151,7 +151,7 @@ $script:AuditPhases = @(
     @{
         Id = 10
         Name = "Tests"
-        Description = "Tests unitaires, intégration, fonctionnels"
+        Description = "Tests unitaires, intÃ©gration, fonctionnels"
         Category = "Tests"
         Dependencies = @(1, 2, 5)
         Priority = 10
@@ -159,12 +159,12 @@ $script:AuditPhases = @(
         Target = "project"
     },
     
-    # PHASE 11: DÉPLOIEMENT
+    # PHASE 11: DÃ‰PLOIEMENT
     @{
         Id = 11
-        Name = "Déploiement"
+        Name = "DÃ©ploiement"
         Description = "CI/CD, GitHub Pages, configuration"
-        Category = "Déploiement"
+        Category = "DÃ©ploiement"
         Dependencies = @(1, 4)
         Priority = 11
         Modules = @()
@@ -175,7 +175,7 @@ $script:AuditPhases = @(
     @{
         Id = 12
         Name = "Hardware/Firmware"
-        Description = "Arduino, compilation, cohérence"
+        Description = "Arduino, compilation, cohÃ©rence"
         Category = "Hardware"
         Dependencies = @(1)
         Priority = 12
@@ -183,10 +183,10 @@ $script:AuditPhases = @(
         Target = "project"
     },
     
-    # PHASE 13: IA et Compléments
+    # PHASE 13: IA et ComplÃ©ments
     @{
         Id = 13
-        Name = "IA et Compléments"
+        Name = "IA et ComplÃ©ments"
         Description = "Tests exhaustifs, IA, suivi temps"
         Category = "IA"
         Dependencies = @(1, 2, 5, 10)
@@ -217,7 +217,7 @@ function Write-Log {
         "PHASE" { Write-Host "$prefix [PHASE] $Message" -ForegroundColor Cyan }
         "MODULE" { Write-Host "$prefix [MODULE] $Message" -ForegroundColor Magenta }
         "DETAIL" { Write-Host "$prefix [DETAIL] $Message" -ForegroundColor Gray }
-        "PROGRESS" { Write-Host "$prefix [⏳] $Message" -ForegroundColor Blue }
+        "PROGRESS" { Write-Host "$prefix [â³] $Message" -ForegroundColor Blue }
         default { Write-Host "$prefix [$Level] $Message" }
     }
 }
@@ -226,15 +226,15 @@ function Write-PhaseHeader {
     param([int]$PhaseId, [string]$PhaseName, [string]$Description, [int]$ModuleCount)
     Write-Log "=== Phase $PhaseId : $PhaseName ===" "PHASE" -NoTimestamp
     Write-Log "Description: $Description" "DETAIL"
-    Write-Log "Modules à exécuter: $ModuleCount" "DETAIL"
+    Write-Log "Modules Ã  exÃ©cuter: $ModuleCount" "DETAIL"
     if ($script:ProjectProfile) {
-        Write-Log "Projet détecté: $($script:ProjectProfile.Id)" "DETAIL"
+        Write-Log "Projet dÃ©tectÃ©: $($script:ProjectProfile.Id)" "DETAIL"
     }
 }
 
 function Write-ModuleStart {
     param([string]$ModuleName, [string]$ModulePath)
-    Write-Log "▶ Démarrage: $ModuleName" "MODULE"
+    Write-Log "â–¶ DÃ©marrage: $ModuleName" "MODULE"
     if ($Verbose) {
         Write-Log "  Chemin: $ModulePath" "DETAIL"
     }
@@ -243,14 +243,14 @@ function Write-ModuleStart {
 function Write-ModuleResult {
     param([string]$ModuleName, [string]$Status, [timespan]$Duration, [int]$Issues = 0)
     $statusIcon = switch ($Status) {
-        "SUCCESS" { "✅" }
-        "WARNING" { "⚠️" }
-        "ERROR" { "❌" }
-        "SKIPPED" { "⏭️" }
-        default { "❓" }
+        "SUCCESS" { "[OK]" }
+        "WARNING" { "[WARN]" }
+        "ERROR" { "[ERR]" }
+        "SKIPPED" { "[SKIP]" }
+        default { "[?]" }
     }
     $issuesText = if ($Issues -gt 0) { " ($Issues issues)" } else { "" }
-    Write-Log "$statusIcon $ModuleName terminé en $([math]::Round($Duration.TotalSeconds, 2))s$issuesText" "MODULE"
+    Write-Log "$statusIcon $ModuleName termine en $([math]::Round($Duration.TotalSeconds, 2))s$issuesText" "MODULE"
 }
 
 function Write-PhaseSummary {
@@ -259,11 +259,11 @@ function Write-PhaseSummary {
     $warningCount = ($Results.Values | Where-Object { $_.Status -eq "WARNING" }).Count
     $errorCount = ($Results.Values | Where-Object { $_.Status -eq "ERROR" }).Count
     
-    Write-Log "Phase $PhaseId terminée en $([math]::Round($TotalDuration.TotalSeconds, 2))s" "SUCCESS"
+    Write-Log "Phase $PhaseId terminee en $([math]::Round($TotalDuration.TotalSeconds, 2))s" "SUCCESS"
     if ($warningCount -gt 0 -or $errorCount -gt 0) {
-        Write-Log "  Résumé: $successCount succès, $warningCount avertissements, $errorCount erreurs" "DETAIL"
+        Write-Log "  RÃ©sumÃ©: $successCount succÃ¨s, $warningCount avertissements, $errorCount erreurs" "DETAIL"
     }
-    Write-Log "Résultats: $($script:Config.OutputDir)\phase_$PhaseId`_$($script:Config.Timestamp).json" "DETAIL"
+    Write-Log "RÃ©sultats: $($script:Config.OutputDir)\phase_$PhaseId`_$($script:Config.Timestamp).json" "DETAIL"
 }
 
 function Import-AuditDependencies {
@@ -421,12 +421,12 @@ function Resolve-AuditModulePath {
 
 function Resolve-TargetRoot {
     if ($Target -eq "project") {
-        # Par défaut: le projet est le parent du dossier "audit"
+        # Par dÃ©faut: le projet est le parent du dossier "audit"
         $repoRoot = Split-Path -Parent $PSScriptRoot
         return $repoRoot
     }
     if ([string]::IsNullOrWhiteSpace($Path)) {
-        throw "Le paramètre -Path est requis pour Target=$Target"
+        throw "Le paramÃ¨tre -Path est requis pour Target=$Target"
     }
     if (-not (Test-Path $Path)) {
         throw "Chemin introuvable: $Path"
@@ -462,7 +462,7 @@ function Initialize-AuditContext {
         Recommendations = @()
         Statistics = @{ }
         API = @{ }
-    }
+            AIContext = @{ }}
 
     if ($Target -eq "file") {
         $script:Files = @((Get-Item $Path -ErrorAction Stop))
@@ -500,10 +500,10 @@ function Invoke-AuditModule {
     if ($cmd.Parameters.ContainsKey('ProjectRoot')) { $invokeParams.ProjectRoot = $script:Config.ProjectRoot }
     if ($cmd.Parameters.ContainsKey('ProjectInfo')) { $invokeParams.ProjectInfo = $script:ProjectInfo }
 
-    # Capturer les résultats du module
+    # Capturer les rÃ©sultats du module
     $moduleResult = & $functionName @invokeParams
     
-    # Retourner un objet structuré avec les statistiques
+    # Retourner un objet structurÃ© avec les statistiques
     if ($moduleResult -is [hashtable]) {
         return @{
             Success = $true
@@ -514,7 +514,7 @@ function Invoke-AuditModule {
             Result = $moduleResult
         }
     } else {
-        # Comportement par défaut si le module ne retourne pas de hashtable
+        # Comportement par dÃ©faut si le module ne retourne pas de hashtable
         return @{
             Success = $true
             Errors = 0
@@ -571,23 +571,23 @@ function Resolve-PhaseExecution {
         }
     }
 
-    # Filtrer les phases spécifiques projet si non détecté
+    # Filtrer les phases spÃ©cifiques projet si non dÃ©tectÃ©
     $availablePhases = @()
     foreach ($phaseId in $allPhases) {
         $phase = $script:AuditPhases | Where-Object { $_.Id -eq $phaseId }
         if ($phase -and $phase.ProjectSpecific) {
-            # Phase spécifique projet : vérifier si le projet détecté est autorisé
+            # Phase spÃ©cifique projet : vÃ©rifier si le projet dÃ©tectÃ© est autorisÃ©
             if ($script:ProjectProfile -and $phase.ProjectSpecific -contains $script:ProjectProfile.Id) {
                 $availablePhases += $phaseId
             }
             # Sinon, ignorer cette phase
         } else {
-            # Phase générique : toujours inclure
+            # Phase gÃ©nÃ©rique : toujours inclure
             $availablePhases += $phaseId
         }
     }
 
-    # Trier par priorité
+    # Trier par prioritÃ©
     $sortedPhases = @()
     foreach ($phase in $script:AuditPhases | Sort-Object Priority) {
         if ($availablePhases -contains $phase.Id) {
@@ -638,7 +638,7 @@ function Invoke-InteractiveMenu {
     $script:Quiet = ($quietChoice -match '^(o|oui|y|yes)$')
 
     Write-Host "" 
-    Write-Host "Résumé:" -ForegroundColor Cyan
+    Write-Host "RÃ©sumÃ©:" -ForegroundColor Cyan
     Write-Host ("  Target: " + $script:Target) -ForegroundColor Cyan
     if ($script:Target -ne "project") {
         Write-Host ("  Path: " + $script:Path) -ForegroundColor Cyan
@@ -650,7 +650,7 @@ function Invoke-InteractiveMenu {
     $confirm = Read-Host "Lancer l'audit ? (o/n) [o]"
     if ([string]::IsNullOrWhiteSpace($confirm)) { $confirm = "o" }
     if ($confirm -notmatch '^(o|oui|y|yes)$') {
-        Write-Host "Audit annulé." -ForegroundColor Yellow
+        Write-Host "Audit annulÃ©." -ForegroundColor Yellow
         exit 0
     }
 }
@@ -665,13 +665,13 @@ function Initialize-AuditEnvironment {
     try {
         Push-Location -Path $script:Config.ProjectRoot
     } catch {
-        throw "Impossible de se placer dans le répertoire projet '$($script:Config.ProjectRoot)': $($_.Exception.Message)"
+        throw "Impossible de se placer dans le rÃ©pertoire projet '$($script:Config.ProjectRoot)': $($_.Exception.Message)"
     }
 
-    # Création du répertoire de résultats
+    # CrÃ©ation du rÃ©pertoire de rÃ©sultats
     if (-not (Test-Path $script:Config.OutputDir)) {
         New-Item -ItemType Directory -Path $script:Config.OutputDir -Force | Out-Null
-        Write-Log "Création du répertoire de résultats: $($script:Config.OutputDir)" "INFO"
+        Write-Log "CrÃ©ation du rÃ©pertoire de rÃ©sultats: $($script:Config.OutputDir)" "INFO"
     }
 
     Write-Log "Projet: $($script:Config.ProjectRoot)" "SUCCESS"
@@ -688,7 +688,7 @@ function Execute-Phase {
     Write-PhaseHeader -PhaseId $Phase.Id -PhaseName $Phase.Name -Description $Phase.Description -ModuleCount $Phase.Modules.Count
 
     if ($Phase.Dependencies.Count -gt 0) {
-        Write-Log "Dépendances: $($Phase.Dependences -join ', ')" "DETAIL"
+        Write-Log "DÃ©pendances: $($Phase.Dependences -join ', ')" "DETAIL"
     }
 
     $results = @{}
@@ -699,15 +699,15 @@ function Execute-Phase {
         $modulePath = Resolve-AuditModulePath -Module $module
         
         if (-not (Test-Path $modulePath)) {
-            Write-Log "⚠ Module $module introuvable, ignoré" "WARN"
+            Write-Log "âš  Module $module introuvable, ignorÃ©" "WARN"
             if ($Verbose) {
-                Write-Log "  Chemin recherché: $modulePath" "DETAIL"
+                Write-Log "  Chemin recherchÃ©: $modulePath" "DETAIL"
             }
             continue
         }
 
         Write-ModuleStart -ModuleName $module -ModulePath $modulePath
-        Write-Log "[$moduleIndex/$($Phase.Modules.Count)] Exécution en cours..." "PROGRESS"
+        Write-Log "[$moduleIndex/$($Phase.Modules.Count)] ExÃ©cution en cours..." "PROGRESS"
 
         try {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -738,7 +738,7 @@ function Execute-Phase {
             Write-ModuleResult -ModuleName $module -Status $status -Duration $sw.Elapsed -Issues $issues
             
             if ($Verbose -and $issues -gt 0) {
-                Write-Log "  Détail: $($moduleResult.Errors) erreurs, $($moduleResult.Warnings) avertissements" "DETAIL"
+                Write-Log "  DÃ©tail: $($moduleResult.Errors) erreurs, $($moduleResult.Warnings) avertissements" "DETAIL"
             }
             
         } catch {
@@ -759,7 +759,7 @@ function Execute-Phase {
         }
     }
 
-    # Sauvegarde des résultats de la phase
+    # Sauvegarde des rÃ©sultats de la phase
     $phaseEndTime = Get-Date
     $totalDuration = $phaseEndTime - $phaseStartTime
     
@@ -793,7 +793,7 @@ function Main {
 
         Initialize-AuditEnvironment
 
-        # Résolution des phases à exécuter
+        # RÃ©solution des phases Ã  exÃ©cuter
         $requestedPhases = @()
         if ($Phases -eq "all") {
             $requestedPhases = $script:AuditPhases | ForEach-Object { $_.Id }
@@ -804,32 +804,32 @@ function Main {
                 if ($script:AuditPhases | Where-Object { $_.Id -eq $num }) {
                     $num
                 } else {
-                    Write-Log "Phase $num invalide, ignorée" "WARN"
+                    Write-Log "Phase $num invalide, ignorÃ©e" "WARN"
                 }
             }
-            Write-Log "Mode: Phases sélectives - $($Phases)" "INFO"
+            Write-Log "Mode: Phases sÃ©lectives - $($Phases)" "INFO"
         }
 
         if ($requestedPhases.Count -eq 0) {
-            Write-Log "Aucune phase valide à exécuter" "ERROR"
+            Write-Log "Aucune phase valide Ã  exÃ©cuter" "ERROR"
             return
         }
 
         $executionPlan = Resolve-PhaseExecution -RequestedPhases $requestedPhases
 
-        Write-Log "Plan d'exécution: $($executionPlan -join ', ')" "INFO"
+        Write-Log "Plan d'exÃ©cution: $($executionPlan -join ', ')" "INFO"
         Write-Log "Nombre de phases: $($executionPlan.Count)" "INFO"
         
         if ($script:ProjectProfile) {
-            Write-Log "Projet détecté: $($script:ProjectProfile.Id) (score: $($script:ProjectProfile.Score))" "SUCCESS"
+            Write-Log "Projet dÃ©tectÃ©: $($script:ProjectProfile.Id) (score: $($script:ProjectProfile.Score))" "SUCCESS"
         } else {
-            Write-Log "Aucun projet spécifique détecté (mode générique)" "INFO"
+            Write-Log "Aucun projet spÃ©cifique dÃ©tectÃ© (mode gÃ©nÃ©rique)" "INFO"
         }
 
-        Write-Log "Répertoire de sortie: $($script:Config.OutputDir)" "INFO"
+        Write-Log "RÃ©pertoire de sortie: $($script:Config.OutputDir)" "INFO"
         Write-Log "Timestamp: $($script:Config.Timestamp)" "DETAIL"
 
-        # Exécution des phases
+        # ExÃ©cution des phases
         $auditStartTime = Get-Date
         $allPhaseResults = @()
         $totalModules = 0
@@ -843,7 +843,7 @@ function Main {
             if (-not $phase) { continue }
             
             Write-Log "" "INFO"
-            Write-Log "[$($i + 1)/$($executionPlan.Count)] Démarrage Phase $phaseId" "PROGRESS"
+            Write-Log "[$($i + 1)/$($executionPlan.Count)] DÃ©marrage Phase $phaseId" "PROGRESS"
             
             try {
                 $phaseResult = Execute-Phase -Phase $phase
@@ -863,28 +863,28 @@ function Main {
             }
         }
 
-        # Résumé final
+        # RÃ©sumÃ© final
         $auditEndTime = Get-Date
         $totalDuration = $auditEndTime - $auditStartTime
         
         Write-Log "" "INFO"
         Write-Host "================================================================" -ForegroundColor Green
-        Write-Host "AUDIT TERMINE AVEC SUCCÈS" -ForegroundColor Green
+        Write-Host "AUDIT TERMINE AVEC SUCCÃˆS" -ForegroundColor Green
         Write-Host "================================================================" -ForegroundColor Green
         
-        Write-Log "Durée totale: $([math]::Round($totalDuration.TotalMinutes, 2)) minutes" "SUCCESS"
-        Write-Log "Phases exécutées: $($allPhaseResults.Count)" "SUCCESS"
-        Write-Log "Modules exécutés: $totalModules" "SUCCESS"
+        Write-Log "DurÃ©e totale: $([math]::Round($totalDuration.TotalMinutes, 2)) minutes" "SUCCESS"
+        Write-Log "Phases exÃ©cutÃ©es: $($allPhaseResults.Count)" "SUCCESS"
+        Write-Log "Modules exÃ©cutÃ©s: $totalModules" "SUCCESS"
         
         if ($totalErrors -gt 0 -or $totalWarnings -gt 0) {
-            Write-Log "Problèmes détectés: $totalErrors erreurs, $totalWarnings avertissements" "WARN"
+            Write-Log "ProblÃ¨mes dÃ©tectÃ©s: $totalErrors erreurs, $totalWarnings avertissements" "WARN"
         } else {
-            Write-Log "Aucun problème détecté" "SUCCESS"
+            Write-Log "Aucun problÃ¨me dÃ©tectÃ©" "SUCCESS"
         }
         
         Write-Log "Rapport complet: $($script:Config.OutputDir)\audit_summary_$($script:Config.Timestamp).json" "INFO"
 
-        # Génération du résumé global
+        # GÃ©nÃ©ration du rÃ©sumÃ© global
         $summary = @{
             AuditVersion = $script:Config.Version
             StartTime = $auditStartTime

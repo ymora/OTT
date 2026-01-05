@@ -63,7 +63,7 @@ function Invoke-Check-FunctionalTests {
             }
         } catch {
             Write-Warn "Authentification échouée: $($_.Exception.Message)"
-            Write-Info "⏭️  Tests fonctionnels nécessitent une authentification - Score: 5/10"
+            Write-Info "[SKIP] Tests fonctionnels necessitent une authentification - Score: 5/10"
             $Results.Scores["FunctionalTests"] = 5
             return
         }
@@ -99,7 +99,7 @@ function Invoke-Check-FunctionalTests {
         $createResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients" -Method POST -Body $newPatient -ContentType "application/json" -Headers $authHeaders -TimeoutSec 10 -ErrorAction Stop
         if ($createResponse.success -and $createResponse.patient -and $createResponse.patient.id) {
             $testPatientId = $createResponse.patient.id
-            Write-OK "    ✅ CREATE patient réussi (ID: $testPatientId)"
+                    Write-OK "    [OK] CREATE patient reussi (ID: $testPatientId)"
             $success += "CRUD Patient CREATE"
             $testResults.CRUD += @{Operation = "Patient CREATE"; Status = "OK"; Details = "ID: $testPatientId"}
         } else {
@@ -111,7 +111,7 @@ function Invoke-Check-FunctionalTests {
         if ($getResponse.success -and $getResponse.patients) {
             $foundPatient = $getResponse.patients | Where-Object { $_.id -eq $testPatientId }
             if ($foundPatient) {
-                Write-OK "    ✅ READ patient réussi (trouvé dans liste)"
+                Write-OK "    [OK] READ patient reussi (trouve dans liste)"
                 $success += "CRUD Patient READ"
                 $testResults.CRUD += @{Operation = "Patient READ"; Status = "OK"}
             } else {
@@ -129,7 +129,7 @@ function Invoke-Check-FunctionalTests {
         } | ConvertTo-Json
         $updateResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients/$testPatientId" -Method PUT -Body $updatePatient -ContentType "application/json" -Headers $authHeaders -TimeoutSec 10 -ErrorAction Stop
         if ($updateResponse.success -and $updateResponse.patient -and $updateResponse.patient.last_name -eq "Fonctionnel Modifié") {
-            Write-OK "    ✅ UPDATE patient réussi"
+            Write-OK "    [OK] UPDATE patient reussi"
             $success += "CRUD Patient UPDATE"
             $testResults.CRUD += @{Operation = "Patient UPDATE"; Status = "OK"}
         } else {
@@ -139,7 +139,7 @@ function Invoke-Check-FunctionalTests {
         # DELETE (soft delete)
         $deleteResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients/$testPatientId" -Method DELETE -Headers $authHeaders -TimeoutSec 5 -ErrorAction Stop
         if ($deleteResponse.success) {
-            Write-OK "    ✅ DELETE patient réussi (soft delete)"
+            Write-OK "    [OK] DELETE patient reussi (soft delete)"
             $success += "CRUD Patient DELETE"
             $testResults.CRUD += @{Operation = "Patient DELETE"; Status = "OK"}
         } else {
@@ -152,18 +152,18 @@ function Invoke-Check-FunctionalTests {
             if ($getDeletedResponse.success -and $getDeletedResponse.patients) {
                 $foundDeleted = $getDeletedResponse.patients | Where-Object { $_.id -eq $testPatientId -and $_.deleted_at }
                 if ($foundDeleted) {
-                    Write-OK "    ✅ Patient trouvé dans archives après DELETE (soft delete correct)"
+                    Write-OK "    [OK] Patient trouve dans archives apres DELETE (soft delete correct)"
                 } else {
-                    Write-Warn "    ⚠️  Patient non trouvé dans archives (peut être normal si permanent delete)"
+                    Write-Warn "    [WARN] Patient non trouve dans archives (peut etre normal si permanent delete)"
                 }
             }
         } catch {
-            Write-Info "    ℹ️  Impossible de vérifier l'archivage (normal)"
+            Write-Info "    [INFO] Impossible de verifier l'archivage (normal)"
         }
         
     } catch {
         $errorMsg = $_.Exception.Message
-        Write-Err "    ❌ CRUD Patients échoué: $errorMsg"
+        Write-Err "    [ERR] CRUD Patients echoue: $errorMsg"
         $errors += "CRUD Patients: $errorMsg"
         $testResults.CRUD += @{Operation = "Patient CRUD"; Status = "ERROR"; Details = $errorMsg}
         
@@ -191,7 +191,7 @@ function Invoke-Check-FunctionalTests {
         $createDeviceResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices" -Method POST -Body $newDevice -ContentType "application/json" -Headers $authHeaders -TimeoutSec 10 -ErrorAction Stop
         if ($createDeviceResponse.success -and $createDeviceResponse.device -and $createDeviceResponse.device.id) {
             $testDeviceId = $createDeviceResponse.device.id
-            Write-OK "    ✅ CREATE device réussi (ID: $testDeviceId)"
+            Write-OK "    [OK] CREATE device reussi (ID: $testDeviceId)"
             $success += "CRUD Device CREATE"
             $testResults.CRUD += @{Operation = "Device CREATE"; Status = "OK"; Details = "ID: $testDeviceId"}
             
@@ -202,7 +202,7 @@ function Invoke-Check-FunctionalTests {
             } | ConvertTo-Json
             $updateDeviceResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices/$testDeviceId" -Method PUT -Body $updateDevice -ContentType "application/json" -Headers $authHeaders -TimeoutSec 10 -ErrorAction Stop
             if ($updateDeviceResponse.success) {
-                Write-OK "    ✅ UPDATE device réussi"
+                Write-OK "    [OK] UPDATE device reussi"
                 $success += "CRUD Device UPDATE"
                 $testResults.CRUD += @{Operation = "Device UPDATE"; Status = "OK"}
             }
@@ -210,14 +210,14 @@ function Invoke-Check-FunctionalTests {
             # DELETE (soft delete)
             $deleteDeviceResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices/$testDeviceId" -Method DELETE -Headers $authHeaders -TimeoutSec 5 -ErrorAction Stop
             if ($deleteDeviceResponse.success) {
-                Write-OK "    ✅ DELETE device réussi (soft delete)"
+                Write-OK "    [OK] DELETE device reussi (soft delete)"
                 $success += "CRUD Device DELETE"
                 $testResults.CRUD += @{Operation = "Device DELETE"; Status = "OK"}
             }
         }
     } catch {
         $errorMsg = $_.Exception.Message
-        Write-Warn "    ⚠️  CRUD Devices échoué: $errorMsg (peut être normal selon permissions)"
+        Write-Warn "    [WARN] CRUD Devices echoue: $errorMsg (peut etre normal selon permissions)"
         $warnings += "CRUD Devices: $errorMsg"
         $testResults.CRUD += @{Operation = "Device CRUD"; Status = "WARNING"; Details = $errorMsg}
         
@@ -250,7 +250,7 @@ function Invoke-Check-FunctionalTests {
         $createWorkflowPatient = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients" -Method POST -Body $workflowPatient -ContentType "application/json" -Headers $authHeaders -TimeoutSec 10 -ErrorAction Stop
         if ($createWorkflowPatient.success -and $createWorkflowPatient.patient.id) {
             $workflowPatientId = $createWorkflowPatient.patient.id
-            Write-OK "    ✅ Patient créé (ID: $workflowPatientId)"
+            Write-OK "    [OK] Patient cree (ID: $workflowPatientId)"
             
             # Créer un device
             $workflowDevice = @{
@@ -262,7 +262,7 @@ function Invoke-Check-FunctionalTests {
             $createWorkflowDevice = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices" -Method POST -Body $workflowDevice -ContentType "application/json" -Headers $authHeaders -TimeoutSec 10 -ErrorAction Stop
             if ($createWorkflowDevice.success -and $createWorkflowDevice.device.id) {
                 $workflowDeviceId = $createWorkflowDevice.device.id
-                Write-OK "    ✅ Device créé (ID: $workflowDeviceId)"
+                Write-OK "    [OK] Device cree (ID: $workflowDeviceId)"
                 
                 # Assigner le device au patient
                 $assignDevice = @{
@@ -270,18 +270,18 @@ function Invoke-Check-FunctionalTests {
                 } | ConvertTo-Json
                 $assignResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices/$workflowDeviceId" -Method PUT -Body $assignDevice -ContentType "application/json" -Headers $authHeaders -TimeoutSec 10 -ErrorAction Stop
                 if ($assignResponse.success) {
-                    Write-OK "    ✅ Device assigné au patient"
+                    Write-OK "    [OK] Device assigne au patient"
                     
                     # Vérifier l'assignation (via liste patients)
                     $verifyPatients = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients?limit=100" -Method GET -Headers $authHeaders -TimeoutSec 5 -ErrorAction Stop
                     if ($verifyPatients.success -and $verifyPatients.patients) {
                         $foundWorkflowPatient = $verifyPatients.patients | Where-Object { $_.id -eq $workflowPatientId }
                         if ($foundWorkflowPatient -and $foundWorkflowPatient.device_id -eq $workflowDeviceId) {
-                            Write-OK "    ✅ Assignation vérifiée dans patient (device_id: $($foundWorkflowPatient.device_id))"
+                            Write-OK "    [OK] Assignation verifiee dans patient (device_id: $($foundWorkflowPatient.device_id))"
                             $success += "Workflow Patient-Device Assignment"
                             $testResults.Workflows += @{Workflow = "Patient-Device Assignment"; Status = "OK"}
                         } else {
-                            Write-Warn "    ⚠️  Assignation non visible dans patient (peut être normal selon structure API)"
+                            Write-Warn "    [WARN] Assignation non visible dans patient (peut etre normal selon structure API)"
                         }
                     }
                     
@@ -290,12 +290,12 @@ function Invoke-Check-FunctionalTests {
                     if ($verifyDevice.success) {
                         $deviceData = if ($verifyDevice.device) { $verifyDevice.device } elseif ($verifyDevice) { $verifyDevice } else { $null }
                         if ($deviceData -and $deviceData.patient_id -eq $workflowPatientId) {
-                            Write-OK "    ✅ Assignation vérifiée dans device (patient_id: $($deviceData.patient_id))"
+                            Write-OK "    [OK] Assignation verifiee dans device (patient_id: $($deviceData.patient_id))"
                         } else {
-                            Write-Warn "    ⚠️  Assignation non visible dans device (structure API différente)"
+                            Write-Warn "    [WARN] Assignation non visible dans device (structure API differente)"
                         }
                     } else {
-                        Write-Warn "    ⚠️  Impossible de vérifier device (peut être normal)"
+                        Write-Warn "    [WARN] Impossible de verifier device (peut etre normal)"
                     }
                     
                 } else {
@@ -309,7 +309,7 @@ function Invoke-Check-FunctionalTests {
         }
     } catch {
         $errorMsg = $_.Exception.Message
-        Write-Err "    ❌ Workflow Patient-Device échoué: $errorMsg"
+        Write-Err "    [ERR] Workflow Patient-Device echoue: $errorMsg"
         $errors += "Workflow Patient-Device: $errorMsg"
         $testResults.Workflows += @{Workflow = "Patient-Device Assignment"; Status = "ERROR"; Details = $errorMsg}
     } finally {
@@ -366,13 +366,13 @@ function Invoke-Check-FunctionalTests {
                 # Endpoint OTT: POST /api.php/devices/measurements (format unifié sim_iccid, flow_lpm, etc.)
                 $measurementResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices/measurements" -Method POST -Body $testMeasurement -ContentType "application/json" -TimeoutSec 5 -ErrorAction Stop
                 if ($measurementResponse.success) {
-                    Write-OK "    ✅ Mesure OTT envoyée avec succès (device auto-enregistré si nécessaire)"
+                    Write-OK "    [OK] Mesure OTT envoyee avec succes (device auto-enregistre si necessaire)"
                     $success += "Endpoint Mesures OTT"
                     $testResults.Workflows += @{Workflow = "OTT Measurement POST"; Status = "OK"}
                     
                     # Vérifier que la mesure a bien créé/mis à jour le device
                     if ($measurementResponse.device_id) {
-                        Write-Info "    📊 Device ID dans réponse: $($measurementResponse.device_id)"
+                        Write-Info "    [INFO] Device ID dans reponse: $($measurementResponse.device_id)"
                     }
                 } else {
                     throw "Réponse success=false: $($measurementResponse.error)"
@@ -382,11 +382,11 @@ function Invoke-Check-FunctionalTests {
                 # Vérifier si c'est une erreur 404/400 normale (device non trouvé, format incorrect, etc.)
                 $statusCode = if ($_.Exception.Response) { $_.Exception.Response.StatusCode.value__ } else { $null }
                 if ($statusCode -eq 404 -or $statusCode -eq 400) {
-                    Write-Warn "    ⚠️  Mesure rejetée (code $statusCode): $errorMsg (peut être normal selon validation)"
+                    Write-Warn "    [WARN] Mesure rejetee (code $statusCode): $errorMsg (peut etre normal selon validation)"
                     $warnings += "Endpoint Mesures: $errorMsg"
                     $testResults.Workflows += @{Workflow = "OTT Measurement POST"; Status = "WARNING"; Details = "Code $statusCode : $errorMsg"}
                 } else {
-                    Write-Warn "    ⚠️  Envoi mesure échoué: $errorMsg"
+                    Write-Warn "    [WARN] Envoi mesure echoue: $errorMsg"
                     $warnings += "Endpoint Mesures: $errorMsg"
                     $testResults.Workflows += @{Workflow = "OTT Measurement POST"; Status = "WARNING"; Details = $errorMsg}
                 }
@@ -401,7 +401,7 @@ function Invoke-Check-FunctionalTests {
         }
     } catch {
         $errorMsg = $_.Exception.Message
-        Write-Warn "    ⚠️  Test mesures échoué: $errorMsg"
+        Write-Warn "    [WARN] Test mesures echoue: $errorMsg"
         $warnings += "Test Mesures: $errorMsg"
         $testResults.Workflows += @{Workflow = "IoT Measurement POST"; Status = "WARNING"; Details = $errorMsg}
         
@@ -425,25 +425,25 @@ function Invoke-Check-FunctionalTests {
         try {
             $usbLogsResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/usb-logs/$testIdentifier" -Method GET -Headers $authHeaders -TimeoutSec 5 -ErrorAction Stop
             if ($usbLogsResponse.success -ne $false) {
-                Write-OK "    ✅ Endpoint USB logs accessible"
+                Write-OK "    [OK] Endpoint USB logs accessible"
                 $success += "Endpoint USB Logs"
                 $testResults.Integration += @{Integration = "USB Logs API"; Status = "OK"}
             } else {
-                Write-Warn "    ⚠️  USB logs: $($usbLogsResponse.error)"
+                Write-Warn "    [WARN] USB logs: $($usbLogsResponse.error)"
                 $warnings += "USB Logs: $($usbLogsResponse.error)"
             }
         } catch {
             if ($_.Exception.Response.StatusCode.value__ -eq 404) {
-                Write-Info "    ℹ️  Aucun log USB pour l'identifiant test (normal si pas de logs)"
+                Write-Info "    [INFO] Aucun log USB pour l'identifiant test (normal si pas de logs)"
                 $testResults.Integration += @{Integration = "USB Logs API"; Status = "INFO"; Details = "Endpoint accessible, pas de logs"}
             } else {
-                Write-Warn "    ⚠️  USB logs échoué: $($_.Exception.Message)"
+                Write-Warn "    [WARN] USB logs echoue: $($_.Exception.Message)"
                 $warnings += "USB Logs: $($_.Exception.Message)"
                 $testResults.Integration += @{Integration = "USB Logs API"; Status = "WARNING"; Details = $_.Exception.Message}
             }
         }
     } catch {
-        Write-Warn "    ⚠️  Test USB logs échoué: $($_.Exception.Message)"
+        Write-Warn "    [WARN] Test USB logs echoue: $($_.Exception.Message)"
         $warnings += "USB Logs: $($_.Exception.Message)"
     }
     
@@ -460,23 +460,23 @@ function Invoke-Check-FunctionalTests {
         try {
             $commandsResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices/$testICCID/commands/pending" -Method GET -Headers $authHeaders -TimeoutSec 5 -ErrorAction Stop
             if ($commandsResponse.success -ne $false) {
-                Write-OK "    ✅ Endpoint commandes pending accessible"
+                Write-OK "    [OK] Endpoint commandes pending accessible"
                 $success += "Endpoint Commandes Pending"
                 $testResults.Integration += @{Integration = "Device Commands API"; Status = "OK"}
             } else {
-                Write-Warn "    ⚠️  Commandes: $($commandsResponse.error)"
+                Write-Warn "    [WARN] Commandes: $($commandsResponse.error)"
             }
         } catch {
             if ($_.Exception.Response.StatusCode.value__ -eq 404) {
-                Write-Info "    ℹ️  Device non trouvé pour commandes (normal pour test)"
+                Write-Info "    [INFO] Device non trouve pour commandes (normal pour test)"
                 $testResults.Integration += @{Integration = "Device Commands API"; Status = "INFO"; Details = "Endpoint accessible"}
             } else {
-                Write-Warn "    ⚠️  Commandes pending échoué: $($_.Exception.Message)"
+                Write-Warn "    [WARN] Commandes pending echoue: $($_.Exception.Message)"
                 $warnings += "Commandes: $($_.Exception.Message)"
             }
         }
     } catch {
-        Write-Warn "    ⚠️  Test commandes échoué: $($_.Exception.Message)"
+        Write-Warn "    [WARN] Test commandes echoue: $($_.Exception.Message)"
         $warnings += "Commandes: $($_.Exception.Message)"
     }
     
@@ -495,21 +495,21 @@ function Invoke-Check-FunctionalTests {
                 
                 # Vérifier le statut actuel et les erreurs
                 if ($testFirmware.status -eq "compiled") {
-                    Write-OK "    ✅ Firmware déjà compilé"
+                    Write-OK "    [OK] Firmware deja compile"
                     $success += "Firmware Compilation (déjà compilé)"
                     $testResults.Firmware += @{Test = "Firmware Status"; Status = "OK"; Details = "Déjà compilé"}
                 } elseif ($testFirmware.status -eq "error") {
                     $errorDetail = if ($testFirmware.error_message) { $testFirmware.error_message } elseif ($testFirmware.compile_error) { $testFirmware.compile_error } else { "Aucun détail d'erreur" }
-                    Write-Warn "    ⚠️  Firmware en erreur: $errorDetail"
+                    Write-Warn "    [WARN] Firmware en erreur: $errorDetail"
                     $warnings += "Firmware en erreur: $errorDetail"
                     $testResults.Firmware += @{Test = "Firmware Status"; Status = "WARNING"; Details = "En erreur: $errorDetail"}
                 } elseif ($testFirmware.status -eq "compiling") {
-                    Write-Warn "    ⚠️  Firmware bloqué en 'compiling' (peut indiquer un problème)"
+                    Write-Warn "    [WARN] Firmware bloque en 'compiling' (peut indiquer un probleme)"
                     $warnings += "Firmware bloqué en 'compiling' - vérifier les logs de compilation"
                     $testResults.Firmware += @{Test = "Firmware Status"; Status = "WARNING"; Details = "Bloqué en 'compiling' - peut nécessiter reset"}
-                    Write-Info "    💡 Pour diagnostiquer: vérifier les logs API (docker logs ott-api) ou relancer la compilation"
+                    Write-Info "    [TIP] Pour diagnostiquer: verifier les logs API (docker logs ott-api) ou relancer la compilation"
                 } else {
-                    Write-Info "    ⚠️  Firmware avec statut: $($testFirmware.status)"
+                    Write-Info "    [WARN] Firmware avec statut: $($testFirmware.status)"
                     $testResults.Firmware += @{Test = "Firmware Status"; Status = "INFO"; Details = "Statut: $($testFirmware.status)"}
                 }
                 
@@ -521,7 +521,7 @@ function Invoke-Check-FunctionalTests {
                     $compileEndpoint = "$ApiUrl/api.php/firmwares/$($testFirmware.id)/compile"
                     # Note: L'endpoint utilise Server-Sent Events (SSE), donc on ne peut pas tester directement avec Invoke-RestMethod
                     # On vérifie juste que le firmware existe et a un fichier .ino
-                    Write-OK "    ✅ Endpoint compilation disponible: $compileEndpoint"
+                    Write-OK "    [OK] Endpoint compilation disponible: $compileEndpoint"
                     $testResults.Firmware += @{Test = "Compilation Endpoint"; Status = "OK"; Details = "Endpoint disponible"}
                     
                     # 6.3 Vérifier arduino-cli (dans Docker)
@@ -530,42 +530,42 @@ function Invoke-Check-FunctionalTests {
                         $arduinoCliCheck = docker exec ott-api which arduino-cli 2>&1
                         if ($arduinoCliCheck -match 'arduino-cli') {
                             $arduinoVersion = docker exec ott-api arduino-cli version 2>&1
-                            Write-OK "    ✅ arduino-cli disponible: $($arduinoVersion -replace "`n", " ")"
+                            Write-OK "    [OK] arduino-cli disponible: $($arduinoVersion -replace "`n", " ")"
                             $success += "arduino-cli disponible"
                             $testResults.Firmware += @{Test = "arduino-cli"; Status = "OK"; Details = $arduinoVersion}
                         } else {
-                            Write-Warn "    ⚠️  arduino-cli non trouvé dans Docker"
+                            Write-Warn "    [WARN] arduino-cli non trouve dans Docker"
                             $warnings += "arduino-cli non trouvé"
                             $testResults.Firmware += @{Test = "arduino-cli"; Status = "WARNING"; Details = "Non trouvé"}
                         }
                     } catch {
-                        Write-Warn "    ⚠️  Impossible de vérifier arduino-cli: $($_.Exception.Message)"
+                        Write-Warn "    [WARN] Impossible de verifier arduino-cli: $($_.Exception.Message)"
                         $warnings += "Impossible vérifier arduino-cli"
                         $testResults.Firmware += @{Test = "arduino-cli"; Status = "WARNING"; Details = $_.Exception.Message}
                     }
                     
                     # Note: On ne lance pas de compilation réelle car cela peut prendre 10-30 minutes
                     # On vérifie juste que les prérequis sont en place
-                    Write-Info "    ⚠️  Compilation réelle non testée (prendrait 10-30 minutes)"
-                    Write-Info "    💡 Pour tester: lancer manuellement depuis l'interface web"
+                    Write-Info "    [WARN] Compilation reelle non testee (prendrait 10-30 minutes)"
+                    Write-Info "    [TIP] Pour tester: lancer manuellement depuis l'interface web"
                     
                 } catch {
-                    Write-Warn "    ⚠️  Erreur test endpoint compilation: $($_.Exception.Message)"
+                    Write-Warn "    [WARN] Erreur test endpoint compilation: $($_.Exception.Message)"
                     $warnings += "Erreur test endpoint compilation"
                 }
             } else {
-                Write-Warn "    ⚠️  Aucun firmware avec fichier .ino trouvé"
+                Write-Warn "    [WARN] Aucun firmware avec fichier .ino trouve"
                 $warnings += "Aucun firmware testable"
                 $testResults.Firmware += @{Test = "Firmware Availability"; Status = "WARNING"; Details = "Aucun firmware avec .ino"}
             }
         } else {
-            Write-Warn "    ⚠️  Aucun firmware dans la base"
+            Write-Warn "    [WARN] Aucun firmware dans la base"
             $warnings += "Aucun firmware"
             $testResults.Firmware += @{Test = "Firmware Availability"; Status = "WARNING"; Details = "Aucun firmware"}
         }
     } catch {
         $errorMsg = $_.Exception.Message
-        Write-Warn "    ⚠️  Test firmware échoué: $errorMsg"
+        Write-Warn "    [WARN] Test firmware echoue: $errorMsg"
         $warnings += "Test firmware: $errorMsg"
         $testResults.Firmware += @{Test = "Firmware Check"; Status = "ERROR"; Details = $errorMsg}
     }
@@ -583,7 +583,7 @@ function Invoke-Check-FunctionalTests {
         $patientsResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/patients?limit=5" -Method GET -Headers $authHeaders -TimeoutSec 5 -ErrorAction Stop
         
         if ($devicesResponse.success -and $patientsResponse.success) {
-            Write-OK "    ✅ API ↔ Base de données fonctionnelle"
+                Write-OK "    [OK] API ↔ Base de donnees fonctionnelle"
             $success += "Intégration API-Database"
             $testResults.Integration += @{Integration = "API-Database"; Status = "OK"}
             
@@ -593,7 +593,7 @@ function Invoke-Check-FunctionalTests {
                 $patientsWithDevices = $patientsResponse.patients | Where-Object { $_.device_id }
                 
                 if ($assignedDevices.Count -gt 0 -or $patientsWithDevices.Count -gt 0) {
-                    Write-Info "    📊 Assignations trouvées: $($assignedDevices.Count) devices, $($patientsWithDevices.Count) patients"
+                    Write-Info "    [INFO] Assignations trouvees: $($assignedDevices.Count) devices, $($patientsWithDevices.Count) patients"
                 }
             }
         } else {
@@ -612,7 +612,7 @@ function Invoke-Check-FunctionalTests {
         $paginationUrl = "$ApiUrl/api.php/devices?limit=10" + '&' + "offset=0"
         $paginationTest = Invoke-RestMethod -Uri $paginationUrl -Method GET -Headers $authHeaders -TimeoutSec 5 -ErrorAction Stop
         if ($paginationTest.success -and $paginationTest.pagination -and $paginationTest.pagination.total -ne $null -and $paginationTest.pagination.limit -eq 10) {
-            Write-OK "    ✅ Pagination fonctionnelle (total: $($paginationTest.total))"
+                Write-OK "    [OK] Pagination fonctionnelle (total: $($paginationTest.total))"
             $success += "Pagination API"
             $testResults.Integration += @{Integration = "Pagination"; Status = "OK"}
         } else {
@@ -620,7 +620,7 @@ function Invoke-Check-FunctionalTests {
         }
     } catch {
         $errorMsg = $_.Exception.Message
-        Write-Warn "    ⚠️  Pagination échouée: $errorMsg"
+        Write-Warn "    [WARN] Pagination echouee: $errorMsg"
         $warnings += "Pagination: $errorMsg"
         $testResults.Integration += @{Integration = "Pagination"; Status = "ERROR"; Details = $errorMsg}
     }
@@ -633,12 +633,12 @@ function Invoke-Check-FunctionalTests {
         # On teste un endpoint qui DOIT être protégé (ex: POST /devices qui nécessite devices.edit)
         try {
             $unauthorizedTest = Invoke-RestMethod -Uri "$ApiUrl/api.php/devices" -Method POST -Body (@{} | ConvertTo-Json) -ContentType "application/json" -TimeoutSec 3 -ErrorAction Stop
-            Write-Warn "    ⚠️  Endpoint POST /devices accessible sans authentification (risque sécurité)"
+                Write-Warn "    [WARN] Endpoint POST /devices accessible sans authentification (risque securite)"
             $warnings += "Endpoint POST /devices accessible sans auth"
             $testResults.Integration += @{Integration = "Auth Security"; Status = "WARNING"; Details = "Endpoint POST /devices accessible sans auth"}
         } catch {
             if ($_.Exception.Response.StatusCode.value__ -eq 401 -or $_.Exception.Response.StatusCode.value__ -eq 403) {
-                Write-OK "    ✅ Endpoint protégé correctement (401/403)"
+                Write-OK "    [OK] Endpoint protege correctement (401/403)"
                 $success += "Sécurité Auth"
                 $testResults.Integration += @{Integration = "Auth Security"; Status = "OK"}
             } else {
@@ -647,7 +647,7 @@ function Invoke-Check-FunctionalTests {
         }
     } catch {
         $errorMsg = $_.Exception.Message
-        Write-Warn "    ⚠️  Test sécurité échoué: $errorMsg"
+        Write-Warn "    [WARN] Test securite echoue: $errorMsg"
         $testResults.Integration += @{Integration = "Auth Security"; Status = "ERROR"; Details = $errorMsg}
     }
     
@@ -661,21 +661,21 @@ function Invoke-Check-FunctionalTests {
     try {
         $reportsResponse = Invoke-RestMethod -Uri "$ApiUrl/api.php/reports/overview" -Method GET -Headers $authHeaders -TimeoutSec 5 -ErrorAction Stop
         if ($reportsResponse.success -ne $false) {
-            Write-OK "    ✅ Endpoint reports accessible"
+                Write-OK "    [OK] Endpoint reports accessible"
             $success += "Endpoint Reports OTT"
             $testResults.Integration += @{Integration = "Reports API"; Status = "OK"}
             
             # Vérifier la structure des données
             if ($reportsResponse.stats -or $reportsResponse.data) {
-                Write-Info "    📊 Données de rapports présentes"
+                    Write-Info "    [INFO] Donnees de rapports presentes"
             }
         } else {
-            Write-Warn "    ⚠️  Reports: $($reportsResponse.error)"
+                Write-Warn "    [WARN] Reports: $($reportsResponse.error)"
             $warnings += "Reports: $($reportsResponse.error)"
         }
     } catch {
         $errorMsg = $_.Exception.Message
-        Write-Warn "    ⚠️  Reports échoué: $errorMsg"
+        Write-Warn "    [WARN] Reports echoue: $errorMsg"
         $warnings += "Reports: $errorMsg"
         $testResults.Integration += @{Integration = "Reports API"; Status = "WARNING"; Details = $errorMsg}
     }
@@ -700,13 +700,13 @@ function Invoke-Check-FunctionalTests {
     
     # Résumé
     Write-Host "`n[RESUME] Resume Tests Fonctionnels:" -ForegroundColor Cyan
-    Write-Host "   ✅ Succes: $($success.Count)" -ForegroundColor Green
-    Write-Host "   ⚠️  Avertissements: $($warnings.Count)" -ForegroundColor Yellow
-    Write-Host "   ❌ Erreurs: $($errors.Count)" -ForegroundColor Red
+        Write-Host "   [OK] Succes: $($success.Count)" -ForegroundColor Green
+        Write-Host "   [WARN] Avertissements: $($warnings.Count)" -ForegroundColor Yellow
+        Write-Host "   [ERR] Erreurs: $($errors.Count)" -ForegroundColor Red
     Write-Host "   📊 Score: $score/10" -ForegroundColor Cyan
     
     if ($errors.Count -gt 0) {
-        Write-Host "`n❌ Erreurs critiques detectees:" -ForegroundColor Red
+        Write-Host "`n[ERR] Erreurs critiques detectees:" -ForegroundColor Red
         foreach ($error in $errors) {
             Write-Host "   - $error" -ForegroundColor Red
         }
