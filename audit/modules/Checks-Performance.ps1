@@ -24,7 +24,7 @@ function Invoke-Check-Performance {
         return
     }
     
-    Write-Section "[19/23] Performance"
+    Write-PhaseSection -PhaseNumber 8 -Title "Performance"
     
     try {
         $jsFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$" }

@@ -19,7 +19,7 @@ function Invoke-Check-Documentation {
         return
     }
     
-    Write-Section "[20/23] Documentation"
+    Write-PhaseSection -PhaseNumber 9 -Title "Documentation"
     
     try {
         $mdFiles = $Files | Where-Object { $_.Extension -eq ".md" }

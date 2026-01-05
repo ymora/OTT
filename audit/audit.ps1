@@ -181,12 +181,25 @@ $script:AuditPhases = @(
         Priority = 12
         Modules = @("Checks-FirmwareInteractive.ps1")
         Target = "project"
+    },
+    
+    # PHASE 13: IA et Compléments
+    @{
+        Id = 13
+        Name = "IA et Compléments"
+        Description = "Tests exhaustifs, IA, suivi temps"
+        Category = "IA"
+        Dependencies = @(1, 2, 5, 10)
+        Priority = 13
+        Modules = @("Checks-FunctionalTests.ps1", "Checks-TestsComplets.ps1", "Checks-TimeTracking.ps1", "AI-TestsComplets.ps1")
+        Target = "project"
+        ProjectSpecific = @("ott")
     }
 )
 
 # Fonctions utilitaires
 function Write-Log {
-    param([string]$Message, [string]$Level = "INFO")
+    param([string]$Message, [string]$Level = "INFO", [switch]$NoTimestamp)
     
     if ($Quiet) { return }
 
@@ -194,15 +207,63 @@ function Write-Log {
         $Message = Convert-ToAsciiSafe -Text $Message
     }
     
-    $timestamp = Get-Date -Format "HH:mm:ss"
+    $prefix = if (-not $NoTimestamp) { "[$(Get-Date -Format 'HH:mm:ss')]" } else { "" }
     
     switch ($Level) {
-        "INFO" { Write-Host "[$timestamp] [INFO] $Message" -ForegroundColor White }
-        "SUCCESS" { Write-Host "[$timestamp] [SUCCESS] $Message" -ForegroundColor Green }
-        "WARN" { Write-Host "[$timestamp] [WARN] $Message" -ForegroundColor Yellow }
-        "ERROR" { Write-Host "[$timestamp] [ERROR] $Message" -ForegroundColor Red }
-        default { Write-Host "[$timestamp] [$Level] $Message" }
+        "INFO" { Write-Host "$prefix [INFO] $Message" -ForegroundColor White }
+        "SUCCESS" { Write-Host "$prefix [SUCCESS] $Message" -ForegroundColor Green }
+        "WARN" { Write-Host "$prefix [WARN] $Message" -ForegroundColor Yellow }
+        "ERROR" { Write-Host "$prefix [ERROR] $Message" -ForegroundColor Red }
+        "PHASE" { Write-Host "$prefix [PHASE] $Message" -ForegroundColor Cyan }
+        "MODULE" { Write-Host "$prefix [MODULE] $Message" -ForegroundColor Magenta }
+        "DETAIL" { Write-Host "$prefix [DETAIL] $Message" -ForegroundColor Gray }
+        "PROGRESS" { Write-Host "$prefix [⏳] $Message" -ForegroundColor Blue }
+        default { Write-Host "$prefix [$Level] $Message" }
     }
+}
+
+function Write-PhaseHeader {
+    param([int]$PhaseId, [string]$PhaseName, [string]$Description, [int]$ModuleCount)
+    Write-Log "=== Phase $PhaseId : $PhaseName ===" "PHASE" -NoTimestamp
+    Write-Log "Description: $Description" "DETAIL"
+    Write-Log "Modules à exécuter: $ModuleCount" "DETAIL"
+    if ($script:ProjectProfile) {
+        Write-Log "Projet détecté: $($script:ProjectProfile.Id)" "DETAIL"
+    }
+}
+
+function Write-ModuleStart {
+    param([string]$ModuleName, [string]$ModulePath)
+    Write-Log "▶ Démarrage: $ModuleName" "MODULE"
+    if ($Verbose) {
+        Write-Log "  Chemin: $ModulePath" "DETAIL"
+    }
+}
+
+function Write-ModuleResult {
+    param([string]$ModuleName, [string]$Status, [timespan]$Duration, [int]$Issues = 0)
+    $statusIcon = switch ($Status) {
+        "SUCCESS" { "✅" }
+        "WARNING" { "⚠️" }
+        "ERROR" { "❌" }
+        "SKIPPED" { "⏭️" }
+        default { "❓" }
+    }
+    $issuesText = if ($Issues -gt 0) { " ($Issues issues)" } else { "" }
+    Write-Log "$statusIcon $ModuleName terminé en $([math]::Round($Duration.TotalSeconds, 2))s$issuesText" "MODULE"
+}
+
+function Write-PhaseSummary {
+    param([int]$PhaseId, [string]$PhaseName, [timespan]$TotalDuration, [hashtable]$Results)
+    $successCount = ($Results.Values | Where-Object { $_.Status -eq "SUCCESS" }).Count
+    $warningCount = ($Results.Values | Where-Object { $_.Status -eq "WARNING" }).Count
+    $errorCount = ($Results.Values | Where-Object { $_.Status -eq "ERROR" }).Count
+    
+    Write-Log "Phase $PhaseId terminée en $([math]::Round($TotalDuration.TotalSeconds, 2))s" "SUCCESS"
+    if ($warningCount -gt 0 -or $errorCount -gt 0) {
+        Write-Log "  Résumé: $successCount succès, $warningCount avertissements, $errorCount erreurs" "DETAIL"
+    }
+    Write-Log "Résultats: $($script:Config.OutputDir)\phase_$PhaseId`_$($script:Config.Timestamp).json" "DETAIL"
 }
 
 function Import-AuditDependencies {
@@ -439,7 +500,30 @@ function Invoke-AuditModule {
     if ($cmd.Parameters.ContainsKey('ProjectRoot')) { $invokeParams.ProjectRoot = $script:Config.ProjectRoot }
     if ($cmd.Parameters.ContainsKey('ProjectInfo')) { $invokeParams.ProjectInfo = $script:ProjectInfo }
 
-    & $functionName @invokeParams
+    # Capturer les résultats du module
+    $moduleResult = & $functionName @invokeParams
+    
+    # Retourner un objet structuré avec les statistiques
+    if ($moduleResult -is [hashtable]) {
+        return @{
+            Success = $true
+            Errors = if ($moduleResult.ContainsKey('Errors')) { $moduleResult.Errors } else { 0 }
+            Warnings = if ($moduleResult.ContainsKey('Warnings')) { $moduleResult.Warnings } else { 0 }
+            Issues = if ($moduleResult.ContainsKey('Issues')) { $moduleResult.Issues } else { @() }
+            Score = if ($moduleResult.ContainsKey('Score')) { $moduleResult.Score } else { 10 }
+            Result = $moduleResult
+        }
+    } else {
+        # Comportement par défaut si le module ne retourne pas de hashtable
+        return @{
+            Success = $true
+            Errors = 0
+            Warnings = 0
+            Issues = @()
+            Score = 10
+            Result = $moduleResult
+        }
+    }
 }
 
 function Test-ModuleExists {
@@ -487,10 +571,26 @@ function Resolve-PhaseExecution {
         }
     }
 
+    # Filtrer les phases spécifiques projet si non détecté
+    $availablePhases = @()
+    foreach ($phaseId in $allPhases) {
+        $phase = $script:AuditPhases | Where-Object { $_.Id -eq $phaseId }
+        if ($phase -and $phase.ProjectSpecific) {
+            # Phase spécifique projet : vérifier si le projet détecté est autorisé
+            if ($script:ProjectProfile -and $phase.ProjectSpecific -contains $script:ProjectProfile.Id) {
+                $availablePhases += $phaseId
+            }
+            # Sinon, ignorer cette phase
+        } else {
+            # Phase générique : toujours inclure
+            $availablePhases += $phaseId
+        }
+    }
+
     # Trier par priorité
     $sortedPhases = @()
     foreach ($phase in $script:AuditPhases | Sort-Object Priority) {
-        if ($allPhases -contains $phase.Id) {
+        if ($availablePhases -contains $phase.Id) {
             $sortedPhases += $phase.Id
         }
     }
@@ -584,56 +684,103 @@ function Initialize-AuditEnvironment {
 function Execute-Phase {
     param([object]$Phase)
 
-    Write-Log "Début Phase $($Phase.Id): $($Phase.Name)" "INFO"
-    Write-Log "Description: $($Phase.Description)" "INFO"
+    $phaseStartTime = Get-Date
+    Write-PhaseHeader -PhaseId $Phase.Id -PhaseName $Phase.Name -Description $Phase.Description -ModuleCount $Phase.Modules.Count
 
     if ($Phase.Dependencies.Count -gt 0) {
-        Write-Log "Dépendances: $($Phase.Dependencies -join ', ')" "INFO"
+        Write-Log "Dépendances: $($Phase.Dependences -join ', ')" "DETAIL"
     }
 
-    $results = @()
+    $results = @{}
+    $moduleIndex = 0
+    
     foreach ($module in $Phase.Modules) {
-        if (-not (Test-ModuleExists $module)) {
-            Write-Log "Module $module introuvable, ignoré" "WARN"
+        $moduleIndex++
+        $modulePath = Resolve-AuditModulePath -Module $module
+        
+        if (-not (Test-Path $modulePath)) {
+            Write-Log "⚠ Module $module introuvable, ignoré" "WARN"
+            if ($Verbose) {
+                Write-Log "  Chemin recherché: $modulePath" "DETAIL"
+            }
             continue
         }
 
-        Write-Log "Exécution module: $module" "INFO"
+        Write-ModuleStart -ModuleName $module -ModulePath $modulePath
+        Write-Log "[$moduleIndex/$($Phase.Modules.Count)] Exécution en cours..." "PROGRESS"
 
         try {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            Invoke-AuditModule -Module $module
+            $moduleResult = Invoke-AuditModule -Module $module
             $sw.Stop()
-            $results += @{
-                Module = $module
-                Status = "SUCCESS"
+            
+            $status = if ($moduleResult.Errors -gt 0) { 
+                if ($moduleResult.Warnings -gt 0) { "WARNING" } else { "ERROR" }
+            } elseif ($moduleResult.Warnings -gt 0) {
+                "WARNING"
+            } else {
+                "SUCCESS"
+            }
+            
+            $issues = $moduleResult.Errors + $moduleResult.Warnings
+            
+            $results[$module] = @{
+                Status = $status
+                Duration = $sw.Elapsed
                 DurationMs = $sw.ElapsedMilliseconds
                 Timestamp = Get-Date
+                Issues = $issues
+                Errors = $moduleResult.Errors
+                Warnings = $moduleResult.Warnings
+                Result = $moduleResult
             }
-            Write-Log "Module $module terminé avec succès" "SUCCESS"
+            
+            Write-ModuleResult -ModuleName $module -Status $status -Duration $sw.Elapsed -Issues $issues
+            
+            if ($Verbose -and $issues -gt 0) {
+                Write-Log "  Détail: $($moduleResult.Errors) erreurs, $($moduleResult.Warnings) avertissements" "DETAIL"
+            }
+            
         } catch {
-            Write-Log "Erreur module $module : $($_.Exception.Message)" "ERROR"
-            $results += @{
-                Module = $module
+            $sw.Stop()
+            $results[$module] = @{
                 Status = "ERROR"
-                Error = $_.Exception.Message
+                Duration = $sw.Elapsed
                 DurationMs = $sw.ElapsedMilliseconds
                 Timestamp = Get-Date
+                Issues = 1
+                Errors = 1
+                Warnings = 0
+                Error = $_.Exception.Message
             }
+            
+            Write-ModuleResult -ModuleName $module -Status "ERROR" -Duration $sw.Elapsed -Issues 1
+            Write-Log "  Erreur: $($_.Exception.Message)" "ERROR"
         }
     }
 
     # Sauvegarde des résultats de la phase
+    $phaseEndTime = Get-Date
+    $totalDuration = $phaseEndTime - $phaseStartTime
+    
     $phaseResult = @{
         Phase = $Phase
         Results = $results
-        Timestamp = Get-Date
+        StartTime = $phaseStartTime
+        EndTime = $phaseEndTime
+        TotalDuration = $totalDuration
+        TotalDurationMs = $totalDuration.TotalMilliseconds
+        Timestamp = $phaseEndTime
+        ModuleCount = $Phase.Modules.Count
+        SuccessCount = ($results.Values | Where-Object { $_.Status -eq "SUCCESS" }).Count
+        WarningCount = ($results.Values | Where-Object { $_.Status -eq "WARNING" }).Count
+        ErrorCount = ($results.Values | Where-Object { $_.Status -eq "ERROR" }).Count
     }
 
     $resultFile = Join-Path $script:Config.OutputDir "phase_$($Phase.Id)_$($script:Config.Timestamp).json"
     $phaseResult | ConvertTo-Json -Depth 10 | Out-File -FilePath $resultFile -Encoding UTF8
 
-    Write-Log "Phase $($Phase.Id) terminée - Résultats: $resultFile" "SUCCESS"
+    Write-PhaseSummary -PhaseId $Phase.Id -PhaseName $Phase.Name -TotalDuration $totalDuration -Results $results
     return $phaseResult
 }
 
@@ -650,6 +797,7 @@ function Main {
         $requestedPhases = @()
         if ($Phases -eq "all") {
             $requestedPhases = $script:AuditPhases | ForEach-Object { $_.Id }
+            Write-Log "Mode: Audit complet (toutes les phases)" "INFO"
         } else {
             $requestedPhases = $Phases -split ',' | ForEach-Object { 
                 $num = [int]($_.Trim())
@@ -659,6 +807,7 @@ function Main {
                     Write-Log "Phase $num invalide, ignorée" "WARN"
                 }
             }
+            Write-Log "Mode: Phases sélectives - $($Phases)" "INFO"
         }
 
         if ($requestedPhases.Count -eq 0) {
@@ -670,66 +819,104 @@ function Main {
 
         Write-Log "Plan d'exécution: $($executionPlan -join ', ')" "INFO"
         Write-Log "Nombre de phases: $($executionPlan.Count)" "INFO"
+        
+        if ($script:ProjectProfile) {
+            Write-Log "Projet détecté: $($script:ProjectProfile.Id) (score: $($script:ProjectProfile.Score))" "SUCCESS"
+        } else {
+            Write-Log "Aucun projet spécifique détecté (mode générique)" "INFO"
+        }
+
+        Write-Log "Répertoire de sortie: $($script:Config.OutputDir)" "INFO"
+        Write-Log "Timestamp: $($script:Config.Timestamp)" "DETAIL"
 
         # Exécution des phases
-        $allResults = @()
-        foreach ($phaseId in $executionPlan) {
-            $phase = $script:AuditPhases | Where-Object { $_.Id -eq $phaseId }
-            $result = Execute-Phase -Phase $phase
-            $allResults += $result
-        }
+        $auditStartTime = Get-Date
+        $allPhaseResults = @()
+        $totalModules = 0
+        $totalErrors = 0
+        $totalWarnings = 0
 
-        # Rapport final
-        $globalScore = $null
-        if (Get-Command Calculate-GlobalScore -ErrorAction SilentlyContinue) {
+        for ($i = 0; $i -lt $executionPlan.Count; $i++) {
+            $phaseId = $executionPlan[$i]
+            $phase = $script:AuditPhases | Where-Object { $_.Id -eq $phaseId }
+            
+            if (-not $phase) { continue }
+            
+            Write-Log "" "INFO"
+            Write-Log "[$($i + 1)/$($executionPlan.Count)] Démarrage Phase $phaseId" "PROGRESS"
+            
             try {
-                $globalScore = Calculate-GlobalScore -Results $script:Results -Config $script:AuditConfig
+                $phaseResult = Execute-Phase -Phase $phase
+                $allPhaseResults += $phaseResult
+                
+                $totalModules += $phaseResult.ModuleCount
+                $totalErrors += $phaseResult.ErrorCount
+                $totalWarnings += $phaseResult.WarningCount
+                
+                # Progression globale
+                $progressPercent = [math]::Round((($i + 1) / $executionPlan.Count) * 100)
+                Write-Log "Progression globale: $progressPercent% ($($i + 1)/$($executionPlan.Count) phases)" "DETAIL"
+                
             } catch {
-                $globalScore = $null
+                Write-Log "Erreur critique durant Phase $phaseId : $($_.Exception.Message)" "ERROR"
+                continue
             }
         }
 
+        # Résumé final
+        $auditEndTime = Get-Date
+        $totalDuration = $auditEndTime - $auditStartTime
+        
+        Write-Log "" "INFO"
+        Write-Host "================================================================" -ForegroundColor Green
+        Write-Host "AUDIT TERMINE AVEC SUCCÈS" -ForegroundColor Green
+        Write-Host "================================================================" -ForegroundColor Green
+        
+        Write-Log "Durée totale: $([math]::Round($totalDuration.TotalMinutes, 2)) minutes" "SUCCESS"
+        Write-Log "Phases exécutées: $($allPhaseResults.Count)" "SUCCESS"
+        Write-Log "Modules exécutés: $totalModules" "SUCCESS"
+        
+        if ($totalErrors -gt 0 -or $totalWarnings -gt 0) {
+            Write-Log "Problèmes détectés: $totalErrors erreurs, $totalWarnings avertissements" "WARN"
+        } else {
+            Write-Log "Aucun problème détecté" "SUCCESS"
+        }
+        
+        Write-Log "Rapport complet: $($script:Config.OutputDir)\audit_summary_$($script:Config.Timestamp).json" "INFO"
+
+        # Génération du résumé global
         $summary = @{
             AuditVersion = $script:Config.Version
-            Timestamp = Get-Date
+            StartTime = $auditStartTime
+            EndTime = $auditEndTime
+            TotalDuration = $totalDuration
             Target = $Target
             ProjectRoot = $script:Config.ProjectRoot
-            PhasesExecuted = $executionPlan
-            Results = $allResults
-            Summary = @{
-                TotalPhases = $executionPlan.Count
-                SuccessfulModules = ($allResults.Results | Where-Object { $_.Status -eq "SUCCESS" }).Count
-                FailedModules = ($allResults.Results | Where-Object { $_.Status -eq "ERROR" }).Count
-                GlobalScore = $globalScore
-            }
+            ProjectProfile = if ($script:ProjectProfile) { $script:ProjectProfile.Id } else { $null }
+            RequestedPhases = $requestedPhases
+            ExecutedPhases = $executionPlan
+            PhaseResults = $allPhaseResults
+            TotalPhases = $allPhaseResults.Count
+            TotalModules = $totalModules
+            TotalErrors = $totalErrors
+            TotalWarnings = $totalWarnings
+            Timestamp = $script:Config.Timestamp
+            OutputDir = $script:Config.OutputDir
         }
 
         $summaryFile = Join-Path $script:Config.OutputDir "audit_summary_$($script:Config.Timestamp).json"
         $summary | ConvertTo-Json -Depth 10 | Out-File -FilePath $summaryFile -Encoding UTF8
 
-        Write-Host "================================================================" -ForegroundColor Green
-        Write-Host "AUDIT TERMINE AVEC SUCCES" -ForegroundColor Green
-        Write-Host "Rapport complet: $summaryFile" -ForegroundColor Cyan
-        Write-Host "================================================================" -ForegroundColor Green
-        
     } catch {
         Write-Log "Erreur fatale: $($_.Exception.Message)" "ERROR"
-        if ($Verbose) {
-            Write-Log "Stack trace: $($_.ScriptStackTrace)" "ERROR"
-        }
+        Write-Log "Stack trace: $($_.ScriptStackTrace)" "ERROR"
         exit 1
-    } finally {
-        try {
-            if ($script:Config -and $script:Config.ProjectRoot) {
-                Pop-Location -ErrorAction SilentlyContinue
-            }
-        } catch {
-        }
     }
 }
 
-# Lancement du programme
+# Lancement du programme principal
 if ($PSBoundParameters.Count -eq 0) {
     Invoke-InteractiveMenu
+} else {
+    Main
 }
-Main

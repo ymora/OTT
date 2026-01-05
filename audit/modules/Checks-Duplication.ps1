@@ -20,7 +20,7 @@ function Invoke-Check-Duplication {
         return
     }
     
-    Write-Section "[11/23] Duplication de Code"
+    Write-PhaseSection -PhaseNumber 7 -Title "Duplication de Code"
     
     try {
         $searchFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$|\.php$" }

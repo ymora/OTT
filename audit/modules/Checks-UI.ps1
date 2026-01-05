@@ -19,9 +19,9 @@ function Invoke-Check-UI {
     
     # Déterminer le titre selon la phase (16 = Accessibilité, 17 = Uniformisation UI/UX)
     if ($PhaseNumber -eq 17) {
-        Write-Section "[18/23] Uniformisation UI/UX"
+        Write-PhaseSection -PhaseNumber 6 -Title "Uniformisation UI/UX"
     } else {
-        Write-Section "[17/23] Accessibilité (a11y)"
+        Write-PhaseSection -PhaseNumber 6 -Title "Accessibilité (a11y)"
     }
     
     try {

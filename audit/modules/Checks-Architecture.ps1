@@ -18,7 +18,7 @@ function Invoke-Check-Architecture {
         [string]$ProjectPath
     )
     
-    Write-Section "[2/23] Architecture et Statistiques"
+    Write-PhaseSection -PhaseNumber 2 -Title "Architecture et Statistiques"
     
     try {
         Write-Info "Comptage des fichiers..."

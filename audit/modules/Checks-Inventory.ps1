@@ -15,7 +15,7 @@ function Invoke-Check-Inventory {
         [hashtable]$ProjectInfo = @{}
     )
     
-    Write-Section "[1/23] Inventaire Exhaustif"
+    Write-PhaseSection -PhaseNumber 1 -Title "Inventaire Exhaustif"
     
     try {
         Write-Info "Parcours exhaustif de tous les fichiers..."

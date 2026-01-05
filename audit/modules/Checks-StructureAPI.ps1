@@ -13,7 +13,7 @@ function Invoke-Check-StructureAPI {
         [string]$ProjectPath
     )
     
-    Write-Section "[7/23] Structure API"
+    Write-PhaseSection -PhaseNumber 5 -Title "Structure API"
     
     try {
         $structureScore = 10.0

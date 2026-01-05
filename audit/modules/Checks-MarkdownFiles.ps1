@@ -17,7 +17,7 @@ function Invoke-Check-MarkdownFiles {
     # Les fonctions Write-* sont déjà disponibles depuis Utils.ps1 (chargé en premier)
     # Pas besoin de les redéfinir ici
     
-    Write-Section "[5/23] Liens et Imports"
+    Write-PhaseSection -PhaseNumber 9 -Title "Liens et Imports"
     
     try {
         # ================================================================================

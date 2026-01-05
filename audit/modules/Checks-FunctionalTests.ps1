@@ -7,7 +7,7 @@ function Invoke-Check-FunctionalTests {
         [hashtable]$Results
     )
 
-    Write-Section "Tests Fonctionnels"
+    Write-PhaseSection -PhaseNumber 10 -Title "Tests Fonctionnels"
 
     if (-not $Results.Scores) {
         $Results.Scores = @{}

@@ -21,7 +21,7 @@ function Invoke-Check-CodeMort {
         return
     }
     
-    Write-Section "[10/23] Code Mort"
+    Write-PhaseSection -PhaseNumber 7 -Title "Code Mort"
     
     try {
         $deadCode = @{

@@ -22,7 +22,7 @@ function Invoke-Check-FirmwareInteractive {
         return
     }
     
-    Write-Section "[22/23] Firmware"
+    Write-PhaseSection -PhaseNumber 12 -Title "Firmware"
     
     try {
         # Vérifier si on est dans un environnement Node.js/Next.js (frontend)

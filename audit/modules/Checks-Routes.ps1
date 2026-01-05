@@ -21,7 +21,7 @@ function Invoke-Check-Routes {
         [string]$ProjectPath
     )
     
-    Write-Section "[16/23] Routes et Navigation"
+    Write-PhaseSection -PhaseNumber 6 -Title "Routes et Navigation"
     
     try {
         $missingPages = 0

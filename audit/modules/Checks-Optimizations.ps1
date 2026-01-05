@@ -19,7 +19,7 @@ function Invoke-Check-Optimizations {
         [hashtable]$ProjectInfo
     )
     
-    Write-Section "[13/23] Optimisations Avancées"
+    Write-PhaseSection -PhaseNumber 8 -Title "Optimisations Avancées"
     
     try {
         $optimizationScore = 10.0

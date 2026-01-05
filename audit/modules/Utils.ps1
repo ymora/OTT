@@ -19,6 +19,16 @@ function Write-Section {
     Write-Host "=== $Text ===" -ForegroundColor Cyan
 }
 
+function Write-PhaseSection {
+    param(
+        [Parameter(Mandatory=$true)][int]$PhaseNumber,
+        [Parameter(Mandatory=$true)][string]$Title
+    )
+    Write-Host ""
+    $title = Convert-ToAsciiSafe -Text $Title
+    Write-Host "=== Phase $PhaseNumber / $PhaseNumber - $title ===" -ForegroundColor Cyan
+}
+
 function Write-OK {
     param([string]$Text)
     $Text = Convert-ToAsciiSafe -Text $Text

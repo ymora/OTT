@@ -23,7 +23,7 @@ function Invoke-Check-Security {
         return
     }
     
-    Write-Section "[6/23] Sécurité"
+    Write-PhaseSection -PhaseNumber 3 -Title "Sécurité"
     
     try {
         $securityScore = 10

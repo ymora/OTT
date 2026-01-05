@@ -19,7 +19,7 @@ function Invoke-Check-ConfigConsistency {
         [string]$ProjectPath = "."
     )
     
-    Write-Section "[4/23] Cohérence Configuration"
+    Write-PhaseSection -PhaseNumber 4 -Title "Cohérence Configuration"
     
     try {
         $issues = @()

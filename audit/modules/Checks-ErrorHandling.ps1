@@ -14,7 +14,7 @@ function Invoke-Check-ErrorHandling {
         [hashtable]$Results
     )
     
-    Write-Section "[15/23] Gestion d'Erreurs"
+    Write-PhaseSection -PhaseNumber 11 -Title "Gestion d'Erreurs"
     
     try {
         $issues = @()

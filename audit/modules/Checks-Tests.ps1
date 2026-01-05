@@ -19,7 +19,7 @@ function Invoke-Check-Tests {
         return
     }
     
-    Write-Section "[14/23] Tests"
+    Write-PhaseSection -PhaseNumber 10 -Title "Tests"
     
     try {
         # Détecter les fichiers de tests (pattern .test.js, .spec.js, etc.)

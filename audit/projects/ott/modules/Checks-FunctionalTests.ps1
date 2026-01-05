@@ -17,7 +17,7 @@ function Invoke-Check-FunctionalTests {
     # Récupérer le flag Verbose depuis le scope script si disponible
     $Verbose = if ($script:Verbose) { $script:Verbose } else { $false }
     
-    Write-Section "[24/24] Tests Fonctionnels Complets"
+    Write-PhaseSection -PhaseNumber 13 -Title "Tests Fonctionnels Complets"
     
     $errors = @()
     $warnings = @()

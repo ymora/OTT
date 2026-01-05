@@ -20,7 +20,7 @@ function Invoke-Check-Complexity {
         return
     }
     
-    Write-Section "[12/23] Complexité"
+    Write-PhaseSection -PhaseNumber 7 -Title "Complexité"
     
     try {
         $maxFileLines = $Config.Checks.Complexity.MaxFileLines

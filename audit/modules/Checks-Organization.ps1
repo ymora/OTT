@@ -19,7 +19,7 @@ function Invoke-Check-Organization {
         return
     }
     
-    Write-Section "[3/23] Organisation"
+    Write-PhaseSection -PhaseNumber 2 -Title "Organisation"
     
     try {
         # Filtrer les fichiers valides (exclure les répertoires et fichiers non lisibles)

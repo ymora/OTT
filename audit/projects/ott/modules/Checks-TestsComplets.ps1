@@ -15,7 +15,7 @@ function Invoke-Check-TestsComplets {
         [hashtable]$Results
     )
     
-    Write-Section "[23/23] Tests Complets Application"
+    Write-PhaseSection -PhaseNumber 13 -Title "Tests End-to-End Complets Application"
     
     $errors = @()
     $warnings = @()

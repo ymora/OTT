@@ -11,7 +11,7 @@ function Invoke-Check-API {
         [hashtable]$Results
     )
     
-    Write-Section "[8/23] Endpoints API"
+    Write-PhaseSection -PhaseNumber 5 -Title "Endpoints API"
     
     $apiScore = 0
     $endpointsTotal = 0
