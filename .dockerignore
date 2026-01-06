@@ -15,7 +15,6 @@ hooks
 lib
 public/*
 !public/*.html
-scripts
 package-lock.json
 package.json
 # ================================================================================
