@@ -146,6 +146,163 @@ function Invoke-Check-Organization {
             Write-OK "$consoleCount console.log (acceptable)"
         }
         
+        # ============================================================================
+        # DÉTECTION DES SCRIPTS DE TEST ÉPARPILLÉS
+        # ============================================================================
+        # Détecte les scripts de test qui peuvent être mélangés avec les scripts utiles
+        Write-Info "Détection des scripts de test éparpillés..."
+        
+        # Patterns pour identifier les scripts de test
+        $testScriptPatterns = @(
+            '\btest[_\-]',          # test_, test-
+            '\btesting[_\-]',       # testing_, testing-
+            '\btest\.',             # test.
+            '[_\-]test\.',          # _test., -test.
+            '[_\-]spec\.',          # _spec., -spec.
+            '\bspec[_\-]',          # spec_, spec-
+            '\bdemo[_\-]',          # demo_, demo-
+            '\bexample[_\-]',       # example_, example-
+            '\bverify[_\-]',        # verify_, verify-
+            '\bcheck[_\-]test',     # check_test, check-test
+            '\btry[_\-]',           # try_, try-
+            '\btemp[_\-]',          # temp_, temp-
+            '\bdebug[_\-]',         # debug_, debug-
+            '\bplayground',         # playground
+            '\bsandbox',            # sandbox
+            '^test\d+',             # test1, test2, etc.
+            '^try\d+',              # try1, try2, etc.
+            '^debug\d+'             # debug1, debug2, etc.
+        )
+        
+        $testPattern = '\b(' + ($testScriptPatterns -join '|') + ')'
+        
+        # Chercher dans les scripts (PowerShell, Shell, Python, etc.)
+        $scriptFiles = $validFiles | Where-Object { 
+            $_.Extension -match '\.(ps1|sh|bash|py|js|ts)$' -and
+            $_.FullName -notmatch '[\\/](node_modules|\.arduino15|\.git|\.next|hardware[\\/]arduino-data)[\\/]' -and
+            $_.FullName -notmatch '[\\/](audit[\\/]projects|audit[\\/]modules|__tests__)[\\/]'
+        }
+        
+        $testScripts = @()
+        $productionScripts = @()
+        
+        foreach ($script in $scriptFiles) {
+            $name = $script.Name
+            $baseName = $script.BaseName
+            $fullPath = $script.FullName
+            
+            # Vérifier si c'est un script de test
+            $isTestScript = $false
+            
+            # Pattern dans le nom de fichier
+            if ($name -match $testPattern -or $baseName -match $testPattern) {
+                $isTestScript = $true
+            }
+            
+            # Vérifier dans les dossiers de test connus (mais exclure les vrais dossiers de test)
+            if ($fullPath -match '[\\/](test|tests|spec|specs|demo|examples|debug|temp|tmp)[\\/]' -and
+                $fullPath -notmatch '[\\/]__tests__[\\/]') {
+                $isTestScript = $true
+            }
+            
+            # Vérifier le contenu du script (lignes commentaires ou code)
+            try {
+                $content = Get-Content -Path $fullPath -First 20 -ErrorAction SilentlyContinue
+                $contentStr = ($content -join "`n").ToLower()
+                
+                # Indicateurs dans le contenu
+                $testIndicators = @(
+                    'test script', 'testing script', 'debug script',
+                    'temporary script', 'temp script', 'demo script',
+                    'example script', 'playground', 'sandbox',
+                    '# test', '# testing', '# debug', '# temp',
+                    'Write-Host.*test', 'console\.log.*test',
+                    'This is a test', 'This script is for testing'
+                )
+                
+                foreach ($indicator in $testIndicators) {
+                    if ($contentStr -match $indicator) {
+                        $isTestScript = $true
+                        break
+                    }
+                }
+            } catch {
+                # Ignorer les erreurs de lecture
+            }
+            
+            if ($isTestScript) {
+                $testScripts += @{
+                    File = $script
+                    Path = $fullPath
+                    Name = $name
+                    Reason = "Pattern de test détecté dans le nom ou contenu"
+                }
+            } else {
+                $productionScripts += $script
+            }
+        }
+        
+        # Signaler les scripts de test détectés
+        if ($testScripts.Count -gt 0) {
+            Write-Warn "$($testScripts.Count) script(s) de test détecté(s) (peuvent être mélangés avec scripts de production)"
+            
+            # Grouper par répertoire pour voir où ils sont éparpillés
+            $testScriptsByDir = $testScripts | Group-Object { Split-Path $_.Path -Parent }
+            
+            foreach ($dirGroup in $testScriptsByDir) {
+                $dirPath = $dirGroup.Name
+                $scriptsInDir = $dirGroup.Group
+                
+                Write-Info "  Dossier: $dirPath ($($scriptsInDir.Count) script(s) de test)"
+                foreach ($testScript in $scriptsInDir) {
+                    Write-Info "    - $($testScript.Name)"
+                }
+            }
+            
+            # Ajouter au contexte IA avec avertissement CRITIQUE
+            foreach ($testScript in $testScripts) {
+                # Vérifier si le script est référencé quelque part
+                $referencedCount = 0
+                try {
+                    $scriptNameOnly = $testScript.Name
+                    
+                    # Chercher références dans les autres fichiers (grep simple)
+                    $refSearch = $validFiles | Select-String -Pattern ([regex]::Escape($scriptNameOnly)) -ErrorAction SilentlyContinue
+                    if ($refSearch) {
+                        $referencedCount = ($refSearch | Group-Object Path).Count
+                    }
+                } catch {
+                    # Ignorer erreurs
+                }
+                
+                $aiContext += @{
+                    Category = "Organization"
+                    Type = "Test Script Detection"
+                    File = $testScript.Name
+                    Path = $testScript.Path
+                    Reason = $testScript.Reason
+                    ReferencedCount = $referencedCount
+                    Severity = "high"
+                    NeedsAICheck = $true
+                    CriticalWarning = $true
+                    Question = "⚠️⚠️⚠️ CRITIQUE - SCRIPT DE TEST DÉTECTÉ ⚠️⚠️⚠️`n`nLe script '$($testScript.Name)' a été détecté comme script de test.`n`n🔴 AVANT TOUTE SUPPRESSION, OBLIGATOIRE de vérifier :`n1. Est-ce vraiment un script de test ou un script utile à la production ?`n2. Est-il référencé/utilisé ailleurs ? (Rechercher avec grep)`n3. Contient-il du code utile qui doit être conservé ?`n4. Peut-il être déplacé vers un dossier scripts/tests/ dédié au lieu d'être supprimé ?`n5. Est-il utilisé dans des workflows CI/CD ou des processus automatisés ?`n`n❌ NE JAMAIS SUPPRIMER SANS VÉRIFICATION MANUELLE COMPLÈTE !`n✅ Si vraiment inutile après vérification, le déplacer vers scripts/tests/ ou scripts/archive/ plutôt que supprimer directement.`n`nRéférences trouvées : $referencedCount fichier(s)"
+                }
+                
+                $refText = if ($referencedCount -gt 0) { " (référencé dans $referencedCount fichier(s))" } else { " (non référencé)" }
+                $Results.Recommendations += "⚠️ Script de test détecté: '$($testScript.Path)'$refText - VÉRIFIER MANUELLEMENT avant suppression ou déplacement"
+            }
+            
+            # Pénaliser le score d'organisation
+            $Results.Scores["Organization"] = [Math]::Max(10 - ($testScripts.Count * 0.1), 7)
+        } else {
+            Write-OK "Aucun script de test éparpillé détecté"
+        }
+        
+        # Statistiques
+        if ($testScripts.Count -gt 0) {
+            Write-Info "Scripts de production: $($productionScripts.Count), Scripts de test: $($testScripts.Count)"
+        }
+        
         # Sauvegarder le contexte pour l'IA
         if (-not $Results.AIContext) {
             $Results.AIContext = @{}
@@ -156,7 +313,10 @@ function Invoke-Check-Organization {
             }
         }
         
-        $Results.Scores["Organization"] = 10
+        # Définir le score final (seulement s'il n'a pas été modifié par les vérifications)
+        if (-not $Results.Scores.ContainsKey("Organization")) {
+            $Results.Scores["Organization"] = 10
+        }
     } catch {
         Write-Err "Erreur vérification organisation: $($_.Exception.Message)"
         if ($script:Verbose) {

@@ -2128,12 +2128,13 @@ if($method === 'POST' && (preg_match('#^/docs/regenerate-time-tracking/?$#', $pa
     handleGetCompileDebugLogs($matches[1]);
 } elseif($method === 'GET' && preg_match('#^/firmwares/compile/(\d+)$#', $path, $matches)) {
     error_log('[ROUTER] Route GET /firmwares/compile/' . $matches[1] . ' matchée - Path: ' . $path);
-    // Nettoyer le buffer AVANT d'appeler handleCompileFirmware pour les routes SSE
-    // Le handler gérera lui-même les headers SSE
+    // Utiliser la version optimisée (plus rapide, moins de logs)
+    require_once __DIR__ . '/api/handlers/firmwares/compile_optimized.php';
+    // Nettoyer le buffer AVANT d'appeler le handler SSE
     while (ob_get_level() > 0) {
         ob_end_clean();
     }
-    handleCompileFirmware($matches[1]);
+    handleCompileFirmwareOptimized($matches[1]);
     exit; // Important: arrêter l'exécution après SSE pour éviter tout output supplémentaire
 } elseif($method === 'GET' && preg_match('#^/firmwares/(\d+)/download$#', $path, $matches)) {
     handleDownloadFirmware($matches[1]);

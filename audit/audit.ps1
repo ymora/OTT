@@ -331,6 +331,8 @@ function Merge-Hashtable {
     foreach ($key in $Override.Keys) {
         if ($merged.ContainsKey($key) -and ($merged[$key] -is [hashtable]) -and ($Override[$key] -is [hashtable])) {
             $merged[$key] = Merge-Hashtable -Base $merged[$key] -Override $Override[$key]
+        } elseif ($merged.ContainsKey($key) -and ($merged[$key] -is [array]) -and ($Override[$key] -is [array])) {
+            $merged[$key] = @($merged[$key] + $Override[$key])
         } else {
             $merged[$key] = $Override[$key]
         }
@@ -458,11 +460,16 @@ function Initialize-AuditContext {
     }
 
     $script:Results = @{
-        Scores = @{ }
+        StartTime = Get-Date
+        Scores = @{}
+        Issues = @()
+        Warnings = @()
         Recommendations = @()
-        Statistics = @{ }
-        API = @{ }
-            AIContext = @{ }}
+        Stats = @{}
+        Statistics = @{}
+        API = @{}
+        AIContext = @{}
+    }
 
     if ($Target -eq "file") {
         $script:Files = @((Get-Item $Path -ErrorAction Stop))
@@ -730,7 +737,7 @@ function Execute-Phase {
     Write-PhaseHeader -PhaseId $Phase.Id -PhaseName $Phase.Name -Description $Phase.Description -ModuleCount $Phase.Modules.Count
 
     if ($Phase.Dependencies.Count -gt 0) {
-        Write-Log "DÃ©pendances: $($Phase.Dependences -join ', ')" "DETAIL"
+        Write-Log "DÃ©pendances: $($Phase.Dependencies -join ', ')" "DETAIL"
     }
 
     $results = @{}

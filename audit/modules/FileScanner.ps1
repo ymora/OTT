@@ -14,7 +14,19 @@ function Get-ProjectFiles {
     $files = @()
     
     # Exclusions par défaut (à ajouter aux exclusions config)
-    $defaultExcludeDirs = @("node_modules", ".next", "dist", "build", ".git", "out", "docs/_next", "docs/.next")
+    $defaultExcludeDirs = @(
+        "node_modules",
+        ".next",
+        "dist",
+        "build",
+        ".git",
+        "out",
+        "docs/_next",
+        "docs/.next",
+        ".arduino15",
+        "audit/resultats",
+        "resultats"
+    )
     $defaultExcludeFiles = @("**/*.min.js", "**/*.bundle.js", "**/docs/_next/**", "**/out/**")
     
     $excludeDirs = $Config.Exclude.Directories + $defaultExcludeDirs
@@ -27,10 +39,13 @@ function Get-ProjectFiles {
         $found = Get-ChildItem -Path $Path -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue | Where-Object {
             $shouldInclude = $true
             $fullPath = $_.FullName
+            $fullPathNorm = $fullPath.Replace('/', '\')
             
             # Exclure les dossiers
             foreach ($exDir in $excludeDirs) {
-                if ($fullPath -match [regex]::Escape($exDir)) {
+                if (-not $exDir) { continue }
+                $exDirNorm = ([string]$exDir).Replace('/', '\')
+                if ($fullPathNorm -match [regex]::Escape($exDirNorm)) {
                     $shouldInclude = $false
                     break
                 }

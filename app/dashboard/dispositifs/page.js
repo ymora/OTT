@@ -11,6 +11,7 @@ import { fetchJson } from '@/lib/api'
 import logger from '@/lib/logger'
 import InoEditorTab from '@/components/configuration/InoEditorTab'
 import UsbStreamingTab from '@/components/configuration/UsbStreamingTab'
+// DeviceDashboard supprimé - fonctionnalités fusionnées dans UsbStreamingTab
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import DeviceModal from '@/components/DeviceModal'
@@ -217,8 +218,8 @@ export default function OutilsPage() {
   }
 
   const tabs = [
-    { id: 'streaming', label: 'Streaming', icon: '🔧' },
-    { id: 'ino', label: 'Upload INO', icon: '📝' }
+    { id: 'streaming', label: 'Dispositifs & USB', icon: '🔌' },
+    { id: 'ino', label: 'Firmware (.ino)', icon: '📝' }
   ]
 
   return (
@@ -248,11 +249,11 @@ export default function OutilsPage() {
 
       {/* Contenu des onglets - Ne pas démonter les composants pour garder les connexions SSE ouvertes */}
       <div className="mt-6">
-        <div style={{ display: activeTab === 'ino' ? 'block' : 'none' }}>
-          <InoEditorTab />
-        </div>
         <div style={{ display: activeTab === 'streaming' ? 'block' : 'none' }}>
           <UsbStreamingTab />
+        </div>
+        <div style={{ display: activeTab === 'ino' ? 'block' : 'none' }}>
+          <InoEditorTab />
         </div>
       </div>
       

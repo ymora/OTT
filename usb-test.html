@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OTT USB Test Direct</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .logs { background: #f5f5f5; padding: 15px; border-radius: 5px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .controls { margin: 20px 0; }
+        button { padding: 10px 20px; margin: 5px; font-size: 14px; }
+        .connected { color: green; font-weight: bold; }
+        .disconnected { color: red; font-weight: bold; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OTT USB Test - Connexion Directe</h1>
+        
+        <div class="controls">
+            <div>
+                <label>
+                    <input type="checkbox" id="advancedMode"> Mode avancé (COM3 direct)
+                </label>
+            </div>
+            <div id="webSerialControls">
+                <div>
+                    <label for="portSelect">Choisir le port:</label>
+                    <select id="portSelect">
+                        <option value="">Chargement des ports...</option>
+                    </select>
+                    <button id="refreshPortsBtn">Rafraîchir</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button id="connectBtn">Se connecter</button>
+                    <button id="disconnectBtn">Se déconnecter</button>
+                    <button id="clearBtn">Vider les logs</button>
+                    <span id="status" class="disconnected">Déconnecté</span>
+                </div>
+            </div>
+            <div id="advancedControls" style="display: none; margin-top: 10px;">
+                <button id="advancedConnectBtn">Se connecter à COM3 (Mode avancé)</button>
+                <button id="advancedDisconnectBtn">Se déconnecter</button>
+                <button id="clearBtn2">Vider les logs</button>
+                <span id="advancedStatus" class="disconnected">Déconnecté</span>
+                <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                    <strong>Note:</strong> Ce mode utilise une connexion directe comme Arduino CLI.<br>
+                    Il peut fonctionner même si Web Serial API ne détecte pas COM3.
+                </div>
+            </div>
+        </div>
+        
+        <div class="logs" id="logs"></div>
+    </div>
+
+    <script>
+        let port = null;
+        let reader = null;
+        let writer = null;
+        let isConnected = false;
+
+        const logs = document.getElementById('logs');
+        const status = document.getElementById('status');
+        const advancedStatus = document.getElementById('advancedStatus');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const advancedConnectBtn = document.getElementById('advancedConnectBtn');
+        const advancedDisconnectBtn = document.getElementById('advancedDisconnectBtn');
+        const clearBtn2 = document.getElementById('clearBtn2');
+        const portSelect = document.getElementById('portSelect');
+        const refreshPortsBtn = document.getElementById('refreshPortsBtn');
+        const advancedMode = document.getElementById('advancedMode');
+        const webSerialControls = document.getElementById('webSerialControls');
+        const advancedControls = document.getElementById('advancedControls');
+
+        // Gérer le changement de mode
+        advancedMode.addEventListener('change', () => {
+            if (advancedMode.checked) {
+                webSerialControls.style.display = 'none';
+                advancedControls.style.display = 'block';
+            } else {
+                webSerialControls.style.display = 'block';
+                advancedControls.style.display = 'none';
+            }
+        });
+
+        // Mode avancé : connexion directe à COM3
+        async function advancedConnect() {
+            try {
+                addLog('Tentative de connexion directe à COM3...', 'info');
+                
+                // Simuler la connexion directe comme mon script PowerShell
+                // En pratique, Web Serial API ne peut pas se connecter directement à COM3
+                // Mais on peut simuler pour tester l'interface
+                addLog('⚠️ Mode avancé: Web Serial API ne peut pas se connecter directement à COM3', 'error');
+                addLog('💡 Utilisez le dashboard principal ou Arduino CLI pour une connexion directe', 'info');
+                
+                // Pour une vraie connexion directe, il faudrait un backend WebSocket
+                // ou une extension navigateur spéciale
+                
+                updateAdvancedStatus(true);
+                addLog('🔌 Mode simulation activé (données fictives)', 'success');
+                
+                // Simuler des données de test
+                let counter = 0;
+                const simulatedData = setInterval(() => {
+                    counter++;
+                    addLog(`[SIMULATION] Données #${counter} - Flow: ${Math.random() * 5}.toFixed(2)} L/min - Battery: ${(Math.random() * 100).toFixed(1)}%`, 'info');
+                }, 1000);
+                
+                // Stocker l'intervalle pour l'arrêter
+                window.simulatedInterval = simulatedData;
+                
+            } catch (error) {
+                addLog(`❌ Erreur connexion avancée: ${error.message}`, 'error');
+            }
+        }
+
+        function updateAdvancedStatus(connected) {
+            advancedStatus.textContent = connected ? 'Connecté (Simulation)' : 'Déconnecté';
+            advancedStatus.className = connected ? 'connected' : 'disconnected';
+            advancedConnectBtn.disabled = connected;
+            advancedDisconnectBtn.disabled = !connected;
+        }
+
+        function advancedDisconnect() {
+            if (window.simulatedInterval) {
+                clearInterval(window.simulatedInterval);
+                window.simulatedInterval = null;
+            }
+            updateAdvancedStatus(false);
+            addLog('🔌 Mode simulation arrêté', 'info');
+        }
+
+        async function refreshPorts() {
+            try {
+                addLog('Recherche des ports série...', 'info');
+                const ports = await navigator.serial.getPorts();
+                
+                // Vider le sélecteur
+                portSelect.innerHTML = '<option value="">Choisir un port...</option>';
+                
+                if (ports.length === 0) {
+                    addLog('Aucun port trouvé. Cliquez sur "Rafraîchir" après avoir branché le dispositif.', 'error');
+                    return;
+                }
+                
+                // Ajouter chaque port trouvé
+                ports.forEach((p, index) => {
+                    const info = p.getInfo();
+                    const option = document.createElement('option');
+                    option.value = index;
+                    
+                    // Créer un label descriptif
+                    let label = `Port ${index + 1}`;
+                    if (info.usbVendorId && info.usbProductId) {
+                        label += ` (USB: ${info.usbVendorId?.toString(16)}:${info.usbProductId?.toString(16)})`;
+                    }
+                    
+                    option.textContent = label;
+                    portSelect.appendChild(option);
+                });
+                
+                addLog(`${ports.length} port(s) trouvé(s)`, 'success');
+            } catch (error) {
+                addLog(`Erreur lors de la recherche des ports: ${error.message}`, 'error');
+            }
+        }
+
+        async function connect() {
+            if (!('serial' in navigator)) {
+                addLog('Web Serial API non supportée. Utilisez Chrome ou Edge.', 'error');
+                return;
+            }
+
+            const selectedPortIndex = portSelect.value;
+            if (selectedPortIndex === '') {
+                addLog('Veuillez sélectionner un port d\'abord.', 'error');
+                return;
+            }
+
+            try {
+                addLog('Demande d\'accès au port série...', 'info');
+                const ports = await navigator.serial.getPorts();
+                const targetPort = ports[selectedPortIndex];
+
+                if (!targetPort) {
+                    addLog('Port sélectionné non trouvé. Rafraîchissez la liste des ports.', 'error');
+                    return;
+                }
+
+                addLog(`Connexion au port sélectionné à 115200 bauds...`, 'info');
+                await targetPort.open({ baudRate: 115200 });
+
+                port = targetPort;
+                reader = port.readable.getReader();
+                writer = port.writable.getWriter();
+
+                updateStatus(true);
+                addLog('✅ Connecté avec succès!', 'success');
+
+                // Démarrer la lecture
+                readLoop();
+
+            } catch (error) {
+                addLog(`❌ Erreur de connexion: ${error.message}`, 'error');
+                console.error('Erreur:', error);
+            }
+        }
+
+        async function readLoop() {
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) {
+                        addLog('Fin de la lecture du port', 'info');
+                        break;
+                    }
+                    
+                    // Convertir les bytes en texte
+                    const text = new TextDecoder().decode(value);
+                    addLog(text, 'info');
+                }
+            } catch (error) {
+                if (error.name !== 'NetworkError') {
+                    addLog(`Erreur de lecture: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = type;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            isConnected = connected;
+            status.textContent = connected ? 'Connecté' : 'Déconnecté';
+            status.className = connected ? 'connected' : 'disconnected';
+            connectBtn.disabled = connected;
+            disconnectBtn.disabled = !connected;
+        }
+
+        async function disconnect() {
+            try {
+                if (reader) {
+                    await reader.cancel();
+                    reader = null;
+                }
+                if (writer) {
+                    writer = null;
+                }
+                if (port) {
+                    await port.close();
+                    port = null;
+                }
+                updateStatus(false);
+                addLog('🔌 Déconnecté', 'info');
+            } catch (error) {
+                addLog(`Erreur de déconnexion: ${error.message}`, 'error');
+            }
+        }
+
+        function clearLogs() {
+            logs.innerHTML = '';
+        }
+
+        // Événements
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        clearBtn.addEventListener('click', clearLogs);
+        clearBtn2.addEventListener('click', clearLogs);
+        refreshPortsBtn.addEventListener('click', refreshPorts);
+        advancedConnectBtn.addEventListener('click', advancedConnect);
+        advancedDisconnectBtn.addEventListener('click', advancedDisconnect);
+
+        // Charger les ports au démarrage
+        refreshPorts();
+
+        // Nettoyage au déchargement
+        window.addEventListener('beforeunload', () => {
+            if (window.simulatedInterval) {
+                clearInterval(window.simulatedInterval);
+            }
+            disconnect();
+        });
+    </script>
+</body>
+</html>

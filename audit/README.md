@@ -1,13 +1,29 @@
-# 🔍 Système d'Audit - Documentation
+# 🔍 Système d'Audit v2.0 - Documentation
 
 ## 📋 Vue d'ensemble
 
 Système d'audit générique et portable pour analyser la qualité, la sécurité et la structure de projets web (Next.js, React, PHP, etc.).
 
-## 🚀 Utilisation rapide
+**Fonctionnalités principales:**
+- 13 phases d'analyse (structure, sécurité, qualité, performance, etc.)
+- Détection automatique du type de projet
+- Export JSON pour analyse IA (333+ questions générées)
+- Interface graphique Windows + ligne de commande
+- Extensible par projet (surcharges config/modules)
+
+## 🖥️ Interface Graphique (Recommandé)
+
+**Double-cliquez sur `audit-gui.bat`** pour ouvrir l'interface visuelle :
+
+- Sélection de la cible (projet, fichier, répertoire)
+- Choix des phases à exécuter
+- Options verbose/silencieux
+- Accès direct aux résultats
+
+## 🚀 Utilisation en ligne de commande
 
 ```powershell
-# Audit complet (12 phases, dépendances automatiques)
+# Audit complet (13 phases, dépendances automatiques)
 .\audit\audit.ps1 -Phases "all" -Verbose
 
 # Audit de phases spécifiques (les dépendances sont ajoutées automatiquement)
@@ -19,8 +35,11 @@ Système d'audit générique et portable pour analyser la qualité, la sécurit�
 # Audit d'un répertoire spécifique
 .\audit\audit.ps1 -Target "directory" -Path ".\app" -Phases "2,6,7" -Verbose
 
-# Ou via le script batch
+# Via le script batch (ligne de commande)
 .\audit\audit.bat -Phases "all" -Verbose
+
+# Menu interactif (sans arguments)
+.\audit\audit.ps1
 ```
 
 ## 📚 Documentation
@@ -33,43 +52,47 @@ Système d'audit générique et portable pour analyser la qualité, la sécurit�
 
 ```
 audit/
-├── audit.ps1          # Point d'entrée unique (12 phases)
-├── modules/           # Modules de vérification (Invoke-Check-*)
+├── audit.ps1          # Point d'entrée principal
+├── audit-gui.ps1      # Interface graphique Windows
+├── audit-gui.bat      # Lanceur interface graphique (double-clic)
+├── audit.bat          # Lanceur ligne de commande
+├── modules/           # Modules de vérification (17 actifs)
 │   ├── Checks-*.ps1         # Modules de vérification
-│   ├── AI-*.ps1             # Modules d'intégration IA
-│   └── Utils.ps1            # Utilitaires
+│   ├── Utils.ps1            # Utilitaires
+│   ├── FileScanner.ps1      # Scan fichiers
+│   ├── ProjectDetector.ps1  # Détection type projet
+│   ├── ReportGenerator.ps1  # Export JSON/MD
 ├── config/            # Configuration
 │   ├── audit.config.ps1         # Configuration globale (générique)
-│   ├── audit.config.local.ps1   # Surcharge locale (non versionnée)
 │   └── audit.config.example.ps1 # Exemple
 ├── projects/          # Spécificités projet (auto-détection)
 │   └── ott/
-│       ├── project.ps1               # Détection (retourne un score)
-│       ├── config/
-│       │   ├── audit.config.ps1       # Surcharge projet (versionnée)
-│       │   └── audit.config.local.ps1 # Surcharge locale projet (non versionnée)
-│       └── modules/                  # Overrides modules pour ce projet
-├── data/              # Données de référence
-│   └── expected_tables.txt   # Tables attendues
-└── resultats/         # Résultats d'audit (générés, non versionnés)
-    ├── phase_<id>_<timestamp>.json
-    └── audit_summary_<timestamp>.json
+│       ├── project.ps1        # Détection projet OTT
+│       ├── config/            # Surcharges config
+│       └── modules/           # Modules spécifiques OTT
+└── resultats/         # Résultats d'audit (générés)
+    ├── audit_summary_<timestamp>.json
+    ├── ai-context-<timestamp>.json    # Export IA
+    └── phase_<id>_<timestamp>.json
 ```
 
-## 🎯 Les 12 Phases d'Audit (ordre logique)
+## 🎯 Les 13 Phases d'Audit
 
-1. **Inventaire Complet**
-2. **Architecture Projet** (dépendance: 1)
-3. **Sécurité** (dépendances: 1,2)
-4. **Configuration** (dépendance: 1)
-5. **Backend API** (dépendances: 1,2)
-6. **Frontend** (dépendances: 1,2)
-7. **Qualité Code** (dépendances: 1,2)
-8. **Performance** (dépendances: 1,2,5,6)
-9. **Documentation** (dépendances: 1,2)
-10. **Tests** (dépendances: 1,2,5)
-11. **Déploiement** (dépendances: 1,4)
-12. **Hardware/Firmware** (dépendance: 1)
+| Phase | Nom | Description | Dépendances |
+|-------|-----|-------------|-------------|
+| 1 | Inventaire | Analyse fichiers/structure | - |
+| 2 | Architecture | Structure projet | 1 |
+| 3 | Sécurité | Vulnérabilités, secrets | 1,2 |
+| 4 | Configuration | Docker, environnement | 1 |
+| 5 | Backend API | Endpoints, handlers, DB | 1,2 |
+| 6 | Frontend | Routes, UI/UX | 1,2 |
+| 7 | Qualité Code | Code mort, duplication, complexité | 1,2 |
+| 8 | Performance | Optimisations, mémoire | 1,2,5,6 |
+| 9 | Documentation | README, commentaires | 1,2 |
+| 10 | Tests | Unitaires, E2E | 1,2,5 |
+| 11 | Déploiement | CI/CD | 1,4 |
+| 12 | Hardware | Firmware Arduino/ESP32 | 1 |
+| 13 | IA & Compléments | Tests exhaustifs (spécifique projet) | 1,2,5,10 |
 
 ## ⚙️ Configuration
 

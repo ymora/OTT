@@ -26,6 +26,17 @@ RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/inst
     rm -rf bin && \
     arduino-cli version || (echo "ERREUR CRITIQUE: arduino-cli n'a pas pu etre installe" && exit 1)
 
+# Installer le core ESP32 et ses tools au build (évite les timeouts au runtime)
+# Cela ajoute ~500MB à l'image mais permet la compilation immédiate
+RUN mkdir -p /var/www/html/.arduino15 && \
+    arduino-cli config init --dest-dir /var/www/html/.arduino15 && \
+    arduino-cli config add board_manager.additional_urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json --config-file /var/www/html/.arduino15/arduino-cli.yaml && \
+    arduino-cli core update-index --config-file /var/www/html/.arduino15/arduino-cli.yaml && \
+    arduino-cli core install esp32:esp32@3.3.4 --config-file /var/www/html/.arduino15/arduino-cli.yaml && \
+    arduino-cli lib install ArduinoJson@7.0.4 --config-file /var/www/html/.arduino15/arduino-cli.yaml && \
+    chown -R www-data:www-data /var/www/html/.arduino15 && \
+    echo "✅ ESP32 core et tools installes"
+
 # Configuration Apache pour PHP
 RUN echo "ServerName ott-api" >> /etc/apache2/apache2.conf
 

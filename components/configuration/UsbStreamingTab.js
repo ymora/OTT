@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh } from '@/hooks'
+import { useApiData, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh, useTimers } from '@/hooks'
 import { isArchived } from '@/lib/utils'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
@@ -19,38 +19,16 @@ import UsbConsole from '@/components/usb/UsbConsole'
 import { useDeviceRegistration } from '@/components/usb/hooks/useDeviceRegistration'
 import { useUsbStreaming } from '@/components/usb/hooks/useUsbStreaming'
 import { useUsbCallbacks } from '@/components/usb/hooks/useUsbCallbacks'
+import SimpleUsbConnector from '@/components/SimpleUsbConnector'
 
 export default function DebugTab() {
   const usbContext = useUsb()
   
-  // Références pour gérer les timeouts avec cleanup
-  const timeoutRefs = useRef([])
-  const isMountedRef = useRef(true)
+  // Utiliser le hook useTimers pour gérer les timeouts avec cleanup automatique
+  const { createTimeout: createTimeoutWithCleanup } = useTimers()
+  
   // Flag pour éviter le double démarrage du streaming
   const isStartingStreamRef = useRef(false)
-  
-  // Nettoyer tous les timeouts au démontage
-  useEffect(() => {
-    isMountedRef.current = true
-    return () => {
-      isMountedRef.current = false
-      timeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId))
-      timeoutRefs.current = []
-    }
-  }, [])
-  
-  // Fonction utilitaire pour créer un timeout avec cleanup
-  const createTimeoutWithCleanup = (callback, delay) => {
-    if (!isMountedRef.current) return null
-    const timeoutId = setTimeout(() => {
-      if (isMountedRef.current) {
-        callback()
-      }
-      timeoutRefs.current = timeoutRefs.current.filter(id => id !== timeoutId)
-    }, delay)
-    timeoutRefs.current.push(timeoutId)
-    return timeoutId
-  }
   
   const {
     usbDevice,
@@ -479,6 +457,7 @@ export default function DebugTab() {
   const [dbDeviceData, setDbDeviceData] = useState(null)
   const [loadingDbData, setLoadingDbData] = useState(false)
   const [dataSource, setDataSource] = useState(null) // 'usb' | 'database' | null
+  const [simpleMode, setSimpleMode] = useState(false) // Mode simple pour contourner les problèmes Web Serial API
   
   // Valeurs calculées mémorisées pour éviter les recalculs (définies AVANT les useEffect qui les utilisent)
   const isStreaming = useMemo(() => 
@@ -1287,6 +1266,21 @@ export default function DebugTab() {
             </p>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSimpleMode(!simpleMode)}
+                className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                  simpleMode 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                {simpleMode ? 'Mode Normal' : 'Mode Simple'}
+              </button>
+              {simpleMode && (
+                <span className="text-xs text-blue-600">
+                  (Connecteur direct)
+                </span>
+              )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1751,7 +1745,6 @@ export default function DebugTab() {
           appendUsbStreamLog={appendUsbStreamLog}
           clearUsbStreamLogs={clearUsbStreamLogs}
           isStartingStreamRef={isStartingStreamRef}
-          timeoutRefs={timeoutRefs}
           createTimeoutWithCleanup={createTimeoutWithCleanup}
         />
 

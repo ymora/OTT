@@ -15,6 +15,7 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const [inoContent, setInoContent] = useState('')
   const [originalContent, setOriginalContent] = useState('')
   const [isEdited, setIsEdited] = useState(false)
+  const [backupContent, setBackupContent] = useState('') // Sauvegarde avant modification externe
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [currentStep, setCurrentStep] = useState(null)
@@ -385,9 +386,40 @@ export default function InoEditorTab({ onUploadSuccess }) {
   // Gérer les modifications du contenu
   const handleContentChange = useCallback((e) => {
     const newContent = e.target.value
+    const currentContent = inoContent
+    
+    // Protection : détecter si le contenu a été drastiquement réduit (probable bug)
+    // Si le nouveau contenu est < 20% de l'ancien ET qu'il ne s'agit pas d'une suppression manuelle normale
+    if (currentContent && newContent.length > 0 && currentContent.length > 100) {
+      const reductionRatio = newContent.length / currentContent.length
+      if (reductionRatio < 0.2) {
+        // Contenu drastiquement réduit - probable bug d'un outil externe
+        logger.warn('[InoEditorTab] ⚠️ Détection de réduction drastique du contenu:', {
+          avant: currentContent.length,
+          apres: newContent.length,
+          ratio: (reductionRatio * 100).toFixed(1) + '%'
+        })
+        
+        // Demander confirmation avant d'appliquer
+        const confirmRestore = window.confirm(
+          `⚠️ Le contenu a été drastiquement réduit (de ${currentContent.length} à ${newContent.length} caractères).\n\n` +
+          `Cela semble être une erreur. Voulez-vous restaurer le contenu précédent ?\n\n` +
+          `Cliquez sur "Annuler" pour garder le nouveau contenu (si c'était intentionnel).`
+        )
+        
+        if (confirmRestore) {
+          // Restaurer le contenu précédent
+          e.target.value = currentContent
+          setInoContent(currentContent)
+          setIsEdited(currentContent !== originalContent)
+          return
+        }
+      }
+    }
+    
     setInoContent(newContent)
     setIsEdited(newContent !== originalContent)
-  }, [originalContent])
+  }, [inoContent, originalContent])
 
   // Enregistrer le fichier
   const handleSave = useCallback(async () => {
@@ -639,6 +671,13 @@ export default function InoEditorTab({ onUploadSuccess }) {
     refetch()
 
     try {
+      // Utiliser le token d'authentification réel
+      if (!token) {
+        setError('Token d\'authentification manquant. Veuillez vous reconnecter.')
+        resetCompilationState()
+        return
+      }
+      
       const tokenEncoded = encodeURIComponent(token)
       
       // IMPORTANT: Pour les SSE, utiliser l'URL directe de l'API (pas le proxy Next.js)
@@ -655,9 +694,6 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
       // Logger pour diagnostic
       logger.debug('[InoEditorTab] Connexion SSE vers:', sseUrl)
-      logger.debug('[InoEditorTab] API_URL:', API_URL)
-      logger.debug('[InoEditorTab] isLocalhost:', isLocalhost)
-      logger.debug('[InoEditorTab] sseApiUrl:', sseApiUrl)
       
       setCompileLogs(prev => [...prev, {
         timestamp: new Date().toLocaleTimeString('fr-FR'),
@@ -718,7 +754,10 @@ export default function InoEditorTab({ onUploadSuccess }) {
               const newProgress = data.progress || 0
               return Math.max(prev, newProgress) // Ne garder que la valeur la plus élevée
             })
-            // Ne plus afficher la progression dans les logs, seulement dans la barre
+            // Mettre à jour le nom de l'étape si fourni
+            if (data.step) {
+              setCurrentStep(data.step)
+            }
           } else if (data.type === 'success') {
             setSuccess(`✅ Compilation réussie ! Firmware v${data.version} disponible`)
             setCompileLogs(prev => [...prev, {
@@ -834,11 +873,11 @@ export default function InoEditorTab({ onUploadSuccess }) {
         
         // Ne pas fermer immédiatement - attendre un peu pour voir si la connexion se rétablit
         // EventSource essaie automatiquement de se reconnecter
-        createTimeoutWithCleanup(() => {
+        setTimeout(() => {
           // Si la connexion est fermée (readyState === 2), vérifier le statut du firmware
           if (eventSource.readyState === EventSource.CLOSED) {
             // Vérifier le statut du firmware après 3 secondes (plus rapide)
-            createTimeoutWithCleanup(async () => {
+            setTimeout(async () => {
               try {
                 const response = await fetchWithAuth(`${API_URL}/api.php/firmwares`)
                 const data = await response.json()
@@ -1058,9 +1097,16 @@ export default function InoEditorTab({ onUploadSuccess }) {
             <h2 className="text-xl font-semibold">📊 Progression</h2>
             <div className="flex items-center gap-2">
               {compileProgress > 0 && (
-                <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
-                  {compileProgress}%
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
+                    {compileProgress}%
+                  </span>
+                  {currentStep && (
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      • {currentStep}
+                    </span>
+                  )}
+                </div>
               )}
               {compileLogs.length > 0 && (
                 <button
@@ -1083,14 +1129,22 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
           {!compileWindowMinimized && (
             <>
-              {/* Barre de progression */}
+              {/* Barre de progression avec étape */}
               {compileProgress > 0 && (
                 <div className="space-y-2 mb-4">
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                  <div className="flex justify-between items-center text-sm mb-1">
+                    <span className="text-gray-600 dark:text-gray-400 font-medium">
+                      {currentStep || 'En cours...'}
+                    </span>
+                    <span className="text-primary-600 dark:text-primary-400 font-bold">
+                      {compileProgress}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
                     <div
-                      className={`h-3 rounded-full transition-all duration-300 ${
-                        compiling ? 'bg-blue-500' :
-                        compileProgress === 100 ? 'bg-green-500' :
+                      className={`h-4 rounded-full transition-all duration-500 ease-out ${
+                        compiling ? 'bg-gradient-to-r from-blue-500 to-blue-600 animate-pulse' :
+                        compileProgress === 100 ? 'bg-gradient-to-r from-green-500 to-green-600' :
                         'bg-gray-300 dark:bg-gray-600'
                       }`}
                       style={{
@@ -1181,6 +1235,22 @@ export default function InoEditorTab({ onUploadSuccess }) {
                     {editingFirmwareId ? `Fichier .ino - Version v${inoFirmwares.find(f => f.id === editingFirmwareId)?.version || ''}` : 'Contenu du fichier .ino'}
                   </label>
                   <div className="flex gap-2">
+                    {backupContent && backupContent.length > inoContent.length * 1.5 && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Restaurer le contenu sauvegardé ? Le contenu actuel sera remplacé.')) {
+                            setInoContent(backupContent)
+                            setIsEdited(backupContent !== originalContent)
+                            setBackupContent('')
+                          }
+                        }}
+                        className="btn-secondary text-sm bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50"
+                        disabled={uploading}
+                        title="Restaurer le contenu sauvegardé (protection contre perte de code)"
+                      >
+                        🔄 Restaurer sauvegarde
+                      </button>
+                    )}
                     {isEdited && (
                       <button
                         onClick={handleReset}
@@ -1206,6 +1276,12 @@ export default function InoEditorTab({ onUploadSuccess }) {
                   ref={textareaRef}
                   value={inoContent}
                   onChange={handleContentChange}
+                  onBeforeInput={(e) => {
+                    // Sauvegarder le contenu avant toute modification (protection contre outils externes)
+                    if (inoContent && inoContent.length > 100) {
+                      setBackupContent(inoContent)
+                    }
+                  }}
                   disabled={uploading}
                   className="w-full h-96 font-mono text-sm p-4 border border-gray-300 dark:border-gray-600 
                     rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100

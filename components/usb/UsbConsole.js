@@ -30,7 +30,6 @@ export default function UsbConsole({
   clearUsbStreamLogs,
   // Références pour éviter les re-renders
   isStartingStreamRef,
-  timeoutRefs,
   createTimeoutWithCleanup
 }) {
   const { formatJsonLog, analyzeLogCategory, getLogColorClass } = useUsbLogs()
@@ -134,10 +133,9 @@ export default function UsbConsole({
           logger.log(`[USB] Connexion établie sur ${portLabel}`)
           
           // Démarrer automatiquement le streaming après connexion
-          const streamTimeoutId = setTimeout(async () => {
+          createTimeoutWithCleanup(async () => {
             if (usbStreamStatus !== 'idle' || isStartingStreamRef?.current) {
               logger.debug('[USB] Streaming déjà démarré ou en cours, pas de démarrage manuel')
-              timeoutRefs.current = timeoutRefs.current.filter(id => id !== streamTimeoutId)
               return
             }
             
@@ -150,10 +148,8 @@ export default function UsbConsole({
               appendUsbStreamLog(`❌ Erreur démarrage streaming: ${streamErr.message || streamErr}`, 'dashboard')
             } finally {
               isStartingStreamRef.current = false
-              timeoutRefs.current = timeoutRefs.current.filter(id => id !== streamTimeoutId)
             }
           }, 500)
-          timeoutRefs.current.push(streamTimeoutId)
         } else {
           appendUsbStreamLog(`❌ Échec de la connexion au port ${portLabel}`, 'dashboard')
           logger.error(`[USB] Échec connexion au port ${portLabel}`)

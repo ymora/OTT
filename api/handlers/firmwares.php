@@ -11,5 +11,5 @@ require_once __DIR__ . '/firmwares/helpers.php';
 require_once __DIR__ . '/firmwares/crud.php';
 require_once __DIR__ . '/firmwares/upload.php';
 require_once __DIR__ . '/firmwares/download.php';
-require_once __DIR__ . '/firmwares/compile.php';
+// compile.php supprimé - remplacé par compile_optimized.php (plus rapide, moins de logs)
 

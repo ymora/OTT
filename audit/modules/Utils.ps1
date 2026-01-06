@@ -12,13 +12,6 @@ function Convert-ToAsciiSafe {
     return $Text
 }
 
-function Write-Section {
-    param([string]$Text)
-    Write-Host ""
-    $Text = Convert-ToAsciiSafe -Text $Text
-    Write-Host "=== $Text ===" -ForegroundColor Cyan
-}
-
 function Write-PhaseSection {
     param(
         [Parameter(Mandatory=$true)][int]$PhaseNumber,
@@ -55,6 +48,25 @@ function Write-Info {
     }
 }
 
+function Normalize-ScoreKey {
+    param([string]$Key)
+    if ([string]::IsNullOrWhiteSpace($Key)) { return $Key }
+
+    $k = $Key.Trim()
+    $map = @{
+        "CodeMort" = "Code Mort"
+        "DeadCode" = "Code Mort"
+        "Optimizations" = "Optimisations"
+        "Optimisation" = "Optimisations"
+        "Organisation" = "Organization"
+        "UI" = "UI/UX"
+        "UX" = "UI/UX"
+    }
+
+    if ($map.ContainsKey($k)) { return $map[$k] }
+    return $k
+}
+
 function Calculate-GlobalScore {
     param(
         [hashtable]$Results,
@@ -82,7 +94,17 @@ function Calculate-GlobalScore {
     $weightedSum = 0
     
     foreach ($key in $weights.Keys) {
-        $score = if ($Results.Scores.ContainsKey($key)) { $Results.Scores[$key] } else { 5 }
+        $normalizedKey = Normalize-ScoreKey -Key $key
+
+        $score = 5
+        if ($Results.Scores) {
+            if ($Results.Scores.ContainsKey($normalizedKey)) {
+                $score = $Results.Scores[$normalizedKey]
+            } elseif ($Results.Scores.ContainsKey($key)) {
+                $score = $Results.Scores[$key]
+            }
+        }
+
         $weight = $weights[$key]
         $totalWeight += $weight
         $weightedSum += ($score * $weight)

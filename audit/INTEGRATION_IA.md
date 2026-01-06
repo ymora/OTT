@@ -19,7 +19,7 @@ L'audit détecte :
 
 ### 2. Génération du Rapport IA
 ```powershell
-# Le rapport peut être exporté si des modules ajoutent du contenu dans Results.AIContext
+# Le contexte IA est exporté automatiquement en fin d'audit si des modules ajoutent du contenu dans Results.AIContext
 ```
 
 Le rapport contient :
@@ -29,28 +29,19 @@ Le rapport contient :
 
 ### 3. Vérification IA (Optionnelle)
 ```powershell
-# Lire le prompt généré
-Get-Content audit/resultats/ai-verification-prompt.txt
-
-# Ou utiliser directement le contexte JSON
-$context = Get-Content audit/resultats/ai-context.json | ConvertFrom-Json
+# Utiliser directement le contexte JSON exporté
+$context = Get-Content audit/resultats/ai-context-*.json | ConvertFrom-Json
 ```
 
-## Modules Améliorés
+## Modules concernés
 
 ### `Checks-StructureAPI.ps1`
 - Analyse de structure API / routing (détection de handlers, routes potentielles)
-- Peut alimenter un contexte à faire valider par l'IA si nécessaire
+- Alimente un contexte à faire valider par l'IA si nécessaire
 
-### `AI-ContextGenerator.ps1`
-- Génère rapport structuré avec contexte de code
-- Inclut patterns de routing et routes potentielles
-- Questions spécifiques pour l'IA
-
-### `AI-VerificationPrompt.ps1`
-- Génère prompt optimisé pour minimiser les tokens
-- Contexte ciblé (seulement ce qui est nécessaire)
-- Format structuré pour réponse facile
+### `modules/ReportGenerator.ps1` (Export)
+- Exporte automatiquement un JSON `ai-context-*.json` en fin d'audit si `Results.AIContext` est alimenté
+- Regroupe les questions par catégorie avec un résumé de sévérité
 
 ## Exemple de Rapport IA
 
@@ -85,10 +76,9 @@ $context = Get-Content audit/resultats/ai-context.json | ConvertFrom-Json
 
 ## Intégration dans audit.ps1
 
-Les modules IA sont présents dans `audit/modules/AI-*.ps1`.
-L'intégration automatique au lanceur `audit/audit.ps1` n'est pas activée par défaut :
-- l'audit CPU peut générer des éléments dans `Results.AIContext`.
-- tu peux ensuite exploiter ce contexte (JSON) pour faire valider les cas douteux par l'IA.
+L'intégration est assurée par le lanceur `audit/audit.ps1` :
+- l'audit CPU génère des éléments dans `Results.AIContext`.
+- en fin d'exécution, `ReportGenerator.ps1` exporte automatiquement un JSON `ai-context-*.json` si nécessaire.
 
 ## Modules de tests exhaustifs (spécifiques projet)
 

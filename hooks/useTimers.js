@@ -21,6 +21,23 @@ export function useTimers() {
     }
   }, [])
 
+  const createTimeout = useCallback((callback, delay) => {
+    if (!isMountedRef.current) return
+
+    // Générer un nom unique pour chaque timeout
+    const name = `timeout_${Date.now()}_${Math.random()}`
+    
+    const timerId = setTimeout(() => {
+      if (isMountedRef.current) {
+        callback()
+      }
+      timersRef.current.delete(name)
+    }, delay)
+
+    timersRef.current.set(name, timerId)
+    return timerId
+  }, [])
+
   const createTimer = useCallback((name, callback, delay) => {
     if (!isMountedRef.current) return
 
@@ -59,7 +76,8 @@ export function useTimers() {
   }, [])
 
   return {
-    createTimer,
+    createTimeout, // Fonction principale (sans nom, génère un nom unique)
+    createTimer,   // Pour les timers nommés (si besoin)
     clearTimer,
     clearAllTimers,
     hasTimer

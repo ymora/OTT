@@ -18,7 +18,11 @@ function sendSSE($type, $message = '', $data = null) {
         $message = $data;
         $payload = ['type' => 'log', 'level' => $level, 'message' => $message];
     } else if ($type === 'progress') {
+        // $message = pourcentage, $data = nom de l'étape (optionnel)
         $payload = ['type' => 'progress', 'progress' => $message];
+        if ($data !== null) {
+            $payload['step'] = $data;
+        }
     } else if ($type === 'success') {
         $payload = ['type' => 'success', 'message' => $message, 'version' => $data];
     } else if ($type === 'error') {

@@ -23,13 +23,28 @@ function Invoke-Check-Complexity {
     Write-PhaseSection -PhaseNumber 7 -Title "Complexité"
     
     try {
-        $maxFileLines = $Config.Checks.Complexity.MaxFileLines
-        $maxFunctionLines = $Config.Checks.Complexity.MaxFunctionLines
+        $maxFileLines = $null
+        $maxFunctionLines = $null
+        $aiQuestionMinLines = $null
+
+        if ($Config.Checks -and $Config.Checks.Complexity) {
+            $maxFileLines = $Config.Checks.Complexity.MaxFileLines
+            $maxFunctionLines = $Config.Checks.Complexity.MaxFunctionLines
+            $aiQuestionMinLines = $Config.Checks.Complexity.AIQuestionMinLines
+        }
+
+        if (-not $maxFileLines) { $maxFileLines = 450 }
+        if (-not $maxFunctionLines) { $maxFunctionLines = 80 }
+        if (-not $aiQuestionMinLines) { $aiQuestionMinLines = 900 }
+
         $largeFiles = @()
         $aiContext = @()  # Contexte pour l'IA
+        $ignorePathRegex = "\\.next\\\\|node_modules\\\\|\\.git\\\\|audit\\\\resultats\\\\|resultats\\\\|\\.arduino15\\\\"
         
         foreach ($file in $Files) {
             try {
+                if ($file.FullName -match $ignorePathRegex) { continue }
+
                 $lines = @(Get-Content $file.FullName -ErrorAction SilentlyContinue).Count
                 if ($lines -gt $maxFileLines) {
                     $relativePath = $file.FullName.Replace((Get-Location).Path + '\', '').Replace((Get-Location).Path + '/', '')
@@ -57,7 +72,7 @@ function Invoke-Check-Complexity {
                         $justification = "Fichier de contexte/gestion (logique métier complexe)"
                     }
                     
-                    if (-not $isJustified) {
+                    if ((-not $isJustified) -and ($lines -ge $aiQuestionMinLines)) {
                         $aiContext += @{
                             Category = "Complexity"
                             Type = "Large File"

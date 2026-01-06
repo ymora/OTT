@@ -12,6 +12,13 @@
         Description = "Système de monitoring et gestion de dispositifs médicaux"
     }
 
+    Exclude = @{
+        Directories = @(
+            "hardware/arduino-data"
+        )
+        Files = @()
+    }
+
     # Configuration API
     Api = @{
         # URL de l'API - Configuration générique selon le mode

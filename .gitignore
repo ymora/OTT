@@ -73,6 +73,7 @@ backup_*.json
 # Scripts de test temporaires
 scripts/test-*.js
 scripts/test-*.php
+api/test_*.php
 
 # Rapports temporaires (SUIVI_TEMPS généré automatiquement)
 # SUIVI_TEMPS_FACTURATION.md (sauf dans docs/ qui doit être versionné)

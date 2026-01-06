@@ -55,6 +55,7 @@ services:
       JWT_SECRET: docker-dev-secret-change-in-production
       APP_ENV: development
       DEBUG_ERRORS: "true"
+      AUTH_DISABLED: "true"
       # CORS pour Docker local uniquement
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3003,http://localhost:8000
       # Notifications désactivées en développement
@@ -73,6 +74,7 @@ services:
       - ./api:/var/www/html/api
       - ./sql:/var/www/html/sql
       - ./hardware:/var/www/html/hardware
+      - ./uploads:/var/www/html/uploads
     networks:
       - ott-network
 

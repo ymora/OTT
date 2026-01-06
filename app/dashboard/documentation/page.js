@@ -581,6 +581,14 @@ function MarkdownViewer({ fileName }) {
       }
     }
 
+    const periodMatchAlt = md.match(/\*\*Periode analysee\*\* : (\d+) derniers jours \(depuis (\d{4}-\d{2}-\d{2})\)/)
+    if (!metadata.period && periodMatchAlt) {
+      metadata.period = {
+        days: parseInt(periodMatchAlt[1], 10),
+        start: periodMatchAlt[2]
+      }
+    }
+
     // Développeur
     const authorMatch = md.match(/\*\*Développeur\*\* : (.+)/)
     if (authorMatch) {
@@ -597,6 +605,11 @@ function MarkdownViewer({ fileName }) {
     const totalCommitsMatch = md.match(/\*\*Total commits analysés\*\* : (\d+)/)
     if (totalCommitsMatch) {
       metadata.totalCommits = parseInt(totalCommitsMatch[1])
+    }
+
+    const totalCommitsMatchAlt = md.match(/\*\*Total commits\*\* : (\d+)/)
+    if (!metadata.totalCommits && totalCommitsMatchAlt) {
+      metadata.totalCommits = parseInt(totalCommitsMatchAlt[1], 10)
     }
 
     // Branches analysées
@@ -626,6 +639,11 @@ function MarkdownViewer({ fileName }) {
     const lastGenMatch = md.match(/\*\*Dernière génération\*\* : (.+)/)
     if (lastGenMatch) {
       metadata.lastGenerated = lastGenMatch[1].trim()
+    }
+
+    const lastGenMatchAlt = md.match(/\*\*Date de generation\*\* : (.+)/)
+    if (!metadata.lastGenerated && lastGenMatchAlt) {
+      metadata.lastGenerated = lastGenMatchAlt[1].trim()
     }
 
     if (Object.keys(metadata).length > 0) {
@@ -670,6 +688,51 @@ function MarkdownViewer({ fileName }) {
 
       data.totalHours += hours
       data.totalCommits += commits
+    }
+
+    if (data.dailyData.length === 0) {
+      const altTableRegex = /\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*\*\*(.+?)\*\*\s*\|\s*(\d+)\s*\|\s*~?([\d.]+)h\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|/g
+      let altMatch
+      while ((altMatch = altTableRegex.exec(md)) !== null) {
+        const date = altMatch[1]
+        const hours = safeParseFloat(altMatch[4])
+        const commits = safeParseInt(altMatch[3])
+
+        const featCount = safeParseInt(altMatch[5])
+        const fixCount = safeParseInt(altMatch[6])
+        const refactorCount = safeParseInt(altMatch[7])
+        const docCount = safeParseInt(altMatch[8])
+        const testCount = safeParseInt(altMatch[9])
+        const uiCount = safeParseInt(altMatch[10])
+
+        const totalCount = featCount + fixCount + refactorCount + docCount + testCount + uiCount
+        const ratio = (v) => (totalCount > 0 ? (v / totalCount) : 0)
+
+        const dev = hours * ratio(featCount)
+        const fix = hours * ratio(fixCount)
+        const test = hours * ratio(testCount)
+        const doc = hours * ratio(docCount)
+        const refactor = hours * ratio(refactorCount)
+        const uiux = hours * ratio(uiCount)
+
+        data.dailyData.push({
+          date,
+          hours,
+          commits,
+          dev,
+          fix,
+          test,
+          doc,
+          refactor,
+          deploy: 0,
+          uiux,
+          optim: 0,
+          details: null
+        })
+
+        data.totalHours += hours
+        data.totalCommits += commits
+      }
     }
 
     // ============================================
@@ -734,6 +797,10 @@ function MarkdownViewer({ fileName }) {
       data.categories['Déploiement'] = data.dailyData.reduce((sum, d) => sum + (d.deploy || 0), 0)
       data.categories['UI/UX'] = data.dailyData.reduce((sum, d) => sum + (d.uiux || 0), 0)
       data.categories['Optimisation'] = data.dailyData.reduce((sum, d) => sum + (d.optim || 0), 0)
+
+      if (metadata.totalCommits && !data.totalCommits) {
+        data.totalCommits = metadata.totalCommits
+      }
     }
 
     // ============================================

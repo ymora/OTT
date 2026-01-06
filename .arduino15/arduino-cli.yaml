@@ -1,17 +1,24 @@
 # Configuration Arduino-cli pour le projet OTT
-# Les tools restent dans %LOCALAPPDATA%\Arduino15 (pas de copie)
-# Seul le core est dans .arduino15/ (committé dans Git)
+# ============================================================================
+# NOTE: Ce fichier de config n'est PAS utilisé en production (Docker/Render)
+# Le code PHP utilise les variables d'environnement ARDUINO_DIRECTORIES_* 
+# pour configurer arduino-cli de manière portable.
+# 
+# Ce fichier est uniquement pour le développement local Windows.
+# ============================================================================
 
 board_manager:
   additional_urls:
     - https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
+# ATTENTION: Ces chemins sont pour Windows local uniquement
+# En Docker/Render, les variables d'environnement sont utilisées à la place
 directories:
   # Data : utilise .arduino15/ (core pré-installé)
   data: .arduino15
-  # Downloads : utilise le cache local
-  downloads: C:\Users\ymora\AppData\Local\Arduino15\staging
-  # User : utilise le projet
+  # Downloads : temporaire pour staging
+  downloads: .arduino15/staging
+  # User : pour les bibliothèques utilisateur
   user: .arduino15
 
 library:

@@ -221,6 +221,84 @@ function getProjectRoot() {
 }
 
 /**
+ * Obtenir le répertoire Arduino standard selon l'OS
+ * Utilise les répertoires système standards pour les utilisateurs locaux
+ * Retourne le répertoire du projet pour les serveurs distants
+ */
+function getArduinoUserDirectory() {
+    $rootDir = getProjectRoot();
+    $rootPath = realpath($rootDir) ?: $rootDir;
+    
+    // 1. Override via variable d'environnement (pour tests/configuration spécifique)
+    if (getenv('ARDUINO_USER_DIR')) {
+        $arduinoDir = getenv('ARDUINO_USER_DIR');
+        if (is_dir($arduinoDir) || @mkdir($arduinoDir, 0755, true)) {
+            return $arduinoDir;
+        }
+    }
+    
+    // 2. Windows : utiliser répertoires système (si variables d'environnement disponibles)
+    // Détection simple : présence de USERPROFILE ou LOCALAPPDATA = Windows
+    if (getenv('USERPROFILE') || getenv('LOCALAPPDATA')) {
+        // Windows : %USERPROFILE%\Documents\Arduino (standard Arduino IDE)
+        $userProfile = getenv('USERPROFILE');
+        if ($userProfile) {
+            $arduinoDir = $userProfile . DIRECTORY_SEPARATOR . 'Documents' . DIRECTORY_SEPARATOR . 'Arduino';
+            if (!is_dir($arduinoDir)) {
+                @mkdir($arduinoDir, 0755, true);
+            }
+            if (is_dir($arduinoDir) && is_writable($arduinoDir)) {
+                return $arduinoDir;
+            }
+        }
+        
+        // Fallback Windows : %LOCALAPPDATA%\Arduino15 (arduino-cli standard)
+        $localAppData = getenv('LOCALAPPDATA');
+        if ($localAppData) {
+            $arduinoDir = $localAppData . DIRECTORY_SEPARATOR . 'Arduino15';
+            if (!is_dir($arduinoDir)) {
+                @mkdir($arduinoDir, 0755, true);
+            }
+            if (is_dir($arduinoDir) && is_writable($arduinoDir)) {
+                return $arduinoDir;
+            }
+        }
+    }
+    
+    // 3. Linux/Mac local : utiliser répertoires système standards
+    // Exclure WSL dans Docker (projet dans /var/www/ ou /opt/)
+    $home = getenv('HOME');
+    if ($home && strpos($rootPath, '/var/www/') !== 0 && strpos($rootPath, '/opt/') !== 0) {
+        // ~/.arduino15 (standard arduino-cli)
+        $arduinoDir = $home . DIRECTORY_SEPARATOR . '.arduino15';
+        if (!is_dir($arduinoDir)) {
+            @mkdir($arduinoDir, 0755, true);
+        }
+        if (is_dir($arduinoDir) && is_writable($arduinoDir)) {
+            return $arduinoDir;
+        }
+        
+        // Fallback : ~/Arduino (standard Arduino IDE)
+        $arduinoDir = $home . DIRECTORY_SEPARATOR . 'Arduino';
+        if (!is_dir($arduinoDir)) {
+            @mkdir($arduinoDir, 0755, true);
+        }
+        if (is_dir($arduinoDir) && is_writable($arduinoDir)) {
+            return $arduinoDir;
+        }
+    }
+    
+    // 4. Serveurs distants (Render, Docker, WSL dans Docker) : utiliser hardware/arduino-data
+    // AVANTAGE : Persistant entre compilations, réutilisable
+    // NOTE : Perdu au redéploiement mais les bibliothèques se réinstallent rapidement (< 30s)
+    $arduinoDataDir = $rootDir . DIRECTORY_SEPARATOR . 'hardware' . DIRECTORY_SEPARATOR . 'arduino-data';
+    if (!is_dir($arduinoDataDir)) {
+        @mkdir($arduinoDataDir, 0755, true);
+    }
+    return $arduinoDataDir;
+}
+
+/**
  * Encode binary data for PostgreSQL BYTEA column
  * PDO with PostgreSQL requires BYTEA data to be encoded in hexadecimal format
  * 
