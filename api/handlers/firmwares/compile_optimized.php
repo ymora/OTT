@@ -65,13 +65,15 @@ function handleCompileFirmwareOptimized($firmware_id) {
         }
         
         // Mettre à jour statut
-        $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = ?")->execute([$firmware_id]);
+        $updateStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = ?");
+        $updateStmt->execute([$firmware_id]);
         
         // Trouver fichier .ino
         $inoFile = findFirmwareInoFile($firmware_id, $firmware);
         if (!$inoFile || !file_exists($inoFile)) {
             sendSSE('error', 'Fichier .ino introuvable');
-            $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Fichier .ino introuvable' WHERE id = ?")->execute([$firmware_id]);
+            $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Fichier .ino introuvable' WHERE id = ?");
+            $errorStmt->execute([$firmware_id]);
             flush();
             return;
         }
@@ -99,7 +101,8 @@ function handleCompileFirmwareOptimized($firmware_id) {
         
         if (!$arduinoCli) {
             sendSSE('error', 'arduino-cli non trouvé');
-            $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'arduino-cli non trouvé' WHERE id = ?")->execute([$firmware_id]);
+            $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'arduino-cli non trouvé' WHERE id = ?");
+            $errorStmt->execute([$firmware_id]);
             flush();
             return;
         }
@@ -122,7 +125,8 @@ function handleCompileFirmwareOptimized($firmware_id) {
         // Vérifier que le répertoire existe et est accessible
         if (!is_dir($arduinoDataDir) || !is_writable($arduinoDataDir)) {
             sendSSE('error', 'Impossible de créer/accéder au répertoire Arduino: ' . $arduinoDataDir);
-            $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Répertoire Arduino inaccessible' WHERE id = ?")->execute([$firmware_id]);
+            $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Répertoire Arduino inaccessible' WHERE id = ?");
+            $errorStmt->execute([$firmware_id]);
             flush();
             return;
         }
@@ -301,7 +305,8 @@ function handleCompileFirmwareOptimized($firmware_id) {
                 $errorOutput = implode("\n", array_slice($installOutput, -5));
                 sendSSE('log', 'error', 'Échec installation ArduinoJson: ' . substr($errorOutput, 0, 200));
                 sendSSE('error', 'Échec installation bibliothèque ArduinoJson');
-                $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Échec installation ArduinoJson' WHERE id = ?")->execute([$firmware_id]);
+                $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Échec installation ArduinoJson' WHERE id = ?");
+                $errorStmt->execute([$firmware_id]);
                 if (is_dir($build_dir)) {
                     exec(($isWindows ? 'rmdir /s /q ' : 'rm -rf ') . escapeshellarg($build_dir) . ' 2>&1');
                 }
@@ -339,7 +344,8 @@ function handleCompileFirmwareOptimized($firmware_id) {
             if ($installCoreReturn !== 0) {
                 $errorOutput = implode("\n", array_slice($installCoreOutput, -10));
                 sendSSE('error', 'Échec installation core ESP32: ' . substr($errorOutput, 0, 300));
-                $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Core ESP32 non installé' WHERE id = ?")->execute([$firmware_id]);
+                $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Core ESP32 non installé' WHERE id = ?");
+                $errorStmt->execute([$firmware_id]);
                 if (is_dir($build_dir)) {
                     exec(($isWindows ? 'rmdir /s /q ' : 'rm -rf ') . escapeshellarg($build_dir) . ' 2>&1');
                 }
@@ -538,16 +544,19 @@ function handleCompileFirmwareOptimized($firmware_id) {
                     sendSSE('success', 'Compilation terminée', $firmware['version']);
                 } else {
                     sendSSE('error', 'Impossible de lire le binaire généré');
-                    $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Impossible de lire le binaire' WHERE id = ?")->execute([$firmware_id]);
+                    $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Impossible de lire le binaire' WHERE id = ?");
+                    $errorStmt->execute([$firmware_id]);
                 }
             } else {
                 sendSSE('error', 'Binaire non généré');
-                $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Binaire non généré' WHERE id = ?")->execute([$firmware_id]);
+                $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Binaire non généré' WHERE id = ?");
+                $errorStmt->execute([$firmware_id]);
             }
         } else {
             $errorMsg = implode("\n", array_slice($output, -10));
             sendSSE('error', 'Erreur compilation: ' . substr($errorMsg, 0, 200));
-            $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = ? WHERE id = ?")->execute([substr($errorMsg, 0, 500), $firmware_id]);
+            $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = ? WHERE id = ?");
+            $errorStmt->execute([substr($errorMsg, 0, 500), $firmware_id]);
         }
         
         // Cleanup
@@ -567,7 +576,8 @@ function handleCompileFirmwareOptimized($firmware_id) {
         error_log('[compile_optimized] Erreur: ' . $e->getMessage());
         sendSSE('error', 'Erreur: ' . $e->getMessage());
         if (isset($firmware_id)) {
-            $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = ? WHERE id = ?")->execute([$e->getMessage(), $firmware_id]);
+            $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = ? WHERE id = ?");
+            $errorStmt->execute([$e->getMessage(), $firmware_id]);
         }
         flush();
     }

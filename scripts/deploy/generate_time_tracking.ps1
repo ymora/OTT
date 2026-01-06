@@ -65,6 +65,7 @@ $author_stats = @{}
 $author_days = @{}
 $author_categories = @{}
 $daily_stats = @{}
+$daily_categories = @{}
 $total_commits = 0
 
 foreach ($line in $COMMITS -split "`n") {
@@ -115,11 +116,14 @@ foreach ($line in $COMMITS -split "`n") {
     $daily_key = "$date_str|$author"
     if (!$daily_stats.ContainsKey($daily_key)) {
         $daily_stats[$daily_key] = 0
+        $daily_categories[$daily_key] = "0|0|0|0|0|0|0|0"  # Feature|Fix|Refactor|Doc|Test|UI|Deploy|Other
     }
     $daily_stats[$daily_key]++
     
     # Catégoriser le commit
     $msg_lower = $message.ToLower()
+    
+    # Mettre à jour les catégories globales de l'auteur
     $categories = $author_categories[$author].Split('|')
     $feat = [int]$categories[0]
     $fix = [int]$categories[1]
@@ -130,32 +134,44 @@ foreach ($line in $COMMITS -split "`n") {
     $deploy = [int]$categories[6]
     $other = [int]$categories[7]
     
+    # Mettre à jour les catégories quotidiennes
+    $daily_cats = $daily_categories[$daily_key].Split('|')
+    $daily_feat = [int]$daily_cats[0]
+    $daily_fix = [int]$daily_cats[1]
+    $daily_refactor = [int]$daily_cats[2]
+    $daily_doc = [int]$daily_cats[3]
+    $daily_test = [int]$daily_cats[4]
+    $daily_ui = [int]$daily_cats[5]
+    $daily_deploy = [int]$daily_cats[6]
+    $daily_other = [int]$daily_cats[7]
+    
     if ($msg_lower -match 'feat|feature|add|ajout|nouveau') {
-        $feat++
+        $feat++; $daily_feat++
     }
     elseif ($msg_lower -match 'fix|bug|corr|repair') {
-        $fix++
+        $fix++; $daily_fix++
     }
     elseif ($msg_lower -match 'refact|clean|optim') {
-        $refactor++
+        $refactor++; $daily_refactor++
     }
     elseif ($msg_lower -match 'doc|readme|comment') {
-        $doc++
+        $doc++; $daily_doc++
     }
     elseif ($msg_lower -match 'test|spec|jest') {
-        $test++
+        $test++; $daily_test++
     }
     elseif ($msg_lower -match 'ui|css|style|design|interface') {
-        $ui++
+        $ui++; $daily_ui++
     }
     elseif ($msg_lower -match 'deploy|release|version|build') {
-        $deploy++
+        $deploy++; $daily_deploy++
     }
     else {
-        $other++
+        $other++; $daily_other++
     }
     
     $author_categories[$author] = "$feat|$fix|$refactor|$doc|$test|$ui|$deploy|$other"
+    $daily_categories[$daily_key] = "$daily_feat|$daily_fix|$daily_refactor|$daily_doc|$daily_test|$daily_ui|$daily_deploy|$daily_other"
 }
 
 # Générer le fichier Markdown
@@ -172,11 +188,11 @@ $content = @"
 
 ## Tableau Recapitulatif par Jour et Contributeur
 
-| Date | Contributeur | Commits | Heures | Features | Fix | Refactor | Doc | Tests | UI |
-|------|--------------|---------|--------|----------|-----|----------|-----|-------|-----|
+| Date | Contributeur | Commits | Heures | Features | Fix | Refactor | Doc | Tests | UI | Deploy | Other |
+|------|--------------|---------|--------|----------|-----|----------|-----|-------|-----|--------|-------|
 "@
 
-# Trier et afficher les statistiques quotidiennes
+# Trier et afficher les statistiques quotidiennes avec catégories par jour
 $daily_keys = $daily_stats.Keys | Sort-Object -Descending | Select-Object -First 100
 foreach ($daily_key in $daily_keys) {
     $parts = $daily_key.Split('|')
@@ -185,16 +201,18 @@ foreach ($daily_key in $daily_keys) {
     $commits = $daily_stats[$daily_key]
     $hours = [math]::Round($commits * 0.5, 1)
     
-    # Récupérer les catégories pour ce jour et cet auteur
-    $categories = $author_categories[$author].Split('|')
+    # Récupérer les catégories pour CE jour et CET auteur
+    $categories = $daily_categories[$daily_key].Split('|')
     $feat = $categories[0]
     $fix = $categories[1]
     $refactor = $categories[2]
     $doc = $categories[3]
     $test = $categories[4]
     $ui = $categories[5]
+    $deploy = $categories[6]
+    $other = $categories[7]
     
-    $content += "`n| $date_str | **$author** | $commits | ~${hours}h | $feat | $fix | $refactor | $doc | $test | $ui |"
+    $content += "`n| $date_str | **$author** | $commits commits (~${hours}h) | $feat Features | $fix Fixes | $refactor Refactors | $doc Docs | $test Tests | $ui UI | $deploy Deploy | $other Other |"
 }
 
 # Ajouter le résumé par contributeur

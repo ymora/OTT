@@ -571,7 +571,8 @@ function handleUploadFirmwareIno() {
             error_log('[handleUploadFirmwareIno] ❌ Échec renommage: ' . $temp_path . ' -> ' . $ino_path);
             @unlink($temp_path);
             // Supprimer l'entrée en DB
-            $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
+            $deleteStmt = $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id");
+            $deleteStmt->execute(['id' => $firmware_id]);
             http_response_code(500);
             echo json_encode(['success' => false, 'error' => 'Impossible de renommer le fichier .ino']);
             return;
@@ -581,7 +582,8 @@ function handleUploadFirmwareIno() {
         if (!file_exists($ino_path)) {
             error_log('[handleUploadFirmwareIno] ❌ Fichier renommé introuvable: ' . $ino_path);
             // Supprimer l'entrée en DB
-            $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
+            $deleteStmt = $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id");
+            $deleteStmt->execute(['id' => $firmware_id]);
             http_response_code(500);
             echo json_encode(['success' => false, 'error' => 'Fichier .ino introuvable après renommage']);
             return;
@@ -654,7 +656,8 @@ function handleUploadFirmwareIno() {
         // Supprimer l'entrée en DB si elle a été créée
         if (isset($firmware_id)) {
             try {
-                $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
+                $deleteStmt = $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id");
+                $deleteStmt->execute(['id' => $firmware_id]);
             } catch(PDOException $deleteErr) {
                 error_log('[handleUploadFirmwareIno] Erreur lors de la suppression: ' . $deleteErr->getMessage());
             }
@@ -687,7 +690,8 @@ function handleUploadFirmwareIno() {
         // Supprimer l'entrée en DB si elle a été créée
         if (isset($firmware_id)) {
             try {
-                $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id")->execute(['id' => $firmware_id]);
+                $deleteStmt = $pdo->prepare("DELETE FROM firmware_versions WHERE id = :id");
+                $deleteStmt->execute(['id' => $firmware_id]);
             } catch(PDOException $deleteErr) {
                 error_log('[handleUploadFirmwareIno] Erreur lors de la suppression: ' . $deleteErr->getMessage());
             }

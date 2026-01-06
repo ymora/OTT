@@ -995,6 +995,26 @@ function Main {
             Write-Log "Aucun contexte IA à exporter" "INFO"
         }
 
+        # Mise à jour du tableau récapitulatif des scores d'audit
+        try {
+            $auditScoresUpdatePath = Join-Path $PSScriptRoot "projects\ott\modules\Checks-AuditScoresUpdate.ps1"
+            if (Test-Path $auditScoresUpdatePath) {
+                . $auditScoresUpdatePath
+                
+                $updateResult = Update-AuditScoresDocumentation -AuditSummary $summary -OutputDir $script:Config.OutputDir
+                if ($updateResult.Success) {
+                    Write-Log "Tableau des scores d'audit mis à jour: $($updateResult.File)" "SUCCESS"
+                    Write-Log "Score global: $($updateResult.GlobalScore)/10 sur $($updateResult.PhaseCount) phases" "INFO"
+                } else {
+                    Write-Log "Erreur lors de la mise à jour des scores: $($updateResult.Error)" "WARN"
+                }
+            } else {
+                Write-Log "Module Checks-AuditScoresUpdate.ps1 non trouvé, mise à jour des scores ignorée" "WARN"
+            }
+        } catch {
+            Write-Log "Erreur lors de la mise à jour du tableau des scores: $($_.Exception.Message)" "WARN"
+        }
+
     } catch {
         Write-Log "Erreur fatale: $($_.Exception.Message)" "ERROR"
         Write-Log "Stack trace: $($_.ScriptStackTrace)" "ERROR"

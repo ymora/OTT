@@ -16,9 +16,7 @@ import DeviceMeasurementsModal from '@/components/DeviceMeasurementsModal'
 import SuccessMessage from '@/components/SuccessMessage'
 // Nouveaux composants et hooks refactorisés
 import UsbConsole from '@/components/usb/UsbConsole'
-import { useDeviceRegistration } from '@/components/usb/hooks/useDeviceRegistration'
 import { useUsbStreaming } from '@/components/usb/hooks/useUsbStreaming'
-import { useUsbCallbacks } from '@/components/usb/hooks/useUsbCallbacks'
 import SimpleUsbConnector from '@/components/SimpleUsbConnector'
 
 export default function DebugTab() {
@@ -383,16 +381,16 @@ export default function DebugTab() {
   }, [])
   
   // Hook pour configurer les callbacks USB
-  useUsbCallbacks({
-    fetchWithAuth,
-    API_URL,
-    setSendMeasurementCallback,
-    setUpdateDeviceFirmwareCallback,
-    appendUsbStreamLog,
-    refetchDevicesRef,
-    notifyDevicesUpdated,
-    createTimeoutWithCleanup
-  })
+  // useUsbCallbacks({
+  //   fetchWithAuth,
+  //   API_URL,
+  //   setSendMeasurementCallback,
+  //   setUpdateDeviceFirmwareCallback,
+  //   appendUsbStreamLog,
+  //   refetchDevicesRef,
+  //   notifyDevicesUpdated,
+  //   createTimeoutWithCleanup
+  // })
   
   // Charger les patients pour l'assignation
   const { data: patientsData, loading: patientsLoading } = useApiData(
@@ -502,17 +500,17 @@ export default function DebugTab() {
     allDevicesRef.current = allDevices
   }, [allDevices])
   
-  useDeviceRegistration({
-    isConnected,
-    usbDeviceInfo,
-    usbDevice,
-    setUsbDevice,
-    allDevices: allDevicesRef.current,
-    isUsbDeviceRegistered,
-    normalizeId,
-    invalidateCache,
-    refetchDevicesRef
-  })
+  // useDeviceRegistration({
+  //   isConnected,
+  //   usbDeviceInfo,
+  //   usbDevice,
+  //   setUsbDevice,
+  //   allDevices: allDevicesRef.current,
+  //   isUsbDeviceRegistered,
+  //   normalizeId,
+  //   invalidateCache,
+  //   refetchDevicesRef
+  // })
   
   // Helper pour formater l'heure
   const formatTime = useCallback((timestamp) => {

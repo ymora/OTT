@@ -31,7 +31,7 @@ function compileFirmware($arduinoCli, $envStr, $build_dir, $sketch_dir, $firmwar
     
     sendSSE('log', 'info', 'Compilation du firmware...');
     sendSSE('log', 'info', 'Commande: ' . $compile_cmd);
-    $sendProgress(60);
+    // Pas de sendProgress ici pour éviter l'affichage double
     flush();
     
     // Logger la commande pour diagnostic
@@ -199,7 +199,7 @@ function compileFirmware($arduinoCli, $envStr, $build_dir, $sketch_dir, $firmwar
             
             // PROGRESSION TEMPORELLE : Avancer la barre de progression même sans output
             // Cela évite que la barre reste bloquée pendant les phases longues
-            if ($current_time - $compile_last_progress_update >= 2) { // Mise à jour toutes les 2 secondes
+            if ($current_time - $compile_last_progress_update > 3) { // Toutes les 3 secondes au lieu de 1
                 $compile_last_progress_update = $current_time;
                 
                 // Calculer la progression basée sur le temps écoulé et la phase

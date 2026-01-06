@@ -86,8 +86,9 @@ function handleUpdateNotificationPreferences() {
                     } elseif (is_numeric($value)) {
                         $boolValue = (int)$value !== 0;
                     }
-                    // Pour PostgreSQL, utiliser TRUE/FALSE directement dans la requête
-                    $updates[] = "$field = " . ($boolValue ? 'TRUE' : 'FALSE');
+                    // Utiliser des paramètres préparés pour les valeurs booléennes aussi
+                    $updates[] = "$field = :$field";
+                    $params[$field] = $boolValue ? 1 : 0; // Convertir en entier pour compatibilité DB
                 } elseif ($value === null || $value === '') {
                     $updates[] = "$field = NULL";
                 } else {
@@ -371,8 +372,9 @@ function handleUpdateUserNotifications($user_id) {
                     } elseif (is_numeric($value)) {
                         $boolValue = (int)$value !== 0;
                     }
-                    // Pour PostgreSQL, utiliser TRUE/FALSE directement dans la requête
-                    $updates[] = "$field = " . ($boolValue ? 'TRUE' : 'FALSE');
+                    // Utiliser des paramètres préparés pour les valeurs booléennes aussi
+                    $updates[] = "$field = :$field";
+                    $params[$field] = $boolValue ? 1 : 0; // Convertir en entier pour compatibilité DB
                 } elseif ($value === null || $value === '') {
                     $updates[] = "$field = NULL";
                 } else {
@@ -540,8 +542,9 @@ function handleUpdatePatientNotifications($patient_id) {
                     } elseif (is_numeric($value)) {
                         $boolValue = (int)$value !== 0;
                     }
-                    // Pour PostgreSQL, utiliser TRUE/FALSE directement dans la requête
-                    $updates[] = "$field = " . ($boolValue ? 'TRUE' : 'FALSE');
+                    // Utiliser des paramètres préparés pour les valeurs booléennes aussi
+                    $updates[] = "$field = :$field";
+                    $params[$field] = $boolValue ? 1 : 0; // Convertir en entier pour compatibilité DB
                 } elseif ($value === null || $value === '') {
                     $updates[] = "$field = NULL";
                 } else {

@@ -13,38 +13,14 @@ import { isAdmin as checkIsAdmin } from '@/lib/userUtils'
 import { Bar, Doughnut, Line} from 'react-chartjs-2'
 import MetadataCard from '@/components/MetadataCard'
 import DayDetailsModal from '@/components/DayDetailsModal'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js'
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-)
+import TimeTrackingDashboard from '@/components/TimeTrackingDashboardSimple'
 
 const DOCUMENTATION_FILES = {
   presentation: 'DOCUMENTATION_PRESENTATION.html',
   developpeurs: 'DOCUMENTATION_DEVELOPPEURS.html',
   commerciale: 'DOCUMENTATION_COMMERCIALE.html',
-  'suivi-temps': 'SUIVI_TEMPS_FACTURATION.md'
+  'suivi-temps': 'SUIVI_TEMPS_FACTURATION.md',
+  'audit-scores': 'AUDIT_SCORES.md'
 }
 
 export default function DocumentationPage() {
@@ -70,21 +46,22 @@ export default function DocumentationPage() {
       presentation: 'Documentation Présentation - OTT Dashboard',
       developpeurs: 'Documentation Développeurs - OTT Dashboard',
       commerciale: 'Documentation Commerciale - OTT Dashboard',
-      'suivi-temps': 'Suivi Temps - OTT Dashboard'
+      'suivi-temps': 'Suivi Temps - OTT Dashboard',
+      'audit-scores': 'Scores Audit - OTT Dashboard'
     }
     document.title = titles[docType] || titles.presentation
   }, [docType])
 
-  const isMarkdownDoc = docType === 'suivi-temps'
+  const isMarkdownDoc = docType === 'audit-scores'
   
   // ✅ HOOKS AVANT LA VÉRIFICATION ADMIN (Règle des hooks React)
   // Référence à l'iframe pour envoyer le thème
   const iframeRef = useRef(null)
   const timeoutRefs = useRef([])
 
-  // Fonction pour envoyer le thème à l'iframe
+  // Fonction pour envoyer le thème à l'iframe (uniquement pour les docs HTML)
   const sendThemeToIframe = useCallback(() => {
-    if (isMarkdownDoc || !iframeRef.current?.contentWindow) {
+    if (docType === 'suivi-temps' || !iframeRef.current?.contentWindow) {
       return
     }
     try {
@@ -93,12 +70,12 @@ export default function DocumentationPage() {
     } catch (error) {
       logger.error('Erreur envoi thème à iframe:', error)
     }
-  }, [isMarkdownDoc])
+  }, [docType])
 
   // Détecter le thème actuel et observer les changements
   useEffect(() => {
-    if (isMarkdownDoc) {
-      return
+    if (docType === 'suivi-temps') {
+      return // Pas de détection de thème pour le dashboard React
     }
     
     // Écouter les demandes de thème depuis l'iframe
@@ -126,7 +103,7 @@ export default function DocumentationPage() {
       timeoutRefs.current.forEach(timeout => clearTimeout(timeout))
       timeoutRefs.current = []
     }
-  }, [sendThemeToIframe, isMarkdownDoc])
+  }, [sendThemeToIframe, docType])
 
   // 🔒 Protection : Si non admin, afficher un message d'erreur
   // (APRÈS tous les hooks pour respecter les règles de React)
@@ -157,11 +134,17 @@ export default function DocumentationPage() {
     )
   }
 
-  // Si c'est un fichier markdown, on affiche un composant spécial
-  if (isMarkdownDoc) {
-    return <MarkdownViewer key={docType} fileName="SUIVI_TEMPS_FACTURATION.md" />
+  // Si c'est un fichier markdown (audit scores), on affiche le composant spécial
+  if (docType === 'audit-scores') {
+    return <MarkdownViewer key={docType} fileName="AUDIT_SCORES.md" />
   }
 
+  // Si c'est le suivi du temps, on affiche le dashboard complet
+  if (docType === 'suivi-temps') {
+    return <TimeTrackingDashboard />
+  }
+
+  // Pour les autres docs HTML, on utilise l'iframe
   return (
     <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 -m-6 overflow-y-auto docs-scrollbar">
       <iframe
@@ -227,8 +210,12 @@ function MarkdownViewer({ fileName }) {
     setSelectedDay(null)
   }, [])
   
-  // Détecter le thème pour le MarkdownViewer (4ème doc - Suivi Temps)
+  // Détecter le thème pour l'iframe (uniquement pour les docs HTML)
   useEffect(() => {
+    if (docType === 'suivi-temps') {
+      return // Pas de détection de thème pour le dashboard React
+    }
+    
     const checkTheme = () => {
       const isDarkMode = document.documentElement.classList.contains('dark')
       const container = document.getElementById('markdown-viewer-container')
@@ -444,7 +431,7 @@ function MarkdownViewer({ fileName }) {
 
   // Fonction pour régénérer le fichier de suivi du temps
   const regenerateTimeTracking = useCallback(async (force = false) => {
-    if (fileName !== 'SUIVI_TEMPS_FACTURATION.md') {
+    if (fileName !== 'SUIVI_TEMPS_FACTURATION.md' && fileName !== 'AUDIT_SCORES.md') {
       return
     }
     
