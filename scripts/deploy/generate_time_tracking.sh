@@ -1,12 +1,13 @@
 #!/bin/bash
-# Script pour générer SUIVI_TEMPS_FACTURATION.md depuis les commits Git
+# Script pour générer SUIVI_TEMPS_FACTURATION.md avec stats par contributeur
+# Version synchronisée avec Generate-GitStats.ps1
 
-# Ne pas utiliser set -e pour permettre la gestion d'erreurs
 set +e
 
 echo "📄 Génération du fichier SUIVI_TEMPS_FACTURATION.md..."
 
 OUTPUT_FILE="public/docs/SUIVI_TEMPS_FACTURATION.md"
+DAYS=365
 
 # Créer le dossier public/docs/ s'il n'existe pas
 mkdir -p public/docs
@@ -33,118 +34,165 @@ EOF
     exit 0
 fi
 
-# Récupérer tous les commits de ymora (sans --remotes pour éviter les erreurs si pas de remote)
-COMMITS=$(git log --all --author="*ymora*" --format="%ci|%an|%s|%H" 2>/dev/null || echo "")
+# Date de début pour le filtrage
+SINCE_DATE=$(date -d "$DAYS days ago" +%Y-%m-%d)
+GEN_DATE=$(date -u +"%Y-%m-%d %H:%M")
+
+# Récupérer tous les commits avec informations détaillées
+COMMITS=$(git log --all --since="$SINCE_DATE" --format="%H|%an|%ae|%ci|%s" 2>/dev/null || echo "")
 
 if [ -z "$COMMITS" ]; then
-    echo "⚠️  Aucun commit trouvé pour ymora, création d'un fichier minimal"
-    cat > "$OUTPUT_FILE" << 'EOF'
+    echo "⚠️  Aucun commit trouvé dans la période, création d'un fichier minimal"
+    cat > "$OUTPUT_FILE" << EOF
 # Suivi du Temps - Projet OTT
 ## Journal de travail pour facturation (Généré automatiquement)
 
-> **Note**: Ce fichier est généré automatiquement. Pour une version complète, utilisez le script d'audit ou l'API.
-
-**Période analysée** : En cours
-**Développeur** : ymora
-
-### Statistiques
-- **Total heures** : 0
-- **Total commits** : 0
+**Date de génération** : $GEN_DATE
+**Période analysée** : $DAYS derniers jours (depuis $SINCE_DATE)
+**Total commits** : 0
+**Contributeurs** : 0
 
 ---
-*Ce fichier sera mis à jour lors du prochain audit complet.*
+
+---
+_Rapport généré automatiquement par generate_time_tracking.sh_
 EOF
     echo "✅ Fichier minimal créé : $OUTPUT_FILE"
     exit 0
 fi
 
-# Compter les commits (gérer le cas où COMMITS est vide)
-COMMIT_COUNT=$(echo "$COMMITS" | grep -v '^$' | wc -l | tr -d ' ')
+# Parser les commits et collecter les statistiques
+declare -A author_stats
+declare -A author_days
+declare -A author_categories
+declare -A daily_stats
+total_commits=0
 
-# Si aucun commit, créer un fichier minimal
-if [ "$COMMIT_COUNT" -eq 0 ] || [ -z "$COMMIT_COUNT" ]; then
-    echo "⚠️  Aucun commit trouvé, création d'un fichier minimal"
-    cat > "$OUTPUT_FILE" << 'EOF'
-# Suivi du Temps - Projet OTT
-## Journal de travail pour facturation (Généré automatiquement)
-
-> **Note**: Ce fichier est généré automatiquement. Pour une version complète, utilisez le script d'audit ou l'API.
-
-**Période analysée** : En cours
-**Développeur** : ymora
-
-### Statistiques
-- **Total heures** : 0
-- **Total commits** : 0
-
----
-*Ce fichier sera mis à jour lors du prochain audit complet.*
-EOF
-    echo "✅ Fichier minimal créé : $OUTPUT_FILE"
-    exit 0
-fi
+while IFS='|' read -r hash author email date_time message; do
+    if [ -z "$author" ] || [ -z "$message" ]; then continue; fi
+    
+    # Nettoyer les données
+    author=$(echo "$author" | tr -d ' ')
+    date_str=$(echo "$date_time" | cut -d' ' -f1)
+    
+    # Initialiser les stats pour cet auteur
+    if [ -z "${author_stats[$author]}" ]; then
+        author_stats[$author]=0
+        author_days[$author]=""
+        author_categories[$author]="0|0|0|0|0|0|0|0"  # Feature|Fix|Refactor|Doc|Test|UI|Deploy|Other
+    fi
+    
+    # Incrémenter les stats
+    author_stats[$author]=$((${author_stats[$author]} + 1))
+    total_commits=$((total_commits + 1))
+    
+    # Ajouter le jour à la liste des jours actifs de l'auteur
+    if [[ "$author_days[$author]" != *"$date_str"* ]]; then
+        author_days[$author]="${author_days[$author]} $date_str"
+    fi
+    
+    # Statistiques quotidiennes
+    daily_key="$date_str|$author"
+    daily_stats[$daily_key]=$((${daily_stats[$daily_key]} + 1))
+    
+    # Catégoriser le commit
+    msg_lower=$(echo "$message" | tr '[:upper:]' '[:lower:]')
+    IFS='|' read -r feat fix refactor doc test ui deploy other <<< "${author_categories[$author]}"
+    
+    if [[ "$msg_lower" =~ (feat|feature|add|ajout|nouveau) ]]; then
+        feat=$((feat + 1))
+    elif [[ "$msg_lower" =~ (fix|bug|corr|repair) ]]; then
+        fix=$((fix + 1))
+    elif [[ "$msg_lower" =~ (refact|clean|optim) ]]; then
+        refactor=$((refactor + 1))
+    elif [[ "$msg_lower" =~ (doc|readme|comment) ]]; then
+        doc=$((doc + 1))
+    elif [[ "$msg_lower" =~ (test|spec|jest) ]]; then
+        test=$((test + 1))
+    elif [[ "$msg_lower" =~ (ui|css|style|design|interface) ]]; then
+        ui=$((ui + 1))
+    elif [[ "$msg_lower" =~ (deploy|release|version|build) ]]; then
+        deploy=$((deploy + 1))
+    else
+        other=$((other + 1))
+    fi
+    
+    author_categories[$author]="$feat|$fix|$refactor|$doc|$test|$ui|$deploy|$other"
+done <<< "$COMMITS"
 
 # Générer le fichier Markdown
 cat > "$OUTPUT_FILE" << EOF
 # Suivi du Temps - Projet OTT
 ## Journal de travail pour facturation (Généré automatiquement)
 
-**Période analysée** : $(date -u +"%Y-%m-%d")
-**Développeur** : ymora
-
-### Statistiques Générales
-
-- **Total commits** : $COMMIT_COUNT
-- **Date de génération** : $(date -u +"%Y-%m-%d %H:%M UTC")
-
-### Détails des Commits
-
-EOF
-
-# Ajouter les commits (limiter à 100 pour éviter un fichier trop volumineux)
-echo "$COMMITS" | grep -v '^$' | head -100 | while IFS='|' read -r date_time author message hash; do
-    if [ -n "$date_time" ] && [ -n "$message" ]; then
-        date_only=$(echo "$date_time" | cut -d' ' -f1)
-        time_only=$(echo "$date_time" | cut -d' ' -f2)
-        echo "- **$date_only $time_only** : $message" >> "$OUTPUT_FILE"
-    fi
-done
-
-# Ajouter le footer
-cat >> "$OUTPUT_FILE" << 'EOF'
+**Date de génération** : $GEN_DATE
+**Période analysée** : $DAYS derniers jours (depuis $SINCE_DATE)
+**Total commits** : $total_commits
+**Contributeurs** : ${#author_stats[@]}
 
 ---
 
-_Rapport généré automatiquement le $(date -u +"%Y-%m-%d %H:%M UTC")_
-_Basé sur l'analyse Git des commits de ymora_
+## Tableau Recapitulatif par Jour et Contributeur
+
+| Date | Contributeur | Commits | Heures | Features | Fix | Refactor | Doc | Tests | UI |
+|------|--------------|---------|--------|----------|-----|----------|-----|-------|-----|
+EOF
+
+# Trier et afficher les statistiques quotidiennes
+for daily_key in $(printf '%s\n' "${!daily_stats[@]}" | sort -r | head -100); do
+    IFS='|' read -r date_str author <<< "$daily_key"
+    commits=${daily_stats[$daily_key]}
+    hours=$(echo "scale=1; $commits * 0.5" | bc 2>/dev/null || echo "~${commits/2}h")
+    
+    # Récupérer les catégories pour ce jour et cet auteur
+    IFS='|' read -r feat fix refactor doc test ui deploy other <<< "${author_categories[$author]}"
+    
+    echo "| $date_str | **$author** | $commits | ~${hours}h | $feat | $fix | $refactor | $doc | $test | $ui |" >> "$OUTPUT_FILE"
+done
+
+# Ajouter le résumé par contributeur
+cat >> "$OUTPUT_FILE" << EOF
+
+---
+
+## Resume par Contributeur
+
+EOF
+
+# Trier les contributeurs par nombre de commits
+for author in $(printf '%s\n' "${!author_stats[@]}" | while read -r a; do echo "${author_stats[$a]} $a"; done | sort -nr | cut -d' ' -f2-); do
+    commits=${author_stats[$author]}
+    contribution=$(echo "scale=1; $commits * 100 / $total_commits" | bc 2>/dev/null || echo "0")
+    hours=$(echo "scale=1; $commits * 0.5" | bc 2>/dev/null || echo "0")
+    days_active=$(echo "${author_days[$author]}" | wc -w)
+    avg_commits=$(echo "scale=2; $commits / $days_active" | bc 2>/dev/null || echo "0")
+    
+    cat >> "$OUTPUT_FILE" << EOF
+### $author
+- **Total commits** : $commits ($contribution%)
+- **Heures estimees** : ~${hours}h
+- **Jours actifs** : $days_active
+- **Moyenne** : $avg_commits commits/jour
+
+EOF
+done
+
+# Ajouter le footer
+cat >> "$OUTPUT_FILE" << EOF
+
+---
+_Rapport généré automatiquement par generate_time_tracking.sh_
+_Basé sur l'analyse Git des commits du projet_
 EOF
 
 # Vérifier que le fichier a été créé
 if [ -f "$OUTPUT_FILE" ]; then
     echo "✅ Fichier généré : $OUTPUT_FILE"
-    echo "   Commits analysés : $COMMIT_COUNT"
+    echo "   Commits analysés : $total_commits"
+    echo "   Contributeurs : ${#author_stats[@]}"
     ls -lh "$OUTPUT_FILE"
     exit 0
 else
     echo "❌ ERREUR: Le fichier n'a pas été créé"
-    # Créer un fichier minimal en dernier recours
-    cat > "$OUTPUT_FILE" << 'EOF'
-# Suivi du Temps - Projet OTT
-## Journal de travail pour facturation (Généré automatiquement)
-
-> **Note**: Ce fichier est généré automatiquement. Pour une version complète, utilisez le script d'audit ou l'API.
-
-**Période analysée** : En cours
-**Développeur** : ymora
-
-### Statistiques
-- **Total heures** : 0
-- **Total commits** : 0
-
----
-*Ce fichier sera mis à jour lors du prochain audit complet.*
-EOF
-    echo "✅ Fichier minimal créé en dernier recours : $OUTPUT_FILE"
-    exit 0
+    exit 1
 fi
-

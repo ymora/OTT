@@ -1,0 +1,271 @@
+﻿{
+    "Authors":  [
+                    {
+                        "TotalDays":  53,
+                        "TotalCommits":  1151,
+                        "DaysActive":  46,
+                        "CommitsPerDay":  25.02,
+                        "Contribution":  100,
+                        "LastCommit":  "2026-01-05",
+                        "Name":  "ymora",
+                        "FirstCommit":  "2025-11-14",
+                        "EstimatedHours":  575.5,
+                        "Categories":  {
+                                           "Refactor":  102,
+                                           "UI":  26,
+                                           "Feature":  368,
+                                           "Deploy":  7,
+                                           "Fix":  468,
+                                           "Doc":  64,
+                                           "Other":  109,
+                                           "Test":  7
+                                       },
+                        "Email":  "ymora@free.fr"
+                    }
+                ],
+    "Branches":  [
+                     {
+                         "TotalCommits":  984,
+                         "Name":  "maxime",
+                         "Authors":  {
+                                         "ymora":  984
+                                     }
+                     },
+                     {
+                         "TotalCommits":  1149,
+                         "Name":  "origin",
+                         "Authors":  {
+                                         "ymora":  1149
+                                     }
+                     },
+                     {
+                         "TotalCommits":  1149,
+                         "Name":  "main",
+                         "Authors":  {
+                                         "ymora":  1149
+                                     }
+                     }
+                 ],
+    "GeneratedAt":  "2026-01-06 21:54:16",
+    "Summary":  {
+                    "TotalCommits":  1151,
+                    "TotalAuthors":  1,
+                    "TotalDaysWithActivity":  46
+                },
+    "Period":  {
+                   "Days":  365,
+                   "Since":  "2025-01-06"
+               },
+    "DailyActivity":  [
+                          {
+                              "Date":  "2025-11-22",
+                              "TotalCommits":  69,
+                              "Authors":  {
+                                              "ymora":  69
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-08",
+                              "TotalCommits":  49,
+                              "Authors":  {
+                                              "ymora":  49
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-19",
+                              "TotalCommits":  18,
+                              "Authors":  {
+                                              "ymora":  18
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-01",
+                              "TotalCommits":  14,
+                              "Authors":  {
+                                              "ymora":  14
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-31",
+                              "TotalCommits":  1,
+                              "Authors":  {
+                                              "ymora":  1
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-27",
+                              "TotalCommits":  59,
+                              "Authors":  {
+                                              "ymora":  59
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-07",
+                              "TotalCommits":  21,
+                              "Authors":  {
+                                              "ymora":  21
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-28",
+                              "TotalCommits":  3,
+                              "Authors":  {
+                                              "ymora":  3
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-03",
+                              "TotalCommits":  85,
+                              "Authors":  {
+                                              "ymora":  85
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-20",
+                              "TotalCommits":  6,
+                              "Authors":  {
+                                              "ymora":  6
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-20",
+                              "TotalCommits":  3,
+                              "Authors":  {
+                                              "ymora":  3
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-18",
+                              "TotalCommits":  25,
+                              "Authors":  {
+                                              "ymora":  25
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-14",
+                              "TotalCommits":  15,
+                              "Authors":  {
+                                              "ymora":  15
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-03",
+                              "TotalCommits":  4,
+                              "Authors":  {
+                                              "ymora":  4
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-09",
+                              "TotalCommits":  12,
+                              "Authors":  {
+                                              "ymora":  12
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-23",
+                              "TotalCommits":  1,
+                              "Authors":  {
+                                              "ymora":  1
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-12",
+                              "TotalCommits":  22,
+                              "Authors":  {
+                                              "ymora":  22
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-24",
+                              "TotalCommits":  24,
+                              "Authors":  {
+                                              "ymora":  24
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-29",
+                              "TotalCommits":  2,
+                              "Authors":  {
+                                              "ymora":  2
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-19",
+                              "TotalCommits":  7,
+                              "Authors":  {
+                                              "ymora":  7
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-14",
+                              "TotalCommits":  9,
+                              "Authors":  {
+                                              "ymora":  9
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-05",
+                              "TotalCommits":  16,
+                              "Authors":  {
+                                              "ymora":  16
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-21",
+                              "TotalCommits":  1,
+                              "Authors":  {
+                                              "ymora":  1
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-22",
+                              "TotalCommits":  1,
+                              "Authors":  {
+                                              "ymora":  1
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-30",
+                              "TotalCommits":  77,
+                              "Authors":  {
+                                              "ymora":  77
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-15",
+                              "TotalCommits":  2,
+                              "Authors":  {
+                                              "ymora":  2
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-18",
+                              "TotalCommits":  67,
+                              "Authors":  {
+                                              "ymora":  67
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-17",
+                              "TotalCommits":  14,
+                              "Authors":  {
+                                              "ymora":  14
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-06",
+                              "TotalCommits":  29,
+                              "Authors":  {
+                                              "ymora":  29
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-26",
+                              "TotalCommits":  59,
+                              "Authors":  {
+                                              "ymora":  59
+                                          }
+                          }
+                      ]
+}
