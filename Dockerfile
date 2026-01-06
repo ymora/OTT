@@ -48,6 +48,7 @@ COPY api /var/www/html/api
 COPY bootstrap /var/www/html/bootstrap
 COPY sql /var/www/html/sql
 COPY hardware /var/www/html/hardware
+COPY scripts /var/www/html/scripts
 # Note: arduino-data/ n'est pas copié car volumineux (~430MB) et chemins trop longs
 # Le core ESP32 sera téléchargé une seule fois lors de la première compilation
 # Note: bin/ n'est pas copié ici car arduino-cli est installé dans le RUN précédent
