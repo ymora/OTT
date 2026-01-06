@@ -203,6 +203,8 @@ function MarkdownViewer({ fileName }) {
   const [regenerating, setRegenerating] = useState(false)
   const [selectedDay, setSelectedDay] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [contributorView, setContributorView] = useState('global') // 'global', 'yannick', 'maxime'
+  const [showGitDetails, setShowGitDetails] = useState(false) // Dérouleur pour les détails Git
   const { API_URL } = useAuth()
   // Utiliser useApiCall pour l'appel API de régénération
   const { call: regenerateCall } = useApiCall({ requiresAuth: true })
@@ -249,8 +251,20 @@ function MarkdownViewer({ fileName }) {
       attributeFilter: ['class']
     })
     
-    return () => observer.disconnect()
-  }, [])
+    // Fermer le dérouleur Git quand on clique ailleurs
+    const handleClickOutside = (event) => {
+      if (showGitDetails && !event.target.closest('.git-dropdown')) {
+        setShowGitDetails(false)
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside)
+    
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showGitDetails])
 
   // Fonction pour recharger le contenu
   const reloadContent = useCallback(async () => {
@@ -952,40 +966,82 @@ function MarkdownViewer({ fileName }) {
     return Object.values(months).sort((a, b) => new Date(a.date) - new Date(b.date))
   }
 
-  // Préparer les données selon la vue sélectionnée - MÉMORISÉ pour éviter les recalculs
-  const displayData = useMemo(() => {
-    if (!chartData) return null
+  // Filtrer les données par contributeur
+  const filteredData = useMemo(() => {
+    if (!chartData || !chartData.dailyData) return chartData
+    
+    if (contributorView === 'global') {
+      return chartData
+    }
+    
+    // Filtrer les données quotidiennes
+    const filteredDailyData = chartData.dailyData.filter(day => {
+      // Extraire le contributeur du contenu markdown
+      const contributorMatch = content.match(new RegExp(`\\| ${day.date} \\|\\s*\\*\\*(.+?)\\*\\*\\s*\\|`))
+      if (contributorMatch) {
+        const contributor = contributorMatch[1].toLowerCase()
+        return contributor === contributorView
+      }
+      return false
+    })
+    
+    // Recalculer les totaux
+    const filteredTotalHours = filteredDailyData.reduce((sum, d) => sum + d.hours, 0)
+    const filteredTotalCommits = filteredDailyData.reduce((sum, d) => sum + d.commits, 0)
+    
+    // Recalculer les catégories
+    const filteredCategories = {
+      'Développement': filteredDailyData.reduce((sum, d) => sum + (d.dev || 0), 0),
+      'Correction': filteredDailyData.reduce((sum, d) => sum + (d.fix || 0), 0),
+      'Test': filteredDailyData.reduce((sum, d) => sum + (d.test || 0), 0),
+      'Documentation': filteredDailyData.reduce((sum, d) => sum + (d.doc || 0), 0),
+      'Refactoring': filteredDailyData.reduce((sum, d) => sum + (d.refactor || 0), 0),
+      'Déploiement': filteredDailyData.reduce((sum, d) => sum + (d.deploy || 0), 0),
+      'UI/UX': filteredDailyData.reduce((sum, d) => sum + (d.uiux || 0), 0),
+      'Optimisation': filteredDailyData.reduce((sum, d) => sum + (d.optim || 0), 0)
+    }
+    
+    return {
+      ...chartData,
+      dailyData: filteredDailyData,
+      totalHours: filteredTotalHours,
+      totalCommits: filteredTotalCommits,
+      categories: filteredCategories
+    }
+  }, [chartData, contributorView, content])
+
+  // Agréger les données selon la vue (jour/semaine/mois)
+  const aggregateData = useMemo(() => {
+    if (!filteredData || !filteredData.dailyData) return []
     
     switch (timeView) {
       case 'week':
-        return aggregateByWeek(chartData.dailyData)
+        return aggregateByWeek(filteredData.dailyData)
       case 'month':
-        return aggregateByMonth(chartData.dailyData)
+        return aggregateByMonth(filteredData.dailyData)
       default:
-        return chartData.dailyData
+        return filteredData.dailyData
     }
-  }, [chartData, timeView])
-
-  // Note: convertMarkdown supprimé - non utilisé (le markdown est géré par le composant MarkdownViewer)
+  }, [filteredData, timeView])
 
   // Calculer des statistiques supplémentaires
   const stats = useMemo(() => {
-    if (!chartData || !chartData.dailyData || chartData.dailyData.length === 0) {
+    if (!filteredData || !filteredData.dailyData || filteredData.dailyData.length === 0) {
       return null
     }
     
     try {
       return {
-        avgHoursPerDay: chartData.totalHours / chartData.dailyData.length,
-        avgCommitsPerDay: chartData.totalCommits / chartData.dailyData.length,
-        maxHours: Math.max(...chartData.dailyData.map(d => d.hours)),
-        minHours: Math.min(...chartData.dailyData.map(d => d.hours)),
-        maxCommits: Math.max(...chartData.dailyData.map(d => d.commits)),
-        minCommits: Math.min(...chartData.dailyData.map(d => d.commits)),
+        avgHoursPerDay: filteredData.totalHours / filteredData.dailyData.length,
+        avgCommitsPerDay: filteredData.totalCommits / filteredData.dailyData.length,
+        maxHours: Math.max(...filteredData.dailyData.map(d => d.hours)),
+        minHours: Math.min(...filteredData.dailyData.map(d => d.hours)),
+        maxCommits: Math.max(...filteredData.dailyData.map(d => d.commits)),
+        minCommits: Math.min(...filteredData.dailyData.map(d => d.commits)),
         // Régularité : écart-type des heures
         regularity: (() => {
-          const avg = chartData.totalHours / chartData.dailyData.length
-          const variance = chartData.dailyData.reduce((sum, d) => sum + Math.pow(d.hours - avg, 2), 0) / chartData.dailyData.length
+          const avg = filteredData.totalHours / filteredData.dailyData.length
+          const variance = filteredData.dailyData.reduce((sum, d) => sum + Math.pow(d.hours - avg, 2), 0) / filteredData.dailyData.length
           return Math.sqrt(variance)
         })(),
         // Distribution par jour de la semaine
@@ -1000,7 +1056,7 @@ function MarkdownViewer({ fileName }) {
             'dimanche': { hours: 0, commits: 0, days: 0 }
           }
           
-          chartData.dailyData.forEach(d => {
+          filteredData.dailyData.forEach(d => {
             const date = new Date(d.date)
             const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' }).toLowerCase()
             
@@ -1019,18 +1075,18 @@ function MarkdownViewer({ fileName }) {
       logger.error('Erreur calcul stats:', error)
       return null
     }
-  }, [chartData])
+  }, [filteredData])
 
   // Préparer les données pour les graphiques (avec vue jour/semaine/mois)
   // Note: commitsChartData supprimé - non utilisé (seul hoursChartData est affiché)
-  const hoursChartData = displayData ? {
-    labels: displayData.map(d => d.label || (() => {
+  const hoursChartData = aggregateData ? {
+    labels: aggregateData.map(d => d.label || (() => {
       const date = new Date(d.date)
       return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
     })()),
     datasets: [{
       label: timeView === 'day' ? 'Heures par jour' : timeView === 'week' ? 'Heures par semaine' : 'Heures par mois',
-      data: displayData.map(d => d.hours),
+      data: aggregateData.map(d => d.hours),
       borderColor: 'rgb(81, 207, 102)',
       backgroundColor: 'rgba(81, 207, 102, 0.1)',
       fill: true,
@@ -1040,7 +1096,7 @@ function MarkdownViewer({ fileName }) {
   } : null
 
   const pieChartData = useMemo(() => {
-    if (!chartData || !chartData.categories) return null
+    if (!filteredData || !filteredData.categories) return null
     
     try {
       // Palette de couleurs distinctives pour 8 catégories
@@ -1055,8 +1111,8 @@ function MarkdownViewer({ fileName }) {
         'Optimisation': { bg: 'rgba(14, 165, 233, 0.8)', border: 'rgb(14, 165, 233)' }       // Cyan
       }
       
-      const activeCategories = Object.keys(chartData.categories).filter(k => chartData.categories[k] > 0)
-      const activeValues = activeCategories.map(k => chartData.categories[k])
+      const activeCategories = Object.keys(filteredData.categories).filter(k => filteredData.categories[k] > 0)
+      const activeValues = activeCategories.map(k => filteredData.categories[k])
       const backgroundColors = activeCategories.map(k => colorPalette[k]?.bg || 'rgba(128, 128, 128, 0.8)')
       const borderColors = activeCategories.map(k => colorPalette[k]?.border || 'rgb(128, 128, 128)')
       
@@ -1073,7 +1129,7 @@ function MarkdownViewer({ fileName }) {
       logger.error('Erreur calcul pieChartData:', error)
       return null
     }
-  }, [chartData])
+  }, [filteredData])
 
   // Graphique par jour de la semaine
   const dayOfWeekChartData = useMemo(() => {
@@ -1222,46 +1278,93 @@ function MarkdownViewer({ fileName }) {
       {/* Menu de navigation sticky pour accès rapides */}
       {chartData && (
         <nav className="sticky top-0 z-50 bg-gradient-to-r from-primary-600 to-secondary-600 shadow-lg">
-          <div className="max-w-7xl mx-auto px-6 py-3">
-            <div className="flex flex-wrap gap-2 justify-center items-center">
-              <a href="#stats" className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
-                📊 Statistiques
-              </a>
-              <a href="#regularite" className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
-                📈 Régularité
-              </a>
-              <a href="#repartition" className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
-                🥧 Répartition
-              </a>
-              <a href="#tableau" className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
-                📋 Tableau
-              </a>
-              {/* Bouton de mise à jour retiré - le script peut être exécuté manuellement via: pwsh scripts/generate_time_tracking.ps1 */}
-              {/* Code conservé pour référence:
-              {fileName === 'SUIVI_TEMPS_FACTURATION.md' && (
-                <button
-                  onClick={() => regenerateTimeTracking(true)}
-                  disabled={regenerating}
-                  className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm flex items-center gap-2"
-                  title="Mettre à jour les données avec les derniers commits Git"
-                >
-                  {regenerating ? (
-                    <>
-                      <span className="animate-spin">⏳</span>
-                      Mise à jour...
-                    </>
-                  ) : (
-                    <>
-                      🔄 Mettre à jour
-                    </>
-                  )}
-                </button>
-              )}
-              */}
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex flex-wrap gap-3 justify-center items-center">
+              {/* Navigation principale */}
+              <div className="flex flex-wrap gap-2 justify-center items-center">
+                <a href="#stats" className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
+                  📊 Statistiques
+                </a>
+                <a href="#regularite" className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
+                  📈 Régularité
+                </a>
+                <a href="#repartition" className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
+                  🥧 Répartition
+                </a>
+                <a href="#tableau" className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-all backdrop-blur-sm">
+                  📋 Tableau
+                </a>
+              </div>
             </div>
           </div>
         </nav>
       )}
+      
+      {/* Onglets de filtrage par contributeur */}
+      {chartData && fileName === 'SUIVI_TEMPS_FACTURATION.md' && (
+        <div className="sticky top-16 z-40 bg-white dark:bg-[rgb(var(--night-surface))] shadow-lg border-b border-gray-200 dark:border-gray-700">
+          <div className="max-w-7xl mx-auto px-6 py-3">
+            <div className="flex items-center justify-between">
+              {/* Onglets */}
+              <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                <button
+                  onClick={() => setContributorView('global')}
+                  className={`px-4 py-2 rounded-md font-medium transition-all ${
+                    contributorView === 'global'
+                      ? 'bg-primary-500 text-white shadow-md'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  🌍 Global
+                </button>
+                <button
+                  onClick={() => setContributorView('yannick')}
+                  className={`px-4 py-2 rounded-md font-medium transition-all ${
+                    contributorView === 'yannick'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  👨‍💻 Yannick
+                </button>
+                <button
+                  onClick={() => setContributorView('maxime')}
+                  className={`px-4 py-2 rounded-md font-medium transition-all ${
+                    contributorView === 'maxime'
+                      ? 'bg-purple-500 text-white shadow-md'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  👨‍💻 Maxime
+                </button>
+              </div>
+              
+              {/* Indicateur de vue actuelle */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Vue: <span className="font-semibold text-gray-800 dark:text-white capitalize">
+                    {contributorView === 'global' ? 'Tous les contributeurs' : contributorView}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className={`w-3 h-3 rounded-full ${
+                    contributorView === 'global' ? 'bg-primary-500' :
+                    contributorView === 'yannick' ? 'bg-blue-500' : 'bg-purple-500'
+                  }`}></div>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                    {filteredData.totalCommits} commits
+                  </span>
+                  <span className="text-gray-500">•</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                    ~{filteredData.totalHours.toFixed(1)}h
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-7xl mx-auto p-6">
         {/* Phase 2.1 : Section Métadonnées */}
         {chartData && chartData.metadata && (
@@ -1275,21 +1378,21 @@ function MarkdownViewer({ fileName }) {
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Total Heures</div>
-                <div className="text-2xl font-bold">{chartData.totalHours.toFixed(1)}h</div>
-                {chartData.metadata?.filters && Object.keys(chartData.metadata.filters).length > 0 && (
+                <div className="text-2xl font-bold">{filteredData.totalHours.toFixed(1)}h</div>
+                {filteredData.metadata?.filters && Object.keys(filteredData.metadata.filters).length > 0 && (
                   <div className="text-xs mt-1 opacity-75">⚠️ Filtres actifs</div>
                 )}
               </div>
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Total Commits</div>
-                <div className="text-2xl font-bold">{chartData.totalCommits}</div>
-                {chartData.validation && !chartData.validation.commitsMatch && (
+                <div className="text-2xl font-bold">{filteredData.totalCommits}</div>
+                {filteredData.validation && !filteredData.validation.commitsMatch && (
                   <div className="text-xs mt-1 opacity-75">⚠️ Validation</div>
                 )}
               </div>
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Jours Travaillés</div>
-                <div className="text-2xl font-bold">{chartData.dailyData.length}</div>
+                <div className="text-2xl font-bold">{filteredData.dailyData.length}</div>
               </div>
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Moyenne/jour</div>
@@ -1397,7 +1500,68 @@ function MarkdownViewer({ fileName }) {
         {/* Tableau récapitulatif */}
         {chartData && (
           <div id="tableau" className="bg-white dark:bg-[rgb(var(--night-surface))] rounded-lg shadow-lg p-6 mb-6 scroll-mt-20">
-            <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-200">Tableau Récapitulatif</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">Tableau Récapitulatif</h3>
+              <button
+                onClick={() => setShowGitDetails(!showGitDetails)}
+                className="px-3 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-gray-700 dark:text-gray-300 text-sm font-medium transition-all flex items-center gap-2"
+              >
+                <span className="transition-transform duration-200" style={{ transform: showGitDetails ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                  ⚡
+                </span>
+                {showGitDetails ? 'Masquer' : 'Afficher'} les détails Git
+              </button>
+            </div>
+            
+            {/* Détails Git déroulants */}
+            {showGitDetails && (
+              <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">🔧 Détails Git - Vue: {contributorView === 'global' ? 'Global' : contributorView}</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Total Commits:</span>
+                    <span className="font-medium text-gray-800 dark:text-white">{filteredData.totalCommits}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Total Heures:</span>
+                    <span className="font-medium text-gray-800 dark:text-white">~{filteredData.totalHours.toFixed(1)}h</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Jours actifs:</span>
+                    <span className="font-medium text-gray-800 dark:text-white">{filteredData.dailyData.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Période:</span>
+                    <span className="font-medium text-gray-800 dark:text-white">
+                      {filteredData.metadata?.period?.start ? 
+                        new Date(filteredData.metadata.period.start).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : 
+                        'N/A'
+                      }
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                  <button
+                    onClick={() => regenerateTimeTracking(true)}
+                    disabled={regenerating}
+                    className="px-3 py-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2"
+                  >
+                    {regenerating ? (
+                      <>
+                        <span className="animate-spin">⏳</span>
+                        Mise à jour...
+                      </>
+                    ) : (
+                      <>
+                        🔄 Mettre à jour les stats
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <div className="overflow-x-auto">
               <table className="min-w-full border-collapse">
                 <thead>
@@ -1480,18 +1644,18 @@ function MarkdownViewer({ fileName }) {
                   <tr className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 font-bold">
                     <td className="px-4 py-3 border border-gray-300 dark:border-gray-600">Total</td>
                     <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center text-primary-600 dark:text-primary-400">
-                      ~{chartData.totalHours.toFixed(1)}h
+                      ~{filteredData.totalHours.toFixed(1)}h
                     </td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.totalCommits}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Développement']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Correction']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Test']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Documentation']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Refactoring']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Déploiement']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['UI/UX']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Optimisation']?.toFixed(1) || '0'}</td>
-                    {chartData.dailyData.some(d => d.details && (
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.totalCommits}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Développement']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Correction']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Test']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Documentation']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Refactoring']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Déploiement']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['UI/UX']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Optimisation']?.toFixed(1) || '0'}</td>
+                    {filteredData.dailyData.some(d => d.details && (
                       (d.details.advances && d.details.advances.length > 0) ||
                       (d.details.fixes && d.details.fixes.length > 0) ||
                       (d.details.deployments && d.details.deployments.length > 0) ||

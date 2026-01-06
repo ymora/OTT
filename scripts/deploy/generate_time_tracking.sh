@@ -75,6 +75,31 @@ while IFS='|' read -r hash author email date_time message; do
     author=$(echo "$author" | tr -d ' ')
     date_str=$(echo "$date_time" | cut -d' ' -f1)
     
+    # === DÉTECTION DU DÉVELOPPEUR RÉÉL ===
+    # Mapper l'auteur Git vers le développeur réel selon des règles
+    
+    # Règle 1: Si le message contient des patterns spécifiques
+    msg_lower=$(echo "$message" | tr '[:upper:]' '[:lower:]')
+    real_author="$author"
+    
+    # Patterns pour Maxime
+    if [[ "$msg_lower" =~ (maxime|frontend|react|next\.js|ui|dashboard|interface|design|css|tailwind) ]]; then
+        real_author="Maxime"
+    # Patterns pour Yannick  
+    elif [[ "$msg_lower" =~ (yannick|backend|api|php|database|sql|firmware|arduino|esp32|usb) ]]; then
+        real_author="Yannick"
+    # Règle 2: Selon le type de fichiers modifiés (si disponible)
+    elif [[ "$message" =~ (api|php|sql|database|firmware|hardware) ]]; then
+        real_author="Yannick"
+    elif [[ "$message" =~ (dashboard|frontend|ui|react|next|page) ]]; then
+        real_author="Maxime"
+    # Règle 3: Selon l'heure ou la date (si vous travaillez à des moments différents)
+    # Vous pouvez ajouter des règles basées sur les heures si nécessaire
+    fi
+    
+    # Utiliser le vrai développeur détecté
+    author="$real_author"
+    
     # Initialiser les stats pour cet auteur
     if [ -z "${author_stats[$author]}" ]; then
         author_stats[$author]=0
@@ -96,7 +121,7 @@ while IFS='|' read -r hash author email date_time message; do
     daily_stats[$daily_key]=$((${daily_stats[$daily_key]} + 1))
     
     # Catégoriser le commit
-    msg_lower=$(echo "$message" | tr '[:upper:]' '[:lower:]')
+    # msg_lower déjà défini plus haut
     IFS='|' read -r feat fix refactor doc test ui deploy other <<< "${author_categories[$author]}"
     
     if [[ "$msg_lower" =~ (feat|feature|add|ajout|nouveau) ]]; then
