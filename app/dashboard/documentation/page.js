@@ -1562,7 +1562,9 @@ function MarkdownViewer({ fileName }) {
               </div>
             )}
             
-            <div className="overflow-x-auto">
+            {/* Tableau récapitulatif - seulement si les détails Git sont affichés */}
+            {showGitDetails && (
+              <div className="overflow-x-auto">
               <table className="min-w-full border-collapse">
                 <thead>
                   <tr className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700">
@@ -1667,6 +1669,7 @@ function MarkdownViewer({ fileName }) {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         )}
         
