@@ -1,6 +1,9 @@
 name: Deploy Next.js to GitHub Pages
 
 on:
+  # Déclencher automatiquement sur chaque push vers main
+  push:
+    branches: [main]
   # OPTIMISATION: Ne déclencher que sur workflow_dispatch (manuel) pour économiser les minutes
   # Décommentez la ligne push si vous voulez un déploiement automatique
   # push:
