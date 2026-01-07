@@ -51,10 +51,8 @@ desktop.ini
 temp/
 tmp/
 
-# Firmwares compilés et uploadés (non versionnés)
+# Firmwares compilés (binaires uniquement)
 *.bin
-hardware/firmware/**/*.bin
-hardware/firmware/**/*.ino
 
 # Artefacts volumineux conservés hors du dépôt principal
 # Build Next.js pour GitHub Pages (généré automatiquement par GitHub Actions)
@@ -98,17 +96,15 @@ Dockerfile
 Dockerfile.dashboard
 docker-compose.yml
 DOCKER_README.md
-.dockerignore
-scripts/dev/docker_complete.ps1
-scripts/dev/start_docker.ps1
-scripts/redemarrer_docker.ps1
 
-# Fichiers hardware volumineux non copiés
+# Fichiers hardware volumineux (CAD, PDF, bibliothèques dupliquées)
 hardware/cad/
 hardware/docs/*.pdf
-hardware/firmware/
 hardware/lib/TinyGSM/
-hardware/scripts/
+
+# Fichiers compilés firmware (binaires)
+hardware/firmware/**/*.bin
+hardware/firmware/**/*.elf
 
 # Arduino CLI data (généré localement)
 .arduino15/
