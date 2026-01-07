@@ -741,6 +741,16 @@ function MarkdownViewer({ fileName }) {
               date,
               hours,
               commits,
+              // Stocker les comptages originaux pour affichage dans le tableau
+              featuresCount: features,
+              fixesCount: fixes,
+              testsCount: tests,
+              docsCount: docs,
+              refactorsCount: refactors,
+              deployCount: deploy,
+              uiCount: ui,
+              otherCount: other,
+              // Heures réparties proportionnellement pour les graphiques
               dev: hours * ratio(features),
               fix: hours * ratio(fixes),
               test: hours * ratio(tests),
@@ -1671,14 +1681,14 @@ function MarkdownViewer({ fileName }) {
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center font-bold">
                           {day.commits}
                         </td>
-                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.dev > 0 ? day.dev : '-'}</td>
-                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.fix > 0 ? day.fix : '-'}</td>
-                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.test > 0 ? day.test : '-'}</td>
-                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.doc > 0 ? day.doc : '-'}</td>
-                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.refactor > 0 ? day.refactor : '-'}</td>
-                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.deploy > 0 ? day.deploy : '-'}</td>
-                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.uiux > 0 ? day.uiux : '-'}</td>
-                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.optim > 0 ? day.optim : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.featuresCount > 0 ? day.featuresCount : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.fixesCount > 0 ? day.fixesCount : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.testsCount > 0 ? day.testsCount : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.docsCount > 0 ? day.docsCount : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.refactorsCount > 0 ? day.refactorsCount : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.deployCount > 0 ? day.deployCount : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.uiCount > 0 ? day.uiCount : '-'}</td>
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{day.otherCount > 0 ? day.otherCount : '-'}</td>
                         {hasDetails && (
                           <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">
                             <button
@@ -1702,14 +1712,14 @@ function MarkdownViewer({ fileName }) {
                       ~{chartData.totalHours.toFixed(1)}h
                     </td>
                     <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.totalCommits}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Développement']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Correction']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Test']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Documentation']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Refactoring']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Déploiement']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['UI/UX']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Optimisation']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.dailyData.reduce((sum, d) => sum + (d.featuresCount || 0), 0)}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.dailyData.reduce((sum, d) => sum + (d.fixesCount || 0), 0)}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.dailyData.reduce((sum, d) => sum + (d.testsCount || 0), 0)}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.dailyData.reduce((sum, d) => sum + (d.docsCount || 0), 0)}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.dailyData.reduce((sum, d) => sum + (d.refactorsCount || 0), 0)}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.dailyData.reduce((sum, d) => sum + (d.deployCount || 0), 0)}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.dailyData.reduce((sum, d) => sum + (d.uiCount || 0), 0)}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.dailyData.reduce((sum, d) => sum + (d.otherCount || 0), 0)}</td>
                     {chartData.dailyData.some(d => d.details && (
                       (d.details.advances && d.details.advances.length > 0) ||
                       (d.details.fixes && d.details.fixes.length > 0) ||
