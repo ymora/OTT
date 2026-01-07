@@ -464,13 +464,19 @@ function MarkdownViewer({ fileName }) {
         // Mettre à jour le timestamp de dernière régénération
         lastRegenerationTimeRef.current = Date.now()
         // Attendre un peu pour que le fichier soit écrit
-        // Note: setTimeout dans Promise.resolve n'a pas besoin de cleanup car la Promise se résout immédiatement
         await new Promise(resolve => setTimeout(resolve, 1000))
         
         // Recharger le contenu après régénération
-        // Utiliser reloadContent via ref pour éviter la boucle infinie
-        // Ne pas l'appeler directement car il est dans les dépendances
-        // Le useEffect se déclenchera automatiquement
+        await reloadContent()
+        
+        // Afficher un message de succès temporaire
+        if (typeof window !== 'undefined') {
+          const msg = document.createElement('div')
+          msg.className = 'fixed top-20 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in'
+          msg.textContent = '✅ Statistiques mises à jour !'
+          document.body.appendChild(msg)
+          setTimeout(() => msg.remove(), 3000)
+        }
       } else {
         // Vérifier si c'est une erreur 501 (non disponible sur cette plateforme)
         if (regenerateData?.code === 501 || regenerateData?.status === 501) {
