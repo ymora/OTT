@@ -238,12 +238,22 @@ function handleCompileFirmwareOptimized($firmware_id) {
                     $dependenciesFound[] = $lib_name;
                     $target_lib_persistent = $arduinoDataLibrariesDir . DIRECTORY_SEPARATOR . $lib_name;
                     
-                    // Toujours mettre à jour TinyGSM (version modifiée requise pour compilation)
-                    // Pour les autres libs, copier seulement si pas déjà là
-                    $forceUpdate = (stripos($lib_name, 'TinyGSM') !== false);
+                    // Vérifier si TinyGSM doit être mise à jour (version modifiée requise)
+                    // On vérifie si le fichier contient GSM_NL (présent dans notre version modifiée)
+                    $needsUpdate = false;
+                    if (stripos($lib_name, 'TinyGSM') !== false && is_dir($target_lib_persistent)) {
+                        $sim7600File = $target_lib_persistent . '/src/TinyGsmClientSIM7600.h';
+                        if (file_exists($sim7600File)) {
+                            $content = file_get_contents($sim7600File);
+                            // Notre version modifiée contient GSM_NL, la version standard non
+                            if (strpos($content, 'GSM_NL') === false) {
+                                $needsUpdate = true;
+                                sendSSE('log', 'info', "🔄 Mise à jour TinyGSM (version modifiée requise)");
+                            }
+                        }
+                    }
                     
-                    if ($forceUpdate && is_dir($target_lib_persistent)) {
-                        sendSSE('log', 'info', "🔄 Mise à jour librairie: {$lib_name}");
+                    if ($needsUpdate && is_dir($target_lib_persistent)) {
                         // Supprimer récursivement le dossier existant
                         $it = new RecursiveDirectoryIterator($target_lib_persistent, RecursiveDirectoryIterator::SKIP_DOTS);
                         $files = new RecursiveIteratorIterator($it, RecursiveIteratorIterator::CHILD_FIRST);

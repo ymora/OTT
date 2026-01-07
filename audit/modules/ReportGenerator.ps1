@@ -278,6 +278,57 @@ function Export-AIContext {
             Write-Host "   - $category : $($catData.QuestionCount) question(s)" -ForegroundColor Gray
         }
         
+        # ================================================================
+        # NOUVEAU: Mettre à jour AI-SUMMARY.md (point d'entrée unique IA)
+        # ================================================================
+        $summaryFile = Join-Path $OutputDir "AI-SUMMARY.md"
+        $summaryContent = @"
+# 🤖 RÉSUMÉ GLOBAL POUR L'IA
+> **Point d'entrée unique** - Mis à jour: $(Get-Date -Format 'yyyy-MM-dd HH:mm')
+
+---
+
+## 📊 Dernier Audit
+- **Date** : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+- **Questions IA** : $($export.TotalQuestions)
+- **Fichier détaillé** : ``$($jsonFile | Split-Path -Leaf)``
+
+---
+
+## 🎯 QUESTIONS À VÉRIFIER (répondre OUI/NON + raison courte)
+
+"@
+        
+        # Ajouter les prompts triés par priorité
+        $priorityOrder = @("critical", "high", "medium", "low", "warning")
+        $sortedPrompts = $export.OptimizedPrompts | Sort-Object { $priorityOrder.IndexOf($_.Priority) }
+        
+        foreach ($p in $sortedPrompts) {
+            $icon = switch ($p.Priority) { "critical" {"🔴"} "high" {"🟠"} "medium" {"🟡"} default {"⚪"} }
+            $summaryContent += "$icon **[$($p.Id)]** $($p.Prompt)`n"
+        }
+        
+        $summaryContent += @"
+
+---
+
+## 📝 FORMAT DE RÉPONSE ATTENDU
+``````
+[1] OUI/NON - raison courte (max 10 mots)
+[2] OUI/NON - raison courte
+...
+``````
+
+---
+
+## 📁 Fichiers de cet audit
+- ``ai-context-$timestamp.json`` - Contexte complet
+- ``ai-prompts-$timestamp.txt`` - Questions brutes
+"@
+        
+        $summaryContent | Out-File -FilePath $summaryFile -Encoding UTF8 -Force
+        Write-Host "   📋 Résumé IA : $summaryFile" -ForegroundColor Cyan
+        
         return $jsonFile
     } catch {
         Write-Host "Erreur lors de l'export du contexte IA : $($_.Exception.Message)" -ForegroundColor Red
