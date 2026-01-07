@@ -36,6 +36,7 @@ export default function DebugTab() {
     isSupported,
     isConnected,
     port,
+    serialError, // Erreur de connexion série (pour diagnostic)
     usbStreamStatus,
     usbStreamLogs,
     usbStreamError,
@@ -1742,6 +1743,7 @@ export default function DebugTab() {
           pauseUsbStreaming={pauseUsbStreaming}
           appendUsbStreamLog={appendUsbStreamLog}
           clearUsbStreamLogs={clearUsbStreamLogs}
+          serialError={serialError}
           isStartingStreamRef={isStartingStreamRef}
           createTimeoutWithCleanup={createTimeoutWithCleanup}
         />

@@ -128,11 +128,14 @@ export function useSerialPort() {
 
   // Connecter au port série
   const connect = useCallback(async (selectedPort = null, baudRate = 115200) => {
+    logger.log('[SerialPortManager] connect: DÉBUT - baudRate =', baudRate)
     const portToUse = selectedPort || port
     if (!portToUse) {
+      logger.error('[SerialPortManager] connect: ÉCHEC - Aucun port sélectionné')
       setError('Aucun port sélectionné')
       return false
     }
+    logger.log('[SerialPortManager] connect: Port fourni, tentative de connexion...')
 
     // Vérifier si un autre onglet a déjà ouvert le port AVANT d'essayer de l'ouvrir
     if (portSharingRef.current) {
@@ -371,6 +374,7 @@ export function useSerialPort() {
           return false
         }
       }
+      logger.error('[SerialPortManager] connect: ÉCHEC FINAL -', err.name, err.message)
       setError(`Erreur de connexion: ${err.message}`)
       setIsConnected(false)
       return false

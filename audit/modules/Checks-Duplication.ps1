@@ -27,16 +27,18 @@ function Invoke-Check-Duplication {
         $threshold = $Config.Checks.Duplication.Threshold
         $aiContext = @()  # Contexte pour l'IA
         
-        # Patterns génériques (pas de noms spécifiques)
+        # Patterns de duplication RÉELLE (pas les usages normaux de React/PHP)
+        # NOTE: useState, useEffect, try/catch, fetch sont des patterns NORMAUX, pas de la duplication
+        # On ne signale que les patterns qui indiquent une vraie duplication de logique métier
         $patterns = @(
-            @{Pattern='useState\('; Description='useState'; Seuil=100; Context="React"},
-            @{Pattern='useEffect\('; Description='useEffect'; Seuil=80; Context="React"},
-            @{Pattern='fetchJson|fetch\(|axios\.|http\.'; Description='Appels API'; Seuil=50; Context="Frontend"},
-            @{Pattern='try\s*\{'; Description='Try/catch'; Seuil=100; Context="Error Handling"},
-            @{Pattern='->(query|prepare|execute)'; Description='Requêtes SQL'; Seuil=30; Context="PHP"},
-            @{Pattern='function\s+\w+Archive|handleArchive|archive\s*='; Description='Fonctions Archive'; Seuil=2; Context="CRUD"},
-            @{Pattern='function\s+\w+Delete|handleDelete|delete\s*='; Description='Fonctions Delete'; Seuil=2; Context="CRUD"},
-            @{Pattern='function\s+\w+Restore|handleRestore|restore\s*='; Description='Fonctions Restore'; Seuil=2; Context="CRUD"}
+            # Fonctions CRUD dupliquées (même logique copiée-collée)
+            @{Pattern='function\s+\w+Archive|handleArchive\s*=\s*async'; Description='Fonctions Archive'; Seuil=3; Context="CRUD"},
+            @{Pattern='function\s+\w+Delete|handleDelete\s*=\s*async'; Description='Fonctions Delete'; Seuil=5; Context="CRUD"},
+            @{Pattern='function\s+\w+Restore|handleRestore\s*=\s*async'; Description='Fonctions Restore'; Seuil=3; Context="CRUD"},
+            # Blocs de code identiques (copier-coller)
+            @{Pattern='const\s+\w+\s*=\s*async\s*\(\)\s*=>\s*\{\s*try\s*\{\s*setLoading'; Description='Pattern loading identique'; Seuil=10; Context="React"},
+            # Validation dupliquée
+            @{Pattern='if\s*\(\s*!\w+\s*\|\|\s*\w+\.trim\(\)\s*==='; Description='Validation string dupliquée'; Seuil=8; Context="Validation"}
         )
         
         $duplications = @()

@@ -28,6 +28,7 @@ export default function UsbConsole({
   pauseUsbStreaming,
   appendUsbStreamLog,
   clearUsbStreamLogs,
+  serialError, // Erreur de connexion série (pour diagnostic)
   // Références pour éviter les re-renders
   isStartingStreamRef,
   createTimeoutWithCleanup
@@ -151,8 +152,9 @@ export default function UsbConsole({
             }
           }, 500)
         } else {
-          appendUsbStreamLog(`❌ Échec de la connexion au port ${portLabel}`, 'dashboard')
-          logger.error(`[USB] Échec connexion au port ${portLabel}`)
+          const errorDetail = serialError ? ` - ${serialError}` : ''
+          appendUsbStreamLog(`❌ Échec de la connexion au port ${portLabel}${errorDetail}`, 'dashboard')
+          logger.error(`[USB] Échec connexion au port ${portLabel}`, serialError)
         }
       } else {
         appendUsbStreamLog('ℹ️ Aucun port sélectionné. Vérifiez que votre navigateur supporte l\'API Web Serial (Chrome/Edge) et qu\'un périphérique USB est connecté.', 'dashboard')

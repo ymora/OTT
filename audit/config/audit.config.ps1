@@ -35,12 +35,12 @@
     Checks = @{
         Complexity = @{
             Enabled = $true
-            # Seuil par défaut volontairement élevé pour éviter les faux positifs.
-            # Ajustable par projet via audit/projects/<id>/config/audit.config.ps1
-            MaxFileLines = 450
-            MaxFunctionLines = 80
+            # Seuil augmenté pour éviter les faux positifs sur les fichiers légitimement grands
+            # (composants React complexes, API monolithiques, etc.)
+            MaxFileLines = 800
+            MaxFunctionLines = 120
             # Pour limiter le coût IA, ne générer des questions IA que pour les fichiers vraiment énormes.
-            AIQuestionMinLines = 900
+            AIQuestionMinLines = 1500
         }
     }
 

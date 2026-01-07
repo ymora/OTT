@@ -9,7 +9,7 @@ import { getUsbPortSharing } from '@/lib/usbPortSharing'
 const UsbContext = createContext()
 
 export function UsbProvider({ children }) {
-  const { port, isConnected, isSupported, requestPort, connect, disconnect, startReading, write } = useSerialPort()
+  const { port, isConnected, isSupported, requestPort, connect, disconnect, startReading, write, error: serialError } = useSerialPort()
   const { fetchWithAuth, API_URL } = useAuth()
   
   // État USB global - UN SEUL état pour tous les dispositifs USB connectés
@@ -2117,6 +2117,7 @@ export function UsbProvider({ children }) {
     isConnected,
     isSupported,
     port,
+    serialError, // Erreur de connexion série (pour diagnostic)
     isUsbReady, // État dérivé pour cohérence (isConnected && port && port.readable && port.writable)
     
     // Streaming USB

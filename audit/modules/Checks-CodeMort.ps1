@@ -44,8 +44,18 @@ function Invoke-Check-CodeMort {
             Write-Info "Analyse composants avec détection imports conditionnels..."
             $allComponents = Get-ChildItem -Path components -Recurse -File -Include *.js,*.jsx -ErrorAction SilentlyContinue
             
+            # Exclure les fichiers backup, old, temp, etc.
+            $allComponents = $allComponents | Where-Object { 
+                $_.BaseName -notmatch '_backup$|_old$|_temp$|_copy$|\.bak$|\.old$' 
+            }
+            
             foreach ($compFile in $allComponents) {
                 $compName = $compFile.BaseName
+                
+                # Ignorer les hooks (use*) - ils ne sont pas utilisés en JSX
+                if ($compName -match '^use[A-Z]') {
+                    continue
+                }
                 
                 $allFiles = $searchFiles + $compFile
                 $allFiles = $allFiles | Where-Object { $_.FullName -ne $compFile.FullName }
