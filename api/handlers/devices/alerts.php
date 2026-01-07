@@ -117,3 +117,66 @@ function handleGetAlerts() {
         echo json_encode(['success' => false, 'error' => $errorMsg]);
     }
 }
+
+/**
+ * GET /api.php/devices/:id/alerts
+ */
+function handleGetDeviceAlerts($device_id) {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT * FROM alerts 
+            WHERE device_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 50
+        ");
+        $stmt->execute([$device_id]);
+        echo json_encode(['success' => true, 'alerts' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+/**
+ * POST /api.php/devices/:id/alerts
+ */
+function handleCreateDeviceAlert($device_id) {
+    global $pdo;
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    $type = $input['type'] ?? 'custom';
+    $severity = $input['severity'] ?? 'medium';
+    $message = $input['message'] ?? '';
+    
+    if (!$message) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Message required']);
+        return;
+    }
+    
+    createAlert($pdo, $device_id, $type, $severity, $message);
+    echo json_encode(['success' => true]);
+}
+
+/**
+ * POST /api.php/devices/:id/alerts/:alert_id/acknowledge
+ */
+function handleAcknowledgeAlert($device_id, $alert_id) {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("
+            UPDATE alerts 
+            SET status = 'acknowledged', acknowledged_by = ?, acknowledged_at = NOW() 
+            WHERE id = ? AND device_id = ?
+        ");
+        $stmt->execute([$user['id'], $alert_id, $device_id]);
+        echo json_encode(['success' => true]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}

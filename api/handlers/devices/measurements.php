@@ -447,6 +447,35 @@ function handlePostMeasurement() {
 }
 
 /**
+ * GET /api.php/devices/:id/measurements
+ * Récupérer les mesures d'un dispositif
+ */
+function handleGetDeviceMeasurements($device_id) {
+    global $pdo;
+    
+    $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
+    $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT m.* FROM measurements m
+            JOIN devices d ON m.device_id = d.id
+            WHERE d.device_identifier = ? OR d.id = ?
+            ORDER BY m.timestamp DESC
+            LIMIT ? OFFSET ?
+        ");
+        $stmt->execute([$device_id, $device_id, $limit, $offset]);
+        $measurements = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo json_encode(['success' => true, 'measurements' => $measurements]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        error_log('[handleGetDeviceMeasurements] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+/**
  * GET /api.php/devices/:id/history
  * Récupérer l'historique des mesures d'un dispositif
  */

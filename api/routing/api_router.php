@@ -329,25 +329,25 @@ if ($path === '/health' && $method === 'GET') {
     handleRepairDatabaseAudit();
 }
 
-// STATISTICS - TODO: Implement these handlers
-// } elseif($path === '/statistics' && $method === 'GET') {
-//     handleGetStatistics();
-// } elseif($path === '/statistics/performance' && $method === 'GET') {
-//     handleGetPerformanceStatistics();
-// } elseif($path === '/statistics/usage' && $method === 'GET') {
-//     handleGetUsageStatistics();
-// } elseif($path === '/statistics/errors' && $method === 'GET') {
-//     handleGetErrorStatistics();
+// STATISTICS - Handlers implemented
+} elseif($path === '/statistics' && $method === 'GET') {
+    handleGetStatistics();
+} elseif($path === '/statistics/performance' && $method === 'GET') {
+    handleGetPerformanceStatistics();
+} elseif($path === '/statistics/usage' && $method === 'GET') {
+    handleGetUsageStatistics();
+} elseif($path === '/statistics/errors' && $method === 'GET') {
+    handleGetErrorStatistics();
 
-// SYSTEM - TODO: Implement these handlers
-// } elseif($path === '/system/info' && $method === 'GET') {
-//     handleGetSystemInfo();
-// } elseif($path === '/system/health' && $method === 'GET') {
-//     handleSystemHealthCheck();
-// } elseif($path === '/system/logs' && $method === 'GET') {
-//     handleGetSystemLogs();
-// } elseif($path === '/system/clear-cache' && $method === 'POST') {
-//     handleClearSystemCache();
+// SYSTEM - Handlers implemented
+} elseif($path === '/system/info' && $method === 'GET') {
+    handleGetSystemInfo();
+} elseif($path === '/system/health' && $method === 'GET') {
+    handleSystemHealthCheck();
+} elseif($path === '/system/logs' && $method === 'GET') {
+    handleGetSystemLogs();
+} elseif($path === '/system/clear-cache' && $method === 'POST') {
+    handleClearSystemCache();
 
 // FALLBACK - Route non trouvée
 } else {

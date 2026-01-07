@@ -6,11 +6,6 @@
 RewriteEngine On
 AcceptPathInfo On
 
-# Permettre CORS (les headers sont aussi définis dans api.php pour compatibilité avec PHP built-in server)
-Header set Access-Control-Allow-Origin "*"
-Header set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Device-ICCID, X-Requested-With, Cache-Control, Accept"
-
 # Redirection racine vers index.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

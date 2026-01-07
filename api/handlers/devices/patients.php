@@ -187,6 +187,65 @@ function handleGetPatients() {
 }
 
 /**
+ * GET /api.php/patients/:id
+ * Récupérer un patient par ID
+ */
+function handleGetPatient($patient_id) {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT p.*, 
+                   COUNT(DISTINCT d.id) as device_count
+            FROM patients p
+            LEFT JOIN devices d ON d.patient_id = p.id AND d.deleted_at IS NULL
+            WHERE p.id = ? AND p.deleted_at IS NULL
+            GROUP BY p.id
+        ");
+        $stmt->execute([$patient_id]);
+        $patient = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$patient) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Patient not found']);
+            return;
+        }
+        
+        echo json_encode(['success' => true, 'patient' => $patient]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        error_log('[handleGetPatient] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+/**
+ * PATCH /api.php/patients/:id/archive
+ * Archiver un patient (soft delete)
+ */
+function handleArchivePatient($patient_id) {
+    global $pdo;
+    requirePermission('patients.edit');
+    
+    try {
+        $stmt = $pdo->prepare("UPDATE patients SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL");
+        $stmt->execute([$patient_id]);
+        
+        if ($stmt->rowCount() === 0) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Patient not found or already archived']);
+            return;
+        }
+        
+        echo json_encode(['success' => true, 'message' => 'Patient archived']);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        error_log('[handleArchivePatient] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+/**
  * POST /api.php/patients
  * Créer un patient
  */

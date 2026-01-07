@@ -31,6 +31,8 @@ require_once __DIR__ . '/api/handlers/firmwares.php';
 require_once __DIR__ . '/api/handlers/notifications.php';
 require_once __DIR__ . '/api/handlers/usb_logs.php';
 require_once __DIR__ . '/api/handlers/database_audit.php';
+require_once __DIR__ . '/api/handlers/statistics.php';
+require_once __DIR__ . '/api/handlers/system.php';
 
 // Démarrer le buffer de sortie TRÈS TÔT pour capturer toute sortie HTML accidentelle (warnings, notices, etc.)
 // IMPORTANT: Doit être AVANT la définition des constantes pour capturer les éventuels warnings
@@ -58,44 +60,29 @@ $extraOrigins = array_filter(array_map('trim', explode(',', getenv('CORS_ALLOWED
 $allowedOrigins = array_unique(array_merge($defaultAllowedOrigins, $extraOrigins));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-// Gestion CORS améliorée avec support basePath
-if ($origin) {
-    // Vérifier si l'origine correspond exactement ou commence par une origine autorisée
-    $isAllowed = false;
+// Gestion CORS (fiable et compatible navigateur)
+$isProduction = getenv('APP_ENV') === 'production';
+$isAllowed = false;
+if (!empty($origin)) {
     foreach ($allowedOrigins as $allowedOrigin) {
         if ($origin === $allowedOrigin || strpos($origin, $allowedOrigin) === 0) {
             $isAllowed = true;
             break;
         }
     }
-    
-    if ($isAllowed) {
+}
+
+if (!empty($origin)) {
+    if (!$isProduction || $isAllowed) {
         header("Access-Control-Allow-Origin: {$origin}");
         header('Access-Control-Allow-Credentials: true');
     } else {
-        // SÉCURITÉ: En production, bloquer les origines non autorisées
-        // En développement, autoriser pour faciliter les tests
-        if (getenv('APP_ENV') === 'production') {
-            // Log l'origine bloquée pour monitoring
-            error_log("[CORS] Origine bloquée: {$origin}");
-            // Ne pas définir Access-Control-Allow-Origin = requête CORS bloquée par le navigateur
-        } else {
-            // En dev, autoriser mais logger
-            header("Access-Control-Allow-Origin: {$origin}");
-            header('Access-Control-Allow-Credentials: true');
-        }
-    }
-} elseif (empty($origin)) {
-    // Si pas d'origine (requête directe depuis le même serveur ou curl)
-    // En production, ne pas autoriser * avec credentials
-    if (getenv('APP_ENV') !== 'production') {
-        header('Access-Control-Allow-Origin: *');
+        error_log("[CORS] Origine bloquée: {$origin}");
     }
 } else {
-    // Fallback : en dev seulement
-    if (getenv('APP_ENV') !== 'production') {
-        header("Access-Control-Allow-Origin: {$origin}");
-        header('Access-Control-Allow-Credentials: true');
+    // Pas d'Origin (curl / même serveur). En dev uniquement, autoriser * sans credentials.
+    if (!$isProduction) {
+        header('Access-Control-Allow-Origin: *');
     }
 }
 
@@ -1730,9 +1717,20 @@ function sanitizeForJson($data, $depth = 0) {
                ob_clean();
            }
            
-           // Définir les headers CORS et JSON
+           // Définir les headers CORS et JSON (cohérents avec la politique globale)
            header('Content-Type: application/json; charset=utf-8');
-           header('Access-Control-Allow-Origin: *');
+           $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+           $isProduction = getenv('APP_ENV') === 'production';
+           if (!empty($origin)) {
+               header("Access-Control-Allow-Origin: {$origin}");
+               header('Access-Control-Allow-Credentials: true');
+           } else {
+               // Pas d'Origin (curl / même serveur). En dev uniquement, autoriser * sans credentials.
+               if (!$isProduction) {
+                   header('Access-Control-Allow-Origin: *');
+               }
+           }
+           header('Vary: Origin');
            header('Access-Control-Allow-Methods: GET, OPTIONS');
            header('Access-Control-Allow-Headers: Content-Type, Authorization');
            

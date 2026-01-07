@@ -59,7 +59,8 @@ RUN echo "opcache.enable=1" > /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.memory_consumption=128" >> /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.interned_strings_buffer=8" >> /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.max_accelerated_files=4000" >> /usr/local/etc/php/conf.d/opcache.ini \
-    && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
+    && echo "opcache.validate_timestamps=1" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.revalidate_freq=0" >> /usr/local/etc/php/conf.d/opcache.ini
 
 # Configuration Apache VirtualHost
 RUN echo '<VirtualHost *:80>\n\
@@ -77,6 +78,7 @@ RUN echo '<VirtualHost *:80>\n\
 WORKDIR /var/www/html
 COPY api.php .
 COPY api/ ./api/
+COPY bootstrap/ ./bootstrap/
 COPY router.php .
 COPY index.php .
 COPY .htaccess .

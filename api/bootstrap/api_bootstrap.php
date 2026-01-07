@@ -37,33 +37,30 @@ $extraOrigins = array_filter(array_map('trim', explode(',', getenv('CORS_ALLOWED
 $allowedOrigins = array_unique(array_merge($defaultAllowedOrigins, $extraOrigins));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-// Gestion CORS améliorée avec support basePath
-if ($origin) {
-    // Vérifier si l'origine correspond exactement ou commence par une origine autorisée
-    $isAllowed = false;
+// Gestion CORS (fiable et compatible navigateur)
+$isProduction = getenv('APP_ENV') === 'production';
+$isAllowed = false;
+if (!empty($origin)) {
     foreach ($allowedOrigins as $allowedOrigin) {
         if ($origin === $allowedOrigin || strpos($origin, $allowedOrigin) === 0) {
             $isAllowed = true;
             break;
         }
     }
-    
-    if ($isAllowed) {
+}
+
+if (!empty($origin)) {
+    if (!$isProduction || $isAllowed) {
         header("Access-Control-Allow-Origin: {$origin}");
         header('Access-Control-Allow-Credentials: true');
     } else {
-        // Si origine non autorisée, quand même autoriser pour éviter les erreurs CORS
-        // (la sécurité est gérée par l'authentification JWT)
-        header("Access-Control-Allow-Origin: {$origin}");
-        header('Access-Control-Allow-Credentials: true');
+        error_log("[CORS] Origine bloquée: {$origin}");
     }
-} elseif (empty($origin)) {
-    // Si pas d'origine (requête directe), autoriser toutes les origines
-    header('Access-Control-Allow-Origin: *');
 } else {
-    // Fallback : autoriser l'origine demandée
-    header("Access-Control-Allow-Origin: {$origin}");
-    header('Access-Control-Allow-Credentials: true');
+    // Pas d'Origin (curl / même serveur). En dev uniquement, autoriser * sans credentials.
+    if (!$isProduction) {
+        header('Access-Control-Allow-Origin: *');
+    }
 }
 
 header('Vary: Origin');

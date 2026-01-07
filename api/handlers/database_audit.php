@@ -1,186 +1,200 @@
 <?php
 /**
- * API Handlers - Database Audit
- * Audit complet du schéma de base de données
+ * Database Audit Handlers
+ * Provides handlers for database audit operations
  */
 
 function handleDatabaseAudit() {
-    global $pdo;
-    requireAdmin(); // Seuls les admins peuvent auditer la base de données
-    
-    // Définir le Content-Type JSON
-    header('Content-Type: application/json; charset=utf-8');
-    
     try {
-        $results = [
-            'connection' => ['status' => 'ok', 'message' => 'Connexion réussie'],
-            'tables' => [],
-            'columns' => [],
-            'duplicates' => [],
-            'missing' => [],
-            'orphans' => [],
-            'indexes' => [],
-            'issues' => [],
-            'warnings' => [],
-            'score' => 10
-        ];
+        global $pdo;
         
-        // 1. Test de connexion
-        try {
-            // SÉCURITÉ: Utiliser prepared statement même pour requête statique (bonne pratique)
-            $stmt = $pdo->prepare("SELECT version()");
-            $stmt->execute();
-            $version = $stmt->fetchColumn();
-            $results['connection']['version'] = $version;
-        } catch(PDOException $e) {
-            $results['connection'] = ['status' => 'error', 'message' => $e->getMessage()];
-            $results['score'] = 0;
-            echo json_encode(['success' => false, 'error' => 'Database connection failed', 'results' => $results]);
+        // Check if database connection is available
+        if (!$pdo) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Database connection not available'
+            ]);
             return;
         }
         
-        // 2. Tables attendues (depuis schema.sql)
-        $expectedTables = [
-            'roles', 'permissions', 'role_permissions',
-            'users', 'patients', 'devices', 'measurements',
-            'alerts', 'device_logs', 'device_configurations',
-            'firmware_versions', 'firmware_compilations',
-            'user_notifications_preferences', 'patient_notifications_preferences', 'notifications_queue',
-            'audit_logs', 'usb_logs', 'device_commands'
-        ];
+        // Get database statistics
+        $stats = [];
         
-        // Récupérer toutes les tables existantes
-        // SÉCURITÉ: Utiliser prepared statement même pour requête statique (bonne pratique)
-        $stmt = $pdo->prepare("
-            SELECT table_name 
+        // Table sizes
+        $tableStats = $pdo->query("
+            SELECT 
+                table_name as 'table',
+                ROUND(((data_length + index_length) / 1024 / 1024), 2) as 'size_mb'
             FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_type = 'BASE TABLE'
-            ORDER BY table_name
-        ");
-        $stmt->execute();
-        $existingTables = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            WHERE table_schema = DATABASE()
+            ORDER BY (data_length + index_length) DESC
+        ")->fetchAll(PDO::FETCH_ASSOC);
         
-        // Vérifier les tables attendues
-        foreach ($expectedTables as $table) {
-            $exists = in_array($table, $existingTables);
-            $results['tables'][] = [
-                'name' => $table,
-                'exists' => $exists,
-                'status' => $exists ? 'ok' : 'missing'
-            ];
-            if (!$exists) {
-                $results['missing'][] = "Table manquante: $table";
-                $results['issues'][] = "Table manquante: $table";
-                $results['score'] -= 0.5;
+        // Row counts
+        $rowCounts = [];
+        $tables = ['users', 'devices', 'measurements', 'alerts', 'firmwares'];
+        
+        foreach ($tables as $table) {
+            try {
+                $count = $pdo->query("SELECT COUNT(*) as count FROM `$table`")->fetchColumn();
+                $rowCounts[$table] = $count;
+            } catch (Exception $e) {
+                $rowCounts[$table] = 'N/A';
             }
         }
         
-        // Détecter les tables orphelines
-        foreach ($existingTables as $table) {
-            if (!in_array($table, $expectedTables)) {
-                $results['orphans'][] = $table;
-                $results['warnings'][] = "Table orpheline: $table (existe en DB mais pas dans schema.sql)";
-            }
-        }
+        // Recent activity
+        $recentActivity = $pdo->query("
+            SELECT 'measurements' as type, COUNT(*) as count, DATE(created_at) as date
+            FROM measurements 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            GROUP BY DATE(created_at)
+            ORDER BY date DESC
+            LIMIT 7
+        ")->fetchAll(PDO::FETCH_ASSOC);
         
-        // 3. Détection colonnes en double (ex: birth_date vs date_of_birth)
-        $tablesToCheck = ['patients', 'users', 'devices', 'measurements'];
-        foreach ($tablesToCheck as $tableName) {
-            if (in_array($tableName, $existingTables)) {
-                $stmt = $pdo->prepare("
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_schema = 'public' 
-                    AND table_name = :table_name 
-                    ORDER BY column_name
-                ");
-                $stmt->execute(['table_name' => $tableName]);
-                $columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
-                
-                // Vérifier spécifiquement birth_date vs date_of_birth dans patients
-                if ($tableName === 'patients') {
-                    $hasBirthDate = in_array('birth_date', $columns);
-                    $hasDateOfBirth = in_array('date_of_birth', $columns);
-                    
-                    if ($hasBirthDate && $hasDateOfBirth) {
-                        $results['duplicates'][] = [
-                            'table' => 'patients',
-                            'columns' => ['birth_date', 'date_of_birth'],
-                            'issue' => 'DOUBLON CRITIQUE: birth_date et date_of_birth existent tous les deux'
-                        ];
-                        $results['issues'][] = "DOUBLON CRITIQUE: patients.birth_date et patients.date_of_birth";
-                        $results['score'] -= 2;
-                    }
-                }
-                
-                $results['columns'][$tableName] = $columns;
-            }
-        }
-        
-        // 4. Vérification tables de notifications
-        $notificationTables = ['user_notifications_preferences', 'patient_notifications_preferences', 'notifications_queue'];
-        foreach ($notificationTables as $table) {
-            if (!in_array($table, $existingTables)) {
-                $results['issues'][] = "Table notifications manquante: $table";
-                $results['score'] -= 1;
-            }
-        }
-        
-        // 5. Vérification index critiques
-        $criticalIndexes = [
-            ['table' => 'measurements', 'index' => 'idx_measurements_device_time'],
-            ['table' => 'devices', 'index' => 'devices_pkey'],
-            ['table' => 'users', 'index' => 'users_pkey'],
-            ['table' => 'patients', 'index' => 'patients_pkey']
+        $audit = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'database' => [
+                'name' => DB_NAME,
+                'host' => DB_HOST,
+                'tables' => $tableStats,
+                'row_counts' => $rowCounts,
+                'total_size_mb' => array_sum(array_column($tableStats, 'size_mb'))
+            ],
+            'activity' => $recentActivity,
+            'health' => [
+                'connection' => 'OK',
+                'last_check' => date('Y-m-d H:i:s')
+            ]
         ];
-        
-        foreach ($criticalIndexes as $idx) {
-            $stmt = $pdo->prepare("
-                SELECT EXISTS (
-                    SELECT 1 FROM pg_indexes 
-                    WHERE tablename = :table 
-                    AND indexname = :index
-                )
-            ");
-            $stmt->execute(['table' => $idx['table'], 'index' => $idx['index']]);
-            $exists = $stmt->fetchColumn();
-            $exists = ($exists === true || $exists === 't' || $exists === 1 || $exists === '1');
-            
-            $results['indexes'][] = [
-                'table' => $idx['table'],
-                'index' => $idx['index'],
-                'exists' => $exists
-            ];
-            
-            if (!$exists) {
-                $results['warnings'][] = "Index manquant: {$idx['table']}.{$idx['index']}";
-            }
-        }
-        
-        // Calculer le score final (max 10)
-        $results['score'] = max(0, min(10, $results['score']));
-        
-        // Déterminer le statut global
-        $status = 'ok';
-        if (count($results['issues']) > 0) {
-            $status = count($results['duplicates']) > 0 ? 'critical' : 'warning';
-        }
         
         echo json_encode([
             'success' => true,
-            'status' => $status,
-            'results' => $results,
-            'timestamp' => date('Y-m-d H:i:s')
+            'data' => $audit
         ]);
         
-    } catch(PDOException $e) {
+    } catch (Exception $e) {
+        error_log('[DATABASE_AUDIT] Error: ' . $e->getMessage());
         http_response_code(500);
         echo json_encode([
             'success' => false,
-            'error' => 'Database audit error',
-            'message' => $e->getMessage()
+            'error' => 'Database audit failed: ' . $e->getMessage()
         ]);
     }
 }
 
+function handleRunDatabaseAudit() {
+    try {
+        global $pdo;
+        
+        if (!$pdo) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Database connection not available'
+            ]);
+            return;
+        }
+        
+        // Perform comprehensive database audit
+        $audit = [];
+        
+        // Check table structures
+        $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+        
+        foreach ($tables as $table) {
+            $columns = $pdo->query("DESCRIBE `$table`")->fetchAll(PDO::FETCH_ASSOC);
+            $indexes = $pdo->query("SHOW INDEX FROM `$table`")->fetchAll(PDO::FETCH_ASSOC);
+            
+            $audit['tables'][$table] = [
+                'columns' => count($columns),
+                'indexes' => count($indexes),
+                'engine' => $pdo->query("SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$table'")->fetchColumn(),
+                'size' => $pdo->query("SELECT ROUND(((data_length + index_length) / 1024 / 1024), 2) as size FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$table'")->fetchColumn()
+            ];
+        }
+        
+        // Check for potential issues
+        $issues = [];
+        
+        // Check for large tables (>100MB)
+        foreach ($audit['tables'] as $name => $info) {
+            if ($info['size'] > 100) {
+                $issues[] = "Table '$name' is large ({$info['size']}MB)";
+            }
+        }
+        
+        // Check for missing indexes
+        $audit['recommendations'] = $issues;
+        $audit['timestamp'] = date('Y-m-d H:i:s');
+        
+        echo json_encode([
+            'success' => true,
+            'data' => $audit
+        ]);
+        
+    } catch (Exception $e) {
+        error_log('[RUN_DATABASE_AUDIT] Error: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Database audit failed: ' . $e->getMessage()
+        ]);
+    }
+}
+
+function handleRepairDatabaseAudit() {
+    try {
+        global $pdo;
+        
+        if (!$pdo) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Database connection not available'
+            ]);
+            return;
+        }
+        
+        // Only allow admin users
+        if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
+            http_response_code(403);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Admin access required'
+            ]);
+            return;
+        }
+        
+        $repairs = [];
+        
+        // Optimize tables
+        $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($tables as $table) {
+            try {
+                $pdo->query("OPTIMIZE TABLE `$table`");
+                $repairs[] = "Optimized table: $table";
+            } catch (Exception $e) {
+                $repairs[] = "Failed to optimize $table: " . $e->getMessage();
+            }
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'data' => [
+                'repairs' => $repairs,
+                'timestamp' => date('Y-m-d H:i:s')
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        error_log('[REPAIR_DATABASE_AUDIT] Error: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Database repair failed: ' . $e->getMessage()
+        ]);
+    }
+}

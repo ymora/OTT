@@ -685,6 +685,126 @@ function handleClearAuditLogs() {
 }
 
 // ============================================================================
+// HANDLERS - NOTIFICATIONS SYSTEME
+// ============================================================================
+
+function handleGetNotifications() {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT * FROM notifications 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 50
+        ");
+        $stmt->execute([$user['id']]);
+        $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode(['success' => true, 'notifications' => $notifications]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleCreateNotification() {
+    global $pdo;
+    requirePermission('notifications.manage');
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    $user_id = $input['user_id'] ?? null;
+    $message = $input['message'] ?? '';
+    $type = $input['type'] ?? 'info';
+    
+    if (!$user_id || !$message) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Missing user_id or message']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, type, created_at) VALUES (?, ?, ?, NOW())");
+        $stmt->execute([$user_id, $message, $type]);
+        echo json_encode(['success' => true, 'id' => $pdo->lastInsertId()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleMarkNotificationAsRead($notification_id) {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("UPDATE notifications SET read_at = NOW() WHERE id = ? AND user_id = ?");
+        $stmt->execute([$notification_id, $user['id']]);
+        echo json_encode(['success' => true]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleMarkAllNotificationsAsRead() {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL");
+        $stmt->execute([$user['id']]);
+        echo json_encode(['success' => true, 'updated' => $stmt->rowCount()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleDeleteNotification($notification_id) {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
+        $stmt->execute([$notification_id, $user['id']]);
+        echo json_encode(['success' => true]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleClearAllNotifications() {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("DELETE FROM notifications WHERE user_id = ?");
+        $stmt->execute([$user['id']]);
+        echo json_encode(['success' => true, 'deleted' => $stmt->rowCount()]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+function handleGetUnreadNotificationsCount() {
+    global $pdo;
+    $user = requireAuth();
+    
+    try {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL");
+        $stmt->execute([$user['id']]);
+        $count = $stmt->fetchColumn();
+        echo json_encode(['success' => true, 'count' => (int)$count]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}
+
+// ============================================================================
 // NOTIFICATIONS - ENVOI ET QUEUE
 // ============================================================================
 

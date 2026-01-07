@@ -225,6 +225,12 @@ function handleRefreshToken() {
     echo json_encode(['success' => true, 'token' => $token]);
 }
 
+function handleLogout() {
+    // JWT est stateless, le logout est géré côté client (suppression du token)
+    // Cette fonction existe pour la cohérence de l'API
+    echo json_encode(['success' => true, 'message' => 'Déconnexion réussie']);
+}
+
 // ============================================================================
 // HANDLERS - USERS
 // ============================================================================
@@ -336,6 +342,41 @@ function handleGetUsers() {
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleGetUsers] ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
+function handleGetCurrentUser() {
+    $user = requireAuth();
+    unset($user['password_hash']);
+    echo json_encode(['success' => true, 'user' => $user]);
+}
+
+function handleGetUser($user_id) {
+    global $pdo;
+    requirePermission('users.view');
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, 
+                   u.last_login, u.created_at, r.name AS role_name
+            FROM users u
+            LEFT JOIN roles r ON u.role_id = r.id
+            WHERE u.id = ? AND u.deleted_at IS NULL
+        ");
+        $stmt->execute([$user_id]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$user) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'User not found']);
+            return;
+        }
+        
+        echo json_encode(['success' => true, 'user' => $user]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        error_log('[handleGetUser] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error']);
     }
 }
 
@@ -702,6 +743,28 @@ function handleDeleteUser($user_id) {
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur de base de données';
         error_log('[handleDeleteUser] ' . $e->getMessage());
         echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+}
+
+function handleArchiveUser($user_id) {
+    global $pdo;
+    requirePermission('users.manage');
+    
+    try {
+        $stmt = $pdo->prepare("UPDATE users SET deleted_at = NOW() WHERE id = ? AND deleted_at IS NULL");
+        $stmt->execute([$user_id]);
+        
+        if ($stmt->rowCount() === 0) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'User not found or already archived']);
+            return;
+        }
+        
+        echo json_encode(['success' => true, 'message' => 'User archived']);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        error_log('[handleArchiveUser] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error']);
     }
 }
 

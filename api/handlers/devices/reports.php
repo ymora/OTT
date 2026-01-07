@@ -122,3 +122,78 @@ function handleGetReportsOverview() {
         echo json_encode(['success' => false, 'error' => 'Database error']);
     }
 }
+
+/**
+ * GET /api.php/devices/:id/reports
+ */
+function handleGetDeviceReports($device_id) {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT * FROM device_reports 
+            WHERE device_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 20
+        ");
+        $stmt->execute([$device_id]);
+        echo json_encode(['success' => true, 'reports' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+    } catch(PDOException $e) {
+        // Table might not exist, return empty array
+        echo json_encode(['success' => true, 'reports' => []]);
+    }
+}
+
+/**
+ * POST /api.php/devices/:id/reports/generate
+ */
+function handleGenerateDeviceReport($device_id) {
+    global $pdo;
+    requirePermission('reports.view');
+    
+    try {
+        // Get device info
+        $deviceStmt = $pdo->prepare("SELECT * FROM devices WHERE id = ? OR device_identifier = ?");
+        $deviceStmt->execute([$device_id, $device_id]);
+        $device = $deviceStmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Device not found']);
+            return;
+        }
+        
+        // Get measurements stats for last 30 days
+        $statsStmt = $pdo->prepare("
+            SELECT 
+                COUNT(*) as measurement_count,
+                COALESCE(AVG(flowrate), 0) as avg_flowrate,
+                COALESCE(AVG(battery), 0) as avg_battery,
+                MIN(timestamp) as first_measurement,
+                MAX(timestamp) as last_measurement
+            FROM measurements 
+            WHERE device_id = ? AND timestamp >= NOW() - INTERVAL '30 DAYS'
+        ");
+        $statsStmt->execute([$device['id']]);
+        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+        
+        // Get alerts count
+        $alertsStmt = $pdo->prepare("SELECT COUNT(*) FROM alerts WHERE device_id = ? AND created_at >= NOW() - INTERVAL '30 DAYS'");
+        $alertsStmt->execute([$device['id']]);
+        $alertsCount = $alertsStmt->fetchColumn();
+        
+        $report = [
+            'device' => $device,
+            'period' => '30 days',
+            'stats' => $stats,
+            'alerts_count' => (int)$alertsCount,
+            'generated_at' => date('c')
+        ];
+        
+        echo json_encode(['success' => true, 'report' => $report]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        error_log('[handleGenerateDeviceReport] ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Database error']);
+    }
+}

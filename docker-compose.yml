@@ -25,15 +25,18 @@ services:
       - DB_NAME=${DB_NAME:-ott}
       - DB_USER=${DB_USER:-ott_user}
       - DB_PASSWORD=${DB_PASSWORD:-ott_password}
+      - DB_PASS=${DB_PASSWORD:-ott_password}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
-      - APP_ENV=${APP_ENV:-development}
+      - APP_ENV=development
       - APP_DEBUG=${APP_DEBUG:-true}
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
     volumes:
       # Mode développement : montage du code source
       - ./api.php:/var/www/html/api.php:ro
       - ./api:/var/www/html/api:ro
+      - ./bootstrap:/var/www/html/bootstrap:ro
       - ./router.php:/var/www/html/router.php:ro
       - ./index.php:/var/www/html/index.php:ro
       - ./.htaccess:/var/www/html/.htaccess:ro
@@ -64,7 +67,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:-ott_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     ports:
       - "5432:5432"
     networks:

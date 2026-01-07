@@ -263,6 +263,8 @@ CREATE TABLE IF NOT EXISTS firmware_versions (
   uploaded_by INTEGER REFERENCES users(id),
   status VARCHAR(50) DEFAULT 'pending',
   error_message TEXT,
+  ino_content BYTEA,
+  bin_content BYTEA,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -501,10 +503,30 @@ ON CONFLICT (id) DO UPDATE SET
   is_active = TRUE,
   deleted_at = NULL;
 
+INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role_id, is_active, deleted_at)
+VALUES
+  (2, 'Maxime@happlyzmedical.com', '$2y$10$dQUCC/LXBAPEpl9BKqoywuymqwA/nN4eVO7g854aWPXd7d.PmAJiq', 'Maxime', 'Happlyz Medical', NULL, 1, TRUE, NULL)
+ON CONFLICT (id) DO UPDATE SET
+  email = EXCLUDED.email,
+  password_hash = EXCLUDED.password_hash,
+  phone = EXCLUDED.phone,
+  role_id = EXCLUDED.role_id,
+  is_active = TRUE,
+  deleted_at = NULL;
+
 INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled, phone_number)
 VALUES
   (1, TRUE, TRUE, FALSE, NULL)  -- ymora@free.fr
 ON CONFLICT (user_id) DO UPDATE SET 
+  email_enabled = EXCLUDED.email_enabled,
+  sms_enabled = EXCLUDED.sms_enabled,
+  push_enabled = EXCLUDED.push_enabled,
+  phone_number = EXCLUDED.phone_number;
+
+INSERT INTO user_notifications_preferences (user_id, email_enabled, sms_enabled, push_enabled, phone_number)
+VALUES
+  (2, TRUE, TRUE, FALSE, NULL)  -- Maxime@happlyzmedical.com
+ON CONFLICT (user_id) DO UPDATE SET
   email_enabled = EXCLUDED.email_enabled,
   sms_enabled = EXCLUDED.sms_enabled,
   push_enabled = EXCLUDED.push_enabled,
