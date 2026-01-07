@@ -67,7 +67,7 @@ services:
     dockerContext: .
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://ott-jbln.onrender.com
+        value: https://ott-1-pxer.onrender.com
       - key: NEXT_PUBLIC_ENABLE_DEMO_RESET
         value: false
       - key: NODE_ENV
