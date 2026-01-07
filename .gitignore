@@ -85,3 +85,30 @@ api/test_*.php
 # Données arduino-cli générées localement (cores, bibliothèques)
 # Toujours régénérées via scripts/hardware/prepare_arduino_core.*
 hardware/arduino-data/
+
+# =============================================================================
+# Fichiers déplacés/supprimés lors du déplacement sur D: (2026-01-07)
+# =============================================================================
+
+# Dossier audit déplacé séparément (D:\Windsurf\audit)
+audit/
+
+# Fichiers Docker supprimés (espace disque)
+Dockerfile
+Dockerfile.dashboard
+docker-compose.yml
+DOCKER_README.md
+.dockerignore
+scripts/dev/docker_complete.ps1
+scripts/dev/start_docker.ps1
+scripts/redemarrer_docker.ps1
+
+# Fichiers hardware volumineux non copiés
+hardware/cad/
+hardware/docs/*.pdf
+hardware/firmware/
+hardware/lib/TinyGSM/
+hardware/scripts/
+
+# Arduino CLI data (généré localement)
+.arduino15/
