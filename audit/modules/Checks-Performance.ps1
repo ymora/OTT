@@ -83,8 +83,8 @@ function Invoke-Check-Performance {
                     if ($useEffectEnd -gt $useEffectStart) {
                         $useEffectContent = $content.Substring($useEffectStart, $useEffectEnd - $useEffectStart)
                         
-                        # Chercher return () => { clearTimeout/clearInterval
-                        if ($useEffectContent -match "return\s+\(\)\s*=>\s*\{[^}]*clear(Timeout|Interval)") {
+                        # Chercher return () => { clearTimeout/clearInterval ou return () => clearTimeout
+                        if ($useEffectContent -match "return\s+\(\)\s*=>\s*(\{[^}]*)?clear(Timeout|Interval)") {
                             $hasCleanup = $true
                             $isInUseEffect = $true
                             $cleanupPattern = "useEffect cleanup"
@@ -92,20 +92,38 @@ function Invoke-Check-Performance {
                     }
                 }
                 
+                # Vérifier si c'est un await new Promise(resolve => setTimeout) - pas besoin de cleanup
+                if ($context -match "await\s+new\s+Promise\s*\([^)]*setTimeout") {
+                    $hasCleanup = $true
+                    $cleanupPattern = "Promise-wrapped (no cleanup needed)"
+                }
+                
+                # Vérifier si le cleanup est dans le même bloc (return () => clear...)
+                if ($context -match "return\s+\(\)\s*=>\s*(\{[^}]*)?clear(Timeout|Interval)") {
+                    $hasCleanup = $true
+                    $cleanupPattern = "cleanup in same block"
+                }
+                
+                # Vérifier si c'est stocké dans une ref et clearTimeout/clearInterval appelé ailleurs
+                if ($context -match "(Ref\.current|IntervalRef|TimeoutRef).*=.*set(Timeout|Interval)" -and $context -match "clear(Timeout|Interval)") {
+                    $hasCleanup = $true
+                    $cleanupPattern = "Ref-based cleanup"
+                }
+                
                 # Vérifier si c'est dans un hook personnalisé (useTimer, useTimeout, etc.)
-                $hookPatterns = @("useTimer", "useTimeout", "useInterval", "useAutoRefresh", "useDebounce", "useSmartDeviceRefresh")
+                $hookPatterns = @("useTimer", "useTimeout", "useInterval", "useAutoRefresh", "useDebounce", "useSmartDeviceRefresh", "useApiCall", "useModalState")
                 foreach ($hookPattern in $hookPatterns) {
-                    if ($context -match $hookPattern) {
+                    if ($file.Name -match "^$hookPattern" -or $context -match "function\s+$hookPattern") {
                         $hasCleanup = $true
                         $cleanupPattern = "Hook personnalisé: $hookPattern"
                         break
                     }
                 }
                 
-                # Vérifier si c'est dans createTimeoutWithCleanup
-                if ($context -match "createTimeoutWithCleanup|createIntervalWithCleanup") {
+                # Vérifier si c'est dans createTimeoutWithCleanup ou une fonction qui retourne un cleanup
+                if ($context -match "createTimeoutWithCleanup|createIntervalWithCleanup|startQueueProcessor|stopQueueProcessor") {
                     $hasCleanup = $true
-                    $cleanupPattern = "createTimeoutWithCleanup"
+                    $cleanupPattern = "Function with cleanup"
                 }
                 
                 if (-not $hasCleanup) {

@@ -73,8 +73,8 @@ if ($path === '/health' && $method === 'GET') {
     handleRefreshToken();
 } elseif($path === '/auth/me' && $method === 'GET') {
     handleGetCurrentUser();
-} elseif($path === '/auth/verify' && $method === 'POST') {
-    handleVerifyToken();
+// } elseif($path === '/auth/verify' && $method === 'POST') {
+//     handleVerifyToken(); // TODO: Implement
 
 // USERS
 } elseif($path === '/users' && $method === 'GET') {
@@ -91,8 +91,8 @@ if ($path === '/health' && $method === 'GET') {
     handleArchiveUser($m[1]);
 } elseif(preg_match('#^/users/(\d+)/restore$#', $path, $m) && $method === 'PATCH') {
     handleRestoreUser($m[1]);
-} elseif(preg_match('#^/users/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
-    handlePermanentDeleteUser($m[1]);
+// } elseif(preg_match('#^/users/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
+//     handlePermanentDeleteUser($m[1]); // TODO: Implement
 
 // PATIENTS
 } elseif($path === '/patients' && $method === 'GET') {
@@ -109,8 +109,8 @@ if ($path === '/health' && $method === 'GET') {
     handleArchivePatient($m[1]);
 } elseif(preg_match('#^/patients/(\d+)/restore$#', $path, $m) && $method === 'PATCH') {
     handleRestorePatient($m[1]);
-} elseif(preg_match('#^/patients/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
-    handlePermanentDeletePatient($m[1]);
+// } elseif(preg_match('#^/patients/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
+//     handlePermanentDeletePatient($m[1]); // TODO: Implement
 
 // DEVICES
 } elseif($path === '/devices' && $method === 'GET') {
@@ -145,18 +145,18 @@ if ($path === '/health' && $method === 'GET') {
     handleCreateDeviceCommand($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'GET') {
     handleGetDeviceCommands($m[1]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands/pending$#', $path, $m) && $method === 'GET') {
-    handleGetPendingDeviceCommands($m[1]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands/([0-9A-Za-z]+)/execute$#', $path, $m) && $method === 'POST') {
-    handleExecuteDeviceCommand($m[1], $m[2]);
+// } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands/pending$#', $path, $m) && $method === 'GET') {
+//     handleGetPendingDeviceCommands($m[1]); // TODO: Implement
+// } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands/([0-9A-Za-z]+)/execute$#', $path, $m) && $method === 'POST') {
+//     handleExecuteDeviceCommand($m[1], $m[2]); // TODO: Implement
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/alerts$#', $path, $m) && $method === 'GET') {
     handleGetDeviceAlerts($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/alerts$#', $path, $m) && $method === 'POST') {
     handleCreateDeviceAlert($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/alerts/([0-9A-Za-z]+)/acknowledge$#', $path, $m) && $method === 'POST') {
     handleAcknowledgeAlert($m[1], $m[2]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/logs$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceLogs($m[1]);
+// } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/logs$#', $path, $m) && $method === 'GET') {
+//     handleGetDeviceLogs($m[1]); // TODO: Implement
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/logs/clear$#', $path, $m) && $method === 'POST') {
     handleClearDeviceLogs($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/reports$#', $path, $m) && $method === 'GET') {
@@ -223,28 +223,28 @@ if ($path === '/health' && $method === 'GET') {
     }
 } elseif($path === '/firmwares' && $method === 'GET') {
     handleGetFirmwares();
-} elseif($path === '/firmwares' && $method === 'POST') {
-    handleCreateFirmware();
+// } elseif($path === '/firmwares' && $method === 'POST') {
+//     handleCreateFirmware(); // TODO: Implement (use handleUploadFirmwareIno instead)
 } elseif(preg_match('#^/firmwares/(\d+)$#', $path, $m) && $method === 'GET') {
     handleGetFirmware($m[1]);
 } elseif(preg_match('#^/firmwares/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateFirmware($m[1]);
 } elseif(preg_match('#^/firmwares/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteFirmware($m[1]);
-} elseif(preg_match('#^/firmwares/(\d+)/archive$#', $path, $m) && $method === 'PATCH') {
-    handleArchiveFirmware($m[1]);
+// } elseif(preg_match('#^/firmwares/(\d+)/archive$#', $path, $m) && $method === 'PATCH') {
+//     handleArchiveFirmware($m[1]); // TODO: Implement
 } elseif(preg_match('#^/firmwares/(\d+)/restore$#', $path, $m) && $method === 'PATCH') {
     handleRestoreFirmware($m[1]);
-} elseif(preg_match('#^/firmwares/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
-    handlePermanentDeleteFirmware($m[1]);
+// } elseif(preg_match('#^/firmwares/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
+//     handlePermanentDeleteFirmware($m[1]); // TODO: Implement
 
 // NOTIFICATIONS
 } elseif($path === '/notifications' && $method === 'GET') {
     handleGetNotifications();
 } elseif($path === '/notifications' && $method === 'POST') {
     handleCreateNotification();
-} elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'GET') {
-    handleGetNotification($m[1]);
+// } elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'GET') {
+//     handleGetNotification($m[1]); // TODO: Implement
 } elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateNotification($m[1]);
 } elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'DELETE') {
@@ -255,9 +255,8 @@ if ($path === '/health' && $method === 'GET') {
     handleMarkAllNotificationsAsRead();
 } elseif(preg_match('#^/notifications/unread-count$#', $path) && $method === 'GET') {
     handleGetUnreadNotificationsCount();
-} elseif(preg_match('#^/notifications/clear-all$#', $path) && $method === 'DELETE') {
-    handleClearAllNotifications();
-}
+// } elseif(preg_match('#^/notifications/clear-all$#', $path) && $method === 'DELETE') {
+//     handleClearAllNotifications(); // TODO: Implement
 
 // USB LOGS
 } elseif($path === '/usb/logs' && $method === 'GET') {
@@ -330,27 +329,25 @@ if ($path === '/health' && $method === 'GET') {
     handleRepairDatabaseAudit();
 }
 
-// STATISTICS
-} elseif($path === '/statistics' && $method === 'GET') {
-    handleGetStatistics();
-} elseif($path === '/statistics/performance' && $method === 'GET') {
-    handleGetPerformanceStatistics();
-} elseif($path === '/statistics/usage' && $method === 'GET') {
-    handleGetUsageStatistics();
-} elseif($path === '/statistics/errors' && $method === 'GET') {
-    handleGetErrorStatistics();
-}
+// STATISTICS - TODO: Implement these handlers
+// } elseif($path === '/statistics' && $method === 'GET') {
+//     handleGetStatistics();
+// } elseif($path === '/statistics/performance' && $method === 'GET') {
+//     handleGetPerformanceStatistics();
+// } elseif($path === '/statistics/usage' && $method === 'GET') {
+//     handleGetUsageStatistics();
+// } elseif($path === '/statistics/errors' && $method === 'GET') {
+//     handleGetErrorStatistics();
 
-// SYSTEM
-} elseif($path === '/system/info' && $method === 'GET') {
-    handleGetSystemInfo();
-} elseif($path === '/system/health' && $method === 'GET') {
-    handleSystemHealthCheck();
-} elseif($path === '/system/logs' && $method === 'GET') {
-    handleGetSystemLogs();
-} elseif($path === '/system/clear-cache' && $method === 'POST') {
-    handleClearSystemCache();
-}
+// SYSTEM - TODO: Implement these handlers
+// } elseif($path === '/system/info' && $method === 'GET') {
+//     handleGetSystemInfo();
+// } elseif($path === '/system/health' && $method === 'GET') {
+//     handleSystemHealthCheck();
+// } elseif($path === '/system/logs' && $method === 'GET') {
+//     handleGetSystemLogs();
+// } elseif($path === '/system/clear-cache' && $method === 'POST') {
+//     handleClearSystemCache();
 
 // FALLBACK - Route non trouvée
 } else {

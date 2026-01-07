@@ -36,6 +36,15 @@ function Invoke-Check-StructureAPI {
             }
         }
         
+        # IMPORTANT: Ajouter aussi les fichiers de routing dans api/routing/
+        $routingDir = Join-Path (Join-Path $ProjectPath "api") "routing"
+        if (Test-Path $routingDir) {
+            $routingFiles = Get-ChildItem -Path $routingDir -File -Filter "*.php" -ErrorAction SilentlyContinue
+            foreach ($rf in $routingFiles) {
+                $apiFiles += $rf.FullName
+            }
+        }
+        
         # Si aucun fichier API standard trouvé, chercher des fichiers PHP à la racine
         if ($apiFiles.Count -eq 0) {
             $rootPhpFiles = Get-ChildItem -Path $ProjectPath -File -Filter "*.php" -ErrorAction SilentlyContinue | 

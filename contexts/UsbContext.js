@@ -4,7 +4,6 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, us
 import { useSerialPort } from '@/components/SerialPortManager'
 import { useAuth } from '@/contexts/AuthContext'
 import logger from '@/lib/logger'
-import { getUsbPortSharing } from '@/lib/usbPortSharing'
 
 const UsbContext = createContext()
 
@@ -47,7 +46,6 @@ export function UsbProvider({ children }) {
   const usbStreamBufferRef = useRef('')
   const sendMeasurementToApiRef = useRef(null) // Callback pour envoyer les mesures à l'API
   const updateDeviceFirmwareRef = useRef(null) // Callback pour mettre à jour les informations du dispositif dans la base (firmware_version, last_battery, last_seen, status)
-  const portSharingRef = useRef(null)
   const streamTimeoutRefs = useRef([]) // Références pour les timeouts de streaming
   const usbGetConfigSentRef = useRef(false) // Flag pour éviter d'envoyer GET_CONFIG plusieurs fois (évite boucle infinie)
   const isStartingStreamRef = useRef(false) // Flag global pour éviter les démarrages multiples
@@ -55,34 +53,6 @@ export function UsbProvider({ children }) {
   // Batch des logs pour envoi au serveur (pour monitoring à distance)
   const logsToSendRef = useRef([])
   const sentCommandsCacheRef = useRef(new Set()) // Cache pour éviter de renvoyer les mêmes commandes
-  
-  // Initialiser le système de partage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      portSharingRef.current = getUsbPortSharing()
-      
-      // Écouter les données partagées depuis un autre onglet
-      const unsubscribeData = portSharingRef.current.on('data-received', (data) => {
-        logger.debug('[UsbContext] Data received from master tab:', data)
-        // Traiter les données comme si elles venaient du port local
-        if (data.measurement) {
-          setUsbStreamLastMeasurement(data.measurement)
-          setUsbStreamLastUpdate(Date.now())
-          setUsbStreamMeasurements(prev => {
-            const next = [...prev, data.measurement]
-            return next.slice(-120)
-          })
-        }
-        if (data.deviceInfo) {
-          setUsbDeviceInfo(data.deviceInfo)
-        }
-      })
-      
-      return () => {
-        unsubscribeData()
-      }
-    }
-  }, [])
   
   // Nettoyer le timeout de logs au démontage
   useEffect(() => {
@@ -993,15 +963,6 @@ export function UsbProvider({ children }) {
             setUsbStreamError(null)
             setUsbStreamStatus('running')
             
-            // Partager les données avec les autres onglets si on est master
-            if (portSharingRef.current && portSharingRef.current.isMaster) {
-              portSharingRef.current.notifyDataReceived({
-                measurement,
-                deviceInfo: usbDeviceInfo,
-                timestamp: Date.now()
-              })
-            }
-            
             // Mettre à jour usbDeviceInfo avec les mesures
             setUsbDeviceInfo(prev => ({
               ...prev,
@@ -1114,15 +1075,6 @@ export function UsbProvider({ children }) {
           setUsbStreamLastUpdate(Date.now())
           setUsbStreamError(null)
           setUsbStreamStatus('running')
-          
-          // Partager les données avec les autres onglets si on est master
-          if (portSharingRef.current && portSharingRef.current.isMaster) {
-            portSharingRef.current.notifyDataReceived({
-              measurement,
-              deviceInfo: usbDeviceInfo,
-              timestamp: Date.now()
-            })
-          }
           
           // Mettre à jour TOUTES les données reçues du dispositif USB (uniquement depuis le dispositif)
           // À chaque réception, on met à jour toutes les informations disponibles

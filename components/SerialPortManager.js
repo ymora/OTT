@@ -3,101 +3,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getUsbDeviceLabel, getUsbRequestFilters } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
-import { getUsbPortSharing } from '@/lib/usbPortSharing'
 
 /**
  * Gestionnaire de port série utilisant Web Serial API
- * Permet de détecter, connecter et communiquer avec des dispositifs USB
+ * Version simplifiée sans système de partage entre onglets
  */
 export function useSerialPort() {
   const [port, setPort] = useState(null)
   const [isConnected, setIsConnected] = useState(false)
-  const [availablePorts, setAvailablePorts] = useState([])
   const [error, setError] = useState(null)
   const readerRef = useRef(null)
   const writerRef = useRef(null)
-  const portSharingRef = useRef(null)
-  const isMasterRef = useRef(false)
-  const sharedDataRef = useRef(null)
 
   // Vérifier le support de Web Serial API
   const isSupported = typeof navigator !== 'undefined' && 'serial' in navigator
-  
-  // Initialiser le système de partage (une seule fois au montage)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      portSharingRef.current = getUsbPortSharing()
-      
-      // Debounce pour éviter les oscillations
-      let stateChangeTimeout = null
-      
-      // Écouter les changements d'état
-      const unsubscribeState = portSharingRef.current.on('state-changed', async (data) => {
-        // Debounce : attendre 500ms avant de traiter le changement d'état
-        if (stateChangeTimeout) {
-          clearTimeout(stateChangeTimeout)
-        }
-        
-        stateChangeTimeout = setTimeout(async () => {
-          const wasMaster = isMasterRef.current
-          isMasterRef.current = data.isMaster
-          logger.debug('[SerialPortManager] State changed (debounced):', data)
-          
-          // Si on n'est plus master mais qu'on a un port ouvert, le fermer automatiquement
-          // Utiliser les refs pour éviter les dépendances
-          const currentPort = port
-          const currentIsConnected = isConnected
-          
-          if (!data.isMaster && wasMaster && currentIsConnected && currentPort) {
-            logger.warn('[SerialPortManager] No longer master, closing port automatically...')
-            try {
-              // Fermer le port sans notifier le système de partage (car on n'est plus master)
-              if (readerRef.current) {
-                try {
-                  await readerRef.current.cancel()
-                } catch (e) {
-                  // Ignorer les erreurs
-                }
-                readerRef.current = null
-              }
-              if (writerRef.current) {
-                writerRef.current = null
-              }
-              if (currentPort) {
-                try {
-                  await currentPort.close()
-                } catch (e) {
-                  // Ignorer les erreurs
-                }
-              }
-              setIsConnected(false)
-              setPort(null)
-              logger.debug('[SerialPortManager] Port closed after losing master status')
-            } catch (err) {
-              logger.error('[SerialPortManager] Error closing port after losing master status:', err)
-            }
-          }
-        }, 500) // Debounce de 500ms
-      })
-      
-      // Écouter les données reçues depuis un autre onglet (si on n'est pas master)
-      const unsubscribeData = portSharingRef.current.on('data-received', (data) => {
-        if (!isMasterRef.current) {
-          sharedDataRef.current = data
-          logger.debug('[SerialPortManager] Data received from master tab')
-        }
-      })
-      
-      return () => {
-        if (stateChangeTimeout) {
-          clearTimeout(stateChangeTimeout)
-        }
-        unsubscribeState()
-        unsubscribeData()
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Dépendances vides = initialisation unique
 
   // Demander l'accès à un port série
   const requestPort = useCallback(async () => {
@@ -137,107 +56,30 @@ export function useSerialPort() {
     }
     logger.log('[SerialPortManager] connect: Port fourni, tentative de connexion...')
 
-    // Vérifier si un autre onglet a déjà ouvert le port AVANT d'essayer de l'ouvrir
-    if (portSharingRef.current) {
-      const sharing = portSharingRef.current
-      
-      // Vérifier l'état actuel
-      sharing.checkState()
-      
-      // Si on n'est pas master, essayer de devenir master
-      if (!sharing.isMaster) {
-        logger.debug('[SerialPortManager] Not master, requesting master status...')
-        const becameMaster = await sharing.requestMaster()
-        if (!becameMaster) {
-          // Un autre onglet est master et a déjà ouvert le port
-          // On ne peut PAS ouvrir le port ici, on doit juste écouter les données partagées
-          logger.warn('[SerialPortManager] Port already open in another tab, listening to shared data only')
-          // Mettre à jour l'état pour indiquer qu'on écoute les données du master
-          setIsConnected(true) // On est "connecté" via le partage
-          setPort(null) // Pas de port local, mais on écoute les données partagées
-          setError(null) // Pas d'erreur, c'est normal
-          return true // Retourner true car on est "connecté" via le partage
-        }
-        // On est devenu master, on peut maintenant ouvrir le port
-        isMasterRef.current = true
-        logger.debug('[SerialPortManager] Became master, can open port')
-      } else {
-        // On est déjà master, on peut ouvrir le port
-        isMasterRef.current = true
-        logger.debug('[SerialPortManager] Already master, can open port')
-      }
-    } else {
-      // Pas de système de partage, on peut ouvrir le port normalement
-      isMasterRef.current = true
-    }
-
     try {
       setError(null)
       
       // Libérer les anciens writers/readers s'ils existent
       if (writerRef.current) {
-        // Note: writer n'a pas de méthode release() dans Web Serial API
         writerRef.current = null
       }
       
       if (readerRef.current) {
         try {
           await readerRef.current.cancel()
-          // Note: reader n'a pas de méthode release() dans Web Serial API
         } catch (e) {
           // Ignorer les erreurs
         }
         readerRef.current = null
       }
       
-      // Vérifier si le port est déjà ouvert dans CET onglet
-      // Si readable et writable existent, le port est déjà ouvert dans cet onglet
+      // Vérifier si le port est déjà ouvert
       if (portToUse.readable && portToUse.writable) {
-        logger.debug('[SerialPortManager] connect: port déjà ouvert dans cet onglet, vérification des locks...')
-        logger.debug('[SerialPortManager] connect: writable.locked =', portToUse.writable.locked)
-        logger.debug('[SerialPortManager] connect: readable.locked =', portToUse.readable.locked)
+        logger.debug('[SerialPortManager] connect: port déjà ouvert, vérification des locks...')
         
-        // ⚠️ IMPORTANT: Si le port est déjà ouvert ET qu'on a déjà un reader/writer actif,
-        // on ne doit PAS fermer et rouvrir le port ! C'est inutile et cause des déconnexions.
-        // On vérifie d'abord si on a déjà des refs actives
-        const hasActiveReader = readerRef.current !== null
-        const hasActiveWriter = writerRef.current !== null
-        
-        // Si les streams sont verrouillés ET qu'on a déjà des refs actives, c'est normal
-        // Le port fonctionne correctement, on ne doit rien faire
-        if ((portToUse.writable.locked || portToUse.readable.locked) && (hasActiveReader || hasActiveWriter)) {
-          logger.debug('[SerialPortManager] connect: port déjà ouvert et actif, réutilisation sans fermeture...')
-          setIsConnected(true)
-          setPort(portToUse)
-          setError(null)
-          return true // Port déjà connecté et fonctionnel, pas besoin de le rouvrir
-        }
-        
-        // Si les streams sont verrouillés mais qu'on n'a PAS de refs actives,
-        // c'est qu'un autre onglet utilise le port
+        // Si les streams sont verrouillés, le port est utilisé
         if (portToUse.writable.locked || portToUse.readable.locked) {
-          // Vérifier qu'on est toujours master avant de fermer/rouvrir
-          if (portSharingRef.current) {
-            portSharingRef.current.checkState()
-            if (!portSharingRef.current.isMaster) {
-              logger.debug('[SerialPortManager] connect: port verrouillé par un autre onglet, écoute des données partagées...')
-              setError(null) // Pas d'erreur, c'est normal
-              setIsConnected(true) // On est "connecté" via le partage
-              setPort(null) // Pas de port local
-              return true // Retourner true car on écoute les données partagées
-            }
-          }
-          
-          // Si on est master mais qu'on n'a pas de refs actives, on doit récupérer le port
-          if (!isMasterRef.current) {
-            logger.debug('[SerialPortManager] connect: port verrouillé mais on n\'est pas master - un autre onglet a le port')
-            setError(null) // Pas d'erreur, c'est normal
-            setIsConnected(true) // On est "connecté" via le partage
-            setPort(null) // Pas de port local
-            return true // Retourner true car on écoute les données partagées
-          }
-          
-          // Cas rare : port verrouillé mais on est master et on n'a pas de refs
+          // Port verrouillé - probablement par une autre application
           // On doit libérer les locks en annulant les readers/writers existants
           logger.warn('[SerialPortManager] connect: port verrouillé sans refs actives, libération des locks...')
           try {
@@ -294,15 +136,6 @@ export function useSerialPort() {
 
           setIsConnected(true)
           setPort(portToUse)
-          
-          // Notifier le système de partage que le port est ouvert
-          if (portSharingRef.current && isMasterRef.current) {
-            portSharingRef.current.notifyPortOpened({
-              baudRate,
-              timestamp: Date.now()
-            })
-          }
-          
           logger.debug('[SerialPortManager] connect: ✅ port réutilisé avec succès')
           return true
         } catch (err) {
@@ -314,11 +147,12 @@ export function useSerialPort() {
       }
       
       // Ouvrir le port (soit nouveau, soit après fermeture complète)
-      logger.debug('[SerialPortManager] connect: ouverture du port...')
+      logger.log('[SerialPortManager] connect: ouverture du port avec baudRate =', baudRate)
       try {
         await portToUse.open({ baudRate })
-        logger.debug('[SerialPortManager] connect: port ouvert')
+        logger.log('[SerialPortManager] connect: ✅ port ouvert avec succès')
       } catch (openErr) {
+        logger.error('[SerialPortManager] connect: ❌ Erreur ouverture port:', openErr.name, openErr.message)
         // Si le port est déjà ouvert, essayer de réutiliser
         if (openErr.name === 'InvalidStateError' && portToUse.readable && portToUse.writable) {
           logger.debug('[SerialPortManager] connect: port déjà ouvert (InvalidStateError), réutilisation...')
@@ -329,6 +163,12 @@ export function useSerialPort() {
             setIsConnected(false)
             return false
           }
+        } else if (openErr.name === 'NetworkError') {
+          // Erreur réseau = port utilisé par une autre application
+          setError('Port utilisé par une autre application (Arduino IDE, terminal série, etc.). Fermez ces applications et réessayez.')
+          logger.error('[SerialPortManager] connect: Port utilisé par une autre application')
+          setIsConnected(false)
+          return false
         } else {
           throw openErr
         }
@@ -420,14 +260,6 @@ export function useSerialPort() {
       setIsConnected(false)
       setPort(null)
       setError(null)
-      
-      // Notifier le système de partage que le port est fermé
-      if (portSharingRef.current && isMasterRef.current) {
-        portSharingRef.current.notifyPortClosed()
-        isMasterRef.current = false
-        logger.debug('[SerialPortManager] Notified port sharing system (port closed)')
-      }
-      
       logger.debug('[SerialPortManager] disconnect: ✅ déconnexion complète')
     } catch (err) {
       logger.error('[SerialPortManager] disconnect: ❌ erreur:', err)
