@@ -7,10 +7,10 @@
 - Exclut les commentaires et la documentation de l'analyse
 - Score actuel: **7/10** (acceptable)
 
-### 2. Phase 22 ajoutée à l'audit complet
-- Nouvelle phase "Cohérence Configuration" dans `Audit-Phases.ps1`
-- Intégration dans `Audit-Complet.ps1`
-- L'audit a maintenant **23 phases** (au lieu de 22)
+### 2. Phase intégrée à l'audit unifié
+- Vérification "Cohérence Configuration" dans `audit/audit.ps1`
+- Système d'audit refactorisé en un seul fichier
+- L'audit contient maintenant **14 phases**
 
 ### 3. Configuration uniformisée pour Docker
 
@@ -126,11 +126,11 @@ docker exec -i ott-postgres psql -U postgres -d ott_data < sql/schema.sql
 ## 🔍 Vérifier la cohérence
 
 ```powershell
-# Lancer l'audit de cohérence seul
-pwsh -File audit/modules/Check-ConfigConsistency.ps1 -ProjectRoot .
+# Lancer l'audit complet
+.\audit\audit.ps1 -Phases "all"
 
-# Lancer l'audit complet avec la Phase 22
-pwsh -File audit/audit.ps1 -All
+# Lancer un audit rapide (phases principales)
+.\audit\audit.ps1 -Phases "1,2,5,8,9"
 ```
 
 ## 📝 Améliorations possibles (optionnel)

@@ -25,7 +25,10 @@ function Get-ProjectFiles {
         "docs/.next",
         ".arduino15",
         "audit/resultats",
-        "resultats"
+        "resultats",
+        "hardware/firmware",
+        "hardware/lib",
+        "firmware"
     )
     $defaultExcludeFiles = @("**/*.min.js", "**/*.bundle.js", "**/docs/_next/**", "**/out/**")
     
