@@ -46,3 +46,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 
 # Commande de démarrage (production) - utilise le script pour configurer le port dynamiquement
 CMD ["/usr/local/bin/start_dashboard.sh"]
+# Force update
