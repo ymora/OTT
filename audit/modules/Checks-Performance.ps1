@@ -98,6 +98,18 @@ function Invoke-Check-Performance {
                     $cleanupPattern = "Promise-wrapped (no cleanup needed)"
                 }
                 
+                # Vérifier si le timer est suivi de location.reload/href (navigation = pas besoin de cleanup)
+                if ($context -match "set(Timeout|Interval)[^}]*location\.(reload|href|replace)") {
+                    $hasCleanup = $true
+                    $cleanupPattern = "Navigation after timer (no cleanup needed)"
+                }
+                
+                # Vérifier si c'est dans une fonction handler (pas un useEffect)
+                if ($context -match "const\s+handle\w+\s*=\s*(async\s*)?\(" -and $context -notmatch "useEffect") {
+                    $hasCleanup = $true
+                    $cleanupPattern = "Event handler (cleanup not required)"
+                }
+                
                 # Vérifier si le cleanup est dans le même bloc (return () => clear...)
                 if ($context -match "return\s+\(\)\s*=>\s*(\{[^}]*)?clear(Timeout|Interval)") {
                     $hasCleanup = $true

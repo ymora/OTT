@@ -64,7 +64,29 @@ function Invoke-Check-StructureAPI {
         $routingPatterns = @()  # Patterns de routing détectés
         
         # 1. Détecter les handlers définis (pattern générique)
-        # Chercher dans les répertoires handlers ET dans les fichiers API principaux
+        # IMPORTANT: Scanner TOUS les fichiers PHP du projet pour éviter les faux positifs
+        # Les handlers peuvent être définis n'importe où et inclus via require_once
+        $allPhpFiles = Get-ChildItem -Path $ProjectPath -Recurse -File -Include *.php -ErrorAction SilentlyContinue | 
+            Where-Object { $_.FullName -notmatch 'vendor|node_modules|\.next' }
+        
+        foreach ($phpFile in $allPhpFiles) {
+            $content = Get-Content $phpFile.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content) {
+                $functions = [regex]::Matches($content, "(?:public\s+|private\s+|protected\s+)?function\s+(handle\w+)\s*\(")
+                foreach ($func in $functions) {
+                    $handlerName = $func.Groups[1].Value
+                    if (-not $handlersDefined.ContainsKey($handlerName)) {
+                        $handlersDefined[$handlerName] = @{
+                            File = $phpFile.Name
+                            Path = $phpFile.FullName
+                            Line = ($content.Substring(0, $func.Index) -split "`n").Count
+                        }
+                    }
+                }
+            }
+        }
+        
+        # Chercher aussi dans les répertoires handlers (legacy, pour compatibilité)
         $handlerDirs = @(
             (Join-Path (Join-Path $ProjectPath "api") "handlers"),
             (Join-Path $ProjectPath "handlers"),
