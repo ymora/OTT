@@ -76,6 +76,9 @@ backups/
 scripts/dev/
 scripts/test-*
 
+# Scripts de démarrage (garder start_dashboard.sh)
+!scripts/start_dashboard.sh
+
 # Fichiers volumineux
 *.bin
 *.pdf

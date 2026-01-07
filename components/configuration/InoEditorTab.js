@@ -9,6 +9,25 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import Modal from '@/components/Modal'
 
+// Utilitaire pour vérifier l'environnement de manière sécurisée
+const isDevelopment = () => {
+  try {
+    return process.env?.NODE_ENV === 'development'
+  } catch {
+    return false
+  }
+}
+
+// Utilitaire pour obtenir une variable d'environnement de manière sécurisée
+const getEnvVar = (key, defaultValue = '') => {
+  try {
+    const value = process.env?.[key]
+    return (typeof value === 'string' && value.trim() !== '') ? value.trim() : defaultValue
+  } catch {
+    return defaultValue
+  }
+}
+
 export default function InoEditorTab({ onUploadSuccess }) {
   const { fetchWithAuth, API_URL, token } = useAuth()
   const [selectedFile, setSelectedFile] = useState(null)
@@ -55,17 +74,35 @@ export default function InoEditorTab({ onUploadSuccess }) {
     { requiresAuth: true, cacheTTL: 0 } // Désactiver le cache pour avoir les données en temps réel
   )
 
-  const firmwares = data?.firmwares?.data?.firmwares?.firmwares || []
+  // Validation et extraction sécurisée des données de firmwares
+  const firmwares = useMemo(() => {
+    // Structure attendue: data.firmwares.data.firmwares.firmwares
+    const extracted = data?.firmwares?.data?.firmwares?.firmwares || []
+    
+    // Validation supplémentaire
+    if (!Array.isArray(extracted)) {
+      if (isDevelopment()) {
+        console.warn('[InoEditorTab] Les firmwares ne sont pas dans un tableau format attendu:', typeof extracted)
+      }
+      return []
+    }
+    
+    return extracted
+  }, [data])
   
-  // DEBUG: Log pour débugger
-  console.log('[InoEditorTab] Données brutes API:', data)
-  console.log('[InoEditorTab] Firmwares extraits:', firmwares, 'type:', typeof firmwares, 'isArray:', Array.isArray(firmwares))
+  // Validation de la structure des données
+  if (isDevelopment()) {
+    console.log('[InoEditorTab] Données brutes API:', data)
+    console.log('[InoEditorTab] Firmwares extraits:', firmwares, 'type:', typeof firmwares, 'isArray:', Array.isArray(firmwares))
+  }
   
   // Filtrer les firmwares pour ne garder que ceux avec des fichiers .ino (non compilés)
   // Utiliser useMemo pour optimiser le filtrage
   const inoFirmwares = useMemo(() => {
-    if (!Array.isArray(firmwares)) {
-      console.log('[InoEditorTab] firmwares n\'est pas un tableau, retourne []')
+    if (!Array.isArray(firmwares) || firmwares.length === 0) {
+      if (isDevelopment()) {
+        console.log('[InoEditorTab] firmwares n\'est pas un tableau ou est vide, retourne []')
+      }
       return []
     }
     
@@ -78,7 +115,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
       if (fw.file_path && fw.file_path.includes('.ino')) return true
       return false
     })
-    console.log('[InoEditorTab] Firmware filtrés (inoFirmwares):', filtered)
+    if (isDevelopment()) {
+      console.log('[InoEditorTab] Firmware filtrés (inoFirmwares):', filtered)
+    }
     return filtered.sort((a, b) => {
       // Trier par date de création décroissante (les plus récents en premier)
       return new Date(b.created_at) - new Date(a.created_at)
@@ -106,25 +145,33 @@ export default function InoEditorTab({ onUploadSuccess }) {
       const formData = new FormData()
       
       if (fileToUpload) {
-        logger.debug('[InoEditorTab] Ajout fichier au FormData:', fileToUpload.name, fileToUpload.size, 'bytes')
+        if (isDevelopment()) {
+          logger.debug('[InoEditorTab] Ajout fichier au FormData:', fileToUpload.name, fileToUpload.size, 'bytes')
+        }
         formData.append('firmware_ino', fileToUpload)
       } else if (contentToUpload) {
         // Créer un blob à partir du contenu édité
-        logger.debug('[InoEditorTab] Création blob depuis contenu, taille:', contentToUpload.length)
+        if (isDevelopment()) {
+          logger.debug('[InoEditorTab] Création blob depuis contenu, taille:', contentToUpload.length)
+        }
         const blob = new Blob([contentToUpload], { type: 'text/plain' })
         const filename = 'firmware_' + Date.now() + '.ino'
         formData.append('firmware_ino', blob, filename)
       }
       
       formData.append('type', 'ino')
-      logger.debug('[InoEditorTab] FormData créé, envoi vers:', `${API_URL}/api.php/firmwares/upload-ino`)
+      if (isDevelopment()) {
+        logger.debug('[InoEditorTab] FormData créé, envoi vers:', `${API_URL}/api.php/firmwares/upload-ino`)
+      }
 
       if (!token) {
         logger.error('[InoEditorTab] Token manquant!')
         throw new Error('Token manquant. Veuillez vous reconnecter.')
       }
 
-      logger.debug('[InoEditorTab] Token présent, création XMLHttpRequest...')
+      if (isDevelopment()) {
+        logger.debug('[InoEditorTab] Token présent, création XMLHttpRequest...')
+      }
       const xhr = new XMLHttpRequest()
       xhr.timeout = 30 * 1000
 
@@ -226,9 +273,13 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
       xhr.open('POST', `${API_URL}/api.php/firmwares/upload-ino`)
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-      logger.debug('[InoEditorTab] Envoi requête XHR...')
+      if (isDevelopment()) {
+        logger.debug('[InoEditorTab] Envoi requête XHR...')
+      }
       xhr.send(formData)
-      logger.debug('[InoEditorTab] Requête XHR envoyée, attente réponse...')
+      if (isDevelopment()) {
+        logger.debug('[InoEditorTab] Requête XHR envoyée, attente réponse...')
+      }
 
     } catch (err) {
       logger.error('❌ Exception lors de l\'upload:', err)
@@ -277,14 +328,20 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
   // Gérer la sélection de fichier
   const handleFileSelect = useCallback(async (e) => {
-    logger.debug('[InoEditorTab] handleFileSelect appelé', e.target.files)
+    if (isDevelopment()) {
+      logger.debug('[InoEditorTab] handleFileSelect appelé', e.target.files)
+    }
     const file = e.target.files?.[0]
     if (!file) {
-      logger.debug('[InoEditorTab] Aucun fichier sélectionné')
+      if (isDevelopment()) {
+        logger.debug('[InoEditorTab] Aucun fichier sélectionné')
+      }
       return
     }
 
-    logger.debug('[InoEditorTab] Fichier sélectionné:', file.name, file.size, 'bytes')
+    if (isDevelopment()) {
+      logger.debug('[InoEditorTab] Fichier sélectionné:', file.name, file.size, 'bytes')
+    }
 
     if (!file.name.endsWith('.ino')) {
       logger.error('[InoEditorTab] Fichier non .ino:', file.name)
@@ -293,7 +350,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
       return
     }
 
-    logger.debug('[InoEditorTab] Fichier .ino valide, lecture du contenu...')
+    if (isDevelopment()) {
+      logger.debug('[InoEditorTab] Fichier .ino valide, lecture du contenu...')
+    }
     setSelectedFile(file)
     setError(null)
     setSuccess(null)
@@ -302,16 +361,22 @@ export default function InoEditorTab({ onUploadSuccess }) {
       // Lire le contenu du fichier
       const reader = new FileReader()
       reader.onload = async (e) => {
-        logger.debug('[InoEditorTab] Fichier lu avec succès, taille:', e.target.result?.length)
+        if (isDevelopment()) {
+          logger.debug('[InoEditorTab] Fichier lu avec succès, taille:', e.target.result?.length)
+        }
         const content = e.target.result
         setInoContent(content)
         setOriginalContent(content)
         setIsEdited(false)
         // Ne pas ouvrir l'éditeur automatiquement, seulement via le crayon
 
-        logger.debug('[InoEditorTab] Extraction de la version depuis le contenu...')
+        if (isDevelopment()) {
+          logger.debug('[InoEditorTab] Extraction de la version depuis le contenu...')
+        }
         const version = extractVersionFromContent(content)
-        logger.debug('[InoEditorTab] Version extraite:', version)
+        if (isDevelopment()) {
+          logger.debug('[InoEditorTab] Version extraite:', version)
+        }
         if (!version) {
           logger.error('[InoEditorTab] Version non trouvée dans le fichier')
           setError('Version non trouvée dans le fichier .ino. Assurez-vous que FIRMWARE_VERSION_STR est défini.')
@@ -322,16 +387,22 @@ export default function InoEditorTab({ onUploadSuccess }) {
         }
 
         // Vérifier si la version existe déjà
-        logger.debug('[InoEditorTab] Vérification si la version existe déjà:', version)
+        if (isDevelopment()) {
+          logger.debug('[InoEditorTab] Vérification si la version existe déjà:', version)
+        }
         let existingFirmware = null
         let versionExists = false
         try {
           existingFirmware = await checkVersionExists(version)
-          logger.debug('[InoEditorTab] Résultat vérification version:', existingFirmware ? 'existe déjà' : 'n\'existe pas')
+          if (isDevelopment()) {
+            logger.debug('[InoEditorTab] Résultat vérification version:', existingFirmware ? 'existe déjà' : 'n\'existe pas')
+          }
           
           if (existingFirmware) {
             // Version existe déjà - afficher le modal
-            logger.debug('[InoEditorTab] Version existe déjà, affichage du modal')
+            if (isDevelopment()) {
+              logger.debug('[InoEditorTab] Version existe déjà, affichage du modal')
+            }
             versionExists = true
             setExistingFirmware(existingFirmware)
             setPendingFile(file)
@@ -370,14 +441,20 @@ export default function InoEditorTab({ onUploadSuccess }) {
         
         // Si la version n'existe pas, lancer automatiquement l'upload
         if (!versionExists && !existingFirmware) {
-          logger.debug('[InoEditorTab] Version n\'existe pas, lancement automatique de l\'upload...')
+          if (isDevelopment()) {
+            logger.debug('[InoEditorTab] Version n\'existe pas, lancement automatique de l\'upload...')
+          }
           // Attendre un court instant pour s'assurer que les états sont bien mis à jour
           createTimeoutWithCleanup(() => {
-            logger.debug('[InoEditorTab] Appel handleUpload avec file et content')
+            if (isDevelopment()) {
+              logger.debug('[InoEditorTab] Appel handleUpload avec file et content')
+            }
             handleUpload(file, content)
           }, 100)
         } else {
-          logger.debug('[InoEditorTab] Upload non lancé (versionExists:', versionExists, ', existingFirmware:', !!existingFirmware, ')')
+          if (isDevelopment()) {
+            logger.debug('[InoEditorTab] Upload non lancé (versionExists:', versionExists, ', existingFirmware:', !!existingFirmware, ')')
+          }
         }
       }
       reader.onerror = (err) => {
@@ -385,7 +462,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
         setError('Erreur lors de la lecture du fichier')
         setSelectedFile(null)
       }
-      logger.debug('[InoEditorTab] Démarrage lecture fichier avec FileReader...')
+      if (isDevelopment()) {
+        logger.debug('[InoEditorTab] Démarrage lecture fichier avec FileReader...')
+      }
       reader.readAsText(file)
     } catch (err) {
       logger.error('Erreur lors de la lecture du fichier:', err)
@@ -697,14 +776,21 @@ export default function InoEditorTab({ onUploadSuccess }) {
       const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost'
       // En localhost, utiliser l'URL de l'API depuis la variable d'environnement ou Render directement
       // En production, utiliser API_URL normal
+      // Sécurisation: valider que process.env est accessible et que NEXT_PUBLIC_API_URL est une chaîne valide
+      const getApiUrl = () => {
+        return getEnvVar('NEXT_PUBLIC_API_URL', 'https://ott-jbln.onrender.com')
+      }
+      
       const sseApiUrl = isLocalhost 
-        ? (process.env.NEXT_PUBLIC_API_URL || 'https://ott-jbln.onrender.com')  // URL directe pour SSE (Render si Docker non disponible)
+        ? getApiUrl()  // URL directe pour SSE (Render si Docker non disponible)
         : API_URL  // En production, utiliser API_URL normal
       
       const sseUrl = `${sseApiUrl}/api.php/firmwares/compile/${firmwareId}?token=${tokenEncoded}`
 
       // Logger pour diagnostic
-      logger.debug('[InoEditorTab] Connexion SSE vers:', sseUrl)
+      if (isDevelopment()) {
+        logger.debug('[InoEditorTab] Connexion SSE vers:', sseUrl)
+      }
       
       setCompileLogs(prev => [...prev, {
         timestamp: new Date().toLocaleTimeString('fr-FR'),
@@ -723,7 +809,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
       eventSource.onopen = () => {
         lastMessageTime = Date.now() // Réinitialiser le timestamp à l'ouverture
-        logger.debug('[InoEditorTab] EventSource.onopen - Connexion établie')
+        if (isDevelopment()) {
+          logger.debug('[InoEditorTab] EventSource.onopen - Connexion établie')
+        }
         setCompileLogs(prev => [...prev, {
           timestamp: new Date().toLocaleTimeString('fr-FR'),
           message: '✅ Connexion SSE établie, démarrage de la compilation...',
@@ -737,12 +825,14 @@ export default function InoEditorTab({ onUploadSuccess }) {
         messageCount++
         
         // Logger pour diagnostic
-        logger.debug(`[InoEditorTab] Message SSE #${messageCount} reçu:`, event.data.substring(0, 100))
+        if (isDevelopment()) {
+          logger.debug(`[InoEditorTab] Message SSE #${messageCount} reçu:`, event.data.substring(0, 100))
+        }
         
         // Ignorer les keep-alive (lignes qui commencent par :)
         if (!event.data || event.data.trim() === '' || event.data.trim().startsWith(':')) {
           // Logger les keep-alive pour diagnostic (tous les 10)
-          if (messageCount % 10 === 0) {
+          if (messageCount % 10 === 0 && isDevelopment()) {
             logger.debug(`[InoEditorTab] Keep-alive reçu (#${messageCount})`)
           }
           return // Ignorer les keep-alive
@@ -750,7 +840,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
 
         try {
           const data = JSON.parse(event.data)
-          logger.debug(`[InoEditorTab] Message parsé:`, data.type, data.message?.substring(0, 50))
+          if (isDevelopment()) {
+            logger.debug(`[InoEditorTab] Message parsé:`, data.type, data.message?.substring(0, 50))
+          }
           
           // Afficher TOUS les types de messages
           if (data.type === 'log') {
@@ -955,7 +1047,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
           eventSourceRef.current.close()
         } catch (err) {
           // Ignorer les erreurs si l'EventSource est déjà fermé
-          console.debug('[InoEditorTab] EventSource déjà fermé ou erreur lors de la fermeture:', err)
+          if (isDevelopment()) {
+            console.debug('[InoEditorTab] EventSource déjà fermé ou erreur lors de la fermeture:', err)
+          }
         }
         eventSourceRef.current = null
       }
