@@ -1,10 +1,30 @@
 # 🔍 Intégration IA dans l'Audit - Guide d'Utilisation
 
-## 🎯 Objectif
+## 🎯 Architecture à 2 Niveaux
 
-Optimiser l'audit pour :
-- **CPU** : Détecte les patterns suspects (rapide, reproductible)
-- **IA** : Vérifie seulement les cas douteux avec contexte (efficace, précise)
+| Niveau | Responsable | Type de vérification | Fiabilité |
+|--------|-------------|---------------------|-----------|
+| **CPU** | Audit auto | Patterns regex, comptages, structure | 100% |
+| **IA** | Cascade | Contexte sémantique, logique métier | Variable |
+
+### Philosophie
+- **CPU fait ce qu'il sait faire à 100%** : comptages, patterns, structure
+- **IA reçoit UNIQUEMENT les cas ambigus** avec contexte minimal
+- **Objectif** : Minimiser les tokens tout en maximisant la précision
+
+### Vérifications par niveau
+
+**CPU (Audit fiable) :**
+- Fichiers > X lignes
+- Patterns regex (console.log, key={index}, secrets)
+- Comptages (imports, dépendances)
+- Structure (fichiers manquants, routes mortes)
+
+**IA uniquement (complexe) :**
+- "Ce handler est-il vraiment mort ou utilisé dynamiquement ?"
+- "Cette fonction est-elle trop complexe à refactorer ?"
+- "Cette duplication est-elle justifiée ?"
+- "Ce TODO est-il toujours pertinent ?"
 
 ## Workflow
 
