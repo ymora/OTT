@@ -185,9 +185,11 @@ function Export-AIContext {
     # Préparer l'export structuré
     $export = @{
         Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        Version = "1.0"
+        Version = "2.0"
         TotalQuestions = 0
         Categories = @{}
+        # NOUVEAU: Prompts optimisés pour l'IA (format concis)
+        OptimizedPrompts = @()
     }
     
     # Parcourir toutes les catégories dans AIContext
@@ -208,8 +210,61 @@ function Export-AIContext {
                     Low = ($questions | Where-Object { $_.Severity -eq "low" }).Count
                 }
             }
+            
+            # NOUVEAU: Générer des prompts optimisés (concis, peu de tokens)
+            foreach ($q in $questions) {
+                $prompt = switch ($q.Type) {
+                    "Timer Without Cleanup" { 
+                        "Timer $($q.File):$($q.Line) - cleanup nécessaire ? (Répondre OUI/NON + raison courte)"
+                    }
+                    "Unused Handler" {
+                        "Handler '$($q.Handler)' dans $($q.File) - utilisé dynamiquement ? (OUI/NON)"
+                    }
+                    "SQL Injection Risk" {
+                        "SQL $($q.File):$($q.Line) - injection possible ? (OUI/NON + fix si OUI)"
+                    }
+                    "LongFunction" {
+                        "Fonction '$($q.Function)' ($($q.Lines) lignes) - refactoring suggéré ?"
+                    }
+                    "UnusedImport" {
+                        "Import '$($q.Import)' dans $($q.File) - supprimer ? (OUI/NON)"
+                    }
+                    default {
+                        "$($q.Type) - $($q.File):$($q.Line) - action requise ?"
+                    }
+                }
+                
+                $export.OptimizedPrompts += @{
+                    Id = $export.OptimizedPrompts.Count + 1
+                    Category = $category
+                    Priority = $q.Severity
+                    Prompt = $prompt
+                    File = $q.File
+                    Line = $q.Line
+                }
+            }
         }
     }
+    
+    # Générer un fichier de prompts texte simple (ultra-concis)
+    $promptsFile = Join-Path $OutputDir "ai-prompts-$timestamp.txt"
+    $promptsText = "# AUDIT IA - $(Get-Date -Format 'yyyy-MM-dd HH:mm')`n"
+    $promptsText += "# $($export.TotalQuestions) questions à vérifier`n`n"
+    
+    $priorityOrder = @("critical", "high", "medium", "low", "warning")
+    $sortedPrompts = $export.OptimizedPrompts | Sort-Object { $priorityOrder.IndexOf($_.Priority) }
+    
+    foreach ($p in $sortedPrompts) {
+        $priorityIcon = switch ($p.Priority) {
+            "critical" { "🔴" }
+            "high" { "🟠" }
+            "medium" { "🟡" }
+            default { "⚪" }
+        }
+        $promptsText += "$priorityIcon [$($p.Id)] $($p.Prompt)`n"
+    }
+    
+    $promptsText | Out-File -FilePath $promptsFile -Encoding UTF8 -Force
     
     # Exporter en JSON
     try {
