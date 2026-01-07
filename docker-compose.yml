@@ -40,7 +40,7 @@ services:
       - ./router.php:/var/www/html/router.php:ro
       - ./index.php:/var/www/html/index.php:ro
       - ./.htaccess:/var/www/html/.htaccess:ro
-      - ./hardware:/var/www/html/hardware:ro
+      - ./hardware:/var/www/html/hardware
     depends_on:
       db:
         condition: service_healthy
