@@ -456,7 +456,6 @@ export default function DebugTab() {
   const [dbDeviceData, setDbDeviceData] = useState(null)
   const [loadingDbData, setLoadingDbData] = useState(false)
   const [dataSource, setDataSource] = useState(null) // 'usb' | 'database' | null
-  const [simpleMode, setSimpleMode] = useState(false) // Mode simple pour contourner les problèmes Web Serial API
   
   // Valeurs calculées mémorisées pour éviter les recalculs (définies AVANT les useEffect qui les utilisent)
   const isStreaming = useMemo(() => 
@@ -1265,21 +1264,6 @@ export default function DebugTab() {
             </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSimpleMode(!simpleMode)}
-                className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
-                  simpleMode 
-                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                {simpleMode ? 'Mode Normal' : 'Mode Simple'}
-              </button>
-              {simpleMode && (
-                <span className="text-xs text-blue-600">
-                  (Connecteur direct)
-                </span>
-              )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
