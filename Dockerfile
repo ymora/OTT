@@ -64,7 +64,7 @@ RUN echo "opcache.enable=1" > /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.revalidate_freq=0" >> /usr/local/etc/php/conf.d/opcache.ini
 
 # Configuration Apache VirtualHost - utilise PORT environment variable
-RUN echo '<VirtualHost *:${PORT:-80}>\n\
+RUN echo '<VirtualHost *:80>\n\
     ServerName localhost\n\
     DocumentRoot /var/www/html\n\
     <Directory /var/www/html>\n\
@@ -94,13 +94,6 @@ RUN chown -R www-data:www-data /var/www/html \
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/api.php/health || exit 1
-
-# Installation Arduino-CLI
-RUN wget -O /tmp/arduino-cli.tar.gz https://downloads.arduino.cc/arduino-cli/0.35.0/arduino-cli_0.35.0_Linux_64bit.tar.gz && \
-    tar -xzf /tmp/arduino-cli.tar.gz -C /tmp/ && \
-    mv /tmp/arduino-cli /usr/local/bin/ && \
-    chmod +x /usr/local/bin/arduino-cli && \
-    rm /tmp/arduino-cli.tar.gz
 
 # Port exposé - supporte PORT environment variable pour Render
 EXPOSE ${PORT:-80}
