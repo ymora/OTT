@@ -242,29 +242,38 @@ function handleCompileFirmwareOptimized($firmware_id) {
                     // On vérifie si le fichier contient GSM_NL (présent dans notre version modifiée)
                     $needsUpdate = false;
                     if (stripos($lib_name, 'TinyGSM') !== false && is_dir($target_lib_persistent)) {
-                        $sim7600File = $target_lib_persistent . '/src/TinyGsmClientSIM7600.h';
+                        $sim7600File = $target_lib_persistent . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'TinyGsmClientSIM7600.h';
+                        sendSSE('log', 'info', "🔍 Vérification TinyGSM: {$sim7600File}");
                         if (file_exists($sim7600File)) {
                             $content = file_get_contents($sim7600File);
-                            // Notre version modifiée contient GSM_NL, la version standard non
-                            if (strpos($content, 'GSM_NL') === false) {
+                            // Notre version modifiée contient "enum RegStatus" et "GSM_NL"
+                            $hasGsmNl = (strpos($content, 'GSM_NL') !== false);
+                            $hasRegStatus = (strpos($content, 'enum RegStatus') !== false);
+                            sendSSE('log', 'info', "🔍 GSM_NL: " . ($hasGsmNl ? 'oui' : 'non') . ", RegStatus: " . ($hasRegStatus ? 'oui' : 'non'));
+                            if (!$hasGsmNl || !$hasRegStatus) {
                                 $needsUpdate = true;
-                                sendSSE('log', 'info', "🔄 Mise à jour TinyGSM (version modifiée requise)");
+                                sendSSE('log', 'info', "🔄 Mise à jour TinyGSM requise (version incorrecte)");
                             }
+                        } else {
+                            sendSSE('log', 'info', "⚠️ Fichier SIM7600.h non trouvé, réinstallation...");
+                            $needsUpdate = true;
                         }
                     }
                     
                     if ($needsUpdate && is_dir($target_lib_persistent)) {
+                        sendSSE('log', 'info', "🗑️ Suppression ancienne TinyGSM...");
                         // Supprimer récursivement le dossier existant
                         $it = new RecursiveDirectoryIterator($target_lib_persistent, RecursiveDirectoryIterator::SKIP_DOTS);
                         $files = new RecursiveIteratorIterator($it, RecursiveIteratorIterator::CHILD_FIRST);
                         foreach($files as $file) {
                             if ($file->isDir()) {
-                                rmdir($file->getRealPath());
+                                @rmdir($file->getRealPath());
                             } else {
-                                unlink($file->getRealPath());
+                                @unlink($file->getRealPath());
                             }
                         }
-                        rmdir($target_lib_persistent);
+                        @rmdir($target_lib_persistent);
+                        sendSSE('log', 'info', "✅ Ancienne TinyGSM supprimée");
                     }
                     
                     if (!is_dir($target_lib_persistent)) {

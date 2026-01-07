@@ -981,31 +981,47 @@ function Main {
             AIContext = $script:Results.AIContext  # Inclure le contexte IA dans le summary
         }
 
-        $summaryFile = Join-Path $script:Config.OutputDir "audit_summary_$($script:Config.Timestamp).json"
-        $summary | ConvertTo-Json -Depth 10 | Out-File -FilePath $summaryFile -Encoding UTF8
+        # SIMPLIFIÉ: Un seul fichier de sortie AI-SUMMARY.md
+        # Générer le résumé IA unique (point d'entrée pour l'IA)
+        $aiSummaryFile = Join-Path $script:Config.OutputDir "AI-SUMMARY.md"
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm"
         
-        # Export du contexte IA pour l'IA (rapport séparé)
-        if ($script:Results.AIContext -and $script:Results.AIContext.Count -gt 0) {
-            try {
-                # Importer le module ReportGenerator si nécessaire
-                $reportGeneratorPath = Join-Path $PSScriptRoot "modules\ReportGenerator.ps1"
-                if (Test-Path $reportGeneratorPath) {
-                    . $reportGeneratorPath
-                    
-                    # Exporter le contexte IA
-                    $aiContextFile = Export-AIContext -Results $script:Results -OutputDir $script:Config.OutputDir
-                    if ($aiContextFile) {
-                        Write-Log "Rapport IA généré: $aiContextFile" "SUCCESS"
-                    }
-                } else {
-                    Write-Log "Module ReportGenerator.ps1 non trouvé, export IA ignoré" "WARN"
-                }
-            } catch {
-                Write-Log "Erreur lors de l'export du contexte IA: $($_.Exception.Message)" "WARN"
-            }
-        } else {
-            Write-Log "Aucun contexte IA à exporter" "INFO"
+        $aiSummary = "# RESUME AUDIT POUR L'IA`n"
+        $aiSummary += "> **Point d'entree unique** - $timestamp`n`n"
+        $aiSummary += "## Scores`n"
+        foreach ($key in ($script:Results.Scores.Keys | Sort-Object)) {
+            $score = $script:Results.Scores[$key]
+            $icon = if($score -ge 8){"[OK]"}elseif($score -ge 5){"[!]"}else{"[!!]"}
+            $aiSummary += "- $icon **$key** : $score/10`n"
         }
+        $aiSummary += "`n## Erreurs: $totalErrors | Warnings: $totalWarnings`n`n"
+        
+        # Ajouter les questions IA si présentes
+        if ($script:Results.AIContext -and $script:Results.AIContext.Count -gt 0) {
+            $aiSummary += "---`n`n## QUESTIONS A VERIFIER (OUI/NON + raison courte)`n`n"
+            $questionId = 1
+            foreach ($category in $script:Results.AIContext.Keys) {
+                $catData = $script:Results.AIContext[$category]
+                if ($catData.Questions -and $catData.Questions.Count -gt 0) {
+                    $aiSummary += "### $category ($($catData.Questions.Count) questions)`n"
+                    foreach ($q in $catData.Questions) {
+                        $icon = switch ($q.Severity) { "critical" {"[!!!]"} "high" {"[!!]"} "medium" {"[!]"} default {"[ ]"} }
+                        $prompt = switch ($q.Type) {
+                            "Timer Without Cleanup" { "Timer $($q.File):$($q.Line) - cleanup ?" }
+                            "Unused Handler" { "Handler $($q.Handler) - utilise ?" }
+                            default { "$($q.Type) $($q.File):$($q.Line)" }
+                        }
+                        $aiSummary += "$icon [$questionId] $prompt`n"
+                        $questionId++
+                    }
+                    $aiSummary += "`n"
+                }
+            }
+        }
+        
+        $aiSummary += "---`n## Format reponse: [ID] OUI/NON - raison courte`n"
+        $aiSummary | Out-File -FilePath $aiSummaryFile -Encoding UTF8 -Force
+        Write-Log "Resume IA genere: $aiSummaryFile" "SUCCESS"
 
         # Mise à jour du tableau récapitulatif des scores d'audit
         try {
