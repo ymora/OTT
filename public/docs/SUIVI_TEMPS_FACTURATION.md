@@ -1,9 +1,9 @@
-# Suivi du Temps - Projet OTT
-## Journal de travail pour facturation (Généré automatiquement)
+﻿# Suivi du Temps - Projet OTT
+## Journal de travail pour facturation (GÃ©nÃ©rÃ© automatiquement)
 
-**Date de génération** : 2026-01-07 00:26
-**Période analysée** : 365 derniers jours (depuis 2025-01-07)
-**Total commits** : 1165
+**Date de gÃ©nÃ©ration** : 2026-01-07 01:37
+**PÃ©riode analysÃ©e** : 365 derniers jours (depuis 2025-01-07)
+**Total commits** : 1174
 **Contributeurs** : 2
 
 ---
@@ -12,7 +12,7 @@
 
 | Date | Contributeur | Commits | Heures | Features | Fix | Refactor | Doc | Tests | UI | Deploy | Other |
 |------|--------------|---------|--------|----------|-----|----------|-----|-------|-----|--------|-------|
-| 2026-01-07 | **Yannick** | 1 commits (~0.5h) | 0 Features | 1 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
+| 2026-01-07 | **Yannick** | 10 commits (~5h) | 5 Features | 4 Fixes | 0 Refactors | 0 Docs | 1 Tests | 0 UI | 0 Deploy | 0 Other |
 | 2026-01-06 | **Yannick** | 12 commits (~6h) | 3 Features | 7 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 2 Deploy | 0 Other |
 | 2026-01-06 | **Maxime** | 1 commits (~0.5h) | 0 Features | 0 Fixes | 0 Refactors | 0 Docs | 1 Tests | 0 UI | 0 Deploy | 0 Other |
 | 2026-01-05 | **Yannick** | 16 commits (~8h) | 3 Features | 12 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
@@ -66,10 +66,10 @@
 ## Resume par Contributeur
 
 ### Yannick
-- **Total commits** : 1164 (99.9%)
-- **Heures estimees** : ~582h
+- **Total commits** : 1173 (99.9%)
+- **Heures estimees** : ~586.5h
 - **Jours actifs** : 48
-- **Moyenne** : 24.25 commits/jour
+- **Moyenne** : 24.44 commits/jour
 
 ### Maxime
 - **Total commits** : 1 (0.1%)
@@ -78,5 +78,5 @@
 - **Moyenne** : 1 commits/jour
 
 ---
-_Rapport généré automatiquement par generate_time_tracking.ps1_
-_Basé sur l'analyse Git des commits du projet_
+_Rapport gÃ©nÃ©rÃ© automatiquement par generate_time_tracking.ps1_
+_BasÃ© sur l'analyse Git des commits du projet_
