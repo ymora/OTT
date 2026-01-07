@@ -62,8 +62,9 @@ RUN echo "opcache.enable=1" > /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.validate_timestamps=1" >> /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.revalidate_freq=0" >> /usr/local/etc/php/conf.d/opcache.ini
 
-# Configuration Apache VirtualHost
-RUN echo '<VirtualHost *:80>\n\
+# Configuration Apache VirtualHost - utilise PORT environment variable
+RUN echo '<VirtualHost *:${PORT:-80}>\n\
+    ServerName localhost\n\
     DocumentRoot /var/www/html\n\
     <Directory /var/www/html>\n\
         AllowOverride All\n\
@@ -74,7 +75,7 @@ RUN echo '<VirtualHost *:80>\n\
     CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
 </VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
-# Copier le code source
+# Copier le code source et scripts
 WORKDIR /var/www/html
 COPY api.php .
 COPY api/ ./api/
@@ -82,6 +83,8 @@ COPY bootstrap/ ./bootstrap/
 COPY router.php .
 COPY index.php .
 COPY .htaccess .
+COPY start-apache.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/start-apache.sh
 
 # Permissions
 RUN chown -R www-data:www-data /var/www/html \
@@ -91,8 +94,8 @@ RUN chown -R www-data:www-data /var/www/html \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/api.php/health || exit 1
 
-# Port exposé
-EXPOSE 80
+# Port exposé - supporte PORT environment variable pour Render
+EXPOSE ${PORT:-80}
 
-# Commande de démarrage
-CMD ["apache2-foreground"]
+# Commande de démarrage - utilise le script pour configurer le port dynamiquement
+CMD ["/usr/local/bin/start-apache.sh"]

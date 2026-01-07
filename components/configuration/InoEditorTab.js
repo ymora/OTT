@@ -55,12 +55,21 @@ export default function InoEditorTab({ onUploadSuccess }) {
     { requiresAuth: true, cacheTTL: 0 } // Désactiver le cache pour avoir les données en temps réel
   )
 
-  const firmwares = data?.firmwares?.firmwares || []
+  const firmwares = data?.firmwares?.data?.firmwares?.firmwares || []
+  
+  // DEBUG: Log pour débugger
+  console.log('[InoEditorTab] Données brutes API:', data)
+  console.log('[InoEditorTab] Firmwares extraits:', firmwares, 'type:', typeof firmwares, 'isArray:', Array.isArray(firmwares))
   
   // Filtrer les firmwares pour ne garder que ceux avec des fichiers .ino (non compilés)
   // Utiliser useMemo pour optimiser le filtrage
   const inoFirmwares = useMemo(() => {
-    return firmwares.filter(fw => {
+    if (!Array.isArray(firmwares)) {
+      console.log('[InoEditorTab] firmwares n\'est pas un tableau, retourne []')
+      return []
+    }
+    
+    const filtered = firmwares.filter(fw => {
       // Inclure les firmwares avec statut pending_compilation (fichiers .ino uploadés)
       if (fw.status === 'pending_compilation') return true
       // Inclure les firmwares dont le file_path se termine par .ino
@@ -68,7 +77,9 @@ export default function InoEditorTab({ onUploadSuccess }) {
       // Inclure les firmwares dont le file_path contient .ino (pour les cas où le chemin est relatif)
       if (fw.file_path && fw.file_path.includes('.ino')) return true
       return false
-    }).sort((a, b) => {
+    })
+    console.log('[InoEditorTab] Firmware filtrés (inoFirmwares):', filtered)
+    return filtered.sort((a, b) => {
       // Trier par date de création décroissante (les plus récents en premier)
       return new Date(b.created_at) - new Date(a.created_at)
     })
