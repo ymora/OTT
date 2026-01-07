@@ -231,9 +231,9 @@ jobs:
           COMMIT_SHA=$(git rev-parse HEAD)
           COMMIT_SHORT=$(git rev-parse --short HEAD)
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          echo "{\"version\":\"$COMMIT_SHORT\",\"timestamp\":\"$BUILD_TIMESTAMP\",\"commit\":\"$COMMIT_SHA\",\"message\":\"$COMMIT_MESSAGE\"}" > out/OTT/.version.json
+          echo "{\"version\":\"$COMMIT_SHORT\",\"timestamp\":\"$BUILD_TIMESTAMP\",\"commit\":\"$COMMIT_SHA\",\"message\":\"$COMMIT_MESSAGE\"}" > out/OTT/version.json
           echo "✅ Fichier de version créé dans out/OTT/:"
-          cat out/OTT/.version.json
+          cat out/OTT/version.json
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -262,7 +262,7 @@ jobs:
           echo "🌐 URL: ${{ steps.deployment.outputs.page_url }}"
           echo ""
           echo "📋 Pour vérifier que le site est à jour:"
-          echo "   curl -s ${{ steps.deployment.outputs.page_url }}/.version.json | jq ."
+          echo "   curl -s ${{ steps.deployment.outputs.page_url }}/version.json | jq ."
           echo ""
           echo "🔗 Actions GitHub: https://github.com/${{ github.repository }}/actions"
 
