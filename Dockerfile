@@ -101,6 +101,10 @@ RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/inst
     chmod +x /usr/local/bin/arduino-cli && \
     ln -sf /usr/local/bin/arduino-cli /bin/arduino-cli
 
+# Installation du core ESP32 pour éviter les timeouts
+RUN arduino-cli core install esp32:esp32 && \
+    arduino-cli lib install "ArduinoJson"
+
 # Port exposé - supporte PORT environment variable pour Render
 EXPOSE ${PORT:-80}
 
