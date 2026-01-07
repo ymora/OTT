@@ -217,7 +217,14 @@ function requireAdmin() {
 function getProjectRoot() {
     // __DIR__ dans api/helpers.php est api/
     // On remonte d'un niveau pour obtenir la racine du projet
-    return dirname(__DIR__);
+    $root = dirname(__DIR__);
+    
+    // Si on est dans Docker (vérifier si /var/www/html/api existe)
+    if (strpos($root, '/var/www/html') !== false) {
+        return '/var/www/html'; // Racine du projet dans Docker
+    }
+    
+    return $root;
 }
 
 /**
