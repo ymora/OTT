@@ -982,45 +982,88 @@ function Main {
             AIContext = $script:Results.AIContext  # Inclure le contexte IA dans le summary
         }
 
-        # SIMPLIFIÉ: Un seul fichier de sortie AI-SUMMARY.md
-        # Générer le résumé IA unique (point d'entrée pour l'IA)
+        # FICHIER UNIQUE AI-SUMMARY.md avec contexte complet
         $aiSummaryFile = Join-Path $script:Config.OutputDir "AI-SUMMARY.md"
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm"
+        $projectRoot = $script:Config.ProjectRoot
         
-        $aiSummary = "# RESUME AUDIT POUR L'IA`n"
-        $aiSummary += "> **Point d'entree unique** - $timestamp`n`n"
-        $aiSummary += "## Scores`n"
+        $aiSummary = "# AUDIT IA - VERIFICATION ET CORRECTIONS`n"
+        $aiSummary += "> Genere: $timestamp | Projet: $projectRoot`n`n"
+        
+        # Instructions pour l'IA
+        $aiSummary += "## INSTRUCTIONS`n"
+        $aiSummary += "Pour chaque probleme, verifier le code et repondre:`n"
+        $aiSummary += "- **FAUX POSITIF** : expliquer pourquoi ce n'est pas un vrai probleme`n"
+        $aiSummary += "- **A CORRIGER** : proposer le fix avec extrait de code`n`n"
+        
+        # Scores
+        $aiSummary += "## SCORES ACTUELS`n"
+        $aiSummary += "| Categorie | Score | Status |`n"
+        $aiSummary += "|-----------|-------|--------|`n"
         foreach ($key in ($script:Results.Scores.Keys | Sort-Object)) {
             $score = $script:Results.Scores[$key]
-            $icon = if($score -ge 8){"[OK]"}elseif($score -ge 5){"[!]"}else{"[!!]"}
-            $aiSummary += "- $icon **$key** : $score/10`n"
+            $status = if($score -ge 8){"OK"}elseif($score -ge 5){"A verifier"}else{"CRITIQUE"}
+            $aiSummary += "| $key | $score/10 | $status |`n"
         }
-        $aiSummary += "`n## Erreurs: $totalErrors | Warnings: $totalWarnings`n`n"
+        $aiSummary += "`n"
         
-        # Ajouter les questions IA si présentes
+        # Questions IA avec contexte complet
         if ($script:Results.AIContext -and $script:Results.AIContext.Count -gt 0) {
-            $aiSummary += "---`n`n## QUESTIONS A VERIFIER (OUI/NON + raison courte)`n`n"
+            $aiSummary += "---`n`n## PROBLEMES A ANALYSER`n`n"
             $questionId = 1
+            
             foreach ($category in $script:Results.AIContext.Keys) {
                 $catData = $script:Results.AIContext[$category]
                 if ($catData.Questions -and $catData.Questions.Count -gt 0) {
-                    $aiSummary += "### $category ($($catData.Questions.Count) questions)`n"
+                    $aiSummary += "### $category`n`n"
+                    
                     foreach ($q in $catData.Questions) {
-                        $icon = switch ($q.Severity) { "critical" {"[!!!]"} "high" {"[!!]"} "medium" {"[!]"} default {"[ ]"} }
-                        $prompt = switch ($q.Type) {
-                            "Timer Without Cleanup" { "Timer $($q.File):$($q.Line) - cleanup ?" }
-                            "Unused Handler" { "Handler $($q.Handler) - utilise ?" }
-                            default { "$($q.Type) $($q.File):$($q.Line)" }
+                        $severity = switch ($q.Severity) { "critical" {"CRITIQUE"} "high" {"IMPORTANT"} "medium" {"MOYEN"} default {"INFO"} }
+                        
+                        $aiSummary += "#### [$questionId] $($q.Type) - $severity`n"
+                        $aiSummary += "- **Fichier**: ``$($q.File)``"
+                        if ($q.Line) { $aiSummary += " ligne $($q.Line)" }
+                        $aiSummary += "`n"
+                        
+                        # Ajouter le contexte si disponible
+                        if ($q.Context) {
+                            $aiSummary += "- **Contexte**:`n"
+                            $aiSummary += "```````n$($q.Context)`n```````n"
                         }
-                        $aiSummary += "$icon [$questionId] $prompt`n"
+                        
+                        # Question specifique
+                        if ($q.Question) {
+                            $aiSummary += "- **Question**: $($q.Question)`n"
+                        } else {
+                            # Generer une question par defaut
+                            $defaultQ = switch ($q.Type) {
+                                "Timer Without Cleanup" { "Ce timer a-t-il besoin d'un cleanup dans useEffect ? Si oui, proposer le fix." }
+                                "Unused Handler" { "Ce handler est-il utilise dynamiquement ? Si non, peut-on le supprimer ?" }
+                                "Request In Loop" { "Cette requete dans une boucle est-elle un probleme N+1 ? Proposer une optimisation." }
+                                "API non accessible" { "L'API est-elle configuree correctement ? Verifier .env et connexion DB." }
+                                default { "Analyser ce probleme et proposer une solution." }
+                            }
+                            $aiSummary += "- **Question**: $defaultQ`n"
+                        }
+                        $aiSummary += "`n"
                         $questionId++
                     }
-                    $aiSummary += "`n"
                 }
             }
+        } else {
+            $aiSummary += "---`n`n## Aucun probleme detecte necessitant verification IA`n`n"
         }
         
-        $aiSummary += "---`n## Format reponse: [ID] OUI/NON - raison courte`n"
+        # Format de reponse attendu
+        $aiSummary += "---`n`n## FORMAT DE REPONSE ATTENDU`n`n"
+        $aiSummary += "Pour chaque probleme:`n"
+        $aiSummary += "```````n"
+        $aiSummary += "### [ID] Verdict: FAUX POSITIF | A CORRIGER`n"
+        $aiSummary += "Explication: ...`n"
+        $aiSummary += "Fix propose (si applicable):`n"
+        $aiSummary += "// code...`n"
+        $aiSummary += "```````n"
+        
         $aiSummary | Out-File -FilePath $aiSummaryFile -Encoding UTF8 -Force
         Write-Log "Resume IA genere: $aiSummaryFile" "SUCCESS"
 
