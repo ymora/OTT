@@ -1,7 +1,32 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+
+/**
+ * Détecte l'environnement d'exécution (Local, Render, Docker)
+ */
+function getEnvironment(apiUrl) {
+  if (!apiUrl) return { name: 'Inconnu', icon: '❓', color: 'gray' }
+  
+  const url = apiUrl.toLowerCase()
+  
+  if (url.includes('render.com') || url.includes('onrender.com')) {
+    return { name: 'Render', icon: '☁️', color: 'purple' }
+  }
+  if (url.includes('localhost') || url.includes('127.0.0.1')) {
+    // Vérifier si c'est Docker (port typique) ou local
+    if (url.includes(':8080') || url.includes(':80')) {
+      return { name: 'Docker', icon: '🐳', color: 'blue' }
+    }
+    return { name: 'Local', icon: '💻', color: 'green' }
+  }
+  if (url.includes('docker') || url.includes('container')) {
+    return { name: 'Docker', icon: '🐳', color: 'blue' }
+  }
+  
+  return { name: 'Externe', icon: '🌐', color: 'indigo' }
+}
 
 /**
  * Bannière qui s'affiche quand l'API est indisponible (déploiement en cours, etc.)
@@ -10,6 +35,8 @@ export default function ApiStatusBanner() {
   const [apiDown, setApiDown] = useState(false)
   const [checking, setChecking] = useState(false)
   const { API_URL } = useAuth()
+  
+  const environment = useMemo(() => getEnvironment(API_URL), [API_URL])
 
   useEffect(() => {
     // Écouter les erreurs d'API globalement
@@ -42,6 +69,19 @@ export default function ApiStatusBanner() {
 
   if (!apiDown) return null
 
+  const getMessage = () => {
+    switch (environment.name) {
+      case 'Render':
+        return 'Le serveur Render est en cours de déploiement. Cela peut prendre 1-2 minutes.'
+      case 'Docker':
+        return 'Le conteneur Docker ne répond pas. Vérifiez que docker-compose est lancé.'
+      case 'Local':
+        return 'Le serveur PHP local ne répond pas. Lancez: php -S localhost:8000'
+      default:
+        return 'Le serveur API ne répond pas. Les données seront disponibles dans quelques instants.'
+    }
+  }
+
   return (
     <div className="fixed top-0 left-0 right-0 z-[9999] bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-3 shadow-lg">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
@@ -52,8 +92,13 @@ export default function ApiStatusBanner() {
             </svg>
           </div>
           <div>
-            <p className="font-semibold">🚀 Déploiement en cours</p>
-            <p className="text-sm opacity-90">Le serveur est en cours de mise à jour. Les données seront disponibles dans quelques instants.</p>
+            <p className="font-semibold flex items-center gap-2">
+              🚀 API indisponible
+              <span className="px-2 py-0.5 bg-white/20 rounded text-xs font-normal">
+                {environment.icon} {environment.name}
+              </span>
+            </p>
+            <p className="text-sm opacity-90">{getMessage()}</p>
           </div>
         </div>
         <button
