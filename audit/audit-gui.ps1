@@ -314,11 +314,20 @@ $btnLaunch.Add_Click({
 })
 
 $btnOpenResults.Add_Click({
-    $resultsPath = Join-Path $PSScriptRoot "resultats"
-    if (Test-Path $resultsPath) {
-        Start-Process explorer.exe -ArgumentList $resultsPath
+    # Ouvrir directement le resume IA (point d'entree unique)
+    $aiSummaryPath = Join-Path $PSScriptRoot "resultats\AI-SUMMARY.md"
+    if (Test-Path $aiSummaryPath) {
+        Start-Process notepad.exe -ArgumentList $aiSummaryPath
+        $statusBar.Text = "Resume IA ouvert dans Notepad"
+        $statusBar.ForeColor = [System.Drawing.Color]::FromArgb(0, 200, 100)
     } else {
-        [System.Windows.Forms.MessageBox]::Show("Le dossier des résultats n'existe pas encore.", "Information", "OK", "Information")
+        # Fallback: ouvrir le dossier
+        $resultsPath = Join-Path $PSScriptRoot "resultats"
+        if (Test-Path $resultsPath) {
+            Start-Process explorer.exe -ArgumentList $resultsPath
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("Lancez d'abord un audit pour generer le resume IA.", "Information", "OK", "Information")
+        }
     }
 })
 
