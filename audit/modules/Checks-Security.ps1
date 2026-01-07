@@ -191,6 +191,73 @@ function Invoke-Check-Security {
             }
         }
         
+        # 4. CORS permissif (PHP)
+        if ($ProjectInfo.Language -contains "PHP") {
+            Write-Info "Vérification CORS..."
+            $phpFiles = $Files | Where-Object { $_.Extension -eq ".php" }
+            
+            foreach ($file in $phpFiles) {
+                $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                if (-not $content) { continue }
+                
+                # Détecter Access-Control-Allow-Origin: * ou origine dynamique sans vérification
+                if ($content -match "Access-Control-Allow-Origin:\s*\*" -or 
+                    ($content -match "Access-Control-Allow-Origin.*\$origin" -and $content -notmatch "isAllowed|APP_ENV.*production")) {
+                    $lineNumber = ($content.Substring(0, $content.IndexOf("Access-Control-Allow-Origin")) -split "`n").Count
+                    Write-Warn "CORS potentiellement permissif dans $($file.Name):$lineNumber"
+                    $securityScore -= 1
+                    $aiContext += @{
+                        Category = "Sécurité"
+                        Type = "CORS Permissif"
+                        File = $file.Name
+                        Line = $lineNumber
+                        Severity = "high"
+                        NeedsAICheck = $true
+                        Question = "Le CORS dans '$($file.Name)' autorise-t-il des origines non contrôlées en production ?"
+                    }
+                }
+            }
+        }
+        
+        # 5. React key={index} anti-pattern
+        if ($ProjectInfo.Language -contains "JavaScript" -or $ProjectInfo.Type -match "React") {
+            Write-Info "Vérification key={index} anti-pattern..."
+            $jsFiles = $Files | Where-Object { $_.Extension -match "\.jsx?$" }
+            $keyIndexIssues = @()
+            
+            foreach ($file in $jsFiles) {
+                if ($file.FullName -match 'node_modules|\.next|out|docs') { continue }
+                
+                $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                if (-not $content) { continue }
+                
+                # Détecter key={index} ou key={i} dans les .map()
+                $keyMatches = [regex]::Matches($content, "key=\{(index|i|idx)\}", [System.Text.RegularExpressions.RegexOptions]::Multiline)
+                foreach ($match in $keyMatches) {
+                    $lineNumber = ($content.Substring(0, $match.Index) -split "`n").Count
+                    $keyIndexIssues += @{
+                        File = $file.Name
+                        Line = $lineNumber
+                    }
+                }
+            }
+            
+            if ($keyIndexIssues.Count -gt 0) {
+                Write-Warn "key={index} détecté dans $($keyIndexIssues.Count) endroit(s) - anti-pattern React"
+            }
+        }
+        
+        # 6. eslint-disable sans justification
+        if ($ProjectInfo.Language -contains "JavaScript") {
+            $eslintDisables = @($Files | Where-Object { $_.Extension -match "\.jsx?$" } | 
+                Where-Object { $_.FullName -notmatch 'node_modules|\.next' } |
+                Select-String -Pattern "eslint-disable" -ErrorAction SilentlyContinue)
+            
+            if ($eslintDisables.Count -gt 5) {
+                Write-Warn "$($eslintDisables.Count) eslint-disable détectés - à justifier"
+            }
+        }
+        
         # Sauvegarder le contexte pour l'IA
         if (-not $Results.AIContext) {
             $Results.AIContext = @{}

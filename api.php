@@ -73,18 +73,30 @@ if ($origin) {
         header("Access-Control-Allow-Origin: {$origin}");
         header('Access-Control-Allow-Credentials: true');
     } else {
-        // Si origine non autorisée, quand même autoriser pour éviter les erreurs CORS
-        // (la sécurité est gérée par l'authentification JWT)
+        // SÉCURITÉ: En production, bloquer les origines non autorisées
+        // En développement, autoriser pour faciliter les tests
+        if (getenv('APP_ENV') === 'production') {
+            // Log l'origine bloquée pour monitoring
+            error_log("[CORS] Origine bloquée: {$origin}");
+            // Ne pas définir Access-Control-Allow-Origin = requête CORS bloquée par le navigateur
+        } else {
+            // En dev, autoriser mais logger
+            header("Access-Control-Allow-Origin: {$origin}");
+            header('Access-Control-Allow-Credentials: true');
+        }
+    }
+} elseif (empty($origin)) {
+    // Si pas d'origine (requête directe depuis le même serveur ou curl)
+    // En production, ne pas autoriser * avec credentials
+    if (getenv('APP_ENV') !== 'production') {
+        header('Access-Control-Allow-Origin: *');
+    }
+} else {
+    // Fallback : en dev seulement
+    if (getenv('APP_ENV') !== 'production') {
         header("Access-Control-Allow-Origin: {$origin}");
         header('Access-Control-Allow-Credentials: true');
     }
-} elseif (empty($origin)) {
-    // Si pas d'origine (requête directe), autoriser toutes les origines
-    header('Access-Control-Allow-Origin: *');
-} else {
-    // Fallback : autoriser l'origine demandée
-    header("Access-Control-Allow-Origin: {$origin}");
-    header('Access-Control-Allow-Credentials: true');
 }
 
 header('Vary: Origin');
