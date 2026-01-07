@@ -17,6 +17,7 @@ LABEL description="OTT Dashboard Next.js - Développement"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Répertoire de travail
 WORKDIR /app
@@ -36,7 +37,7 @@ COPY scripts/start_dashboard.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start_dashboard.sh
 
 # Build (Render / production)
-RUN npm run build
+RUN npm run build -- --verbose
 
 # Port exposé - supporte PORT environment variable pour Render
 EXPOSE ${PORT:-3000}
