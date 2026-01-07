@@ -68,8 +68,46 @@ function handleCompileFirmwareOptimized($firmware_id) {
         $updateStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'compiling' WHERE id = ?");
         $updateStmt->execute([$firmware_id]);
         
-        // Trouver fichier .ino
-        $inoFile = findFirmwareInoFile($firmware_id, $firmware);
+        // Trouver fichier .ino - code direct
+        $inoFile = null;
+        $rootDir = getProjectRoot();
+        
+        // Vérifier le file_path de la base de données
+        if (!empty($firmware['file_path']) && preg_match('/\.ino$/', $firmware['file_path'])) {
+            $test_path = $firmware['file_path'];
+            if (!file_exists($test_path)) {
+                $test_path = $rootDir . '/' . $firmware['file_path'];
+            }
+            if (file_exists($test_path)) {
+                $inoFile = $test_path;
+            }
+        }
+        
+        // Si pas trouvé, chercher dans le dossier de la version avec l'ID
+        if (!$inoFile) {
+            $version_dir = getVersionDir($firmware['version']);
+            $ino_dir = $rootDir . '/hardware/firmware/' . $version_dir . '/';
+            if (is_dir($ino_dir)) {
+                $pattern_with_id = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
+                $ino_path_with_id = $ino_dir . $pattern_with_id;
+                if (file_exists($ino_path_with_id)) {
+                    $inoFile = $ino_path_with_id;
+                }
+            }
+        }
+        
+        // Si toujours pas trouvé, créer depuis ino_content
+        if (!$inoFile && !empty($firmware['ino_content'])) {
+            $version_dir = getVersionDir($firmware['version']);
+            $ino_dir = $rootDir . '/hardware/firmware/' . $version_dir . '/';
+            if (!is_dir($ino_dir)) {
+                mkdir($ino_dir, 0755, true);
+            }
+            $ino_filename = 'fw_ott_v' . $firmware['version'] . '_id' . $firmware_id . '.ino';
+            $inoFile = $ino_dir . $ino_filename;
+            file_put_contents($inoFile, $firmware['ino_content']);
+        }
+        
         if (!$inoFile || !file_exists($inoFile)) {
             sendSSE('error', 'Fichier .ino introuvable');
             $errorStmt = $pdo->prepare("UPDATE firmware_versions SET status = 'error', error_message = 'Fichier .ino introuvable' WHERE id = ?");
