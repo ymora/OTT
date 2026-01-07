@@ -98,6 +98,8 @@ CREATE TABLE IF NOT EXISTS devices (
   firmware_version VARCHAR(20),
   status TEXT CHECK (status IN ('active','inactive')) DEFAULT 'active',
   patient_id INT REFERENCES patients(id) ON DELETE SET NULL,
+  current_firmware_id INTEGER REFERENCES firmware_versions(id),
+  target_firmware_id INTEGER REFERENCES firmware_versions(id),
   installation_date TIMESTAMPTZ,
   first_use_date TIMESTAMPTZ,
   last_seen TIMESTAMPTZ,
