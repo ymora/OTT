@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     curl \
     git \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Installation des extensions PHP
@@ -93,6 +94,13 @@ RUN chown -R www-data:www-data /var/www/html \
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/api.php/health || exit 1
+
+# Installation Arduino-CLI
+RUN wget -O /tmp/arduino-cli.tar.gz https://downloads.arduino.cc/arduino-cli/0.35.0/arduino-cli_0.35.0_Linux_64bit.tar.gz && \
+    tar -xzf /tmp/arduino-cli.tar.gz -C /tmp/ && \
+    mv /tmp/arduino-cli /usr/local/bin/ && \
+    chmod +x /usr/local/bin/arduino-cli && \
+    rm /tmp/arduino-cli.tar.gz
 
 # Port exposé - supporte PORT environment variable pour Render
 EXPOSE ${PORT:-80}
