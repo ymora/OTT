@@ -58,10 +58,11 @@ export default function ApiStatusBanner() {
         cache: 'no-store'
       })
       if (response.ok) {
-        setApiDown(false)
+        // API disponible : rafraîchir la page pour recharger les données
+        window.location.reload()
       }
     } catch {
-      // API toujours down
+      // API toujours down - ne rien faire, la bannière reste visible
     } finally {
       setChecking(false)
     }
