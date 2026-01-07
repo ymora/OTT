@@ -109,7 +109,8 @@ RUN arduino-cli core install esp32:esp32@2.0.14 && \
     arduino-cli lib install "TinyGSM" && \
     arduino-cli lib install "ArduinoHttpClient" && \
     mkdir -p /var/www/html/hardware/arduino-data/libraries && \
-    mkdir -p /var/www/html/hardware/arduino-data/hardware
+    mkdir -p /var/www/html/hardware/arduino-data/hardware && \
+    pip3 install pyserial --break-system-packages
 
 # Port exposé - supporte PORT environment variable pour Render
 EXPOSE ${PORT:-80}
