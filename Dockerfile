@@ -95,6 +95,11 @@ RUN chown -R www-data:www-data /var/www/html \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/api.php/health || exit 1
 
+# Installation Arduino-CLI via curl direct
+RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh && \
+    mv /var/www/html/bin/arduino-cli /usr/local/bin/ && \
+    chmod +x /usr/local/bin/arduino-cli
+
 # Port exposé - supporte PORT environment variable pour Render
 EXPOSE ${PORT:-80}
 
