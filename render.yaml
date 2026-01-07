@@ -74,6 +74,8 @@ services:
         value: production
       - key: NEXT_STATIC_EXPORT
         value: false
+      - key: PORT
+        value: 10000
 
 # Base de données PostgreSQL
 databases:
