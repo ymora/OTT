@@ -406,8 +406,7 @@ function handleCompileFirmwareOptimized($firmware_id) {
         sendSSEKeepAlive();
         
         // Compilation directe avec logs en temps réel
-        sendSSE('log', 'info', '🔨 Démarrage compilation arduino-cli...');
-        sendSSE('progress', 25, 'Lancement arduino-cli');
+        sendSSE('progress', 25, '🔨 Lancement arduino-cli...');
         sendSSEKeepAlive();
         
         $fqbn = 'esp32:esp32:esp32';
