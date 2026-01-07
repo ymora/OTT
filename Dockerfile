@@ -14,22 +14,24 @@ LABEL description="OTT API Backend - Dispositif Médical IoT"
 
 # Variables d'environnement
 ENV APACHE_DOCUMENT_ROOT=/var/www/html
-ENV PHP_MEMORY_LIMIT=256M
-ENV PHP_MAX_EXECUTION_TIME=60
-ENV PHP_UPLOAD_MAX_FILESIZE=50M
-ENV PHP_POST_MAX_SIZE=50M
+ENV PHP_MEMORY_LIMIT=512M
+ENV PHP_MAX_EXECUTION_TIME=120
+ENV PHP_UPLOAD_MAX_FILESIZE=100M
+ENV PHP_POST_MAX_SIZE=100M
 
 # Installation des dépendances système
 RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    unzip \
+    python3 \
+    python3-pip \
     libpq-dev \
     libzip-dev \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
     libonig-dev \
-    unzip \
-    curl \
-    git \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
@@ -102,7 +104,7 @@ RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/inst
     ln -sf /usr/local/bin/arduino-cli /bin/arduino-cli
 
 # Installation du core ESP32 pour éviter les timeouts
-RUN arduino-cli core install esp32:esp32 && \
+RUN arduino-cli core install esp32:esp32@2.0.14 && \
     arduino-cli lib install "ArduinoJson"
 
 # Port exposé - supporte PORT environment variable pour Render
