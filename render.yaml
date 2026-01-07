@@ -61,7 +61,7 @@ services:
 
   # Dashboard Next.js
   - type: web
-    name: ott-dashboard
+    name: ott-1
     env: docker
     dockerfilePath: ./Dockerfile.dashboard
     dockerContext: .
