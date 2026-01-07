@@ -13,14 +13,38 @@ import { isAdmin as checkIsAdmin } from '@/lib/userUtils'
 import { Bar, Doughnut, Line} from 'react-chartjs-2'
 import MetadataCard from '@/components/MetadataCard'
 import DayDetailsModal from '@/components/DayDetailsModal'
-import TimeTrackingDashboard from '@/components/TimeTrackingDashboardSimple'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js'
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+)
 
 const DOCUMENTATION_FILES = {
   presentation: 'DOCUMENTATION_PRESENTATION.html',
   developpeurs: 'DOCUMENTATION_DEVELOPPEURS.html',
   commerciale: 'DOCUMENTATION_COMMERCIALE.html',
-  'suivi-temps': 'SUIVI_TEMPS_FACTURATION.md',
-  'audit-scores': 'AUDIT_SCORES.md'
+  'suivi-temps': 'SUIVI_TEMPS_FACTURATION.md'
 }
 
 export default function DocumentationPage() {
@@ -46,22 +70,21 @@ export default function DocumentationPage() {
       presentation: 'Documentation Présentation - OTT Dashboard',
       developpeurs: 'Documentation Développeurs - OTT Dashboard',
       commerciale: 'Documentation Commerciale - OTT Dashboard',
-      'suivi-temps': 'Suivi Temps - OTT Dashboard',
-      'audit-scores': 'Scores Audit - OTT Dashboard'
+      'suivi-temps': 'Suivi Temps - OTT Dashboard'
     }
     document.title = titles[docType] || titles.presentation
   }, [docType])
 
-  const isMarkdownDoc = docType === 'audit-scores'
+  const isMarkdownDoc = docType === 'suivi-temps'
   
   // ✅ HOOKS AVANT LA VÉRIFICATION ADMIN (Règle des hooks React)
   // Référence à l'iframe pour envoyer le thème
   const iframeRef = useRef(null)
   const timeoutRefs = useRef([])
 
-  // Fonction pour envoyer le thème à l'iframe (uniquement pour les docs HTML)
+  // Fonction pour envoyer le thème à l'iframe
   const sendThemeToIframe = useCallback(() => {
-    if (docType === 'suivi-temps' || !iframeRef.current?.contentWindow) {
+    if (isMarkdownDoc || !iframeRef.current?.contentWindow) {
       return
     }
     try {
@@ -70,12 +93,12 @@ export default function DocumentationPage() {
     } catch (error) {
       logger.error('Erreur envoi thème à iframe:', error)
     }
-  }, [docType])
+  }, [isMarkdownDoc])
 
   // Détecter le thème actuel et observer les changements
   useEffect(() => {
-    if (docType === 'suivi-temps') {
-      return // Pas de détection de thème pour le dashboard React
+    if (isMarkdownDoc) {
+      return
     }
     
     // Écouter les demandes de thème depuis l'iframe
@@ -103,7 +126,7 @@ export default function DocumentationPage() {
       timeoutRefs.current.forEach(timeout => clearTimeout(timeout))
       timeoutRefs.current = []
     }
-  }, [sendThemeToIframe, docType])
+  }, [sendThemeToIframe, isMarkdownDoc])
 
   // 🔒 Protection : Si non admin, afficher un message d'erreur
   // (APRÈS tous les hooks pour respecter les règles de React)
@@ -134,17 +157,11 @@ export default function DocumentationPage() {
     )
   }
 
-  // Si c'est un fichier markdown (audit scores), on affiche le composant spécial
-  if (docType === 'audit-scores') {
-    return <MarkdownViewer key={docType} fileName="AUDIT_SCORES.md" />
+  // Si c'est un fichier markdown, on affiche un composant spécial
+  if (isMarkdownDoc) {
+    return <MarkdownViewer key={docType} fileName="SUIVI_TEMPS_FACTURATION.md" />
   }
 
-  // Si c'est le suivi du temps, on affiche le dashboard complet
-  if (docType === 'suivi-temps') {
-    return <TimeTrackingDashboard />
-  }
-
-  // Pour les autres docs HTML, on utilise l'iframe
   return (
     <div className="fixed inset-0 top-16 left-64 right-0 bottom-0 -m-6 overflow-y-auto docs-scrollbar">
       <iframe
@@ -186,8 +203,7 @@ function MarkdownViewer({ fileName }) {
   const [regenerating, setRegenerating] = useState(false)
   const [selectedDay, setSelectedDay] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [contributorView, setContributorView] = useState('global') // 'global', 'yannick', 'maxime'
-  const [showGitDetails, setShowGitDetails] = useState(false) // Dérouleur pour les détails Git
+  const [showGitDetails, setShowGitDetails] = useState(true) // Dérouleur pour les détails Git
   const { API_URL } = useAuth()
   // Utiliser useApiCall pour l'appel API de régénération
   const { call: regenerateCall } = useApiCall({ requiresAuth: true })
@@ -210,12 +226,8 @@ function MarkdownViewer({ fileName }) {
     setSelectedDay(null)
   }, [])
   
-  // Détecter le thème pour l'iframe (uniquement pour les docs HTML)
+  // Détecter le thème pour le MarkdownViewer (4ème doc - Suivi Temps)
   useEffect(() => {
-    if (docType === 'suivi-temps') {
-      return // Pas de détection de thème pour le dashboard React
-    }
-    
     const checkTheme = () => {
       const isDarkMode = document.documentElement.classList.contains('dark')
       const container = document.getElementById('markdown-viewer-container')
@@ -431,7 +443,7 @@ function MarkdownViewer({ fileName }) {
 
   // Fonction pour régénérer le fichier de suivi du temps
   const regenerateTimeTracking = useCallback(async (force = false) => {
-    if (fileName !== 'SUIVI_TEMPS_FACTURATION.md' && fileName !== 'AUDIT_SCORES.md') {
+    if (fileName !== 'SUIVI_TEMPS_FACTURATION.md') {
       return
     }
     
@@ -652,94 +664,97 @@ function MarkdownViewer({ fileName }) {
     }
 
     // ============================================
-    // PHASE 1.2 : Parsing robuste du tableau (avec UI/UX et Optimisation)
+    // PHASE 1.2 : Parsing robuste du tableau (NOUVEAU FORMAT 2026)
     // ============================================
-    const tableRegex = /\| (\d{4}-\d{2}-\d{2}) \| ~?([\d.]+)h? \| (\d+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \| ([\d.-]+) \|/g
-    let match
-    while ((match = tableRegex.exec(md)) !== null) {
-      const date = match[1]
-      const hours = safeParseFloat(match[2])
-      const commits = safeParseInt(match[3])
-      const dev = safeParseFloat(match[4])
-      const fix = safeParseFloat(match[5])
-      const test = safeParseFloat(match[6])
-      const doc = safeParseFloat(match[7])
-      const refactor = safeParseFloat(match[8])
-      const deploy = safeParseFloat(match[9])
-      const uiux = safeParseFloat(match[10])
-      const optim = safeParseFloat(match[11])
-
-      // Ignorer la ligne de séparation (---) ou lignes invalides
-      if (date.includes('---') || !date.match(/^\d{4}-\d{2}-\d{2}$/)) continue
-
-      data.      dailyData.push({
-        date,
-        hours,
-        commits,
-        dev,
-        fix,
-        test,
-        doc,
-        refactor,
-        deploy,
-        uiux,
-        optim,
-        details: null // Sera rempli par la phase 1.3
-      })
-
-      data.totalHours += hours
-      data.totalCommits += commits
-    }
-
-    if (data.dailyData.length === 0) {
-      const altTableRegex = /\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*\*\*(.+?)\*\*\s*\|\s*(\d+)\s*\|\s*~?([\d.]+)h\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|/g
-      let altMatch
-      while ((altMatch = altTableRegex.exec(md)) !== null) {
-        const date = altMatch[1]
-        const hours = safeParseFloat(altMatch[4])
-        const commits = safeParseInt(altMatch[3])
-
-        const featCount = safeParseInt(altMatch[5])
-        const fixCount = safeParseInt(altMatch[6])
-        const refactorCount = safeParseInt(altMatch[7])
-        const docCount = safeParseInt(altMatch[8])
-        const testCount = safeParseInt(altMatch[9])
-        const uiCount = safeParseInt(altMatch[10])
-
-        const totalCount = featCount + fixCount + refactorCount + docCount + testCount + uiCount
-        const ratio = (v) => (totalCount > 0 ? (v / totalCount) : 0)
-
-        const dev = hours * ratio(featCount)
-        const fix = hours * ratio(fixCount)
-        const test = hours * ratio(testCount)
-        const doc = hours * ratio(docCount)
-        const refactor = hours * ratio(refactorCount)
-        const uiux = hours * ratio(uiCount)
-
-        data.dailyData.push({
-          date,
-          hours,
-          commits,
-          dev,
-          fix,
-          test,
-          doc,
-          refactor,
-          deploy: 0,
-          uiux,
-          optim: 0,
-          details: null
-        })
-
-        data.totalHours += hours
-        data.totalCommits += commits
+    // NOUVEAU FORMAT : | Date | Contributeur | Commits | Heures | Features | Fix | Refactor | Doc | Tests | UI | Deploy | Other |
+    // Exemple : | 2026-01-07 | **Yannick** | 1 commits (~0.5h) | 0 Features | 1 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
+    
+    // Parser ligne par ligne pour plus de robustesse
+    const lines = md.split('\n')
+    let parsing = false
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+      
+      // Début du tableau
+      if (line.includes('| Date |')) {
+        parsing = true
+        continue
+      }
+      
+      // Fin du tableau (ligne vide ou pas de |)
+      if (parsing && (!line.includes('|') || line === '')) {
+        parsing = false
+        continue
+      }
+      
+      // Parser les lignes de données
+      if (parsing && line.includes('|') && !line.includes('---')) {
+        const parts = line.split('|').map(p => p.trim()).filter(p => p)
+        
+        // Format: Date | Contributeur | Commits (~Xh) | Features | Fixes | Refactors | Docs | Tests | UI | Deploy | Other
+        // = 11 colonnes (la colonne "Heures" de l'en-tête est vide, les heures sont dans Commits)
+        if (parts.length >= 11) {
+          const date = parts[0]
+          const contributor = parts[1].replace(/\*\*/g, '')
+          const commitsInfo = parts[2]
+          
+          // Extraire les catégories (indices décalés car pas de colonne Heures séparée)
+          const featuresRaw = parts[3]
+          const fixesRaw = parts[4]
+          const refactorsRaw = parts[5]
+          const docsRaw = parts[6]
+          const testsRaw = parts[7]
+          const uiRaw = parts[8]
+          const deployRaw = parts[9]
+          const otherRaw = parts[10]
+          
+          // Parser les nombres (format "X Features", "X Fixes", etc.)
+          const parseCount = (str) => parseInt(str) || 0
+          const features = parseCount(featuresRaw)
+          const fixes = parseCount(fixesRaw)
+          const refactors = parseCount(refactorsRaw)
+          const docs = parseCount(docsRaw)
+          const tests = parseCount(testsRaw)
+          const ui = parseCount(uiRaw)
+          const deploy = parseCount(deployRaw)
+          const other = parseCount(otherRaw)
+          
+          // Extraire heures et commits depuis "X commits (~Yh)"
+          const commitsMatch = commitsInfo.match(/(\d+)\s*commits?\s*\(~?([\d.]+)h?\)/)
+          const commits = commitsMatch ? parseInt(commitsMatch[1]) : 0
+          const hours = commitsMatch ? parseFloat(commitsMatch[2]) : 0
+          
+          // Vérifier que c'est une date valide
+          if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Calculer la répartition des heures
+            const totalCount = features + fixes + refactors + docs + tests + ui + deploy + other
+            const ratio = totalCount > 0 ? (v) => v / totalCount : () => 0
+            
+            data.dailyData.push({
+              date,
+              hours,
+              commits,
+              dev: hours * ratio(features),
+              fix: hours * ratio(fixes),
+              test: hours * ratio(tests),
+              doc: hours * ratio(docs),
+              refactor: hours * ratio(refactors),
+              deploy: hours * ratio(deploy),
+              uiux: hours * ratio(ui),
+              optim: hours * ratio(other),
+              contributor,
+              details: null
+            })
+            
+            data.totalHours += hours
+            data.totalCommits += commits
+          }
+        }
       }
     }
-
+    // PHASE 1.2 : Parsing robuste du tableau (NOUVEAU FORMAT 2026)
     // ============================================
-    // PHASE 3 : Utiliser les totaux du markdown comme source unique (avec UI/UX et Optimisation)
-    // ============================================
-    // Essayer plusieurs formats de regex pour la ligne Total
     const totalMatchPatterns = [
       // Format avec **Total** et valeurs en gras
       /(?:\*\*)?Total(?:\*\*)?\s*\|\s*(?:\*\*)?~?([\d.]+)h?(?:\*\*)?\s*\|\s*(?:\*\*)?(\d+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?\s*\|\s*(?:\*\*)?([\d.]+)(?:\*\*)?/,
@@ -902,7 +917,25 @@ function MarkdownViewer({ fileName }) {
     // Trier par date croissante (premier jour en premier, dernier à droite)
     data.dailyData.sort((a, b) => new Date(a.date) - new Date(b.date))
     
+    // Debug: logger les données parsées
+    logger.debug('📊 Données parsées du markdown:', {
+      dailyDataCount: data.dailyData.length,
+      totalHours: data.totalHours,
+      totalCommits: data.totalCommits,
+      firstDay: data.dailyData[0]?.date,
+      lastDay: data.dailyData[data.dailyData.length - 1]?.date
+    })
+    
     return data
+  }
+
+  // Fonction pour calculer le numéro de semaine ISO
+  function getISOWeekNumber(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+    const dayNum = d.getUTCDay() || 7
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
   }
 
   // Fonction pour agréger les données par semaine
@@ -910,14 +943,14 @@ function MarkdownViewer({ fileName }) {
     const weeks = {}
     dailyData.forEach(day => {
       const date = new Date(day.date)
-      const weekStart = new Date(date)
-      weekStart.setDate(date.getDate() - date.getDay()) // Dimanche de la semaine
-      const weekKey = weekStart.toISOString().split('T')[0]
+      const weekNum = getISOWeekNumber(date)
+      const year = date.getFullYear()
+      const weekKey = `${year}-W${String(weekNum).padStart(2, '0')}`
       
       if (!weeks[weekKey]) {
         weeks[weekKey] = {
-          date: weekKey,
-          label: `Sem. ${weekStart.getDate()}/${weekStart.getMonth() + 1}`,
+          date: day.date,
+          label: `S${String(weekNum).padStart(2, '0')} ${year}`,
           hours: 0,
           commits: 0,
           days: 0
@@ -935,12 +968,17 @@ function MarkdownViewer({ fileName }) {
     const months = {}
     dailyData.forEach(day => {
       const date = new Date(day.date)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const year = date.getFullYear()
+      const month = date.getMonth()
+      const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
+      
+      const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
+                          'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
       
       if (!months[monthKey]) {
         months[monthKey] = {
           date: monthKey,
-          label: date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }),
+          label: `${monthNames[month]} ${year}`,
           hours: 0,
           commits: 0,
           days: 0
@@ -953,82 +991,90 @@ function MarkdownViewer({ fileName }) {
     return Object.values(months).sort((a, b) => new Date(a.date) - new Date(b.date))
   }
 
-  // Filtrer les données par contributeur
-  const filteredData = useMemo(() => {
-    if (!chartData || !chartData.dailyData) return chartData
-    
-    if (contributorView === 'global') {
-      return chartData
-    }
-    
-    // Filtrer les données quotidiennes
-    const filteredDailyData = chartData.dailyData.filter(day => {
-      // Extraire le contributeur du contenu markdown
-      const contributorMatch = content.match(new RegExp(`\\| ${day.date} \\|\\s*\\*\\*(.+?)\\*\\*\\s*\\|`))
-      if (contributorMatch) {
-        const contributor = contributorMatch[1].toLowerCase()
-        return contributor === contributorView
+  // Résumé par contributeur (pour légende + stats)
+  const contributorSummary = useMemo(() => {
+    if (!chartData?.dailyData) return {}
+    const summary = {}
+    chartData.dailyData.forEach(d => {
+      const key = (d.contributor || '').toLowerCase()
+      if (!key) return
+      if (!summary[key]) {
+        summary[key] = {
+          contributor: d.contributor,
+          totalHours: 0,
+          totalCommits: 0,
+          days: 0
+        }
       }
-      return false
+      summary[key].totalHours += d.hours || 0
+      summary[key].totalCommits += d.commits || 0
+      summary[key].days += 1
     })
-    
-    // Recalculer les totaux
-    const filteredTotalHours = filteredDailyData.reduce((sum, d) => sum + d.hours, 0)
-    const filteredTotalCommits = filteredDailyData.reduce((sum, d) => sum + d.commits, 0)
-    
-    // Recalculer les catégories
-    const filteredCategories = {
-      'Développement': filteredDailyData.reduce((sum, d) => sum + (d.dev || 0), 0),
-      'Correction': filteredDailyData.reduce((sum, d) => sum + (d.fix || 0), 0),
-      'Test': filteredDailyData.reduce((sum, d) => sum + (d.test || 0), 0),
-      'Documentation': filteredDailyData.reduce((sum, d) => sum + (d.doc || 0), 0),
-      'Refactoring': filteredDailyData.reduce((sum, d) => sum + (d.refactor || 0), 0),
-      'Déploiement': filteredDailyData.reduce((sum, d) => sum + (d.deploy || 0), 0),
-      'UI/UX': filteredDailyData.reduce((sum, d) => sum + (d.uiux || 0), 0),
-      'Optimisation': filteredDailyData.reduce((sum, d) => sum + (d.optim || 0), 0)
-    }
-    
-    return {
-      ...chartData,
-      dailyData: filteredDailyData,
-      totalHours: filteredTotalHours,
-      totalCommits: filteredTotalCommits,
-      categories: filteredCategories
-    }
-  }, [chartData, contributorView, content])
+    return summary
+  }, [chartData])
 
   // Agréger les données selon la vue (jour/semaine/mois)
   const aggregateData = useMemo(() => {
-    if (!filteredData || !filteredData.dailyData) return []
+    if (!chartData || !chartData.dailyData) return []
     
     switch (timeView) {
       case 'week':
-        return aggregateByWeek(filteredData.dailyData)
+        return aggregateByWeek(chartData.dailyData)
       case 'month':
-        return aggregateByMonth(filteredData.dailyData)
+        return aggregateByMonth(chartData.dailyData)
       default:
-        return filteredData.dailyData
+        return chartData.dailyData
     }
-  }, [filteredData, timeView])
+  }, [chartData, timeView])
+
+  // Agréger les données par contributeur (Yannick/Maxime) pour affichage combiné
+  const aggregateDataByContributor = useMemo(() => {
+    if (!chartData?.dailyData) return {}
+    const byContributor = {}
+
+    chartData.dailyData.forEach(d => {
+      const key = (d.contributor || '').toLowerCase()
+      if (!key) return
+      if (!byContributor[key]) byContributor[key] = []
+      byContributor[key].push(d)
+    })
+
+    Object.keys(byContributor).forEach(key => {
+      const data = byContributor[key]
+      switch (timeView) {
+        case 'week':
+          byContributor[key] = aggregateByWeek(data)
+          break
+        case 'month':
+          byContributor[key] = aggregateByMonth(data)
+          break
+        default:
+          byContributor[key] = data
+          break
+      }
+    })
+
+    return byContributor
+  }, [chartData, timeView])
 
   // Calculer des statistiques supplémentaires
   const stats = useMemo(() => {
-    if (!filteredData || !filteredData.dailyData || filteredData.dailyData.length === 0) {
+    if (!chartData || !chartData.dailyData || chartData.dailyData.length === 0) {
       return null
     }
     
     try {
       return {
-        avgHoursPerDay: filteredData.totalHours / filteredData.dailyData.length,
-        avgCommitsPerDay: filteredData.totalCommits / filteredData.dailyData.length,
-        maxHours: Math.max(...filteredData.dailyData.map(d => d.hours)),
-        minHours: Math.min(...filteredData.dailyData.map(d => d.hours)),
-        maxCommits: Math.max(...filteredData.dailyData.map(d => d.commits)),
-        minCommits: Math.min(...filteredData.dailyData.map(d => d.commits)),
+        avgHoursPerDay: chartData.totalHours / chartData.dailyData.length,
+        avgCommitsPerDay: chartData.totalCommits / chartData.dailyData.length,
+        maxHours: Math.max(...chartData.dailyData.map(d => d.hours)),
+        minHours: Math.min(...chartData.dailyData.map(d => d.hours)),
+        maxCommits: Math.max(...chartData.dailyData.map(d => d.commits)),
+        minCommits: Math.min(...chartData.dailyData.map(d => d.commits)),
         // Régularité : écart-type des heures
         regularity: (() => {
-          const avg = filteredData.totalHours / filteredData.dailyData.length
-          const variance = filteredData.dailyData.reduce((sum, d) => sum + Math.pow(d.hours - avg, 2), 0) / filteredData.dailyData.length
+          const avg = chartData.totalHours / chartData.dailyData.length
+          const variance = chartData.dailyData.reduce((sum, d) => sum + Math.pow(d.hours - avg, 2), 0) / chartData.dailyData.length
           return Math.sqrt(variance)
         })(),
         // Distribution par jour de la semaine
@@ -1043,7 +1089,7 @@ function MarkdownViewer({ fileName }) {
             'dimanche': { hours: 0, commits: 0, days: 0 }
           }
           
-          filteredData.dailyData.forEach(d => {
+          chartData.dailyData.forEach(d => {
             const date = new Date(d.date)
             const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' }).toLowerCase()
             
@@ -1062,28 +1108,66 @@ function MarkdownViewer({ fileName }) {
       logger.error('Erreur calcul stats:', error)
       return null
     }
-  }, [filteredData])
+  }, [chartData])
 
   // Préparer les données pour les graphiques (avec vue jour/semaine/mois)
   // Note: commitsChartData supprimé - non utilisé (seul hoursChartData est affiché)
-  const hoursChartData = aggregateData ? {
-    labels: aggregateData.map(d => d.label || (() => {
+  const hoursChartData = useMemo(() => {
+    if (!chartData?.dailyData) return null
+
+    const toLabel = (d) => d.label || (() => {
       const date = new Date(d.date)
       return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
-    })()),
-    datasets: [{
-      label: timeView === 'day' ? 'Heures par jour' : timeView === 'week' ? 'Heures par semaine' : 'Heures par mois',
-      data: aggregateData.map(d => d.hours),
-      borderColor: 'rgb(81, 207, 102)',
-      backgroundColor: 'rgba(81, 207, 102, 0.1)',
-      fill: true,
-      tension: 0.4,
-      borderWidth: 2
-    }]
-  } : null
+    })()
+
+    const contributors = Object.keys(aggregateDataByContributor)
+    const allLabelSet = new Set()
+    contributors.forEach(key => {
+      aggregateDataByContributor[key].forEach(d => {
+        allLabelSet.add(toLabel(d))
+      })
+    })
+
+    const labels = Array.from(allLabelSet)
+
+    // Conserver un ordre stable basé sur la date si possible
+    const labelToDate = {}
+    contributors.forEach(key => {
+      aggregateDataByContributor[key].forEach(d => {
+        const label = toLabel(d)
+        if (!labelToDate[label]) labelToDate[label] = d.date
+      })
+    })
+    labels.sort((a, b) => new Date(labelToDate[a] || a) - new Date(labelToDate[b] || b))
+
+    const contributorColors = {
+      yannick: { border: 'rgb(59, 130, 246)', bg: 'rgba(59, 130, 246, 0.12)' },
+      maxime: { border: 'rgb(168, 85, 247)', bg: 'rgba(168, 85, 247, 0.12)' }
+    }
+
+    const datasets = contributors.map(key => {
+      const pointsByLabel = {}
+      aggregateDataByContributor[key].forEach(d => {
+        pointsByLabel[toLabel(d)] = d.hours || 0
+      })
+      const c = contributorColors[key] || { border: 'rgb(81, 207, 102)', bg: 'rgba(81, 207, 102, 0.12)' }
+      const name = contributorSummary[key]?.contributor || key
+      return {
+        label: name,
+        data: labels.map(l => pointsByLabel[l] ?? 0),
+        borderColor: c.border,
+        backgroundColor: c.bg,
+        fill: false,
+        tension: 0.4,
+        borderWidth: 2
+      }
+    })
+
+    return { labels, datasets }
+  }, [chartData, aggregateDataByContributor, contributorSummary, timeView])
 
   const pieChartData = useMemo(() => {
-    if (!filteredData || !filteredData.categories) return null
+    if (!chartData || !chartData.categories) return null
     
     try {
       // Palette de couleurs distinctives pour 8 catégories
@@ -1098,8 +1182,8 @@ function MarkdownViewer({ fileName }) {
         'Optimisation': { bg: 'rgba(14, 165, 233, 0.8)', border: 'rgb(14, 165, 233)' }       // Cyan
       }
       
-      const activeCategories = Object.keys(filteredData.categories).filter(k => filteredData.categories[k] > 0)
-      const activeValues = activeCategories.map(k => filteredData.categories[k])
+      const activeCategories = Object.keys(chartData.categories).filter(k => chartData.categories[k] > 0)
+      const activeValues = activeCategories.map(k => chartData.categories[k])
       const backgroundColors = activeCategories.map(k => colorPalette[k]?.bg || 'rgba(128, 128, 128, 0.8)')
       const borderColors = activeCategories.map(k => colorPalette[k]?.border || 'rgb(128, 128, 128)')
       
@@ -1116,92 +1200,112 @@ function MarkdownViewer({ fileName }) {
       logger.error('Erreur calcul pieChartData:', error)
       return null
     }
-  }, [filteredData])
+  }, [chartData])
 
-  // Graphique par jour de la semaine
+  // Graphique par jour de la semaine - par contributeur
   const dayOfWeekChartData = useMemo(() => {
-    // Pendant le chargement, retourner null sans warning (c'est normal)
-    if (!chartData || !stats) {
-      return null
-    }
-    
-    // Si les données sont chargées mais byDayOfWeek est manquant, c'est anormal
-    if (!stats.byDayOfWeek) {
-      logger.warn('⚠️ byDayOfWeek manquant alors que chartData est chargé:', { 
-        hasStats: !!stats, 
-        hasChartData: !!chartData,
-        dailyDataLength: chartData?.dailyData?.length 
-      })
-      return null
-    }
+    if (!chartData?.dailyData || chartData.dailyData.length === 0) return null
     
     try {
       const daysOrder = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
       const labels = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
       
-      const data = daysOrder.map(day => {
-        const dayData = stats.byDayOfWeek[day]
-        
-        if (!dayData || dayData.days === 0) {
-          return 0
+      // Calculer par contributeur
+      const byContributorByDay = {}
+      chartData.dailyData.forEach(d => {
+        const key = (d.contributor || '').toLowerCase()
+        if (!key) return
+        if (!byContributorByDay[key]) {
+          byContributorByDay[key] = {}
+          daysOrder.forEach(day => {
+            byContributorByDay[key][day] = { hours: 0, days: 0 }
+          })
         }
-        
-        const average = dayData.hours / dayData.days
-        return parseFloat(average.toFixed(1))
+        const date = new Date(d.date)
+        const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' }).toLowerCase()
+        if (byContributorByDay[key][dayName]) {
+          byContributorByDay[key][dayName].hours += d.hours
+          byContributorByDay[key][dayName].days += 1
+        }
       })
       
-      logger.debug('📊 Day of week chart data:', { labels, data, byDayOfWeek: stats.byDayOfWeek })
+      const contributorColors = {
+        yannick: { bg: 'rgba(59, 130, 246, 0.8)', border: 'rgb(59, 130, 246)' },
+        maxime: { bg: 'rgba(168, 85, 247, 0.8)', border: 'rgb(168, 85, 247)' }
+      }
       
-      return {
-        labels: labels,
-        datasets: [{
-          label: 'Heures moyennes',
-          data: data,
-          backgroundColor: 'rgba(81, 207, 102, 0.8)',
-          borderColor: 'rgb(81, 207, 102)',
+      const datasets = Object.keys(byContributorByDay).map(key => {
+        const data = daysOrder.map(day => {
+          const dayData = byContributorByDay[key][day]
+          if (!dayData || dayData.days === 0) return 0
+          return parseFloat((dayData.hours / dayData.days).toFixed(1))
+        })
+        const c = contributorColors[key] || { bg: 'rgba(81, 207, 102, 0.8)', border: 'rgb(81, 207, 102)' }
+        const name = contributorSummary[key]?.contributor || key
+        return {
+          label: name,
+          data,
+          backgroundColor: c.bg,
+          borderColor: c.border,
           borderWidth: 2,
           borderRadius: 4
-        }]
-      }
+        }
+      })
+      
+      return { labels, datasets }
     } catch (error) {
       logger.error('Erreur calcul dayOfWeekChartData:', error)
       return null
     }
-  }, [stats, chartData])
+  }, [chartData, contributorSummary])
 
-  // Histogramme des heures (distribution)
+  // Histogramme des heures (distribution) - par contributeur
   const hoursDistributionData = useMemo(() => {
-    if (!chartData || !chartData.dailyData || chartData.dailyData.length === 0) return null
+    if (!chartData?.dailyData || chartData.dailyData.length === 0) return null
     
     try {
-      return {
-        labels: ['0-2h', '2-4h', '4-6h', '6-8h', '8-10h', '10h+'],
-        datasets: [{
-          label: 'Nombre de jours',
-          data: (() => {
-            // Optimiser les filtres avec un seul passage sur les données
-            const ranges = [0, 0, 0, 0, 0, 0] // [0-2h, 2-4h, 4-6h, 6-8h, 8-10h, 10h+]
-            chartData.dailyData.forEach(d => {
-              if (d.hours >= 0 && d.hours < 2) ranges[0]++
-              else if (d.hours >= 2 && d.hours < 4) ranges[1]++
-              else if (d.hours >= 4 && d.hours < 6) ranges[2]++
-              else if (d.hours >= 6 && d.hours < 8) ranges[3]++
-              else if (d.hours >= 8 && d.hours < 10) ranges[4]++
-              else if (d.hours >= 10) ranges[5]++
-            })
-            return ranges
-          })(),
-          backgroundColor: 'rgba(168, 85, 247, 0.8)',
-          borderColor: 'rgb(168, 85, 247)',
+      const labels = ['0-2h', '2-4h', '4-6h', '6-8h', '8-10h', '10h+']
+      
+      // Calculer par contributeur
+      const byContributor = {}
+      chartData.dailyData.forEach(d => {
+        const key = (d.contributor || '').toLowerCase()
+        if (!key) return
+        if (!byContributor[key]) {
+          byContributor[key] = [0, 0, 0, 0, 0, 0]
+        }
+        if (d.hours >= 0 && d.hours < 2) byContributor[key][0]++
+        else if (d.hours >= 2 && d.hours < 4) byContributor[key][1]++
+        else if (d.hours >= 4 && d.hours < 6) byContributor[key][2]++
+        else if (d.hours >= 6 && d.hours < 8) byContributor[key][3]++
+        else if (d.hours >= 8 && d.hours < 10) byContributor[key][4]++
+        else if (d.hours >= 10) byContributor[key][5]++
+      })
+      
+      const contributorColors = {
+        yannick: { bg: 'rgba(59, 130, 246, 0.8)', border: 'rgb(59, 130, 246)' },
+        maxime: { bg: 'rgba(168, 85, 247, 0.8)', border: 'rgb(168, 85, 247)' }
+      }
+      
+      const datasets = Object.keys(byContributor).map(key => {
+        const c = contributorColors[key] || { bg: 'rgba(81, 207, 102, 0.8)', border: 'rgb(81, 207, 102)' }
+        const name = contributorSummary[key]?.contributor || key
+        return {
+          label: name,
+          data: byContributor[key],
+          backgroundColor: c.bg,
+          borderColor: c.border,
           borderWidth: 2,
           borderRadius: 4
-        }]
-      }
+        }
+      })
+      
+      return { labels, datasets }
     } catch (error) {
       logger.error('Erreur calcul hoursDistributionData:', error)
       return null
     }
-  }, [chartData])
+  }, [chartData, contributorSummary])
 
   const chartOptions = {
     responsive: true,
@@ -1287,77 +1391,9 @@ function MarkdownViewer({ fileName }) {
         </nav>
       )}
       
-      {/* Onglets de filtrage par contributeur */}
-      {chartData && fileName === 'SUIVI_TEMPS_FACTURATION.md' && (
-        <div className="sticky top-16 z-40 bg-white dark:bg-[rgb(var(--night-surface))] shadow-lg border-b border-gray-200 dark:border-gray-700">
-          <div className="max-w-7xl mx-auto px-6 py-3">
-            <div className="flex items-center justify-between">
-              {/* Onglets */}
-              <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                <button
-                  onClick={() => setContributorView('global')}
-                  className={`px-4 py-2 rounded-md font-medium transition-all ${
-                    contributorView === 'global'
-                      ? 'bg-primary-500 text-white shadow-md'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  🌍 Global
-                </button>
-                <button
-                  onClick={() => setContributorView('yannick')}
-                  className={`px-4 py-2 rounded-md font-medium transition-all ${
-                    contributorView === 'yannick'
-                      ? 'bg-blue-500 text-white shadow-md'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  👨‍💻 Yannick
-                </button>
-                <button
-                  onClick={() => setContributorView('maxime')}
-                  className={`px-4 py-2 rounded-md font-medium transition-all ${
-                    contributorView === 'maxime'
-                      ? 'bg-purple-500 text-white shadow-md'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  👨‍💻 Maxime
-                </button>
-              </div>
-              
-              {/* Indicateur de vue actuelle */}
-              <div className="flex items-center gap-3">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Vue: <span className="font-semibold text-gray-800 dark:text-white capitalize">
-                    {contributorView === 'global' ? 'Tous les contributeurs' : contributorView}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <div className={`w-3 h-3 rounded-full ${
-                    contributorView === 'global' ? 'bg-primary-500' :
-                    contributorView === 'yannick' ? 'bg-blue-500' : 'bg-purple-500'
-                  }`}></div>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">
-                    {filteredData.totalCommits} commits
-                  </span>
-                  <span className="text-gray-500">•</span>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">
-                    ~{filteredData.totalHours.toFixed(1)}h
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Vue combinée contributeurs (Yannick/Maxime) : onglets supprimés */}
       
       <div className="max-w-7xl mx-auto p-6">
-        {/* Phase 2.1 : Section Métadonnées */}
-        {chartData && chartData.metadata && (
-          <MetadataCard metadata={chartData.metadata} />
-        )}
-
         {/* En-tête avec stats globales améliorées */}
         {chartData && stats && (
           <div id="stats" className="bg-gradient-to-r from-primary-500 to-secondary-500 rounded-lg shadow-lg p-6 mb-6 text-white scroll-mt-20">
@@ -1365,21 +1401,21 @@ function MarkdownViewer({ fileName }) {
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Total Heures</div>
-                <div className="text-2xl font-bold">{filteredData.totalHours.toFixed(1)}h</div>
-                {filteredData.metadata?.filters && Object.keys(filteredData.metadata.filters).length > 0 && (
+                <div className="text-2xl font-bold">{chartData.totalHours.toFixed(1)}h</div>
+                {chartData.metadata?.filters && Object.keys(chartData.metadata.filters).length > 0 && (
                   <div className="text-xs mt-1 opacity-75">⚠️ Filtres actifs</div>
                 )}
               </div>
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Total Commits</div>
-                <div className="text-2xl font-bold">{filteredData.totalCommits}</div>
-                {filteredData.validation && !filteredData.validation.commitsMatch && (
+                <div className="text-2xl font-bold">{chartData.totalCommits}</div>
+                {chartData.validation && !chartData.validation.commitsMatch && (
                   <div className="text-xs mt-1 opacity-75">⚠️ Validation</div>
                 )}
               </div>
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Jours Travaillés</div>
-                <div className="text-2xl font-bold">{filteredData.dailyData.length}</div>
+                <div className="text-2xl font-bold">{chartData.dailyData.length}</div>
               </div>
               <div className="bg-white/20 rounded-lg p-4 backdrop-blur-sm">
                 <div className="text-xs opacity-90 mb-1">Moyenne/jour</div>
@@ -1397,6 +1433,21 @@ function MarkdownViewer({ fileName }) {
                 <div className="text-xs mt-1">σ={stats.regularity.toFixed(1)}h</div>
               </div>
             </div>
+
+            {/* Légende + stats contributeurs */}
+            {fileName === 'SUIVI_TEMPS_FACTURATION.md' && (
+              <div className="mt-6 flex flex-wrap gap-4">
+                {['yannick', 'maxime'].filter(k => contributorSummary[k]).map(k => (
+                  <div key={k} className="bg-white/15 rounded-lg px-4 py-2 backdrop-blur-sm flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${k === 'yannick' ? 'bg-blue-400' : 'bg-purple-400'}`}></div>
+                    <div className="text-sm">
+                      <div className="font-semibold">{contributorSummary[k].contributor}</div>
+                      <div className="opacity-90">{contributorSummary[k].totalCommits} commits • ~{contributorSummary[k].totalHours.toFixed(1)}h</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1503,25 +1554,25 @@ function MarkdownViewer({ fileName }) {
             {/* Détails Git déroulants */}
             {showGitDetails && (
               <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
-                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">🔧 Détails Git - Vue: {contributorView === 'global' ? 'Global' : contributorView}</h4>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">🔧 Détails Git</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Total Commits:</span>
-                    <span className="font-medium text-gray-800 dark:text-white">{filteredData.totalCommits}</span>
+                    <span className="font-medium text-gray-800 dark:text-white">{chartData.totalCommits}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Total Heures:</span>
-                    <span className="font-medium text-gray-800 dark:text-white">~{filteredData.totalHours.toFixed(1)}h</span>
+                    <span className="font-medium text-gray-800 dark:text-white">~{chartData.totalHours.toFixed(1)}h</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Jours actifs:</span>
-                    <span className="font-medium text-gray-800 dark:text-white">{filteredData.dailyData.length}</span>
+                    <span className="font-medium text-gray-800 dark:text-white">{chartData.dailyData.length}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 dark:text-gray-400">Période:</span>
                     <span className="font-medium text-gray-800 dark:text-white">
-                      {filteredData.metadata?.period?.start ? 
-                        new Date(filteredData.metadata.period.start).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : 
+                      {chartData.metadata?.period?.start ? 
+                        new Date(chartData.metadata.period.start).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : 
                         'N/A'
                       }
                     </span>
@@ -1555,6 +1606,7 @@ function MarkdownViewer({ fileName }) {
               <table className="min-w-full border-collapse">
                 <thead>
                   <tr className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700">
+                    <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-left">Contributeur</th>
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-left">Date</th>
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Heures</th>
                     <th className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-bold text-center">Commits</th>
@@ -1579,6 +1631,8 @@ function MarkdownViewer({ fileName }) {
                 <tbody>
                   {chartData.dailyData.map((day, idx) => {
                     const date = new Date(day.date)
+                    const cKey = (day.contributor || '').toLowerCase()
+                    const contributorDot = cKey === 'yannick' ? 'bg-blue-400' : cKey === 'maxime' ? 'bg-purple-400' : 'bg-gray-400'
                     const hasDetails = day.details && (
                       (day.details.advances && day.details.advances.length > 0) ||
                       (day.details.fixes && day.details.fixes.length > 0) ||
@@ -1596,6 +1650,12 @@ function MarkdownViewer({ fileName }) {
                         title={tooltipText}
                         onClick={() => hasDetails && openDayDetails(day)}
                       >
+                        <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-medium">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2.5 h-2.5 rounded-full ${contributorDot}`}></div>
+                            <span>{day.contributor || 'N/A'}</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 font-medium">
                           {date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </td>
@@ -1631,20 +1691,20 @@ function MarkdownViewer({ fileName }) {
                     )
                   })}
                   <tr className="bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 font-bold">
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600">Total</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600" colSpan={2}>Total</td>
                     <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center text-primary-600 dark:text-primary-400">
-                      ~{filteredData.totalHours.toFixed(1)}h
+                      ~{chartData.totalHours.toFixed(1)}h
                     </td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.totalCommits}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Développement']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Correction']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Test']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Documentation']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Refactoring']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Déploiement']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['UI/UX']?.toFixed(1) || '0'}</td>
-                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{filteredData.categories['Optimisation']?.toFixed(1) || '0'}</td>
-                    {filteredData.dailyData.some(d => d.details && (
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.totalCommits}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Développement']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Correction']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Test']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Documentation']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Refactoring']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Déploiement']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['UI/UX']?.toFixed(1) || '0'}</td>
+                    <td className="px-4 py-3 border border-gray-300 dark:border-gray-600 text-center">{chartData.categories['Optimisation']?.toFixed(1) || '0'}</td>
+                    {chartData.dailyData.some(d => d.details && (
                       (d.details.advances && d.details.advances.length > 0) ||
                       (d.details.fixes && d.details.fixes.length > 0) ||
                       (d.details.deployments && d.details.deployments.length > 0) ||
