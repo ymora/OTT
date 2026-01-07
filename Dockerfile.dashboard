@@ -37,7 +37,7 @@ COPY scripts/start_dashboard.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start_dashboard.sh
 
 # Build (Render / production)
-RUN npm run build -- --verbose
+RUN npm run build
 
 # Port exposé - supporte PORT environment variable pour Render
 EXPOSE ${PORT:-3000}
