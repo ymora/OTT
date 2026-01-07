@@ -1,0 +1,40 @@
+# ================================================================
+# OTT Dashboard - Dockerfile
+# ================================================================
+# Image Node.js pour le dashboard Next.js
+# Utilisé uniquement en développement local
+# (Production = GitHub Pages statique)
+# ================================================================
+
+FROM node:20-alpine
+
+# Métadonnées
+LABEL maintainer="HAPPLYZ MEDICAL <support@happlyz.com>"
+LABEL version="3.1.0"
+LABEL description="OTT Dashboard Next.js - Développement"
+
+# Variables d'environnement
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Répertoire de travail
+WORKDIR /app
+
+# Copier les fichiers de dépendances
+COPY package.json package-lock.json* ./
+
+# Installer les dépendances
+RUN npm ci --legacy-peer-deps
+
+# Copier le code source
+COPY . .
+
+# Port exposé
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
+
+# Commande de démarrage (dev mode)
+CMD ["npm", "run", "dev"]

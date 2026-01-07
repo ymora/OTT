@@ -91,11 +91,8 @@ hardware/arduino-data/
 # Dossier audit déplacé séparément (D:\Windsurf\audit)
 audit/
 
-# Fichiers Docker supprimés (espace disque)
-Dockerfile
-Dockerfile.dashboard
-docker-compose.yml
-DOCKER_README.md
+# Documentation Docker (optionnel)
+# DOCKER_README.md
 
 # Fichiers hardware volumineux (CAD, PDF, bibliothèques dupliquées)
 hardware/cad/
