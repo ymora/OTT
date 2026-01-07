@@ -3,7 +3,7 @@
 # Configure Apache to listen on the PORT environment variable
 
 # Set default port if not specified
-PORT=${PORT:-10000}
+PORT=${PORT:-80}
 
 # Update Apache ports.conf to listen on the correct port
 sed -i "s/Listen 80/Listen $PORT/" /etc/apache2/ports.conf

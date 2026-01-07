@@ -87,4 +87,3 @@ yarn.lock
 
 # Sentry
 .sentryclirc
-sentry.*.config.js
