@@ -190,7 +190,7 @@ if ($path === '/health' && $method === 'GET') {
     handleFirmwareFlash();
 } elseif($method === 'POST' && preg_match('#^/devices/create/?$#', $path)) {
     // Route pour créer un dispositif (alternative à POST /devices)
-    require_once __DIR__ . '/../handlers/devices/crud.php';
+    // REDIRECTION: utiliser la route principale /devices POST
     handleCreateDevice();
 } elseif($method === 'GET' && preg_match('#^/firmwares/check-version/([^/]+)$#', $path, $matches)) {
     handleCheckFirmwareVersion($matches[1]);
