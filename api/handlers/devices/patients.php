@@ -66,8 +66,9 @@ function handleGetPatients() {
             error_log('[handleGetPatients] ⚠️ Erreur vérification table notifications: ' . $e->getMessage());
         }
         
-        // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE deleted_at " . ($includeDeleted ? "IS NOT NULL" : "IS NULL"));
+        // SÉCURITÉ: Utiliser des requêtes préparées avec paramètres
+        $deletedCondition = $includeDeleted ? "IS NOT NULL" : "IS NULL";
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM patients WHERE deleted_at $deletedCondition");
         $countStmt->execute();
         $total = intval($countStmt->fetchColumn());
         

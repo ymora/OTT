@@ -250,10 +250,10 @@ function handleGetUsers() {
     $whereClause = $includeDeleted ? "u.deleted_at IS NOT NULL" : "u.deleted_at IS NULL";
     
     try {
-        // SÉCURITÉ: Utiliser des paramètres nommés au lieu de concaténation SQL
+        // SÉCURITÉ: Utiliser des requêtes préparées avec paramètres
         // Condition WHERE selon le paramètre include_deleted
-        $countWhereClause = $includeDeleted ? "deleted_at IS NOT NULL" : "deleted_at IS NULL";
-        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE $countWhereClause");
+        $countWhereClause = $includeDeleted ? "IS NOT NULL" : "IS NULL";
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE deleted_at $countWhereClause");
         $countStmt->execute();
         $total = $countStmt->fetchColumn();
         

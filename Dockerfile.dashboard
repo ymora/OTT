@@ -33,7 +33,7 @@ RUN npm install --legacy-peer-deps
 COPY . .
 
 # Copier le script de démarrage
-COPY scripts/start_dashboard.sh /usr/local/bin/
+COPY scripts/start_dashboard.sh /usr/local/bin/start_dashboard.sh
 RUN chmod +x /usr/local/bin/start_dashboard.sh
 
 # Build (Render / production)
