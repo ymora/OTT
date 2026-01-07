@@ -7,12 +7,13 @@
 
 FROM php:8.2-apache
 
-# Installer extensions PHP requises, client PostgreSQL et arduino-cli
+# Installer extensions PHP requises, client PostgreSQL, python3 et arduino-cli
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     postgresql-client \
     curl \
     unzip \
+    python3 \
     && docker-php-ext-install pdo pdo_pgsql \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*

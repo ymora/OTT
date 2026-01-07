@@ -838,8 +838,9 @@ function Execute-Phase {
         ErrorCount = ($results.Values | Where-Object { $_.Status -eq "ERROR" }).Count
     }
 
-    $resultFile = Join-Path $script:Config.OutputDir "phase_$($Phase.Id)_$($script:Config.Timestamp).json"
-    $phaseResult | ConvertTo-Json -Depth 10 | Out-File -FilePath $resultFile -Encoding UTF8
+    # DESACTIVE: Plus de fichiers phase_*.json (tout dans AI-SUMMARY.md)
+    # $resultFile = Join-Path $script:Config.OutputDir "phase_$($Phase.Id)_$($script:Config.Timestamp).json"
+    # $phaseResult | ConvertTo-Json -Depth 10 | Out-File -FilePath $resultFile -Encoding UTF8
 
     Write-PhaseSummary -PhaseId $Phase.Id -PhaseName $Phase.Name -TotalDuration $totalDuration -Results $results
     return $phaseResult
