@@ -238,7 +238,25 @@ function handleCompileFirmwareOptimized($firmware_id) {
                     $dependenciesFound[] = $lib_name;
                     $target_lib_persistent = $arduinoDataLibrariesDir . DIRECTORY_SEPARATOR . $lib_name;
                     
-                    // Copier dans arduino-data/libraries si pas déjà là (persistant)
+                    // Toujours mettre à jour TinyGSM (version modifiée requise pour compilation)
+                    // Pour les autres libs, copier seulement si pas déjà là
+                    $forceUpdate = (stripos($lib_name, 'TinyGSM') !== false);
+                    
+                    if ($forceUpdate && is_dir($target_lib_persistent)) {
+                        sendSSE('log', 'info', "🔄 Mise à jour librairie: {$lib_name}");
+                        // Supprimer récursivement le dossier existant
+                        $it = new RecursiveDirectoryIterator($target_lib_persistent, RecursiveDirectoryIterator::SKIP_DOTS);
+                        $files = new RecursiveIteratorIterator($it, RecursiveIteratorIterator::CHILD_FIRST);
+                        foreach($files as $file) {
+                            if ($file->isDir()) {
+                                rmdir($file->getRealPath());
+                            } else {
+                                unlink($file->getRealPath());
+                            }
+                        }
+                        rmdir($target_lib_persistent);
+                    }
+                    
                     if (!is_dir($target_lib_persistent)) {
                         sendSSE('log', 'info', "📦 Installation librairie locale: {$lib_name}");
                         copyRecursive($lib_dir, $target_lib_persistent);
