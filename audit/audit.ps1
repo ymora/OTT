@@ -183,10 +183,10 @@ $script:AuditPhases = @(
         Target = "project"
     },
     
-    # PHASE 13: IA et ComplÃ©ments
+    # PHASE 13: IA et ComplÃments
     @{
         Id = 13
-        Name = "IA et ComplÃ©ments"
+        Name = "IA et ComplÃments"
         Description = "Tests exhaustifs, IA, suivi temps"
         Category = "IA"
         Dependencies = @(1, 2, 5, 10)
@@ -194,6 +194,18 @@ $script:AuditPhases = @(
         Modules = @("Checks-FunctionalTests.ps1", "Checks-TestsComplets.ps1", "Checks-TimeTracking.ps1", "AI-TestsComplets.ps1")
         Target = "project"
         ProjectSpecific = @("ott")
+    },
+    
+    # PHASE 14: QUESTIONS IA (cas ambigus Ã  dÃlÃguer Ã  l'IA)
+    @{
+        Id = 14
+        Name = "Questions IA"
+        Description = "GÃnÃ¨re des questions ciblÃes pour l'IA sur les cas ambigus"
+        Category = "IA"
+        Dependencies = @(1, 2, 7)
+        Priority = 14
+        Modules = @("AI-QuestionGenerator.ps1")
+        Target = "project"
     }
 )
 
