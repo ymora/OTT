@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import Topbar from '@/components/Topbar'
+import ApiStatusBanner from '@/components/ApiStatusBanner'
 import { useAuth } from '@/contexts/AuthContext'
 import { UsbProvider} from '@/contexts/UsbContext'
 import logger from '@/lib/logger'
@@ -68,6 +69,7 @@ function DashboardLayoutContent({ children }) {
   return (
     <UsbProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-[rgb(var(--night-bg-start))]">
+        <ApiStatusBanner />
         <Topbar />
         <div className="flex">
           <Sidebar />

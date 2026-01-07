@@ -104,6 +104,17 @@ export function useApiData(endpoints, options = {}) {
               if (err.code) {
                 logger.error(`Code erreur ${endpoint}:`, err.code)
               }
+              
+              // Détecter si l'API est indisponible (déploiement en cours)
+              const isApiUnavailable = err.message?.includes('Réponse vide') || 
+                                       err.message?.includes('Failed to fetch') ||
+                                       err.message?.includes('NetworkError')
+              if (isApiUnavailable && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('api_status', { 
+                  detail: { type: 'api_unavailable', endpoint } 
+                }))
+              }
+              
               // Retourner un objet avec success: false pour indiquer l'erreur
               return { 
                 success: false, 
@@ -112,7 +123,8 @@ export function useApiData(endpoints, options = {}) {
                 code: err.code || null,
                 file: err.file || null,
                 line: err.line || null,
-                data: null 
+                data: null,
+                isApiUnavailable
               }
             })
         )
