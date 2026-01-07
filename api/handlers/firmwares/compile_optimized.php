@@ -243,20 +243,21 @@ function handleCompileFirmwareOptimized($firmware_id) {
                     $needsUpdate = false;
                     if (stripos($lib_name, 'TinyGSM') !== false && is_dir($target_lib_persistent)) {
                         $sim7600File = $target_lib_persistent . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'TinyGsmClientSIM7600.h';
-                        sendSSE('log', 'info', "🔍 Vérification TinyGSM: {$sim7600File}");
-                        if (file_exists($sim7600File)) {
+                        $versionMarker = $target_lib_persistent . DIRECTORY_SEPARATOR . '.ott_modified_v2';
+                        
+                        // Si le marqueur de version n'existe pas, forcer la mise à jour
+                        if (!file_exists($versionMarker)) {
+                            sendSSE('log', 'info', "🔄 TinyGSM: marqueur de version absent, mise à jour forcée");
+                            $needsUpdate = true;
+                        } else if (file_exists($sim7600File)) {
                             $content = file_get_contents($sim7600File);
                             // Notre version modifiée contient "enum RegStatus" et "GSM_NL"
                             $hasGsmNl = (strpos($content, 'GSM_NL') !== false);
                             $hasRegStatus = (strpos($content, 'enum RegStatus') !== false);
-                            sendSSE('log', 'info', "🔍 GSM_NL: " . ($hasGsmNl ? 'oui' : 'non') . ", RegStatus: " . ($hasRegStatus ? 'oui' : 'non'));
                             if (!$hasGsmNl || !$hasRegStatus) {
                                 $needsUpdate = true;
                                 sendSSE('log', 'info', "🔄 Mise à jour TinyGSM requise (version incorrecte)");
                             }
-                        } else {
-                            sendSSE('log', 'info', "⚠️ Fichier SIM7600.h non trouvé, réinstallation...");
-                            $needsUpdate = true;
                         }
                     }
                     
@@ -279,7 +280,15 @@ function handleCompileFirmwareOptimized($firmware_id) {
                     if (!is_dir($target_lib_persistent)) {
                         sendSSE('log', 'info', "📦 Installation librairie locale: {$lib_name}");
                         copyRecursive($lib_dir, $target_lib_persistent);
-                        sendSSE('log', 'info', "✅ {$lib_name} installée");
+                        
+                        // Créer le fichier marqueur pour TinyGSM modifiée
+                        if (stripos($lib_name, 'TinyGSM') !== false) {
+                            $versionMarker = $target_lib_persistent . DIRECTORY_SEPARATOR . '.ott_modified_v2';
+                            file_put_contents($versionMarker, 'OTT Modified TinyGSM - ' . date('Y-m-d H:i:s'));
+                            sendSSE('log', 'info', "✅ {$lib_name} installée (version OTT modifiée)");
+                        } else {
+                            sendSSE('log', 'info', "✅ {$lib_name} installée");
+                        }
                     } else {
                         sendSSE('log', 'info', "✅ {$lib_name} déjà installée");
                     }

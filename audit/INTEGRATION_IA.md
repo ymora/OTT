@@ -1,112 +1,60 @@
-# 🔍 Intégration IA dans l'Audit - Guide d'Utilisation
+# Integration IA dans l'Audit
 
-## 🎯 Architecture à 2 Niveaux
+## POINT D'ENTREE UNIQUE
 
-| Niveau | Responsable | Type de vérification | Fiabilité |
-|--------|-------------|---------------------|-----------|
-| **CPU** | Audit auto | Patterns regex, comptages, structure | 100% |
-| **IA** | Cascade | Contexte sémantique, logique métier | Variable |
+**Fichier:** `audit/resultats/AI-SUMMARY.md`
 
-### Philosophie
-- **CPU fait ce qu'il sait faire à 100%** : comptages, patterns, structure
-- **IA reçoit UNIQUEMENT les cas ambigus** avec contexte minimal
-- **Objectif** : Minimiser les tokens tout en maximisant la précision
+Ce fichier est regenere automatiquement a chaque audit et contient:
+- Scores par categorie
+- Questions a verifier par l'IA
+- Format de reponse attendu
 
-### Vérifications par niveau
+## Workflow Simplifie
 
-**CPU (Audit fiable) :**
-- Fichiers > X lignes
-- Patterns regex (console.log, key={index}, secrets)
-- Comptages (imports, dépendances)
-- Structure (fichiers manquants, routes mortes)
-
-**IA uniquement (complexe) :**
-- "Ce handler est-il vraiment mort ou utilisé dynamiquement ?"
-- "Cette fonction est-elle trop complexe à refactorer ?"
-- "Cette duplication est-elle justifiée ?"
-- "Ce TODO est-il toujours pertinent ?"
-
-## Workflow
-
-### 1. Audit CPU (Automatique)
 ```powershell
-.\audit\audit.ps1 -Phases "all" -Verbose
+# 1. Lancer l'audit
+.\audit\audit.ps1 -Phases "all"
+
+# 2. Lire le resume IA
+Get-Content audit\resultats\AI-SUMMARY.md
 ```
 
-L'audit détecte :
-- Patterns évidents (code mort, doublons, sécurité basique)
-- Cas douteux (handlers "inutilisés", imports "inutilisés", timers)
+## Architecture 2 Niveaux
 
-### 2. Génération du Rapport IA
-```powershell
-# Le contexte IA est exporté automatiquement en fin d'audit si des modules ajoutent du contenu dans Results.AIContext
+| Niveau | Responsable | Fiabilite |
+|--------|-------------|-----------|
+| **CPU** | Audit auto (patterns, comptages) | 100% |
+| **IA** | Cas ambigus (contexte semantique) | Variable |
+
+## Format du Resume IA
+
+```markdown
+# RESUME AUDIT POUR L'IA
+> Point d'entree unique - 2026-01-07 10:17
+
+## Scores
+- [OK] Architecture : 10/10
+- [!] API : 5/10
+- [!!] Structure API : 0/10
+
+## QUESTIONS A VERIFIER
+[ ] [1] Timer UsbContext.js:1662 - cleanup ?
+[ ] [2] Handler handleGetUsers - utilise ?
+
+## Format reponse: [ID] OUI/NON - raison courte
 ```
 
-Le rapport contient :
-- Contexte de code pour chaque cas douteux
-- Patterns de routing détectés
-- Questions spécifiques pour l'IA
+## Reponse Attendue de l'IA
 
-### 3. Vérification IA (Optionnelle)
-```powershell
-# Utiliser directement le contexte JSON exporté
-$context = Get-Content audit/resultats/ai-context-*.json | ConvertFrom-Json
+```
+[1] NON - timer dans useEffect avec cleanup ref
+[2] OUI - handler appele dans api_router.php ligne 45
 ```
 
-## Modules concernés
+## Fichiers
 
-### `Checks-StructureAPI.ps1`
-- Analyse de structure API / routing (détection de handlers, routes potentielles)
-- Alimente un contexte à faire valider par l'IA si nécessaire
-
-### `modules/ReportGenerator.ps1` (Export)
-- Exporte automatiquement un JSON `ai-context-*.json` en fin d'audit si `Results.AIContext` est alimenté
-- Regroupe les questions par catégorie avec un résumé de sévérité
-
-## Exemple de Rapport IA
-
-```json
-{
-  "Context": [
-    {
-      "Category": "Structure API",
-      "Type": "Unused Handler",
-      "Handler": "handleGetUsers",
-      "Question": "Le handler 'handleGetUsers' est-il utilisé via un routing dynamique non détecté automatiquement ?",
-      "CodeContext": {
-        "File": "auth.php",
-        "Code": "function handleGetUsers() { ... }"
-      },
-      "RoutingContext": {
-        "Patterns": ["preg_match('#/users$#', $path) && handleGetUsers()"]
-      },
-      "NeedsAICheck": true
-    }
-  ]
-}
-```
-
-## Avantages
-
-1. **Moins de tokens** : L'IA vérifie seulement les cas douteux
-2. **Plus précis** : Contexte fourni pour chaque cas
-3. **Généraliste** : Pas de noms de fichiers ou patterns spécifiques
-4. **Réutilisable** : Modules utilisables pour d'autres projets
-5. **Performant** : CPU fait le travail lourd, IA vérifie efficacement
-
-## Intégration dans audit.ps1
-
-L'intégration est assurée par le lanceur `audit/audit.ps1` :
-- l'audit CPU génère des éléments dans `Results.AIContext`.
-- en fin d'exécution, `ReportGenerator.ps1` exporte automatiquement un JSON `ai-context-*.json` si nécessaire.
-
-## Modules de tests exhaustifs (spécifiques projet)
-
-Certains modules de tests “end-to-end” sont spécifiques à un projet (ex: OTT : endpoints, routes, fichiers critiques).
-Ils ne font pas partie du **socle réutilisable** des 12 phases.
-
-Exemples (OTT) :
-- `audit/projects/ott/modules/Checks-TestsComplets.ps1`
-- `audit/projects/ott/modules/AI-TestsComplets.ps1`
-
-Recommandation : placer ces modules dans un dossier projet dédié (ex: `audit/projects/ott/modules/`) et n'activer ces tests que lorsqu'on audite ce projet.
+| Fichier | Description |
+|---------|-------------|
+| `audit/resultats/AI-SUMMARY.md` | **SEUL fichier de sortie** |
+| `audit/audit.ps1` | Script principal |
+| `audit/modules/*.ps1` | Modules de verification |
