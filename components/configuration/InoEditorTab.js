@@ -694,25 +694,60 @@ export default function InoEditorTab({ onUploadSuccess }) {
   }, [firmwareToDelete, editingFirmwareId, API_URL, fetchWithAuth, refetch])
 
 
-  // Auto-fermer les messages de succès après 4 secondes
+  // Auto-fermer les messages après 4 secondes
   useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => {
-        setSuccess(null)
+    if (success || error) {
+      const timer = createTimeoutWithCleanup(() => {
+        resetMessages()
       }, 4000)
-      return () => clearTimeout(timer)
+      return () => timer && clearTimeout(timer)
     }
-  }, [success])
+  }, [success, error, resetMessages])
 
-  // Auto-fermer les messages d'erreur après 4 secondes
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => {
-        setError(null)
-      }, 4000)
-      return () => clearTimeout(timer)
+  // Utilitaire unifié pour vérifier le statut du firmware
+  const checkFirmwareStatus = useCallback(async (firmwareId, isSilent = false) => {
+    try {
+      const response = await fetchWithAuth(`${API_URL}/api.php/firmwares`)
+      const data = await response.json()
+      if (data.success && data.firmwares) {
+        const firmware = data.firmwares.find(f => f.id === firmwareId)
+        if (firmware) {
+          if (firmware.status === 'compiled') {
+            setSuccess(`✅ Compilation réussie ! Firmware v${firmware.version} disponible`)
+            setCompileLogs(prev => [...prev, {
+              timestamp: new Date().toLocaleTimeString('fr-FR'),
+              message: '✅ Compilation terminée avec succès (vérifiée)',
+              level: 'info'
+            }])
+            resetCompilationState()
+            refetch()
+            return 'compiled'
+          } else if (firmware.status === 'error') {
+            setError(`Erreur de compilation: ${firmware.error_message || 'Erreur inconnue'}`)
+            resetCompilationState()
+            refetch()
+            return 'error'
+          }
+        }
+      }
+      if (!isSilent) {
+        setCompileLogs(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: '⚠️ Impossible de vérifier le statut. La compilation peut continuer en arrière-plan.',
+          level: 'warning'
+        }])
+      }
+    } catch (err) {
+      if (!isSilent) {
+        setCompileLogs(prev => [...prev, {
+          timestamp: new Date().toLocaleTimeString('fr-FR'),
+          message: '⚠️ Erreur lors de la vérification du statut.',
+          level: 'warning'
+        }])
+      }
     }
-  }, [error])
+    return null
+  }, [fetchWithAuth, API_URL, resetCompilationState, refetch])
 
   // Fonctions utilitaires pour la compilation
   const closeEventSource = useCallback(() => {
@@ -728,8 +763,6 @@ export default function InoEditorTab({ onUploadSuccess }) {
     setCompileProgress(0)
     closeEventSource()
   }, [closeEventSource])
-
-  // Compiler le firmware
   const handleCompile = useCallback(async (firmwareId) => {
     if (!firmwareId) {
       setError('ID du firmware manquant pour la compilation.')
@@ -917,45 +950,15 @@ export default function InoEditorTab({ onUploadSuccess }) {
             message: '⚠️ Pas de message depuis plus de 60 secondes. Vérification du statut...',
             level: 'warning'
           }])
-          // Vérifier le statut du firmware
-          fetchWithAuth(`${API_URL}/api.php/firmwares`)
-            .then(response => response.json())
-            .then(data => {
-              if (data.success && data.firmwares) {
-                const firmware = data.firmwares.find(f => f.id === firmwareId)
-                if (firmware) {
-                  if (firmware.status === 'compiled') {
-                    setSuccess(`✅ Compilation réussie ! Firmware v${firmware.version} disponible`)
-                    setCompileLogs(prev => [...prev, {
-                      timestamp: new Date().toLocaleTimeString('fr-FR'),
-                      message: '✅ Compilation terminée avec succès (détectée par vérification périodique)',
-                      level: 'info'
-                    }])
-                    resetCompilationState()
-                    refetch()
-                    if (statusCheckIntervalRef.current) {
-                      clearInterval(statusCheckIntervalRef.current)
-                      statusCheckIntervalRef.current = null
-                    }
-                  } else if (firmware.status === 'error') {
-                    setError(`Erreur de compilation: ${firmware.error_message || 'Erreur inconnue'}`)
-                    resetCompilationState()
-                    refetch()
-                    if (statusCheckIntervalRef.current) {
-                      clearInterval(statusCheckIntervalRef.current)
-                      statusCheckIntervalRef.current = null
-                    }
-                  }
-                }
+            // Vérifier le statut du firmware avec la fonction unifiée
+            const status = await checkFirmwareStatus(firmwareId, true)
+            if (status === 'compiled' || status === 'error') {
+              if (statusCheckIntervalRef.current) {
+                clearInterval(statusCheckIntervalRef.current)
+                statusCheckIntervalRef.current = null
               }
-            })
-            .catch(err => {
-              setCompileLogs(prev => [...prev, {
-                timestamp: new Date().toLocaleTimeString('fr-FR'),
-                message: '⚠️ Impossible de vérifier le statut. La compilation peut continuer en arrière-plan.',
-                level: 'warning'
-              }])
-            })
+              return
+            }
         }
       }, 10000) // Vérifier toutes les 10 secondes
 
@@ -1062,10 +1065,15 @@ export default function InoEditorTab({ onUploadSuccess }) {
     }
   }, []) // Pas de dépendances = s'exécute uniquement au montage/démontage
 
-  // Auto-scroll des logs de compilation
+  // Auto-scroll des logs de compilation avec debounce
   useEffect(() => {
     if (compileLogsRef.current && compiling && compileLogs.length > 0) {
-      compileLogsRef.current.scrollTop = compileLogsRef.current.scrollHeight
+      const scrollTimer = createTimeoutWithCleanup(() => {
+        if (compileLogsRef.current) {
+          compileLogsRef.current.scrollTop = compileLogsRef.current.scrollHeight
+        }
+      }, 100) // Debounce de 100ms
+      return () => scrollTimer && clearTimeout(scrollTimer)
     }
   }, [compileLogs.length, compiling])
 
