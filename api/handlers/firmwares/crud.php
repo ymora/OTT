@@ -139,7 +139,7 @@ function handleCreateFirmware() {
         
         // Insert firmware
         $query = "
-            INSERT INTO firmwares (
+            INSERT INTO firmware_versions (
                 name, version, device_type, description, 
                 status, created_at, created_by
             ) VALUES (?, ?, ?, ?, 'draft', NOW(), ?)
@@ -188,7 +188,7 @@ function handleUpdateFirmware($firmwareId) {
         }
         
         // Check if firmware exists
-        $check = $pdo->prepare("SELECT id FROM firmwares WHERE id = ?");
+        $check = $pdo->prepare("SELECT id FROM firmware_versions WHERE id = ?");
         $check->execute([$firmwareId]);
         
         if (!$check->fetch()) {
@@ -237,7 +237,7 @@ function handleUpdateFirmware($firmwareId) {
         $updates[] = "updated_at = NOW()";
         $params[] = $firmwareId;
         
-        $query = "UPDATE firmwares SET " . implode(', ', $updates) . " WHERE id = ?";
+        $query = "UPDATE firmware_versions SET " . implode(', ', $updates) . " WHERE id = ?";
         
         $stmt = $pdo->prepare($query);
         $stmt->execute($params);
@@ -273,7 +273,7 @@ function handleDeleteFirmware($firmwareId) {
         }
         
         // Check if firmware exists
-        $check = $pdo->prepare("SELECT id, file_path FROM firmwares WHERE id = ?");
+        $check = $pdo->prepare("SELECT id, file_path FROM firmware_versions WHERE id = ?");
         $check->execute([$firmwareId]);
         $firmware = $check->fetch(PDO::FETCH_ASSOC);
         
@@ -304,7 +304,7 @@ function handleDeleteFirmware($firmwareId) {
         }
         
         // Delete firmware record
-        $delete = $pdo->prepare("DELETE FROM firmwares WHERE id = ?");
+        $delete = $pdo->prepare("DELETE FROM firmware_versions WHERE id = ?");
         $delete->execute([$firmwareId]);
         
         // Delete physical file if exists
