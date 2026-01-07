@@ -24,8 +24,8 @@ function getApiUrl() {
   
   // URLs selon le mode
   const apiUrls = {
-    production: 'https://ott-api.onrender.com',
-    development: 'http://localhost:8000',
+    production: 'https://ott-jbln.onrender.com',
+    development: 'http://localhost:8080',
   }
   
   return apiUrls[mode]
