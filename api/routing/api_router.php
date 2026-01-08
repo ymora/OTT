@@ -38,6 +38,8 @@ require_once __DIR__ . '/../handlers/migrations/migration_handlers.php';
 $method = $_SERVER['REQUEST_METHOD'];
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path = rtrim($path, '/'); // Normaliser le chemin
+$path = preg_replace('#^/api\.php#', '', $path);
+$path = $path === '' ? '/' : $path;
 
 // Loguer la requête si activé
 if (defined('LOG_REQUESTS') && LOG_REQUESTS) {
