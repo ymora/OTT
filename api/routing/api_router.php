@@ -4,7 +4,7 @@
  * Extrait et refactorisé de api.php pour modularisation
  */
 
-require_once __DIR__ . '/../bootstrap/api_bootstrap.php';
+require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../helpers_sql.php';
 require_once __DIR__ . '/../validators.php';
