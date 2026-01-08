@@ -91,6 +91,7 @@ define('DB_PORT', $dbConfig['port']);
 define('DB_NAME', $dbConfig['name']);
 define('DB_USER', $dbConfig['user']);
 define('DB_PASS', $dbConfig['pass']);
+define('DB_DSN', $dbConfig['dsn']);
 
 // JWT_SECRET doit être défini en production
 $jwtSecret = getenv('JWT_SECRET');
@@ -162,22 +163,37 @@ define('USB_TIMEOUT', 60); // 1 minute
 
 // Initialisation de la connexion PDO
 try {
+    $pdoOptions = ott_pdo_options(DB_TYPE);
+    $pdoOptions[PDO::ATTR_TIMEOUT] = DB_TIMEOUT;
+    $pdoOptions[PDO::ATTR_PERSISTENT] = true;
+
+    if ($dbConfig['type'] === 'mysql' && defined('PDO::MYSQL_ATTR_INIT_COMMAND')) {
+        $pdoOptions[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci";
+    }
+
+    if ($dbConfig['type'] === 'pgsql' && !extension_loaded('pdo_pgsql')) {
+        throw new RuntimeException('Le driver PDO PostgreSQL (pdo_pgsql) est absent');
+    }
+
     $pdo = new PDO(
-        DB_TYPE . ':host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+        $dbConfig['dsn'],
         DB_USER,
         DB_PASS,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-            PDO::ATTR_PERSISTENT => true,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci",
-            PDO::ATTR_TIMEOUT => DB_TIMEOUT
-        ]
+        $pdoOptions
     );
-} catch (PDOException $e) {
+
+    $safeDsn = preg_replace('/:(?:[^:@]+)@/', ':****@', $dbConfig['dsn']);
+    error_log('[DB_CONNECTION] ✅ Connexion réussie (' . $safeDsn . ')');
+} catch (Throwable $e) {
+    $safeDsn = preg_replace('/:(?:[^:@]+)@/', ':****@', $dbConfig['dsn']);
+    error_log('[DB_CONNECTION] ❌ Erreur: ' . $e->getMessage() . ' | DSN=' . $safeDsn);
     http_response_code(500);
-    die(json_encode(['success' => false, 'error' => 'Database connection failed: ' . $e->getMessage()]));
+    die(json_encode([
+        'success' => false,
+        'error' => 'Database connection failed',
+        'details' => $e->getMessage(),
+        'dsn' => $safeDsn
+    ]));
 }
 
 // Configuration du fuseau horaire

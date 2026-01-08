@@ -24,7 +24,8 @@ if (!function_exists('ott_normalize_db_type')) {
             return sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $host, $port, $name);
         }
 
-        return sprintf('pgsql:host=%s;port=%s;dbname=%s', $host, $port, $name);
+        $sslmode = getenv('DB_SSLMODE') ?: getenv('PGSSLMODE') ?: 'require';
+        return sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=%s', $host, $port, $name, $sslmode);
     }
 
     function ott_database_config(bool $includeDefaults = true): ?array
