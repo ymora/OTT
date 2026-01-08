@@ -4,6 +4,11 @@
  * Version refactorisée pour api.php
  */
 
+// Définir les constantes par défaut
+if (!defined('LOG_REQUESTS')) {
+    define('LOG_REQUESTS', false);
+}
+
 // Bootstrap core - corriger les chemins (remonter d'un niveau)
 require_once __DIR__ . '/../bootstrap/env_loader.php';
 require_once __DIR__ . '/../bootstrap/database.php';
