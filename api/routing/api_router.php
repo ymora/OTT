@@ -11,6 +11,8 @@ require_once __DIR__ . '/../validators.php';
 require_once __DIR__ . '/../cache.php';
 require_once __DIR__ . '/../handlers/auth.php';
 
+global $pdo;
+
 // Handlers Devices (modulaires)
 require_once __DIR__ . '/../handlers/devices/utils.php';
 require_once __DIR__ . '/../handlers/devices/crud.php';
