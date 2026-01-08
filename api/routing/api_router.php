@@ -289,4 +289,5 @@ while (ob_get_level() > 0) {
 
 // Envoyer la réponse JSON
 header('Content-Type: application/json');
+// Version: 2.0.1 - Syntax Fixed
 ?>
