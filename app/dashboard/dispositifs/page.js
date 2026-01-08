@@ -15,8 +15,8 @@ import UsbStreamingTab from '@/components/configuration/UsbStreamingTab'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import DeviceModal from '@/components/DeviceModal'
-import FlashModal from '@/components/FlashModal'
-import DeviceMeasurementsModal from '@/components/DeviceMeasurementsModal'
+// FlashModal supprimé - composant non utilisé
+// DeviceMeasurementsModal supprimé - composant non utilisé
 import ConfirmModal from '@/components/ConfirmModal'
 import Modal from '@/components/Modal'
 
@@ -158,8 +158,10 @@ export default function OutilsPage() {
   
   // États pour les modals (toujours déclarer, même si canAccess est false)
   const [showDeviceModal, setShowDeviceModal] = useState(false)
-  const [showFlashModal, setShowFlashModal] = useState(false)
-  const [showMeasurementsModal, setShowMeasurementsModal] = useState(false)
+  // FlashModal supprimé - composant non utilisé
+  // const [showFlashModal, setShowFlashModal] = useState(false)
+  // DeviceMeasurementsModal supprimé - composant non utilisé
+  // const [showMeasurementsModal, setShowMeasurementsModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [showArchiveModal, setShowArchiveModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -272,7 +274,8 @@ export default function OutilsPage() {
         />
       )}
       
-      {/* Modal Flash */}
+      {/* Modal Flash supprimé - composant non utilisé */}
+      {/*
       {showFlashModal && selectedDevice && (
         <FlashModal
           isOpen={showFlashModal}
@@ -283,8 +286,10 @@ export default function OutilsPage() {
           device={selectedDevice}
         />
       )}
+      */}
       
-      {/* Modal Mesures */}
+      {/* Modal Mesures supprimée - composant non utilisé */}
+      {/*
       {showMeasurementsModal && selectedDevice && (
         <DeviceMeasurementsModal
           isOpen={showMeasurementsModal}
@@ -295,6 +300,7 @@ export default function OutilsPage() {
           device={selectedDevice}
         />
       )}
+      */}
       
       {/* Modal Assignation Patient */}
       {showAssignModal && selectedDevice && (

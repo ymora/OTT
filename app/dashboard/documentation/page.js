@@ -11,8 +11,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useApiCall } from '@/hooks'
 import { isAdmin as checkIsAdmin } from '@/lib/userUtils'
 import { Bar, Doughnut, Line} from 'react-chartjs-2'
-import MetadataCard from '@/components/MetadataCard'
-import DayDetailsModal from '@/components/DayDetailsModal'
+// MetadataCard supprimé - composant non utilisé
+// DayDetailsModal supprimé - composant non utilisé
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -1736,12 +1736,14 @@ function MarkdownViewer({ fileName }) {
           </div>
         )}
         
-        {/* Phase 2.4 : Modal de détails par jour */}
+        {/* Phase 2.4 : Modal de détails par jour - supprimé */}
+        {/*
         <DayDetailsModal 
           day={selectedDay}
           isOpen={isModalOpen}
           onClose={closeDayDetails}
         />
+        */}
       </div>
     </div>
   )

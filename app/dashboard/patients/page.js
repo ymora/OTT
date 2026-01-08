@@ -10,7 +10,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
-import UserPatientModal from '@/components/UserPatientModal'
+// UserPatientModal supprimé - composant non utilisé
 import Modal from '@/components/Modal'
 import logger from '@/lib/logger'
 
@@ -442,6 +442,8 @@ export default function PatientsPage() {
         )}
       </div>
 
+      {/* UserPatientModal supprimé - composant non utilisé */}
+      {/*
       <UserPatientModal
         isOpen={showModal}
         onClose={closeModal}
@@ -452,6 +454,7 @@ export default function PatientsPage() {
         API_URL={API_URL}
         roles={[]}
       />
+      */}
 
       {/* Modal d'assignation de dispositif */}
       <Modal
