@@ -10,9 +10,7 @@ import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 import ConfirmModal from '@/components/ConfirmModal'
-// FlashModal supprimé - composant non utilisé
 import DeviceModal from '@/components/DeviceModal'
-// DeviceMeasurementsModal supprimé - composant non utilisé
 import SuccessMessage from '@/components/SuccessMessage'
 // Nouveaux composants et hooks refactorisés
 import UsbConsole from '@/components/usb/UsbConsole'
@@ -1178,7 +1176,8 @@ export default function DebugTab() {
       </ConfirmModal>
       
       {/* Modal de confirmation de suppression */}
-      {/* Modal de flash */}
+      {/* Modal de flash - supprimé */}
+      {/* 
       <FlashModal
         isOpen={showFlashModal}
         onClose={() => {
@@ -1191,6 +1190,7 @@ export default function DebugTab() {
           usbDeviceInfo?.device_serial === deviceToFlash.device_serial
         ) ? 'usb' : 'ota'}
       />
+      */}
       
       {/* Modal pour l'historique des mesures - supprimé */}
       {/*

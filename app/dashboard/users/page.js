@@ -9,7 +9,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
 import SearchBar from '@/components/SearchBar'
-import UserPatientModal from '@/components/UserPatientModal'
+import UserModal from '@/components/UserModal'
 import logger from '@/lib/logger'
 
 export default function UsersPage() {
@@ -289,7 +289,7 @@ export default function UsersPage() {
         )}
       </div>
 
-      <UserPatientModal
+      <UserModal
         isOpen={showModal}
         onClose={closeModal}
         editingItem={editingItem}
