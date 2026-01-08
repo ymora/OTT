@@ -32,10 +32,6 @@ RUN npm install --legacy-peer-deps
 # Copier le code source
 COPY . .
 
-# Copier le script de démarrage
-COPY scripts/start_dashboard.sh /usr/local/bin/start_dashboard.sh
-RUN chmod +x /usr/local/bin/start_dashboard.sh
-
 # Build (Render / production)
 RUN npm run build
 
@@ -46,6 +42,6 @@ EXPOSE ${PORT:-3000}
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-3000} || exit 1
 
-# Commande de démarrage (production) - utilise le script pour configurer le port dynamiquement
-CMD ["/usr/local/bin/start_dashboard.sh"]
+# Commande de démarrage (production) - utilise directement Next.js avec le port dynamique
+CMD ["sh", "-c", "PORT=${PORT:-3000} npx next start -p $PORT"]
 # Force update
