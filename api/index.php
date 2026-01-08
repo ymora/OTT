@@ -4,7 +4,7 @@
  * Extrait et simplifié de api.php
  */
 
-require_once __DIR__ . '/router.php';
+require_once __DIR__ . '/routing/api_router.php';
 
 // Récupérer la méthode et le chemin
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
