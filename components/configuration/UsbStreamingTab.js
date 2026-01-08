@@ -10,14 +10,14 @@ import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
 import Modal from '@/components/Modal'
 import ConfirmModal from '@/components/ConfirmModal'
-import FlashModal from '@/components/FlashModal'
+// FlashModal supprimé - composant non utilisé
 import DeviceModal from '@/components/DeviceModal'
-import DeviceMeasurementsModal from '@/components/DeviceMeasurementsModal'
+// DeviceMeasurementsModal supprimé - composant non utilisé
 import SuccessMessage from '@/components/SuccessMessage'
 // Nouveaux composants et hooks refactorisés
 import UsbConsole from '@/components/usb/UsbConsole'
 import { useUsbStreaming } from '@/components/usb/hooks/useUsbStreaming'
-import SimpleUsbConnector from '@/components/SimpleUsbConnector'
+// SimpleUsbConnector supprimé - composant non utilisé
 
 export default function DebugTab() {
   const usbContext = useUsb()
@@ -423,13 +423,13 @@ export default function DebugTab() {
   const [deviceToUnassign, setDeviceToUnassign] = useState(null)
   const [unassigningPatient, setUnassigningPatient] = useState(false)
   
-  // États pour l'historique des mesures
-  const [showMeasurementsModal, setShowMeasurementsModal] = useState(false)
-  const [deviceForMeasurements, setDeviceForMeasurements] = useState(null)
+  // États pour l'historique des mesures - supprimé
+  // const [showMeasurementsModal, setShowMeasurementsModal] = useState(false)
+  // const [deviceForMeasurements, setDeviceForMeasurements] = useState(null)
   
-  // États pour le flash
-  const [showFlashModal, setShowFlashModal] = useState(false)
-  const [deviceToFlash, setDeviceToFlash] = useState(null)
+  // États pour le flash - supprimé
+  // const [showFlashModal, setShowFlashModal] = useState(false)
+  // const [deviceToFlash, setDeviceToFlash] = useState(null)
   
   // États unifiés pour création et modification (comme pour patients et utilisateurs)
   const [showDeviceModal, setShowDeviceModal] = useState(false)
@@ -1027,16 +1027,16 @@ export default function DebugTab() {
     setShowUnassignPatientModal(true)
   }, [])
   
-  // Gérer l'ouverture du modal de flash (uniquement pour dispositifs non archivés)
-  const handleOpenFlashModal = useCallback((device) => {
-    // Ne pas ouvrir le modal pour les dispositifs archivés
-    if (isArchived(device)) {
-      logger.warn('Tentative de flash d\'un dispositif archivé')
-      return
-    }
-    setDeviceToFlash(device)
-    setShowFlashModal(true)
-  }, [])
+  // Gérer l'ouverture du modal de flash - supprimé
+  // const handleOpenFlashModal = useCallback((device) => {
+  //   // Ne pas ouvrir le modal pour les dispositifs archivés
+  //   if (isArchived(device)) {
+  //     logger.warn('Tentative de flash d\'un dispositif archivé')
+  //     return
+  //   }
+  //   setDeviceToFlash(device)
+  //   setShowFlashModal(true)
+  // }, [])
 
   return (
     <div className="space-y-6">
@@ -1192,7 +1192,8 @@ export default function DebugTab() {
         ) ? 'usb' : 'ota'}
       />
       
-      {/* Modal pour l'historique des mesures */}
+      {/* Modal pour l'historique des mesures - supprimé */}
+      {/*
       <DeviceMeasurementsModal
         isOpen={showMeasurementsModal}
         onClose={() => {
@@ -1201,6 +1202,7 @@ export default function DebugTab() {
         }}
         device={deviceForMeasurements}
       />
+      */}
       
       {/* Modal unifié pour création et modification (comme pour patients et utilisateurs) */}
       <DeviceModal
@@ -1517,13 +1519,9 @@ export default function DebugTab() {
                               {firmwareVersion || 'N/A'}
                             </span>
                           ) : canFlash ? (
-                            <button
-                              onClick={() => handleOpenFlashModal(device)}
-                              className={`text-xs font-mono font-semibold hover:underline transition-colors ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300' : 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 cursor-pointer'}`}
-                              title="Cliquer pour flasher un firmware"
-                            >
-                              {firmwareVersion || 'N/A'}
-                            </button>
+                            <span className="text-xs font-mono font-semibold text-gray-400 dark:text-gray-500">
+                              Flash désactivé
+                            </span>
                           ) : (
                             <span className={`text-xs font-mono font-semibold ${!firmwareVersion ? 'text-gray-400 dark:text-gray-500' : 'text-cyan-600 dark:text-cyan-400'}`}>
                               {firmwareVersion || 'N/A'}
@@ -1640,23 +1638,16 @@ export default function DebugTab() {
                           }
                         })()}
                         <button
-                          onClick={() => handleOpenFlashModal(device)}
-                          disabled={compiledFirmwares.length === 0 || isNotRegistered}
+                          disabled={true}
                           className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={isNotRegistered ? "Enregistrez d'abord le dispositif" : (compiledFirmwares.length === 0 ? 'Aucun firmware compilé disponible. Compilez d\'abord un firmware dans l\'onglet "Upload INO".' : 'Flasher le firmware')}
+                          title="Flash désactivé - composant supprimé"
                         >
                           <span className="text-lg">🚀</span>
                         </button>
                         <button
-                          onClick={() => {
-                            if (deviceDbData?.measurement_count && deviceDbData.measurement_count > 0) {
-                              setDeviceForMeasurements(device)
-                              setShowMeasurementsModal(true)
-                            }
-                          }}
-                          disabled={isNotRegistered || !deviceDbData?.measurement_count || deviceDbData.measurement_count === 0}
-                          className="p-2 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={isNotRegistered ? "Enregistrez d'abord le dispositif" : (deviceDbData?.measurement_count ? `Voir l'historique des mesures (${deviceDbData.measurement_count} mesure${deviceDbData.measurement_count > 1 ? 's' : ''})` : 'Aucune mesure enregistrée')}
+                          disabled={true}
+                          className="p-2 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Mesures désactivées - composant supprimé"
                         >
                           <span className="text-lg">📊</span>
                         </button>
