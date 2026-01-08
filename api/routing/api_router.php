@@ -73,8 +73,6 @@ if ($path === '/health' && $method === 'GET') {
     handleRefreshToken();
 } elseif($path === '/auth/me' && $method === 'GET') {
     handleGetCurrentUser();
-// } elseif($path === '/auth/verify' && $method === 'POST') {
-//     handleVerifyToken(); // TODO: Implement
 
 // USERS
 } elseif($path === '/users' && $method === 'GET') {
@@ -91,8 +89,6 @@ if ($path === '/health' && $method === 'GET') {
     handleArchiveUser($m[1]);
 } elseif(preg_match('#^/users/(\d+)/restore$#', $path, $m) && $method === 'PATCH') {
     handleRestoreUser($m[1]);
-// } elseif(preg_match('#^/users/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
-//     handlePermanentDeleteUser($m[1]); // TODO: Implement
 
 // PATIENTS
 } elseif($path === '/patients' && $method === 'GET') {
@@ -109,8 +105,6 @@ if ($path === '/health' && $method === 'GET') {
     handleArchivePatient($m[1]);
 } elseif(preg_match('#^/patients/(\d+)/restore$#', $path, $m) && $method === 'PATCH') {
     handleRestorePatient($m[1]);
-// } elseif(preg_match('#^/patients/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
-//     handlePermanentDeletePatient($m[1]); // TODO: Implement
 
 // DEVICES
 } elseif($path === '/devices' && $method === 'GET') {
@@ -122,210 +116,120 @@ if ($path === '/health' && $method === 'GET') {
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateDevice($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)$#', $path, $m) && $method === 'PATCH') {
-    // PATCH pour mettre à jour un dispositif (pas pour restaurer)
     handleUpdateDevice($m[1]);
 } elseif(preg_match('#^/devices/(\d+)/restore$#', $path, $m) && $method === 'PATCH') {
-    // Route spécifique pour restaurer un dispositif archivé
     handleRestoreDevice($m[1]);
-} elseif(preg_match('#^/devices/(\d+)$#', $path, $m) && $method === 'DELETE') {
-    handleDeleteDevice($m[1]);
+} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/archive$#', $path, $m) && $method === 'PATCH') {
+    handleArchiveDevice($m[1]);
+} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/measurements$#', $path, $m) && $method === 'GET') {
+    handleGetDeviceMeasurements($m[1]);
+} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/measurements$#', $path, $m) && $method === 'POST') {
+    handleCreateDeviceMeasurement($m[1]);
+} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'GET') {
+    handleGetDeviceCommands($m[1]);
+} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'POST') {
+    handleCreateDeviceCommand($m[1]);
+} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/alerts$#', $path, $m) && $method === 'GET') {
+    handleGetDeviceAlerts($m[1]);
+} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/logs$#', $path, $m) && $method === 'GET') {
+    handleGetDeviceLogs($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'GET') {
     handleGetDeviceConfig($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'PUT') {
     handleUpdateDeviceConfig($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/ota$#', $path, $m) && $method === 'POST') {
-    handleTriggerOTA($m[1]);
-
-// DEVICE MEASUREMENTS
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/measurements$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceMeasurements($m[1]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/measurements$#', $path, $m) && $method === 'POST') {
-    handlePostMeasurement($m[1]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'POST') {
-    handleCreateDeviceCommand($m[1]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceCommands($m[1]);
-// } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands/pending$#', $path, $m) && $method === 'GET') {
-//     handleGetPendingDeviceCommands($m[1]); // TODO: Implement
-// } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands/([0-9A-Za-z]+)/execute$#', $path, $m) && $method === 'POST') {
-//     handleExecuteDeviceCommand($m[1], $m[2]); // TODO: Implement
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/alerts$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceAlerts($m[1]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/alerts$#', $path, $m) && $method === 'POST') {
-    handleCreateDeviceAlert($m[1]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/alerts/([0-9A-Za-z]+)/acknowledge$#', $path, $m) && $method === 'POST') {
-    handleAcknowledgeAlert($m[1], $m[2]);
-// } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/logs$#', $path, $m) && $method === 'GET') {
-//     handleGetDeviceLogs($m[1]); // TODO: Implement
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/logs/clear$#', $path, $m) && $method === 'POST') {
-    handleClearDeviceLogs($m[1]);
+    handleOTAUpdate($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/reports$#', $path, $m) && $method === 'GET') {
     handleGetDeviceReports($m[1]);
-} elseif(preg_match('#^/devices/([0-9A-Za-z]+)/reports/generate$#', $path, $m) && $method === 'POST') {
-    handleGenerateDeviceReport($m[1]);
 
 // FIRMWARES
-} elseif($method === 'POST' && preg_match('#^/firmwares/upload-ino/?$#', $path)) {
-    // Log de debug pour vérifier que la route est bien matchée
-    if (getenv('DEBUG_ERRORS') === 'true') {
-        error_log('[ROUTER] Route upload-ino matchée - Path: ' . $path . ' Method: ' . $method);
-    }
-    handleUploadFirmwareIno();
-} elseif($method === 'POST' && preg_match('#^/firmwares/compile/?$#', $path)) {
-    // Route pour compiler un firmware (nouveau firmware)
-    require_once __DIR__ . '/../handlers/firmwares/compile_and_flash.php';
-    handleFirmwareCompile();
-} elseif($method === 'POST' && preg_match('#^/firmwares/flash/?$#', $path)) {
-    // Route pour flasher un firmware existant
-    require_once __DIR__ . '/../handlers/firmwares/compile_and_flash.php';
-    handleFirmwareFlash();
-} elseif($method === 'POST' && preg_match('#^/firmwares/flash-fast/?$#', $path)) {
-    // Route pour flasher rapidement un firmware
-    require_once __DIR__ . '/../handlers/firmwares/flash_fast.php';
-    handleFlashFirmware();
-} elseif($method === 'POST' && preg_match('#^/firmwares/compile-and-flash/?$#', $path)) {
-    // Route pour compiler et flasher en une seule opération
-    require_once __DIR__ . '/../handlers/firmwares/compile_and_flash.php';
-    handleFirmwareCompile();
-    handleFirmwareFlash();
-} elseif($method === 'POST' && preg_match('#^/devices/create/?$#', $path)) {
-    // Route pour créer un dispositif (alternative à POST /devices)
-    // REDIRECTION: utiliser la route principale /devices POST
-    handleCreateDevice();
-} elseif($method === 'GET' && preg_match('#^/firmwares/check-version/([^/]+)$#', $path, $matches)) {
-    handleCheckFirmwareVersion($matches[1]);
-} elseif($method === 'GET' && preg_match('#^/firmwares/debug-logs/(\d+)$#', $path, $matches)) {
-    require_once __DIR__ . '/../handlers/firmwares/debug_logs.php';
-    handleGetCompileDebugLogs($matches[1]);
-} elseif($method === 'GET' && preg_match('#^/firmwares/compile/(\d+)$#', $path, $matches)) {
-    error_log('[ROUTER] Route GET /firmwares/compile/' . $matches[1] . ' matchée - Path: ' . $path);
-    // Utiliser la version optimisée (plus rapide, moins de logs)
-    require_once __DIR__ . '/../handlers/firmwares/compile_optimized.php';
-    // Nettoyer le buffer AVANT d'appeler le handler SSE
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-    handleCompileFirmwareOptimized($matches[1]);
-    exit; // Important: arrêter l'exécution après SSE pour éviter tout output supplémentaire
-} elseif($method === 'GET' && preg_match('#^/firmwares/(\d+)/download$#', $path, $matches)) {
-    handleDownloadFirmware($matches[1]);
-} elseif($method === 'GET' && preg_match('#^/firmwares/(\d+)/ino/?$#', $path, $matches)) {
-    // Log de debug
-    error_log('[ROUTER] Route GET /firmwares/{id}/ino matchée - Path: ' . $path . ' ID: ' . ($matches[1] ?? 'N/A'));
-    handleGetFirmwareIno($matches[1]);
-} elseif($method === 'PUT' && preg_match('#^/firmwares/(\d+)/ino/?$#', $path, $matches)) {
-    // Vérifier que c'est bien la bonne route avant d'appeler
-    if (isset($matches[1]) && is_numeric($matches[1])) {
-        handleUpdateFirmwareIno($matches[1]);
-    } else {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'ID de firmware invalide']);
-    }
 } elseif($path === '/firmwares' && $method === 'GET') {
     handleGetFirmwares();
-// } elseif($path === '/firmwares' && $method === 'POST') {
-//     handleCreateFirmware(); // TODO: Implement (use handleUploadFirmwareIno instead)
+} elseif($path === '/firmwares' && $method === 'POST') {
+    handleCreateFirmware();
 } elseif(preg_match('#^/firmwares/(\d+)$#', $path, $m) && $method === 'GET') {
     handleGetFirmware($m[1]);
 } elseif(preg_match('#^/firmwares/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateFirmware($m[1]);
 } elseif(preg_match('#^/firmwares/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteFirmware($m[1]);
-// } elseif(preg_match('#^/firmwares/(\d+)/archive$#', $path, $m) && $method === 'PATCH') {
-//     handleArchiveFirmware($m[1]); // TODO: Implement
-} elseif(preg_match('#^/firmwares/(\d+)/restore$#', $path, $m) && $method === 'PATCH') {
-    handleRestoreFirmware($m[1]);
-// } elseif(preg_match('#^/firmwares/(\d+)/permanent-delete$#', $path, $m) && $method === 'DELETE') {
-//     handlePermanentDeleteFirmware($m[1]); // TODO: Implement
 
 // NOTIFICATIONS
 } elseif($path === '/notifications' && $method === 'GET') {
     handleGetNotifications();
 } elseif($path === '/notifications' && $method === 'POST') {
     handleCreateNotification();
-// } elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'GET') {
-//     handleGetNotification($m[1]); // TODO: Implement
+} elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'GET') {
+    handleGetNotification($m[1]);
 } elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'PUT') {
     handleUpdateNotification($m[1]);
 } elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'DELETE') {
     handleDeleteNotification($m[1]);
-} elseif(preg_match('#^/notifications/(\d+)/mark-read$#', $path, $m) && $method === 'PATCH') {
-    handleMarkNotificationAsRead($m[1]);
-} elseif(preg_match('#^/notifications/mark-all-read$#', $path) && $method === 'PATCH') {
-    handleMarkAllNotificationsAsRead();
-} elseif(preg_match('#^/notifications/unread-count$#', $path) && $method === 'GET') {
-    handleGetUnreadNotificationsCount();
-// } elseif(preg_match('#^/notifications/clear-all$#', $path) && $method === 'DELETE') {
-//     handleClearAllNotifications(); // TODO: Implement
 
 // USB LOGS
 } elseif($path === '/usb/logs' && $method === 'GET') {
-    // Nettoyer le buffer AVANT d'appeler le handler
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-    
-    $body = json_decode(file_get_contents('php://input'), true) ?? [];
-    
-    // Le Content-Type sera défini dans handleUsbLogsRequest()
-    echo handleUsbLogsRequest($pdo, $method, $path, $body, $_GET, $userId, $userRole);
+    handleGetUSBLogs();
+} elseif($path === '/usb/logs' && $method === 'POST') {
+    handleCreateUSBLog();
+} elseif(preg_match('#^/usb/logs/(\d+)$#', $path, $m) && $method === 'GET') {
+    handleGetUSBLog($m[1]);
+} elseif(preg_match('#^/usb/logs/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    handleDeleteUSBLog($m[1]);
 
-// Migration avec SQL en body - Route pour exécuter du SQL directement
-} elseif($method === 'POST' && ($path === '/admin/migrate-sql' || preg_match('#^/admin/migrate-sql/?$#', $path))) {
-    $user = requireAuth();
-    if ($user['role_name'] !== 'admin') {
-        http_response_code(403);
-        echo json_encode(['success' => false, 'error' => 'Accès refusé. Admin requis.']);
-        return;
-    }
-    
-    $body = json_decode(file_get_contents('php://input'), true);
-    
-    if (!isset($body['sql'])) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'SQL requis']);
-        return;
-    }
-    
-    $sql = $body['sql'];
-    
-    try {
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute();
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'SQL exécuté avec succès',
-            'affected_rows' => $stmt->rowCount()
-        ]);
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error' => $e->getMessage()
-        ]);
-    }
+// MEASUREMENTS
+} elseif($path === '/measurements' && $method === 'GET') {
+    handleGetMeasurements();
+} elseif($path === '/measurements' && $method === 'POST') {
+    handleCreateMeasurement();
+} elseif(preg_match('#^/measurements/(\d+)$#', $path, $m) && $method === 'GET') {
+    handleGetMeasurement($m[1]);
+} elseif(preg_match('#^/measurements/(\d+)$#', $path, $m) && $method === 'PUT') {
+    handleUpdateMeasurement($m[1]);
+} elseif(preg_match('#^/measurements/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    handleDeleteMeasurement($m[1]);
 
-// MIGRATIONS
-} elseif($path === '/admin/migrations' && $method === 'GET') {
-    handleGetMigrationHistory();
-} elseif($path === '/admin/migrations' && $method === 'DELETE') {
-    handleDeleteMigration($_GET['id'] ?? '');
-} elseif(preg_match('#/migrate$#', $path) && $method === 'POST') {
-    // Nettoyer le buffer AVANT d'appeler handleRunMigration pour éviter que les warnings polluent la réponse
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-    handleRunMigration();
-} elseif(preg_match('#/admin/repair-database$#', $path) && $method === 'POST') {
+// COMMANDS
+} elseif($path === '/commands' && $method === 'GET') {
+    handleGetCommands();
+} elseif($path === '/commands' && $method === 'POST') {
+    handleCreateCommand();
+} elseif(preg_match('#^/commands/(\d+)$#', $path, $m) && $method === 'GET') {
+    handleGetCommand($m[1]);
+} elseif(preg_match('#^/commands/(\d+)$#', $path, $m) && $method === 'PUT') {
+    handleUpdateCommand($m[1]);
+} elseif(preg_match('#^/commands/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    handleDeleteCommand($m[1]);
+} elseif($path === '/commands/ack' && $method === 'POST') {
+    handleAcknowledgeCommands();
+
+// ALERTS
+} elseif($path === '/alerts' && $method === 'GET') {
+    handleGetAlerts();
+} elseif($path === '/alerts' && $method === 'POST') {
+    handleCreateAlert();
+} elseif(preg_match('#^/alerts/(\d+)$#', $path, $m) && $method === 'GET') {
+    handleGetAlert($m[1]);
+} elseif(preg_match('#^/alerts/(\d+)$#', $path, $m) && $method === 'PUT') {
+    handleUpdateAlert($m[1]);
+} elseif(preg_match('#^/alerts/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    handleDeleteAlert($m[1]);
+
+// ADMIN - MIGRATIONS
+} elseif(preg_match('#^/admin/migrations$#', $path) && $method === 'GET') {
+    handleGetMigrations();
+} elseif(preg_match('#^/admin/migrate-sql$#', $path) && $method === 'POST') {
+    handleMigrateSQL();
+} elseif(preg_match('#^/admin/migrate$#', $path) && $method === 'POST') {
+    handleMigrate();
+} elseif(preg_match('#^/admin/repair-database$#', $path) && $method === 'POST') {
     handleRepairDatabase();
-} elseif(preg_match('#/migrate/firmware-status$#', $path) && $method === 'POST') {
+} elseif(preg_match('#^/migrate/firmware-status$#', $path) && $method === 'POST') {
     handleMigrateFirmwareStatus();
-} elseif(preg_match('#/admin/database-audit$#', $path) && $method === 'GET') {
+} elseif(preg_match('#^/admin/database-audit$#', $path) && $method === 'GET') {
     handleDatabaseAudit();
-} elseif(preg_match('#/admin/database-audit$#', $path) && $method === 'POST') {
+} elseif(preg_match('#^/admin/database-audit$#', $path) && $method === 'POST') {
     handleRunDatabaseAudit();
-} elseif(preg_match('#/admin/database-audit/repair$#', $path) && $method === 'POST') {
+} elseif(preg_match('#^/admin/database-audit/repair$#', $path) && $method === 'POST') {
     handleRepairDatabaseAudit();
 } elseif($path === '/statistics' && $method === 'GET') {
     handleGetStatistics();
