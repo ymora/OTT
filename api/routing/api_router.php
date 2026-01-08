@@ -40,7 +40,7 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path = rtrim($path, '/'); // Normaliser le chemin
 
 // Loguer la requête si activé
-if (LOG_REQUESTS) {
+if (defined('LOG_REQUESTS') && LOG_REQUESTS) {
     error_log("[API] {$method} {$path} - " . $_SERVER['REMOTE_ADDR'] . " - " . ($_SERVER['HTTP_USER_AGENT'] ?? 'Unknown'));
 }
 
