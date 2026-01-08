@@ -327,9 +327,6 @@ if ($path === '/health' && $method === 'GET') {
     handleRunDatabaseAudit();
 } elseif(preg_match('#/admin/database-audit/repair$#', $path) && $method === 'POST') {
     handleRepairDatabaseAudit();
-}
-
-// STATISTICS - Handlers implemented
 } elseif($path === '/statistics' && $method === 'GET') {
     handleGetStatistics();
 } elseif($path === '/statistics/performance' && $method === 'GET') {
