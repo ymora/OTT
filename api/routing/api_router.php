@@ -335,8 +335,6 @@ if ($path === '/health' && $method === 'GET') {
     handleGetUsageStatistics();
 } elseif($path === '/statistics/errors' && $method === 'GET') {
     handleGetErrorStatistics();
-
-// SYSTEM - Handlers implemented
 } elseif($path === '/system/info' && $method === 'GET') {
     handleGetSystemInfo();
 } elseif($path === '/system/health' && $method === 'GET') {
