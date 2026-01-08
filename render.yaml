@@ -13,6 +13,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     startCommand: bash /var/www/html/scripts/start_api_with_migration.sh
+    # Force restart
     envVars:
       # Configuration Production Render
       - key: APP_ENV
