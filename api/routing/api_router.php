@@ -12,6 +12,8 @@ require_once __DIR__ . '/../cache.php';
 require_once __DIR__ . '/../handlers/auth.php';
 
 global $pdo;
+error_log("DEBUG: Etat de \$pdo -> " . (isset($pdo) ? 'Initialisé' : 'NULL'));
+error_log("DEBUG: DATABASE_URL -> " . (getenv('DATABASE_URL') ?: 'absent'));
 
 // Handlers Devices (modulaires)
 require_once __DIR__ . '/../handlers/devices/utils.php';
