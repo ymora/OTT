@@ -13,6 +13,8 @@ if (!defined('LOG_REQUESTS')) {
 require_once __DIR__ . '/../bootstrap/env_loader.php';
 require_once __DIR__ . '/../bootstrap/database.php';
 require_once __DIR__ . '/../bootstrap/notifications.php';
+// API-level bootstrap (configuration, PDO, JWT, constantes)
+require_once __DIR__ . '/bootstrap/api_bootstrap.php';
 
 // Helpers et utilitaires
 require_once __DIR__ . '/helpers.php';

@@ -5,20 +5,21 @@
 # Optimisé pour Render.com et environnements cloud
 # ================================================================
 
-FROM php:8.2-apache
+FROM php:8.2-apache AS base
 
 # Métadonnées
 LABEL maintainer="HAPPLYZ MEDICAL <support@happlyz.com>"
 LABEL version="3.1.0"
 LABEL description="OTT API Backend - Dispositif Médical IoT"
 
-# Variables d'environnement
+# Variables d'environnement validées une seule fois
 ENV APACHE_DOCUMENT_ROOT=/var/www/html \
     PHP_MEMORY_LIMIT=512M \
     PHP_MAX_EXECUTION_TIME=120 \
     PHP_UPLOAD_MAX_FILESIZE=100M \
     PHP_POST_MAX_SIZE=100M \
-    PORT=80
+    PORT=80 \
+    APP_ENV=production
 
 # Dépendances système
 RUN apt-get update && apt-get install -y \
@@ -75,8 +76,8 @@ RUN echo "opcache.enable=1" > /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.memory_consumption=128" >> /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.interned_strings_buffer=8" >> /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.max_accelerated_files=4000" >> /usr/local/etc/php/conf.d/opcache.ini \
-    && echo "opcache.validate_timestamps=1" >> /usr/local/etc/php/conf.d/opcache.ini \
-    && echo "opcache.revalidate_freq=0" >> /usr/local/etc/php/conf.d/opcache.ini
+    && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.revalidate_freq=2" >> /usr/local/etc/php/conf.d/opcache.ini
 
 # Installation Arduino CLI avant la copie de l'application
 RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh && \
@@ -86,14 +87,16 @@ RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/inst
     mkdir -p /var/www/html/hardware/arduino-data/{libraries,hardware} && \
     pip3 install pyserial --break-system-packages
 
-# Copier le code source et les scripts
-WORKDIR /var/www/html
-COPY . /var/www/html/
-COPY start-apache.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/start-apache.sh
+FROM base AS production
 
-# Permissions
-RUN chown -R www-data:www-data /var/www/html \
+# Stage final avec application et scripts
+WORKDIR /var/www/html
+
+# Copier l'application et le script tout en conservant l'utilisateur www-data
+COPY --chown=www-data:www-data . /var/www/html/
+COPY start-apache.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/start-apache.sh \
+    && chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html
 
 # Health check

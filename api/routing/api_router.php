@@ -11,8 +11,7 @@ require_once __DIR__ . '/../validators.php';
 require_once __DIR__ . '/../cache.php';
 require_once __DIR__ . '/../handlers/auth.php';
 
-global $pdo;
-error_log("DEBUG: Etat de \$pdo -> " . (isset($pdo) ? 'Initialisé' : 'NULL'));
+error_log("DEBUG: Etat de \$pdo -> " . 'non utilisé (get_db_connection)');
 error_log("DEBUG: DATABASE_URL -> " . (getenv('DATABASE_URL') ?: 'absent'));
 
 // Handlers Devices (modulaires)
@@ -55,7 +54,7 @@ if ($path === '/health' && $method === 'GET') {
     // Health check
     header('Content-Type: application/json');
     try {
-        $stmt = $pdo->query("SELECT 1");
+        $stmt = get_db_connection()->query("SELECT 1");
         echo json_encode([
             'status' => 'healthy',
             'timestamp' => date('c'),
