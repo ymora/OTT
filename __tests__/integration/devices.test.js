@@ -43,6 +43,7 @@ describe('Gestion des dispositifs E2E', () => {
       {
         id: 1,
         serial_number: 'OTT-001',
+        device_name: 'OTT-001',
         status: 'active',
         battery_level: 85,
         last_seen: new Date().toISOString()
@@ -50,47 +51,62 @@ describe('Gestion des dispositifs E2E', () => {
       {
         id: 2,
         serial_number: 'OTT-002',
+        device_name: 'OTT-002',
         status: 'active',
         battery_level: 60,
         last_seen: new Date().toISOString()
       }
     ]
 
+    const createDevicesResponse = () => ({
+      success: true,
+      devices: { devices: mockDevices }
+    })
+
+    const emptyCollection = () => ({
+      success: true,
+      devices: { devices: [] },
+      alerts: { alerts: [] },
+      users: { users: [] },
+      patients: { patients: [] },
+      firmwares: { firmwares: [] }
+    })
+
     // Mock réponses API
     global.fetch.mockImplementation((url) => {
       if (url.includes('/devices')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ success: true, devices: mockDevices })
+          json: async () => createDevicesResponse()
         })
       }
       if (url.includes('/alerts')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ success: true, alerts: [] })
+          json: async () => ({ success: true, alerts: { alerts: [] } })
         })
       }
       if (url.includes('/users')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ success: true, users: [] })
+          json: async () => ({ success: true, users: { users: [] } })
         })
       }
       if (url.includes('/patients')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ success: true, patients: [] })
+          json: async () => ({ success: true, patients: { patients: [] } })
         })
       }
       if (url.includes('/firmwares')) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({ success: true, firmwares: [] })
+          json: async () => ({ success: true, firmwares: { firmwares: [] } })
         })
       }
       return Promise.resolve({
         ok: true,
-        json: async () => ({ success: true })
+        json: async () => ({ success: true, ...emptyCollection() })
       })
     })
 
@@ -108,17 +124,22 @@ describe('Gestion des dispositifs E2E', () => {
   })
 
   it('devrait afficher un message si aucun dispositif', async () => {
+    const emptyPayload = () => ({
+      success: true,
+      devices: { devices: [] },
+      alerts: { alerts: [] },
+      users: { users: [] },
+      patients: { patients: [] },
+      firmwares: { firmwares: [] }
+    })
+
     // Mock réponse vide
     global.fetch.mockImplementation((url) => {
       return Promise.resolve({
         ok: true,
         json: async () => ({ 
           success: true, 
-          devices: [],
-          alerts: [],
-          users: [],
-          patients: [],
-          firmwares: []
+          ...emptyPayload()
         })
       })
     })

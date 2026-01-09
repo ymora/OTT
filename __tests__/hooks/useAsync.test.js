@@ -31,14 +31,10 @@ describe('useAsync', () => {
     const error = new Error('Test error')
     const asyncFunc = jest.fn().mockRejectedValue(error)
     
-    try {
-      await act(async () => {
-        await result.current.execute(asyncFunc)
-      })
-    } catch (e) {
-      // Erreur attendue
-    }
-    
+    await act(async () => {
+      await expect(result.current.execute(asyncFunc)).rejects.toThrow('Test error')
+    })
+
     expect(result.current.loading).toBe(false)
     expect(result.current.error).toBe('Test error')
     expect(result.current.success).toBe(false)

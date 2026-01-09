@@ -42,7 +42,7 @@ describe('Authentification E2E', () => {
 
     // Remplir le formulaire
     const emailInput = screen.getByPlaceholderText(/email/i)
-    const passwordInput = screen.getByPlaceholderText(/mot de passe/i)
+    const passwordInput = screen.getByLabelText(/mot de passe/i)
     const submitButton = screen.getByRole('button', { name: /connexion/i })
 
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } })

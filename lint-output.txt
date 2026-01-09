@@ -1,0 +1,31 @@
+
+> ott-dashboard@3.1.0 lint
+> eslint . --ext .js,.jsx,.ts,.tsx
+
+
+Oops! Something went wrong! :(
+
+ESLint: 9.39.2
+
+Error: Cannot find module 'typescript'
+Require stack:
+- D:\Windsurf\OTT\node_modules\@typescript-eslint\typescript-estree\dist\create-program\getWatchProgramsForProjects.js
+- D:\Windsurf\OTT\node_modules\@typescript-eslint\typescript-estree\dist\clear-caches.js
+- D:\Windsurf\OTT\node_modules\@typescript-eslint\typescript-estree\dist\index.js
+- D:\Windsurf\OTT\node_modules\@typescript-eslint\parser\dist\parser.js
+- D:\Windsurf\OTT\node_modules\@typescript-eslint\parser\dist\index.js
+- D:\Windsurf\OTT\node_modules\@typescript-eslint\eslint-plugin\dist\raw-plugin.js
+- D:\Windsurf\OTT\node_modules\@typescript-eslint\eslint-plugin\dist\index.js
+- D:\Windsurf\OTT\node_modules\typescript-eslint\dist\index.js
+- D:\Windsurf\OTT\node_modules\eslint-config-next\dist\index.js
+- D:\Windsurf\OTT\eslint.config.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1410:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1051:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1056:22)
+    at Module._load (node:internal/modules/cjs/loader:1219:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:238:24)
+    at Module.require (node:internal/modules/cjs/loader:1493:12)
+    at require (node:internal/modules/helpers:152:16)
+    at Object.<anonymous> (D:\Windsurf\OTT\node_modules\@typescript-eslint\typescript-estree\dist\create-program\getWatchProgramsForProjects.js:43:25)
+    at Module._compile (node:internal/modules/cjs/loader:1738:14)

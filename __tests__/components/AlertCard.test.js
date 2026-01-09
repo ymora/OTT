@@ -3,7 +3,7 @@
  */
 
 import { render, screen } from '@testing-library/react'
-import AlertCard from '@/components/AlertCard'
+import AlertCard from '../../components/AlertCard'
 
 describe('AlertCard', () => {
   const mockAlert = {

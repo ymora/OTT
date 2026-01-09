@@ -26,10 +26,12 @@ if (Test-Path .\vendor\bin\phpunit) {
 }
 Pop-Location
 
-Write-Host "Running frontend checks..."
-npm run lint --prefix ./
-npm run test --prefix ./
-npm run build --prefix ./
+Write-Host "Running frontend lint..."
+npm run lint
+Write-Host "Running frontend tests..."
+npm run test
+Write-Host "Building frontend..."
+npm run build
 
 Write-Host "Completed install/test pipeline."
 

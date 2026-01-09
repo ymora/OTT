@@ -4,11 +4,14 @@
  * Ces tests vérifient que les mesures de sécurité sont correctement implémentées
  */
 
+import { setupSecurityMocks } from '../helpers/api/mockApiHelper'
+
 describe('API Security Tests', () => {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
   let authToken = null
 
-  beforeAll(async () => {
+  beforeEach(async () => {
+    setupSecurityMocks()
     const loginResponse = await fetch(`${API_URL}/api.php/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -21,6 +24,8 @@ describe('API Security Tests', () => {
     if (loginResponse.ok) {
       const data = await loginResponse.json()
       authToken = data.token
+    } else {
+      authToken = null
     }
   })
 

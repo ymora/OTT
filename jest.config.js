@@ -1,3 +1,4 @@
+const path = require('path')
 const nextJest = require('next/jest')
 
 const createJestConfig = nextJest({
@@ -7,11 +8,13 @@ const createJestConfig = nextJest({
 
 // Add any custom config to be passed to Jest
 const customJestConfig = {
+  rootDir: path.resolve(__dirname),
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
   },
+  testPathIgnorePatterns: ['<rootDir>/__tests__/helpers/'],
   collectCoverageFrom: [
     'components/**/*.{js,jsx}',
     'hooks/**/*.{js,jsx}',
