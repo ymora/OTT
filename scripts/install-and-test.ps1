@@ -14,8 +14,8 @@ if (Test-Path .\api\composer.json) {
     Write-Warning "composer.json not found under ./api"
 }
 
-Write-Host "Installing JS dependencies..."
-npm install
+Write-Host "Installing JS dependencies (legacy peer deps)..."
+npm install --legacy-peer-deps
 
 Write-Host "Running PHP tests..."
 Push-Location .\api
@@ -27,9 +27,9 @@ if (Test-Path .\vendor\bin\phpunit) {
 Pop-Location
 
 Write-Host "Running frontend checks..."
-npm run lint
-npm run test
-npm run build
+npm run lint --prefix ./
+npm run test --prefix ./
+npm run build --prefix ./
 
 Write-Host "Completed install/test pipeline."
 
