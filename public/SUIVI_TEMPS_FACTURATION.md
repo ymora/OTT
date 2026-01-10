@@ -1,75 +1,86 @@
-﻿# Suivi du Temps - Projet OTT
-## Journal de travail pour facturation (GÃ©nÃ©rÃ© automatiquement)
+# Suivi du Temps - Projet OTT
+## Journal de travail pour facturation (Genere automatiquement)
 
-**Date de gÃ©nÃ©ration** : 2026-01-07 01:37
-**PÃ©riode analysÃ©e** : 365 derniers jours (depuis 2025-01-07)
-**Total commits** : 1174
-**Contributeurs** : 2
+**Date de generation** : 2026-01-10 23:01
+**Periode analysee** : 365 derniers jours (depuis 2025-01-10)
+**Total commits** : 1288
+**Contributeurs** : 3
 
 ---
 
 ## Tableau Recapitulatif par Jour et Contributeur
 
-| Date | Contributeur | Commits | Heures | Features | Fix | Refactor | Doc | Tests | UI | Deploy | Other |
-|------|--------------|---------|--------|----------|-----|----------|-----|-------|-----|--------|-------|
-| 2026-01-07 | **Yannick** | 10 commits (~5h) | 5 Features | 4 Fixes | 0 Refactors | 0 Docs | 1 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2026-01-06 | **Yannick** | 12 commits (~6h) | 3 Features | 7 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 2 Deploy | 0 Other |
-| 2026-01-06 | **Maxime** | 1 commits (~0.5h) | 0 Features | 0 Fixes | 0 Refactors | 0 Docs | 1 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2026-01-05 | **Yannick** | 16 commits (~8h) | 3 Features | 12 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2026-01-04 | **Yannick** | 6 commits (~3h) | 0 Features | 4 Fixes | 1 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2026-01-03 | **Yannick** | 4 commits (~2h) | 0 Features | 3 Fixes | 1 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-31 | **Yannick** | 1 commits (~0.5h) | 0 Features | 1 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-28 | **Yannick** | 2 commits (~1h) | 0 Features | 1 Fixes | 1 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-25 | **Yannick** | 6 commits (~3h) | 0 Features | 0 Fixes | 5 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2025-12-24 | **Yannick** | 3 commits (~1.5h) | 1 Features | 2 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-23 | **Yannick** | 1 commits (~0.5h) | 0 Features | 1 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-22 | **Yannick** | 1 commits (~0.5h) | 0 Features | 1 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-21 | **Yannick** | 1 commits (~0.5h) | 0 Features | 1 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-20 | **Yannick** | 6 commits (~3h) | 1 Features | 1 Fixes | 2 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 2 Other |
-| 2025-12-19 | **Yannick** | 18 commits (~9h) | 5 Features | 11 Fixes | 1 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2025-12-18 | **Yannick** | 67 commits (~33.5h) | 20 Features | 34 Fixes | 6 Refactors | 5 Docs | 0 Tests | 2 UI | 0 Deploy | 0 Other |
-| 2025-12-17 | **Yannick** | 19 commits (~9.5h) | 11 Features | 7 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2025-12-15 | **Yannick** | 2 commits (~1h) | 0 Features | 2 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-14 | **Yannick** | 15 commits (~7.5h) | 3 Features | 8 Fixes | 0 Refactors | 3 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2025-12-13 | **Yannick** | 14 commits (~7h) | 3 Features | 4 Fixes | 1 Refactors | 1 Docs | 1 Tests | 1 UI | 0 Deploy | 3 Other |
-| 2025-12-12 | **Yannick** | 22 commits (~11h) | 5 Features | 10 Fixes | 2 Refactors | 2 Docs | 0 Tests | 0 UI | 0 Deploy | 3 Other |
-| 2025-12-11 | **Yannick** | 57 commits (~28.5h) | 11 Features | 26 Fixes | 0 Refactors | 3 Docs | 3 Tests | 1 UI | 1 Deploy | 12 Other |
-| 2025-12-10 | **Yannick** | 61 commits (~30.5h) | 18 Features | 24 Fixes | 5 Refactors | 10 Docs | 0 Tests | 0 UI | 2 Deploy | 2 Other |
-| 2025-12-09 | **Yannick** | 12 commits (~6h) | 3 Features | 8 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 1 Deploy | 0 Other |
-| 2025-12-08 | **Yannick** | 49 commits (~24.5h) | 20 Features | 27 Fixes | 1 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2025-12-07 | **Yannick** | 21 commits (~10.5h) | 15 Features | 5 Fixes | 1 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-12-06 | **Yannick** | 29 commits (~14.5h) | 1 Features | 19 Fixes | 6 Refactors | 1 Docs | 0 Tests | 0 UI | 0 Deploy | 2 Other |
-| 2025-12-05 | **Yannick** | 18 commits (~9h) | 4 Features | 12 Fixes | 1 Refactors | 0 Docs | 0 Tests | 1 UI | 0 Deploy | 0 Other |
-| 2025-12-04 | **Yannick** | 33 commits (~16.5h) | 14 Features | 10 Fixes | 2 Refactors | 3 Docs | 1 Tests | 0 UI | 1 Deploy | 2 Other |
-| 2025-12-03 | **Yannick** | 85 commits (~42.5h) | 28 Features | 24 Fixes | 3 Refactors | 5 Docs | 2 Tests | 6 UI | 1 Deploy | 16 Other |
-| 2025-12-02 | **Yannick** | 50 commits (~25h) | 2 Features | 11 Fixes | 4 Refactors | 6 Docs | 0 Tests | 5 UI | 0 Deploy | 22 Other |
-| 2025-12-01 | **Yannick** | 14 commits (~7h) | 6 Features | 0 Fixes | 4 Refactors | 2 Docs | 0 Tests | 0 UI | 0 Deploy | 2 Other |
-| 2025-11-30 | **Yannick** | 77 commits (~38.5h) | 28 Features | 31 Fixes | 7 Refactors | 3 Docs | 0 Tests | 6 UI | 0 Deploy | 2 Other |
-| 2025-11-29 | **Yannick** | 2 commits (~1h) | 2 Features | 0 Fixes | 0 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-11-28 | **Yannick** | 3 commits (~1.5h) | 1 Features | 0 Fixes | 0 Refactors | 1 Docs | 0 Tests | 1 UI | 0 Deploy | 0 Other |
-| 2025-11-27 | **Yannick** | 59 commits (~29.5h) | 27 Features | 23 Fixes | 6 Refactors | 3 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-11-26 | **Yannick** | 59 commits (~29.5h) | 13 Features | 36 Fixes | 5 Refactors | 4 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2025-11-25 | **Yannick** | 45 commits (~22.5h) | 17 Features | 20 Fixes | 1 Refactors | 4 Docs | 0 Tests | 1 UI | 0 Deploy | 2 Other |
-| 2025-11-24 | **Yannick** | 24 commits (~12h) | 4 Features | 13 Fixes | 3 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 4 Other |
-| 2025-11-23 | **Yannick** | 60 commits (~30h) | 21 Features | 29 Fixes | 3 Refactors | 1 Docs | 0 Tests | 0 UI | 0 Deploy | 6 Other |
-| 2025-11-22 | **Yannick** | 69 commits (~34.5h) | 18 Features | 30 Fixes | 12 Refactors | 1 Docs | 0 Tests | 0 UI | 0 Deploy | 8 Other |
-| 2025-11-21 | **Yannick** | 12 commits (~6h) | 10 Features | 1 Fixes | 1 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-11-20 | **Yannick** | 3 commits (~1.5h) | 1 Features | 1 Fixes | 1 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-11-19 | **Yannick** | 7 commits (~3.5h) | 2 Features | 1 Fixes | 4 Refactors | 0 Docs | 0 Tests | 0 UI | 0 Deploy | 0 Other |
-| 2025-11-18 | **Yannick** | 25 commits (~12.5h) | 8 Features | 9 Fixes | 6 Refactors | 1 Docs | 0 Tests | 0 UI | 0 Deploy | 1 Other |
-| 2025-11-17 | **Yannick** | 14 commits (~7h) | 7 Features | 3 Fixes | 1 Refactors | 0 Docs | 0 Tests | 1 UI | 0 Deploy | 2 Other |
-| 2025-11-16 | **Yannick** | 27 commits (~13.5h) | 20 Features | 1 Fixes | 3 Refactors | 1 Docs | 0 Tests | 0 UI | 0 Deploy | 2 Other |
-| 2025-11-15 | **Yannick** | 23 commits (~11.5h) | 13 Features | 1 Fixes | 1 Refactors | 4 Docs | 0 Tests | 0 UI | 0 Deploy | 4 Other |
-| 2025-11-14 | **Yannick** | 9 commits (~4.5h) | 2 Features | 0 Fixes | 1 Refactors | 0 Docs | 0 Tests | 1 UI | 1 Deploy | 4 Other |
+| Date | Contributeur | Commits | Heures | Features | Fix | Refactor | Doc | Tests | UI |
+|------|--------------|---------|--------|----------|-----|----------|-----|-------|-----|
+| 2026-01-10 | **Yannick** | 14 | ~7h | 5 | 5 | 0 | 5 | 5 | 5 |
+| 2026-01-09 | **Yannick** | 8 | ~4h | 2 | 2 | 2 | 5 | 2 | 5 |
+| 2026-01-08 | **Yannick** | 36 | ~18h | 11 | 20 | 3 | 4 | 6 | 7 |
+| 2026-01-07 | **Yannick** | 66 | ~33h | 24 | 34 | 6 | 14 | 2 | 24 |
+| 2026-01-06 | **ymora** | 8 | ~4h | 3 | 4 | 0 | 2 | 0 | 5 |
+| 2026-01-06 | **Yannick** | 4 | ~2h | 0 | 4 | 0 | 0 | 0 | 2 |
+| 2026-01-06 | **Maxime** | 1 | ~0.5h | 0 | 0 | 0 | 0 | 5 | 5 |
+| 2026-01-05 | **ymora** | 16 | ~8h | 3 | 13 | 5 | 0 | 5 | 3 |
+| 2026-01-04 | **ymora** | 6 | ~3h | 0 | 4 | 2 | 0 | 0 | 5 |
+| 2026-01-03 | **ymora** | 4 | ~2h | 0 | 3 | 2 | 0 | 0 | 0 |
+| 2025-12-31 | **ymora** | 1 | ~0.5h | 0 | 5 | 0 | 0 | 5 | 0 |
+| 2025-12-28 | **ymora** | 2 | ~1h | 0 | 5 | 5 | 0 | 0 | 0 |
+| 2025-12-25 | **ymora** | 6 | ~3h | 0 | 0 | 5 | 0 | 0 | 0 |
+| 2025-12-24 | **ymora** | 3 | ~1.5h | 5 | 3 | 0 | 2 | 5 | 0 |
+| 2025-12-23 | **ymora** | 1 | ~0.5h | 0 | 5 | 5 | 0 | 0 | 0 |
+| 2025-12-22 | **ymora** | 1 | ~0.5h | 0 | 5 | 0 | 0 | 0 | 0 |
+| 2025-12-21 | **ymora** | 1 | ~0.5h | 0 | 5 | 0 | 0 | 0 | 0 |
+| 2025-12-20 | **ymora** | 6 | ~3h | 5 | 5 | 2 | 2 | 0 | 0 |
+| 2025-12-19 | **ymora** | 18 | ~9h | 5 | 12 | 3 | 2 | 3 | 5 |
+| 2025-12-18 | **ymora** | 67 | ~33.5h | 20 | 46 | 10 | 7 | 3 | 6 |
+| 2025-12-17 | **ymora** | 19 | ~9.5h | 11 | 8 | 0 | 5 | 0 | 0 |
+| 2025-12-15 | **ymora** | 2 | ~1h | 0 | 2 | 0 | 2 | 0 | 0 |
+| 2025-12-14 | **ymora** | 15 | ~7.5h | 3 | 8 | 0 | 6 | 0 | 5 |
+| 2025-12-13 | **ymora** | 14 | ~7h | 3 | 4 | 2 | 4 | 5 | 4 |
+| 2025-12-12 | **ymora** | 22 | ~11h | 5 | 13 | 2 | 9 | 5 | 5 |
+| 2025-12-11 | **ymora** | 57 | ~28.5h | 11 | 29 | 0 | 4 | 4 | 10 |
+| 2025-12-10 | **ymora** | 61 | ~30.5h | 18 | 34 | 13 | 13 | 3 | 7 |
+| 2025-12-09 | **ymora** | 12 | ~6h | 3 | 10 | 0 | 5 | 0 | 2 |
+| 2025-12-08 | **ymora** | 49 | ~24.5h | 20 | 35 | 3 | 8 | 2 | 13 |
+| 2025-12-07 | **ymora** | 21 | ~10.5h | 15 | 10 | 2 | 5 | 0 | 0 |
+| 2025-12-06 | **ymora** | 29 | ~14.5h | 5 | 19 | 8 | 3 | 0 | 4 |
+| 2025-12-05 | **ymora** | 18 | ~9h | 4 | 13 | 5 | 3 | 5 | 2 |
+| 2025-12-04 | **ymora** | 33 | ~16.5h | 14 | 14 | 3 | 5 | 5 | 5 |
+| 2025-12-03 | **ymora** | 85 | ~42.5h | 28 | 30 | 6 | 10 | 4 | 9 |
+| 2025-12-02 | **ymora** | 50 | ~25h | 2 | 11 | 4 | 9 | 0 | 8 |
+| 2025-12-01 | **ymora** | 14 | ~7h | 6 | 5 | 5 | 5 | 0 | 0 |
+| 2025-11-30 | **ymora** | 77 | ~38.5h | 28 | 48 | 9 | 4 | 6 | 13 |
+| 2025-11-29 | **ymora** | 2 | ~1h | 2 | 0 | 0 | 5 | 0 | 0 |
+| 2025-11-28 | **ymora** | 3 | ~1.5h | 5 | 0 | 0 | 5 | 0 | 0 |
+| 2025-11-27 | **ymora** | 59 | ~29.5h | 27 | 31 | 11 | 28 | 2 | 12 |
+| 2025-11-26 | **ymora** | 59 | ~29.5h | 13 | 43 | 8 | 5 | 2 | 2 |
+| 2025-11-25 | **ymora** | 45 | ~22.5h | 17 | 27 | 4 | 9 | 0 | 4 |
+| 2025-11-24 | **ymora** | 24 | ~12h | 4 | 17 | 3 | 5 | 0 | 5 |
+| 2025-11-23 | **ymora** | 60 | ~30h | 21 | 31 | 3 | 4 | 4 | 4 |
+| 2025-11-22 | **ymora** | 69 | ~34.5h | 18 | 35 | 13 | 7 | 5 | 8 |
+| 2025-11-21 | **ymora** | 12 | ~6h | 10 | 5 | 2 | 4 | 5 | 0 |
+| 2025-11-20 | **ymora** | 3 | ~1.5h | 5 | 5 | 5 | 5 | 0 | 0 |
+| 2025-11-19 | **ymora** | 7 | ~3.5h | 2 | 5 | 4 | 0 | 0 | 0 |
+| 2025-11-18 | **ymora** | 25 | ~12.5h | 8 | 9 | 6 | 4 | 0 | 5 |
+| 2025-11-17 | **ymora** | 14 | ~7h | 7 | 4 | 2 | 5 | 0 | 5 |
+| 2025-11-16 | **ymora** | 27 | ~13.5h | 20 | 4 | 9 | 5 | 0 | 5 |
+| 2025-11-15 | **ymora** | 23 | ~11.5h | 13 | 3 | 2 | 12 | 5 | 5 |
+| 2025-11-14 | **ymora** | 9 | ~4.5h | 2 | 0 | 5 | 0 | 0 | 5 |
+
 ---
 
 ## Resume par Contributeur
 
+### ymora
+- **Total commits** : 1159 (90%)
+- **Heures estimees** : ~579.5h
+- **Jours actifs** : 47
+- **Moyenne** : 24.66 commits/jour
+
 ### Yannick
-- **Total commits** : 1173 (99.9%)
-- **Heures estimees** : ~586.5h
-- **Jours actifs** : 48
-- **Moyenne** : 24.44 commits/jour
+- **Total commits** : 128 (9.9%)
+- **Heures estimees** : ~64h
+- **Jours actifs** : 5
+- **Moyenne** : 25.6 commits/jour
 
 ### Maxime
 - **Total commits** : 1 (0.1%)
@@ -78,5 +89,5 @@
 - **Moyenne** : 1 commits/jour
 
 ---
-_Rapport gÃ©nÃ©rÃ© automatiquement par generate_time_tracking.ps1_
-_BasÃ© sur l'analyse Git des commits du projet_
+
+_Rapport genere automatiquement par Generate-GitStats.ps1_

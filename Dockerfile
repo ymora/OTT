@@ -106,5 +106,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Port exposé (compatible Render)
 EXPOSE ${PORT:-80}
 
-# Commande de démarrage
-CMD ["/usr/local/bin/start-apache.sh"]
+# Commande de démarrage directe Apache
+CMD ["apache2-foreground"]
