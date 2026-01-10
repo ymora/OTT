@@ -216,7 +216,8 @@ describe('Gestion des dispositifs E2E', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/0/i)).toBeInTheDocument()
+      const devicesButton = screen.getByRole('button', { name: /dispositifs/i })
+      expect(within(devicesButton).getByText('0')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 
@@ -412,7 +413,8 @@ describe('Gestion des dispositifs E2E', () => {
     fireEvent.click(devicesButton)
 
     await waitFor(() => {
-      expect(screen.getByText(/0/i)).toBeInTheDocument()
+      const devicesButton = screen.getByRole('button', { name: /dispositifs/i })
+      expect(within(devicesButton).getByText('0')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 
