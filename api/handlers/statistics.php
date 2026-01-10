@@ -25,9 +25,10 @@ function handleGetStatistics() {
             SELECT 
                 COUNT(*) as total_users,
                 COUNT(CASE WHEN last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 END) as active_users_30d,
-                COUNT(CASE WHEN role = 'admin' THEN 1 END) as admin_users,
-                COUNT(CASE WHEN role = 'technician' THEN 1 END) as technician_users
+                COUNT(CASE WHEN role_id = 1 THEN 1 END) as admin_users,
+                COUNT(CASE WHEN role_id = 3 THEN 1 END) as technician_users
             FROM users
+            WHERE deleted_at IS NULL
         ")->fetch(PDO::FETCH_ASSOC);
         
         // Device statistics
@@ -254,12 +255,14 @@ function handleGetUsageStatistics() {
         // User activity by role
         $userActivity = $pdo->query("
             SELECT 
-                u.role,
+                r.name as role,
                 COUNT(*) as user_count,
                 COUNT(CASE WHEN u.last_login >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 END) as active_7d,
                 COUNT(CASE WHEN u.last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 END) as active_30d
             FROM users u
-            GROUP BY u.role
+            JOIN roles r ON u.role_id = r.id
+            WHERE u.deleted_at IS NULL
+            GROUP BY u.role_id, r.name
             ORDER BY user_count DESC
         ")->fetchAll(PDO::FETCH_ASSOC);
         

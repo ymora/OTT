@@ -32,6 +32,7 @@ require_once __DIR__ . '/../handlers/notifications.php';
 require_once __DIR__ . '/../handlers/usb_logs.php';
 require_once __DIR__ . '/../handlers/database_audit.php';
 require_once __DIR__ . '/../handlers/migrations/migration_handlers.php';
+require_once __DIR__ . '/../handlers/statistics.php';
 
 // ============================================================================
 // ROUTAGE PRINCIPAL
