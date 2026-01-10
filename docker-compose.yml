@@ -35,7 +35,7 @@ services:
     volumes:
       # Mode développement : montage du code source
       - ./api.php:/var/www/html/api.php:ro
-      - ./api:/var/www/html/api:ro
+      - ./api:/var/www/html/api:rw
       - ./bootstrap:/var/www/html/bootstrap:ro
       - ./router.php:/var/www/html/router.php:ro
       - ./index.php:/var/www/html/index.php:ro

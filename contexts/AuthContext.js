@@ -13,18 +13,19 @@
 const API_URL = (() => {
   // Priorité 1: Variable d'environnement explicite (utilisée si définie)
   if (process.env.NEXT_PUBLIC_API_URL) {
+    console.log('[AuthContext] NEXT_PUBLIC_API_URL trouvé:', process.env.NEXT_PUBLIC_API_URL)
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
   }
   
-  // Priorité 2: En localhost, utiliser le proxy Next.js (URL relative)
-  // Le proxy Next.js redirige vers l'API configurée (voir next.config.js)
-  // Cela permet de fonctionner même si Docker n'est pas démarré
+  // Priorité 2: En localhost, utiliser directement l'API locale
+  // Le proxy Next.js ne fonctionne pas correctement dans Docker
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    // URL vide = URL relative = utilise le proxy Next.js
-    return ''
+    console.log('[AuthContext] Utilisation directe de localhost:8080')
+    return 'http://localhost:8080'
   }
   
   // Priorité 3: Utiliser la configuration centralisée
+  console.log('[AuthContext] Utilisation de la configuration centralisée')
   return getApiUrl()
 })()
  const isAbsoluteUrl = url => /^https?:\/\//i.test(url)

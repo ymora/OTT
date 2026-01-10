@@ -8,6 +8,10 @@
 
 FROM node:20-alpine
 
+# Arguments configurables pour l'API (défaut = service docker "api")
+ARG NEXT_PUBLIC_API_URL=http://api
+ARG NEXT_PUBLIC_API_MODE=development
+
 # Métadonnées
 LABEL maintainer="HAPPLYZ MEDICAL <support@happlyz.com>"
 LABEL version="3.1.0"
@@ -15,6 +19,8 @@ LABEL description="OTT Dashboard Next.js - Développement"
 
 # Variables d'environnement
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_API_MODE=${NEXT_PUBLIC_API_MODE}
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV NODE_OPTIONS="--max-old-space-size=4096"

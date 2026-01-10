@@ -151,6 +151,39 @@ if ($path === '/health' && $method === 'GET') {
     handleGetDeviceReports($m[1]);
 
 // FIRMWARES
+} elseif($method === 'POST' && preg_match('#^/firmwares/upload-ino/?$#', $path)) {
+    // Log de debug pour vérifier que la route est bien matchée
+    if (getenv('DEBUG_ERRORS') === 'true') {
+        error_log('[ROUTER] Route upload-ino matchée - Path: ' . $path . ' Method: ' . $method);
+    }
+    require_once __DIR__ . '/../handlers/firmwares/upload.php';
+    handleUploadFirmwareIno();
+} elseif($method === 'GET' && preg_match('#^/firmwares/check-version/([^/]+)$#', $path, $matches)) {
+    require_once __DIR__ . '/../handlers/firmwares/upload.php';
+    handleCheckFirmwareVersion($matches[1]);
+} elseif($method === 'GET' && preg_match('#^/firmwares/(\d+)/ino/?$#', $path, $matches)) {
+    // Log de debug
+    error_log('[ROUTER] Route GET /firmwares/{id}/ino matchée - Path: ' . $path . ' ID: ' . ($matches[1] ?? 'N/A'));
+    require_once __DIR__ . '/../handlers/firmwares/upload.php';
+    handleGetFirmwareIno($matches[1]);
+} elseif($method === 'PUT' && preg_match('#^/firmwares/(\d+)/ino/?$#', $path, $matches)) {
+    // Vérifier que c'est bien la bonne route avant d'appeler
+    if (isset($matches[1]) && is_numeric($matches[1])) {
+        require_once __DIR__ . '/../handlers/firmwares/upload.php';
+        handleUpdateFirmwareIno($matches[1]);
+    } else {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'ID de firmware invalide']);
+    }
+} elseif($method === 'GET' && preg_match('#^/firmwares/compile/(\d+)$#', $path, $matches)) {
+    error_log('[ROUTER] Route GET /firmwares/compile/' . $matches[1] . ' matchée - Path: ' . $path);
+    require_once __DIR__ . '/../handlers/firmwares/compile_optimized.php';
+    // Nettoyer le buffer AVANT d'appeler le handler SSE
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    handleCompileFirmwareOptimized($matches[1]);
+    exit; // Important: arrêter l'exécution après SSE pour éviter tout output supplémentaire
 } elseif($path === '/firmwares' && $method === 'GET') {
     handleGetFirmwares();
 } elseif($path === '/firmwares' && $method === 'POST') {

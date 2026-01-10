@@ -152,7 +152,10 @@ function handleGetDevices() {
             header('Content-Type: application/json; charset=utf-8');
         }
         
+        // Nettoyer le buffer et forcer la sortie
+        ob_clean();
         echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
     } catch(PDOException $e) {
         // Nettoyer le buffer avant d'envoyer l'erreur
         if (ob_get_level() > 0) {
