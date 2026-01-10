@@ -1,0 +1,35 @@
+name: Notify Admin on Push
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Dispatch
+        run: |
+          echo "🚀 Push detected on main branch"
+          echo "📦 Commit: ${{ github.sha }}"
+          echo "📝 Message: ${{ github.event.head_commit.message }}"
+          echo "👤 Author: ${{ github.event.head_commit.author.name }}"
+          
+      - name: Create notification file
+        run: |
+          cat > notification.md << EOF
+          # 🚀 OTT - Nouveau Push
+          
+          **Commit:** ${{ github.sha }}
+          **Message:** ${{ github.event.head_commit.message }}
+          **Auteur:** ${{ github.event.head_commit.author.name }}
+          **Date:** ${{ github.event.head_commit.timestamp }}
+          
+          **Lien:** https://github.com/ymora/OTT/commit/${{ github.sha }}
+          EOF
+          
+      - name: Upload notification artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: push-notification
+          path: notification.md
