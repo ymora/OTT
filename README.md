@@ -663,3 +663,4 @@ grep -r "function " api/ | sort | uniq -d
 - **Notifications UX** : ajouts des bannières `alert-success/info/warning` pour toutes les étapes USB (détection, création, fallback)
 - **Structure optimisée** : Nettoyage de `.gitignore` (doublons supprimés), vérification de la cohérence des chemins de menu
 
+🧪 Test workflow GitHub Actions - 01/10/2026 22:39:56
