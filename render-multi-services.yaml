@@ -1,0 +1,146 @@
+# ================================================================================
+# Render Configuration - OTT Dashboard
+# ================================================================================
+# Configuration multi-services pour éviter les redéploiements intempestifs
+# HAPPLYZ MEDICAL SAS
+# ================================================================================
+
+services:
+  # =============================================================
+  # Service principal (Production) - Branche main
+  # =============================================================
+  - type: web
+    name: ott-dashboard
+    env: docker
+    repo: https://github.com/ymora/OTT.git
+    rootDir: .
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api.php/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_MODE
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://ott-jbln.onrender.com
+      - key: DATABASE_URL
+        value: postgresql://ott_data_user:lxNCXElZadbthGiOgT3cg2Y6JmMeMqUM@dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com/ott_data
+      - key: DB_HOST
+        value: dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com
+      - key: DB_PORT
+        value: 5432
+      - key: DB_NAME
+        value: ott_data
+      - key: DB_USER
+        value: ott_data_user
+      - key: DB_PASSWORD
+        value: lxNCXElZadbthGiOgT3cg2Y6JmMeMqUM
+      - key: JWT_SECRET
+        value: happlyz_medical_ott_jwt_secret_2024_production
+      - key: AUTH_DISABLED
+        value: false
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://ott-dashboard.onrender.com,https://ott-jbln.onrender.com
+
+  # =============================================================
+  # Service Yannick (Développement) - Branche yannick
+  # =============================================================
+  - type: web
+    name: ott-dashboard-yannick
+    env: docker
+    repo: https://github.com/ymora/OTT.git
+    rootDir: .
+    branch: yannick
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api.php/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: APP_ENV
+        value: development
+      - key: NEXT_PUBLIC_API_MODE
+        value: development
+      - key: NEXT_PUBLIC_API_URL
+        value: https://ott-dashboard-yannick.onrender.com
+      - key: DATABASE_URL
+        value: postgresql://ott_data_user:lxNCXElZadbthGiOgT3cg2Y6JmMeMqUM@dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com/ott_data
+      - key: DB_HOST
+        value: dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com
+      - key: DB_PORT
+        value: 5432
+      - key: DB_NAME
+        value: ott_data
+      - key: DB_USER
+        value: ott_data_user
+      - key: DB_PASSWORD
+        value: lxNCXElZadbthGiOgT3cg2Y6JmMeMqUM
+      - key: JWT_SECRET
+        value: happlyz_medical_ott_jwt_secret_2024_production
+      - key: AUTH_DISABLED
+        value: false
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://ott-dashboard-yannick.onrender.com,https://ott-jbln.onrender.com
+
+  # =============================================================
+  # Service Maxime (Développement) - Branche maxime
+  # =============================================================
+  - type: web
+    name: ott-dashboard-maxime
+    env: docker
+    repo: https://github.com/ymora/OTT.git
+    rootDir: .
+    branch: maxime
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api.php/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: APP_ENV
+        value: development
+      - key: NEXT_PUBLIC_API_MODE
+        value: development
+      - key: NEXT_PUBLIC_API_URL
+        value: https://ott-dashboard-maxime.onrender.com
+      - key: DATABASE_URL
+        value: postgresql://ott_data_user:lxNCXElZadbthGiOgT3cg2Y6JmMeMqUM@dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com/ott_data
+      - key: DB_HOST
+        value: dpg-d4b6c015pdvs73ck6rp0-a.frankfurt-postgres.render.com
+      - key: DB_PORT
+        value: 5432
+      - key: DB_NAME
+        value: ott_data
+      - key: DB_USER
+        value: ott_data_user
+      - key: DB_PASSWORD
+        value: lxNCXElZadbthGiOgT3cg2Y6JmMeMqUM
+      - key: JWT_SECRET
+        value: happlyz_medical_ott_jwt_secret_2024_production
+      - key: AUTH_DISABLED
+        value: false
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://ott-dashboard-maxime.onrender.com,https://ott-jbln.onrender.com
+
+# ================================================================================
+# Base de données partagée
+# ================================================================================
+databases:
+  - name: ott-data
+    databaseName: ott_data
+    user: ott_data_user
+    plan: free
+    region: frankfurt
