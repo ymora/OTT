@@ -2,7 +2,7 @@ name: Notify Admin on Push
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, maxime ]
 
 jobs:
   notify:
@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Repository Dispatch
         run: |
-          echo "🚀 Push detected on main branch"
+          echo "🚀 Push detected on branch: ${{ github.ref_name }}"
           echo "📦 Commit: ${{ github.sha }}"
           echo "📝 Message: ${{ github.event.head_commit.message }}"
           echo "👤 Author: ${{ github.event.head_commit.author.name }}"

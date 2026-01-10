@@ -2,7 +2,7 @@ name: Notify Admin on Push
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, maxime ]
 
 jobs:
   notify:

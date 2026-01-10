@@ -2,7 +2,7 @@ name: Cross-Admin Notifications
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, maxime ]
 
 jobs:
   notify-other-admin:
