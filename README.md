@@ -664,3 +664,4 @@ grep -r "function " api/ | sort | uniq -d
 - **Structure optimisée** : Nettoyage de `.gitignore` (doublons supprimés), vérification de la cohérence des chemins de menu
 
 🧪 Test workflow GitHub Actions - 01/10/2026 22:39:56
+🧪 Test notifications branches - 01/10/2026 22:41:42
