@@ -1,0 +1,31 @@
+# Arduino CLI Configuration pour OTT Project
+# Ce fichier configure les bibliothèques et la plateforme ESP32
+
+# Installation des dépendances Arduino
+# Commande à exécuter une fois :
+# arduino-cli core install esp32:esp32
+# arduino-cli lib install ArduinoJson TinyGSM ArduinoHttpClient
+
+# Configuration des bibliothèques
+libraries:
+  - ArduinoJson@6.21.3
+  - TinyGSM@0.12.0
+  - ArduinoHttpClient@0.4.0
+
+# Plateforme ESP32
+platforms:
+  - esp32:esp32@2.0.11
+
+# Configuration du build
+build:
+  fqbn: esp32:esp32:ttgo-lora32
+  properties:
+    build.board: ttgo-lora32
+    build.core: esp32
+    build.variant: ttgo-lora32
+
+# Répertoires personnalisés
+directories:
+  data: ./hardware/arduino-data
+  downloads: ./hardware/arduino-data/downloads
+  user: ./hardware/arduino-data

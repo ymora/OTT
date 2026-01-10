@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import logger from '@/lib/logger'
+import { logger } from '@/lib/logger'
 
 /**
  * Composant ErrorBoundary pour capturer les erreurs React

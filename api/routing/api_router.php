@@ -324,12 +324,12 @@ if ($path === '/health' && $method === 'GET') {
     ]);
 }
 
-// Nettoyer le buffer final
+// Vider le buffer final (PAS nettoyer !)
 while (ob_get_level() > 0) {
-    ob_end_clean();
+    ob_end_flush();
 }
 
 // Envoyer la réponse JSON (header déjà défini dans handler)
 // header('Content-Type: application/json'); // Déjà défini dans handleLogin
-// Version: 2.0.1 - Syntax Fixed
+// Version: 2.0.1 - Buffer Fix
 ?>

@@ -85,7 +85,8 @@ RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/inst
     arduino-cli core install esp32:esp32@2.0.14 && \
     arduino-cli lib install "ArduinoJson" "TinyGSM" "ArduinoHttpClient" && \
     mkdir -p /var/www/html/hardware/arduino-data/{libraries,hardware} && \
-    pip3 install pyserial --break-system-packages
+    pip3 install pyserial --break-system-packages && \
+    usermod -a -G dialout www-data
 
 FROM base AS production
 
@@ -95,7 +96,9 @@ WORKDIR /var/www/html
 # Copier l'application et le script tout en conservant l'utilisateur www-data
 COPY --chown=www-data:www-data . /var/www/html/
 COPY start-apache.sh /usr/local/bin/
+COPY scripts/compile-arduino.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/start-apache.sh \
+    && chmod +x /usr/local/bin/compile-arduino.sh \
     && chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html
 

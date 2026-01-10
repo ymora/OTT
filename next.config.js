@@ -33,6 +33,9 @@ function getApiUrl() {
 }
 
 const nextConfig = {
+  // Configuration Turbopack pour Next.js 16
+  turbopack: {},
+  
   output: isStaticExport ? 'export' : 'standalone',
   reactStrictMode: false, // Désactiver StrictMode pour éviter les problèmes avec Leaflet
   images: {
