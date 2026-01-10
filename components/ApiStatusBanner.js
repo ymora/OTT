@@ -34,6 +34,7 @@ function getEnvironment(apiUrl) {
 export default function ApiStatusBanner() {
   const [apiDown, setApiDown] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
   const { API_URL } = useAuth()
   
   const environment = useMemo(() => getEnvironment(API_URL), [API_URL])
@@ -42,6 +43,7 @@ export default function ApiStatusBanner() {
     // Écouter les erreurs d'API globalement
     const handleApiError = (event) => {
       if (event.detail?.type === 'api_unavailable') {
+        setDismissed(false)
         setApiDown(true)
       }
     }
@@ -68,7 +70,12 @@ export default function ApiStatusBanner() {
     }
   }
 
-  if (!apiDown) return null
+  const dismissBanner = () => {
+    setDismissed(true)
+    setApiDown(false)
+  }
+
+  if (!apiDown || dismissed) return null
 
   const getMessage = () => {
     switch (environment.name) {
@@ -102,13 +109,22 @@ export default function ApiStatusBanner() {
             <p className="text-sm opacity-90">{getMessage()}</p>
           </div>
         </div>
-        <button
-          onClick={checkApiStatus}
-          disabled={checking}
-          className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-medium transition-all disabled:opacity-50"
-        >
-          {checking ? '⏳ Vérification...' : '🔄 Réessayer'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={checkApiStatus}
+            disabled={checking}
+            className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-medium transition-all disabled:opacity-50"
+          >
+            {checking ? '⏳ Vérification...' : '🔄 Réessayer'}
+          </button>
+          <button
+            onClick={dismissBanner}
+            className="px-3 py-2 hover:bg-white/20 rounded-lg text-sm font-medium transition-all"
+            aria-label="Masquer la bannière"
+          >
+            ✖ Masquer
+          </button>
+        </div>
       </div>
     </div>
   )

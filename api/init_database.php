@@ -18,63 +18,54 @@ function initDatabaseIfEmpty() {
         $tablesCheck->execute();
         $tablesCount = $tablesCheck->fetchColumn();
         
-        // Si moins de 5 tables essentielles, le schéma n'a pas été appliqué
         if ($tablesCount < 5) {
-            error_log('[initDatabase] ⚠️ Schéma SQL non appliqué - ' . $tablesCount . ' tables trouvées');
+            error_log('[initDatabase] ⚠️ Schéma SQL incomplet - ' . $tablesCount . ' tables détectées');
             error_log('[initDatabase] ⚠️ Le schéma complet doit être appliqué via sql/schema.sql');
-            error_log('[initDatabase] ⚠️ Application uniquement des données essentielles (rôles + admin)');
+            error_log('[initDatabase] ⚠️ Application des données minimales (rôles + admin)');
         }
-        
-        // Vérifier si les rôles existent
-        $rolesStmt = $pdo->prepare("SELECT COUNT(*) FROM roles");
-        $rolesStmt->execute();
-        $rolesCount = $rolesStmt->fetchColumn();
-        
-        if ($rolesCount == 0) {
-            error_log('[initDatabase] Base vide détectée - Initialisation minimale...');
-            
-            // Créer les rôles (fallback si le schéma n'a pas été appliqué)
-            // SÉCURITÉ: Requête SQL statique (initialisation BDD) - valeurs hardcodées, sécurisée
-            $pdo->exec("
-                INSERT INTO roles (id, name, description) VALUES
-                (1, 'admin', 'Administrateur systeme - Acces complet'),
-                (2, 'medecin', 'Medecin - Consultation patients et dispositifs'),
-                (3, 'technicien', 'Technicien - Maintenance dispositifs')
-                ON CONFLICT (id) DO UPDATE SET 
+
+        // S'assurer que les rôles attendus existent (utile en cas de base partielle)
+        $pdo->exec("
+            INSERT INTO roles (id, name, description) VALUES
+            (1, 'admin', 'Administrateur systeme - Acces complet'),
+            (2, 'medecin', 'Medecin - Consultation patients et dispositifs'),
+            (3, 'technicien', 'Technicien - Maintenance dispositifs')
+            ON CONFLICT (id) DO UPDATE SET 
                 name = EXCLUDED.name,
                 description = EXCLUDED.description;
-            ");
-            error_log('[initDatabase] ✅ Rôles créés');
-            
-            // Vérifier si l'utilisateur admin existe
-            $userStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = 'ymora@free.fr'");
-            $userStmt->execute();
-            $userExists = $userStmt->fetchColumn() > 0;
-            
-            if (!$userExists) {
-                // Hash pour Ym120879 (doit correspondre à celui dans schema.sql)
-                $adminHash = '$2y$10$CfYRXTMKgtzNsYnMoq2RU.6/SjicRxCnIXj50OZkiQ9/.4VvF51SC';
-                
-                $pdo->prepare("
-                    INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role_id, is_active, deleted_at)
-                    VALUES (1, 'ymora@free.fr', :hash, 'Yann', 'Mora', NULL, 1, TRUE, NULL)
-                    ON CONFLICT (id) DO UPDATE SET 
-                    email = EXCLUDED.email,
+        ");
+        error_log('[initDatabase] ✅ Rôles confirmés');
+
+        // S'assurer que l'utilisateur admin existe
+        $adminRoleStmt = $pdo->prepare("SELECT id FROM roles WHERE name = 'admin' LIMIT 1");
+        $adminRoleStmt->execute();
+        $adminRoleId = $adminRoleStmt->fetchColumn();
+
+        if ($adminRoleId) {
+            $adminHash = '$2y$10$CfYRXTMKgtzNsYnMoq2RU.6/SjicRxCnIXj50OZkiQ9/.4VvF51SC';
+
+            $pdo->prepare("
+                INSERT INTO users (email, password_hash, first_name, last_name, phone, role_id, is_active, deleted_at)
+                VALUES ('ymora@free.fr', :hash, 'Yann', 'Mora', NULL, :role_id, TRUE, NULL)
+                ON CONFLICT (email) DO UPDATE SET 
                     password_hash = EXCLUDED.password_hash,
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
                     phone = EXCLUDED.phone,
                     role_id = EXCLUDED.role_id,
                     is_active = TRUE,
                     deleted_at = NULL;
-                ")->execute(['hash' => $adminHash]);
-                
-                error_log('[initDatabase] ✅ Utilisateur admin créé');
-            }
-            
-            error_log('[initDatabase] ✅ Initialisation minimale terminée');
+            ")->execute([
+                'hash' => $adminHash,
+                'role_id' => $adminRoleId
+            ]);
+            error_log('[initDatabase] ✅ Utilisateur admin confirmé');
+        } else {
+            error_log('[initDatabase] ⚠️ Rôle admin introuvable - impossible de créer l\'admin');
         }
     } catch (PDOException $e) {
-        // Ne pas bloquer si l'initialisation échoue (peut être que les tables n'existent pas encore)
         error_log('[initDatabase] ⚠️ Erreur lors de l\'initialisation: ' . $e->getMessage());
     }
 }
+
 

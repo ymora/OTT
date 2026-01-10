@@ -4,7 +4,7 @@
  * @module hooks/useEntityPage
  */
 
-import { useMemo, useRef, useCallback} from 'react'
+import { useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useApiData, useFilter, useEntityModal, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useToggle, useAsyncState } from '@/hooks'
 import { isArchived as isEntityArchived } from '@/lib/utils'

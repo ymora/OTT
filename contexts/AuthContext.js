@@ -148,7 +148,7 @@ export function AuthProvider({ children }) {
         try {
           const jsonError = JSON.parse(text)
           errorMessage = jsonError.error || jsonError.message || errorMessage
-        } catch (e) {
+        } catch (_e) {
           // Si ce n'est pas du JSON, extraire le message d'erreur du HTML si possible
           if (text.includes('Parse error') || text.includes('Fatal error') || text.includes('Warning')) {
             // Extraire le message d'erreur PHP

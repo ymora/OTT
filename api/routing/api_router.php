@@ -52,6 +52,9 @@ if (defined('LOG_REQUESTS') && LOG_REQUESTS) {
 // Router principal
 if ($path === '/health' && $method === 'GET') {
     // Health check
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
     header('Content-Type: application/json');
     try {
         $stmt = get_db_connection()->query("SELECT 1");
@@ -292,7 +295,7 @@ while (ob_get_level() > 0) {
     ob_end_clean();
 }
 
-// Envoyer la réponse JSON
-header('Content-Type: application/json');
+// Envoyer la réponse JSON (header déjà défini dans handler)
+// header('Content-Type: application/json'); // Déjà défini dans handleLogin
 // Version: 2.0.1 - Syntax Fixed
 ?>

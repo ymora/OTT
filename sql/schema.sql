@@ -90,6 +90,27 @@ CREATE TRIGGER trg_patients_updated BEFORE UPDATE ON patients
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE INDEX IF NOT EXISTS idx_patients_status ON patients(status) WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS firmware_versions (
+  id SERIAL PRIMARY KEY,
+  version VARCHAR(20) UNIQUE NOT NULL,
+  file_path VARCHAR(255) NOT NULL,
+  file_size INTEGER,
+  checksum VARCHAR(64),
+  release_notes TEXT,
+  is_stable BOOLEAN DEFAULT FALSE,
+  min_battery_pct INTEGER DEFAULT 30,
+  uploaded_by INTEGER REFERENCES users(id),
+  status VARCHAR(50) DEFAULT 'pending',
+  error_message TEXT,
+  ino_content BYTEA,
+  bin_content BYTEA,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+DROP TRIGGER IF EXISTS trg_firmware_versions_updated ON firmware_versions;
+CREATE TRIGGER trg_firmware_versions_updated BEFORE UPDATE ON firmware_versions
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 CREATE TABLE IF NOT EXISTS devices (
   id SERIAL PRIMARY KEY,
   sim_iccid VARCHAR(20) UNIQUE NOT NULL,

@@ -1241,7 +1241,7 @@ export function UsbProvider({ children }) {
           processUsbStreamLine(trimmed)
           usbStreamBufferRef.current = ''
           return
-        } catch (e) {
+        } catch (_e) {
           // JSON incomplet, attendre la suite
         }
       }

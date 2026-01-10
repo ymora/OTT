@@ -87,18 +87,18 @@ export function useGeolocation(options = {}) {
               setError(null)
               return
             }
-          } catch (err) {
+          } catch (error) {
             // Continuer avec le service suivant
-            console.warn('Geolocation service failed:', err.message)
+            console.warn('Geolocation service failed:', error.message)
           }
         }
 
         // Si tous les services ont échoué
         throw new Error('Tous les services de géolocalisation IP ont échoué')
-      } catch (err) {
+      } catch (error) {
         if (mounted) {
-          logger.error('Erreur géolocalisation IP:', err)
-          setError(err.message)
+          logger.error('Erreur géolocalisation IP:', error)
+          setError(error.message)
           setLoading(false)
         }
       }
@@ -155,8 +155,8 @@ export function useGeolocation(options = {}) {
             maximumAge
           }
         )
-      } catch (err) {
-        // Si watchPosition échoue, essayer getCurrentPosition
+      } catch (error) {
+        console.warn('watchPosition failed:', error)
         navigator.geolocation.getCurrentPosition(
           onGPSSuccess,
           onGPSError,

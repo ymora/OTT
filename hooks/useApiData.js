@@ -131,6 +131,7 @@ export function useApiData(endpoints, options = {}) {
 
         const results = await Promise.all(promises)
         const dataMap = {}
+        let firstErrorResult = null
         endpointsToUse.forEach((endpoint, index) => {
           // Extraire le nom de la clé depuis l'endpoint (ex: /api.php/devices -> devices)
           // Gérer les endpoints avec query params (ex: /api.php/logs?limit=200 -> logs)
@@ -146,7 +147,22 @@ export function useApiData(endpoints, options = {}) {
           }
           // Si dataMap[key] existe déjà et endpoint n'a pas de query params, on ne l'écrase pas
           // Cela préserve la version plus complète avec include_deleted si elle existe déjà
+
+          if (!firstErrorResult && results[index] && results[index].success === false) {
+            firstErrorResult = results[index]
+          }
         })
+
+        if (firstErrorResult) {
+          const errorMessage = firstErrorResult.error || firstErrorResult.message || 'Erreur lors du chargement des données'
+          setError(errorMessage)
+          setData({})
+          if (cacheTTL > 0) {
+            cache.delete(cacheKey)
+          }
+          setLoading(false)
+          return
+        }
         
         // Mettre en cache si activé
         if (cacheTTL > 0) {
@@ -201,8 +217,7 @@ export function useApiData(endpoints, options = {}) {
     if (autoLoad && !skip) {
       loadData()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLoad, endpointsKey])
+  }, [autoLoad, endpointsKey, skip])
 
   // Fonction pour invalider le cache
   const invalidateCache = useCallback(() => {

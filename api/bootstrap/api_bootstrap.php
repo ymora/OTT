@@ -7,9 +7,10 @@
 // Mode DEBUG activable via variable d'environnement (désactivé par défaut)
 // Pour activer : mettre DEBUG_ERRORS=true dans .env ou variable d'environnement
 
-require_once __DIR__ . '/env_loader.php';
+require_once __DIR__ . '/../../bootstrap/env_loader.php';
 require_once __DIR__ . '/database.php';
-require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/../../bootstrap/notifications.php';
+require_once __DIR__ . '/../init_database.php';
 
 // Démarrer le buffer de sortie TRÈS TÔT pour capturer toute sortie HTML accidentelle (warnings, notices, etc.)
 // IMPORTANT: Doit être AVANT la définition des constantes pour capturer les éventuels warnings
@@ -93,8 +94,12 @@ define('DB_USER', $dbConfig['user']);
 define('DB_PASS', $dbConfig['pass']);
 define('DB_DSN', $dbConfig['dsn']);
 
-// Initialiser la connexion PDO (singleton)
-get_db_connection();
+// Initialiser la connexion PDO (singleton) et partager l'instance aux handlers globaux
+global $pdo;
+$pdo = get_db_connection();
+
+// Garantir que l'administration de base (rôles + admin) existe même si le schéma est partiel
+initDatabaseIfEmpty();
 
 // JWT_SECRET doit être défini en production
 $jwtSecret = getenv('JWT_SECRET');
@@ -134,9 +139,15 @@ define('API_TIMEOUT', 30); // 30 secondes
 define('DB_TIMEOUT', 10); // 10 secondes
 
 // Configuration des logs
-define('LOG_ERRORS', getenv('LOG_ERRORS') !== 'false');
-define('LOG_REQUESTS', getenv('LOG_REQUESTS') === 'true');
-define('LOG_PERFORMANCE', getenv('LOG_PERFORMANCE') === 'true');
+if (!defined('LOG_ERRORS')) {
+    define('LOG_ERRORS', getenv('LOG_ERRORS') !== 'false');
+}
+if (!defined('LOG_REQUESTS')) {
+    define('LOG_REQUESTS', getenv('LOG_REQUESTS') === 'true');
+}
+if (!defined('LOG_PERFORMANCE')) {
+    define('LOG_PERFORMANCE', getenv('LOG_PERFORMANCE') === 'true');
+}
 
 // Configuration du cache
 define('CACHE_ENABLED', getenv('CACHE_ENABLED') !== 'false');

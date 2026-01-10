@@ -1,3 +1,4 @@
+const path = require('path')
 /** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== 'production'
 const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true'
@@ -78,6 +79,15 @@ const nextConfig = {
   // En mode export statique, on veut toujours un build frais
   // Note: Next.js 16 utilise Turbopack par défaut, mais on force webpack ici
   webpack: (config, { dev, isServer, webpack }) => {
+    // Toujours exposer l'alias "@/..." vers la racine du projet
+    if (!config.resolve) {
+      config.resolve = {}
+    }
+    if (!config.resolve.alias) {
+      config.resolve.alias = {}
+    }
+    config.resolve.alias['@'] = path.resolve(__dirname)
+
     if (!dev && isStaticExport) {
       // En export statique, désactiver tous les caches pour forcer la régénération
       config.cache = false

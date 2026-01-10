@@ -41,6 +41,7 @@ services:
       - ./index.php:/var/www/html/index.php:ro
       - ./.htaccess:/var/www/html/.htaccess:ro
       - ./hardware:/var/www/html/hardware
+      - ./.env.local:/var/www/html/.env.local:ro
     depends_on:
       db:
         condition: service_healthy

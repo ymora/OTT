@@ -37,7 +37,7 @@ export function useUsbLogs() {
       }
       
       return parts.length > 0 ? `[USB_STREAM] ${parts.join(' | ')}` : null
-    } catch (e) {
+    } catch (_e) {
       return null // JSON invalide, afficher tel quel
     }
   }, [])

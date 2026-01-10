@@ -57,8 +57,25 @@ export default function DashboardPage() {
   // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
   useAutoRefresh(refetch, 30000)
 
-  // Mémoriser les données pour éviter les re-renders inutiles
-  const devicesFromDb = useMemo(() => data?.devices?.devices || [], [data?.devices])
+  // Mémoriser les dispositifs depuis la base de données
+  const devicesFromDb = useMemo(() => {
+    const devicesResponse = data?.devices
+    if (!devicesResponse) return []
+
+    if (Array.isArray(devicesResponse.devices)) {
+      return devicesResponse.devices
+    }
+
+    if (devicesResponse.devices?.devices && Array.isArray(devicesResponse.devices.devices)) {
+      return devicesResponse.devices.devices
+    }
+
+    if (Array.isArray(devicesResponse)) {
+      return devicesResponse
+    }
+
+    return []
+  }, [data?.devices])
   
   // Ajouter le dispositif USB virtuel s'il existe et n'est pas déjà dans la liste
   const devices = useMemo(() => {
@@ -76,13 +93,18 @@ export default function DashboardPage() {
     return [usbDevice, ...devicesFromDb]
   }, [devicesFromDb, usbDevice])
   const alerts = useMemo(() => {
-    return (data?.alerts?.alerts || []).filter(a => a.status === 'unresolved')
+    const rawAlerts = Array.isArray(data?.alerts?.alerts)
+      ? data.alerts.alerts
+      : Array.isArray(data?.alerts)
+        ? data.alerts
+        : []
+    return rawAlerts.filter(a => a.status === 'unresolved')
   }, [data?.alerts])
 
   // Mémoriser les calculs coûteux pour éviter les recalculs inutiles
   const stats = useMemo(() => {
     // Compter les dispositifs en ligne depuis la base de données (last_seen < 2h)
-    const onlineFromDb = devices.filter(d => {
+    const onlineFromDb = devicesFromDb.filter(d => {
       // Exclure les dispositifs archivés
       if (d.deleted_at) return false
       // Gérer les valeurs null, undefined ou invalides
@@ -112,7 +134,7 @@ export default function DashboardPage() {
     const activeDevices = onlineFromDb.length + (usbDeviceOnline && !usbDeviceAlreadyCounted ? 1 : 0)
     
     // Calculer les batteries faibles depuis la base de données (exclure archivés)
-    const lowBatteryFromDb = devices.filter(d => {
+    const lowBatteryFromDb = devicesFromDb.filter(d => {
       if (d.deleted_at) return false
       const battery = d.last_battery
       return battery !== null && battery !== undefined && battery < 30
@@ -134,7 +156,7 @@ export default function DashboardPage() {
     const lowBatteryDevices = lowBatteryFromDb + (usbBatteryLow && !usbDeviceAlreadyCounted ? 1 : 0)
     
     // Calculer le nombre total de dispositifs avec batterie OK (>= 30%) - exclure archivés
-    const devicesWithBattery = devices.filter(d => {
+    const devicesWithBattery = devicesFromDb.filter(d => {
       if (d.deleted_at) return false
       const battery = d.last_battery
       return battery !== null && battery !== undefined
@@ -143,7 +165,7 @@ export default function DashboardPage() {
     const okBatteryDevices = okBatteryFromDb + (usbBatteryOk && !usbDeviceAlreadyCounted ? 1 : 0)
     
     // Total dispositifs : base de données (exclure archivés) + USB si pas déjà compté
-    const activeDevicesFromDb = devices.filter(d => !d.deleted_at)
+    const activeDevicesFromDb = devicesFromDb.filter(d => !d.deleted_at)
     const totalDevices = activeDevicesFromDb.length + (usbDeviceOnline && !usbDeviceAlreadyCounted ? 1 : 0)
     
     return {
@@ -157,8 +179,8 @@ export default function DashboardPage() {
 
   // Mémoriser les dispositifs actifs (doit être avant mapComponent)
   const activeDevices = useMemo(() => {
-    return devices.filter(d => !d.deleted_at)
-  }, [devices])
+    return devicesFromDb.filter(d => !d.deleted_at)
+  }, [devicesFromDb])
 
   // Mémoriser les dispositifs géolocalisés (GPS ou IP)
   const geolocatedDevices = useMemo(() => {
@@ -167,17 +189,17 @@ export default function DashboardPage() {
   }, [activeDevices])
 
   const unassignedDevices = useMemo(() => 
-    devices.filter(d => !d.deleted_at && !d.first_name && !d.last_name),
-    [devices]
+    devicesFromDb.filter(d => !d.deleted_at && !d.first_name && !d.last_name),
+    [devicesFromDb]
   )
   
   const lowBatteryList = useMemo(() => 
-    devices.filter(d => {
+    devicesFromDb.filter(d => {
       if (d.deleted_at) return false
       const battery = d.last_battery
       return battery !== null && battery !== undefined && battery < 30
     }),
-    [devices]
+    [devicesFromDb]
   )
 
   // Limiter à 5 pour l'affichage
@@ -223,7 +245,7 @@ export default function DashboardPage() {
 
   // Mémoriser les dispositifs en ligne
   const onlineDevicesList = useMemo(() => {
-    const onlineDevices = devices.filter(d => {
+    const onlineDevices = devicesFromDb.filter(d => {
       if (d.deleted_at) return false
       if (!d.last_seen) return false
       const lastSeen = new Date(d.last_seen)
@@ -240,7 +262,7 @@ export default function DashboardPage() {
         🟢 {device.device_name || device.sim_iccid}
       </button>
     ))
-  }, [devices])
+  }, [devicesFromDb])
 
   // Mémoriser les alertes critiques
   const criticalAlerts = useMemo(() => {
@@ -269,12 +291,12 @@ export default function DashboardPage() {
 
   // Mémoriser les dispositifs avec batterie OK (>= 30%)
   const okBatteryDevicesList = useMemo(() => {
-    return devices.filter(d => {
+    return devicesFromDb.filter(d => {
       if (d.deleted_at) return false
       const battery = d.last_battery
       return battery !== null && battery !== undefined && battery >= 30
     })
-  }, [devices])
+  }, [devicesFromDb])
 
   // Mémoriser la liste des batteries
   const batteryListDisplay = useMemo(() => {
@@ -361,7 +383,7 @@ export default function DashboardPage() {
           {kpiAccordions.devices && (
             <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div className="space-y-1 mt-2">
-                {devices.slice(0, 10).map(device => (
+                {devicesFromDb.slice(0, 10).map(device => (
                   <button
                     key={device.id}
                     onClick={() => zoomToDevice(device.id)}
@@ -370,8 +392,8 @@ export default function DashboardPage() {
                     📍 {device.device_name || device.sim_iccid}
                   </button>
                 ))}
-                {devices.length > 10 && (
-                  <div className="text-xs text-gray-500 italic px-2">+{devices.length - 10} autres...</div>
+                {devicesFromDb.length > 10 && (
+                  <div className="text-xs text-gray-500 italic px-2">+{devicesFromDb.length - 10} autres...</div>
                 )}
               </div>
             </div>

@@ -44,21 +44,34 @@ function checkRateLimit($email, $maxAttempts = 5, $windowMinutes = 5) {
     return true;
 }
 
+function resetRateLimit($email) {
+    $lockFile = sys_get_temp_dir() . '/ott_login_' . md5($email) . '.lock';
+    if (file_exists($lockFile)) {
+        @unlink($lockFile);
+    }
+}
+
 function handleLogin() {
     global $pdo;
     
-    // S'assurer que le Content-Type est JSON et nettoyer le buffer
-    if (!headers_sent()) {
-        header('Content-Type: application/json; charset=utf-8');
-    }
+    // Nettoyer TOUT output buffer AVANT toute écriture
     while (ob_get_level() > 0) {
         ob_end_clean();
     }
     
+    // S'assurer que le Content-Type est JSON
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
     try {
-        $input = json_decode(file_get_contents('php://input'), true);
+        $rawInput = file_get_contents('php://input');
+        // error_log('[handleLogin] Raw input received: ' . $rawInput); // COMMENTED: causes output before headers
+        $input = json_decode($rawInput, true);
         $email = $input['email'] ?? '';
         $password = $input['password'] ?? '';
+        
+        // error_log('[handleLogin] Parsed: email=' . $email . ', password=' . ($password ? 'SET' : 'EMPTY')); // COMMENTED: causes output before headers
         
         if (empty($email) || empty($password)) {
             http_response_code(400);
@@ -199,6 +212,7 @@ function handleLogin() {
         $userFull['permissions'] = !empty($permissionsStr) ? explode(',', $permissionsStr) : [];
         
         echo json_encode(['success' => true, 'token' => $token, 'user' => $userFull], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        resetRateLimit($email);
         
     } catch(PDOException $e) {
         error_log('[handleLogin] Database error: ' . $e->getMessage());

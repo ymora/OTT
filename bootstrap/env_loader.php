@@ -4,7 +4,21 @@
  * Compatible avec le format KEY=VALUE (une ligne par variable)
  */
 
-$envFile = __DIR__ . '/../.env.php';
+$envFiles = [
+    __DIR__ . '/../.env.local',
+    __DIR__ . '/../.env.development',
+    __DIR__ . '/../.env.php'
+];
+$envFile = null;
+foreach ($envFiles as $candidate) {
+    if (file_exists($candidate)) {
+        $envFile = $candidate;
+        break;
+    }
+}
+if ($envFile === null) {
+    return;
+}
 if (file_exists($envFile)) {
     $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {

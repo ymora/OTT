@@ -3,7 +3,7 @@
  * Remplace toute la logique complexe par une approche simple qui fonctionne
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 
 export function useSimpleUsbStreaming() {
   const [isConnected, setIsConnected] = useState(false)
