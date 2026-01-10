@@ -3,7 +3,7 @@
   "version": "3.1.0",
   "description": "OTT Dashboard React - HAPPLYZ MEDICAL",
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev -p 3000 --webpack",
     "dev:docker": "powershell -ExecutionPolicy Bypass -File ./start-docker-simple.ps1",
     "build": "next build --webpack",
     "start": "next start",
