@@ -130,14 +130,14 @@ log_info "📋 Recent logs:"
 docker-compose -f docker-compose.ovh.yml logs --tail=20
 
 # Update SSL certificate if needed
-if [ -f "/etc/letsencrypt/live/votre-domaine.ovh/fullchain.pem" ]; then
+if [ -f "/etc/letsencrypt/live/ott-dev.happlyzmedical.com/fullchain.pem" ]; then
     log_info "🔒 Checking SSL certificate..."
     certbot renew --quiet
     docker-compose -f docker-compose.ovh.yml restart nginx
 fi
 
 log "✅ Deployment completed successfully!"
-log_info "🌐 Your API is available at: https://votre-domaine.ovh"
+log_info "🌐 Your API is available at: https://ott-dev.happlyzmedical.com"
 log_info "📊 Monitor logs with: docker-compose -f docker-compose.ovh.yml logs -f"
 log_info "🔄 To restart: docker-compose -f docker-compose.ovh.yml restart"
 
