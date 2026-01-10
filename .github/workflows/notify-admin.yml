@@ -15,21 +15,27 @@ jobs:
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "🚀 OTT - Nouveau push sur main"
-          to: maxime@happlyzmedical.com,ymora@free.fr
+          subject: "🚀 OTT - Nouveau push de ${{ github.event.head_commit.author.name }}"
+          # Notifier l'autre admin (pas celui qui a poussé)
+          to: ${{ github.event.head_commit.author.email == 'ymora@free.fr' && 'maxime@happlyzmedical.com' || 'ymora@free.fr' }}
           from: "OTT System <noreply@happlyz.com>"
           body: |
             Bonjour,
 
-            Un nouveau push a été effectué sur le repository OTT :
+            Un nouveau push a été effectué sur le repository OTT par **${{ github.event.head_commit.author.name }}** :
 
-            📦 Commit: ${{ github.sha }}
-            📝 Message: ${{ github.event.head_commit.message }}
-            👤 Auteur: ${{ github.event.head_commit.author.name }}
-            📅 Date: ${{ github.event.head_commit.timestamp }}
+            📦 **Commit :** ${{ github.sha }}
+            📝 **Message :** ${{ github.event.head_commit.message }}
+            👤 **Auteur :** ${{ github.event.head_commit.author.name }} (${{ github.event.head_commit.author.email }})
+            📅 **Date :** ${{ github.event.head_commit.timestamp }}
 
-            🔗 Voir sur GitHub: https://github.com/ymora/OTT/commit/${{ github.sha }}
+            🔗 **Voir sur GitHub :** https://github.com/ymora/OTT/commit/${{ github.sha }}
 
             ---
+            📊 **Statistiques du repository :**
+            - Branche : main
+            - Auteur du push : ${{ github.event.head_commit.author.name }}
+            - Email de l'auteur : ${{ github.event.head_commit.author.email }}
+
             Ceci est une notification automatique du système OTT
             HAPPLYZ MEDICAL SAS

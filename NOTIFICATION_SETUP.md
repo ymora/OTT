@@ -1,62 +1,97 @@
-# Configuration des Notifications pour le Deuxième Administrateur
+# Configuration des Notifications Croisées entre Administrateurs
 
 ## 🎯 Objectif
-Informer automatiquement Maxime Happlyz Medical (deuxième admin) lors de chaque push sur le repository OTT.
+Notifier automatiquement l'autre administrateur lorsqu'un push est effectué sur le repository OTT.
 
-## 📋 Options Disponibles
+### 📋 Scénarios de notification:
+- **Yann pousse** → **Maxime est notifié**
+- **Maxime pousse** → **Yann est notifié**
+
+## 🔄 Système de Notification Croisée
 
 ### Option 1: GitHub Notifications (Recommandé - Gratuit)
 **Configuration requise:**
-1. Maxime doit avoir un compte GitHub
-2. Ajouter Maxime comme collaborateur sur le repo
-3. Maxime doit "watch" le repository
+1. Les deux admins doivent avoir un compte GitHub
+2. Être collaborateurs sur le repo
+3. "Watch" le repository avec notifications de commits
 
-**Étapes:**
+**Étapes pour Maxime:**
 ```bash
-# 1. Inviter Maxime sur GitHub
-# Settings → Collaborators → Add people → maxime@happlyzmedical.com
-
-# 2. Maxime doit configurer les notifications
-# Sur GitHub: Watch → Custom → 
-# ☑️ Commits (pour les pushes)
-# ☑️ Releases  
-# ☑️ Discussions
+# 1. Accepter l'invitation collaborateur sur GitHub
+# 2. Configurer les notifications:
+# Watch → Custom → ☑️ Commits
 ```
 
-### Option 2: Email Automatique (Nécessite configuration)
+### Option 2: Email Automatique (Nécessite configuration SMTP)
+**Workflow:** `.github/workflows/notify-admin.yml`
+- Détecte automatiquement qui a poussé
+- Envoie un email à l'autre admin uniquement
+- Sujet: "🚀 OTT - Nouveau push de [Nom]"
+
 **Prérequis:**
-- Configurer des secrets GitHub: EMAIL_USERNAME, EMAIL_PASSWORD
-- Utiliser un service SMTP (Gmail, SendGrid, etc.)
+- Configurer les secrets GitHub:
+  - `EMAIL_USERNAME`: Compte email SMTP
+  - `EMAIL_PASSWORD`: Mot de passe email SMTP
 
-**Workflow créé:** `.github/workflows/notify-admin.yml`
+### Option 3: GitHub Issues (Alternative - Gratuit)
+**Workflow:** `.github/workflows/notify-cross-admin.yml`
+- Crée automatiquement une issue GitHub quand Maxime pousse
+- Yann reçoit une notification GitHub
+- Pas besoin de configuration SMTP
 
-### Option 3: Notification Simple (Actuellement configurée)
-**Workflow:** `.github/workflows/notify-simple.yml`
-- Crée un fichier de notification
-- Pas besoin de secrets
-- Consultable dans les artifacts GitHub
+## 🚀 Mise en Place Rapide
 
-## 🚀 Mise en Place Rapide (Option 1)
+### Étape 1: Configuration GitHub (Recommandé)
+1. **Yann**: Ajoute Maxime comme collaborateur
+   - GitHub → Settings → Access → Add people
+   - Email: `maxime@happlyzmedical.com`
+   - Rôle: `Admin`
 
-### Pour Yann (admin principal):
-1. Allez sur https://github.com/ymora/OTT/settings/access
-2. Cliquez sur "Add people"
-3. Entrez: `maxime@happlyzmedical.com`
-4. Rôle: `Admin` ou `Maintainer`
+2. **Maxime**: 
+   - Accepter l'invitation
+   - Watch → Custom → ☑️ Commits
 
-### Pour Maxime (deuxième admin):
-1. Accepter l'invitation par email
-2. Sur le repo OTT, cliquer sur "Watch" → "Custom"
-3. Cocher les notifications de commits
+### Étape 2: Configuration Email (Optionnel)
+1. **Yann**: Configure les secrets GitHub
+   - Settings → Secrets → Actions → New repository secret
+   - `EMAIL_USERNAME`: Votre email SMTP
+   - `EMAIL_PASSWORD`: Votre mot de passe SMTP
 
-## ✅ Résultat
-Maxime recevra automatiquement une notification GitHub à chaque push sur la branche main, sans configuration supplémentaire.
-
-## 📊 Test
-Après configuration, tester avec:
+### Étape 3: Test du système
 ```bash
-echo "test notification" >> README.md
+# Test de Yann vers Maxime
+echo "test notification Yann→Maxime" >> README.md
 git add README.md
-git commit -m "🧪 Test notification system"
+git commit -m "🧪 Test notification croisée"
 git push origin main
+
+# Test de Maxime vers Yann (une fois qu'il a accès)
+# Maxime fera la même chose depuis son compte
 ```
+
+## ✅ Résultats Attendus
+
+### Quand Yann pousse:
+- ✅ Maxime reçoit une notification GitHub
+- ✅ (Optionnel) Maxime reçoit un email si SMTP configuré
+
+### Quand Maxime pousse:
+- ✅ Yann reçoit une notification GitHub
+- ✅ (Optionnel) Yann reçoit un email si SMTP configuré
+- ✅ Une issue GitHub est créée (alternative)
+
+## 📊 Workflows Disponibles
+
+1. **`notify-admin.yml`** - Email avec détection automatique
+2. **`notify-cross-admin.yml`** - Issues GitHub + artifacts
+3. **`notify-simple.yml`** - Artifacts simples
+
+## 🔧 Personnalisation
+
+Pour changer les emails de notification:
+```yaml
+# Dans notify-admin.yml, modifier la ligne:
+to: ${{ github.event.head_commit.author.email == 'ymora@free.fr' && 'maxime@happlyzmedical.com' || 'ymora@free.fr' }}
+```
+
+Le système est maintenant bidirectionnel et automatique ! 🎉

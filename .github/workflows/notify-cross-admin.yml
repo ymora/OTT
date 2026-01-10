@@ -1,0 +1,76 @@
+name: Cross-Admin Notifications
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  notify-other-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Identify pusher and notify other admin
+        run: |
+          echo "🔍 Détection de l'auteur du push..."
+          echo "Auteur: ${{ github.event.head_commit.author.name }}"
+          echo "Email: ${{ github.event.head_commit.author.email }}"
+          
+          # Créer un message personnalisé
+          if [[ "${{ github.event.head_commit.author.email }}" == "ymora@free.fr" ]]; then
+            echo "📤 Yann a poussé -> Notifier Maxime"
+            echo "TO_NOTIFY=maxime@happlyzmedical.com" >> $GITHUB_ENV
+            echo "PUSHER_NAME=Yann" >> $GITHUB_ENV
+            OTHER_ADMIN="Maxime"
+          else
+            echo "📤 Maxime a poussé -> Notifier Yann"
+            echo "TO_NOTIFY=ymora@free.fr" >> $GITHUB_ENV
+            echo "PUSHER_NAME=Maxime" >> $GITHUB_ENV
+            OTHER_ADMIN="Yann"
+          fi
+          echo "OTHER_ADMIN=$OTHER_ADMIN" >> $GITHUB_ENV
+      
+      - name: Create notification message
+        run: |
+          cat > notification.md << EOF
+          # 🚀 Notification OTT - Push de ${{ github.event.head_commit.author.name }}
+          
+          **${{ github.event.head_commit.author.name }}** vient de pousser sur la branche main !
+          
+          ## 📦 Détails du commit
+          - **Hash:** ${{ github.sha }}
+          - **Message:** ${{ github.event.head_commit.message }}
+          - **Auteur:** ${{ github.event.head_commit.author.name }}
+          - **Email:** ${{ github.event.head_commit.author.email }}
+          - **Date:** ${{ github.event.head_commit.timestamp }}
+          
+          ## 🔗 Actions
+          - [Voir sur GitHub](https://github.com/ymora/OTT/commit/${{ github.sha }})
+          - [Voir les changements](https://github.com/ymora/OTT/compare/${{ github.event.before }}...${{ github.event.after }})
+          
+          ---
+          📊 **Notification automatique**
+          🏢 **HAPPLYZ MEDICAL SAS**
+          EOF
+      
+      - name: Create issue for notification (alternative to email)
+        if: github.event.head_commit.author.email != 'ymora@free.fr'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const notification = fs.readFileSync('notification.md', 'utf8');
+            const authorName = '${{ github.event.head_commit.author.name }}';
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔔 Push de ${authorName} - ${{ github.sha }}`,
+              body: notification,
+              labels: ['notification', 'push-alert']
+            });
+      
+      - name: Upload notification artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: "push-notification-${{ github.sha }}"
+          path: notification.md
