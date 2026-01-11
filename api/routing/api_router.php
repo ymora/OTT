@@ -43,7 +43,8 @@ if (!headers_sent() && !isset($GLOBALS['sse_mode']) && !str_contains($_SERVER['R
     header('Content-Type: application/json; charset=utf-8');
 }
 
-// Forcer le statut 200 pour les requêtes API (évite les 404 d'Apache)
+// Forcer le statut 200 pour les requêtes API (évite 404 Apache)
+// IMPORTANT : doit être fait avant tout output !
 if (!str_contains($_SERVER['REQUEST_URI'], '/download') && !str_contains($_SERVER['REQUEST_URI'], '/flash')) {
     http_response_code(200);
 }

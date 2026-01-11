@@ -5,7 +5,7 @@
 version: '3.8'
 
 services:
-  # API Backend PHP
+  # API Backend PHP - Simple PHP Server
   api:
     build:
       context: .
@@ -13,7 +13,7 @@ services:
     container_name: ott-api
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8080:8080"
     environment:
       - DB_HOST=db
       - DB_PORT=5432
@@ -34,6 +34,8 @@ services:
       - redis
     networks:
       - ott-network
+    # Commande : PHP Built-in Server (pas Apache !)
+    command: php -S 0.0.0.0:8080 -t /var/www/html
 
   # Base de données PostgreSQL
   db:

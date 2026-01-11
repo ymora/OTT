@@ -11,9 +11,8 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^$ index.php [L]
 
-# Routes API - TOUT ce qui commence par api.php/ va vers api.php
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+# FORCER toutes les requêtes api.php/... vers api.php (évite 404 Apache)
+# SANS conditions - tout passe par PHP
 RewriteRule ^api\.php/(.*)$ api.php/$1 [QSA,L]
 
 # Routes API directes - api.php sans slash final
@@ -25,7 +24,7 @@ RewriteRule ^ - [L]
     SetHandler application/x-httpd-php
 </FilesMatch>
 
-# Forcer 200 pour les routes API (évite 404 Apache)
+# Désactiver les erreurs 404 pour les routes API
 <FilesMatch "^api\.php$">
     ErrorDocument 404 /api.php
 </FilesMatch>
