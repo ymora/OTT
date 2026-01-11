@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState } from 'react'
 import { useApiData } from '@/hooks'
+import { useAuth } from '@/contexts/AuthContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -11,6 +12,9 @@ import SearchBar from '@/components/SearchBar'
 import UserModal from '@/components/UserModal'
 
 export default function UsersPage() {
+  const { user, token } = useAuth() // Ajout pour debug
+  console.log('Auth state:', { user: !!user, token: !!token }) // Debug
+  
   const [searchTerm, setSearchTerm] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
@@ -18,8 +22,7 @@ export default function UsersPage() {
   const [actionError, setActionError] = useState('')
   
   const { data, loading, error, refetch } = useApiData([
-    '/api.php/users',
-    '/api.php/roles'
+    '/api.php/users'
   ], { requiresAuth: true })
   
   const allUsers = data?.users || []

@@ -1,6 +1,6 @@
 # Tableau Recapitulatif des Scores d'Audit - Projet OTT
 
-**Dernière mise à jour** : 2026-01-11 15:24  
+**Dernière mise à jour** : 2026-01-11 21:14  
 **Version de l'audit** : 2.0.0  
 **Durée totale** : 9.63 minutes  
 
@@ -9,19 +9,19 @@
 ## Scores Globaux par Phase
 
 | Phase | Score | Statut | Évolution | Détails |
-|-------|-------|--------|-----------|---------|| **Inventaire** | 5/10 | [!] Faible Faible | Stable | Analyse fichiers/structure |
-| **Architecture** | 5/10 | [!] Faible Faible | Stable | Analyse fichiers/structure |
-| **Sécurité** | 5/10 | [!] Faible Faible | Stable | Vulnérabilités, secrets |
-| **Configuration** | 5/10 | [!] Faible Faible | Stable | Docker, environnement |
-| **Backend API** | 5/10 | [!] Faible Faible | Stable | Endpoints, handlers, DB |
-| **Frontend** | 5/10 | [!] Faible Faible | Stable | Routes, UI/UX |
-| **Qualité Code** | 5/10 | [!] Faible Faible | Stable | Code mort, duplication, complexité |
-| **Performance** | 5/10 | [!] Faible Faible | Stable | Optimisations, mémoire |
-| **Documentation** | 5/10 | [!] Faible Faible | Stable | README, commentaires |
-| **Tests** | 5/10 | [!] Faible Faible | Stable | Unitaires, E2E |
-| **Déploiement** | 5/10 | [!] Faible Faible | Stable | CI/CD |
-| **Hardware/Firmware** | 5/10 | [!] Faible Faible | Stable | Firmware Arduino/ESP32 |
-| **IA & Compléments** | 5/10 | [!] Faible Faible | Stable | Tests exhaustifs |
+|-------|-------|--------|-----------|---------|| **Inventaire** | 5/10 | [!] Faible Faible | ➡️ Stable | Analyse fichiers/structure |
+| **Architecture** | 5/10 | [!] Faible Faible | ➡️ Stable | Analyse fichiers/structure |
+| **Sécurité** | 5/10 | [!] Faible Faible | ➡️ Stable | Vulnérabilités, secrets |
+| **Configuration** | 5/10 | [!] Faible Faible | ➡️ Stable | Docker, environnement |
+| **Backend API** | 5/10 | [!] Faible Faible | ➡️ Stable | Endpoints, handlers, DB |
+| **Frontend** | 5/10 | [!] Faible Faible | ➡️ Stable | Routes, UI/UX |
+| **Qualité Code** | 5/10 | [!] Faible Faible | ➡️ Stable | Code mort, duplication, complexité |
+| **Performance** | 5/10 | [!] Faible Faible | ➡️ Stable | Optimisations, mémoire |
+| **Documentation** | 5/10 | [!] Faible Faible | ➡️ Stable | README, commentaires |
+| **Tests** | 5/10 | [!] Faible Faible | ➡️ Stable | Unitaires, E2E |
+| **Déploiement** | 5/10 | [!] Faible Faible | ➡️ Stable | CI/CD |
+| **Hardware/Firmware** | 5/10 | [!] Faible Faible | ➡️ Stable | Firmware Arduino/ESP32 |
+| **IA & Compléments** | 5/10 | [!] Faible Faible | ➡️ Stable | Tests exhaustifs |
 
 ---
 

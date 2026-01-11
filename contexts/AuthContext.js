@@ -1,15 +1,24 @@
- 'use client' 
- 
- import { createContext, useContext, useState, useEffect } from 'react'
- import logger from '@/lib/logger'
- import { getApiUrl, getApiMode } from '@/lib/config'
- 
- const AuthContext = createContext()
- 
-// URL de l'API - Utilise la configuration centralisée
-// Si NEXT_PUBLIC_API_URL est défini, l'utiliser directement
-// Sinon, en localhost, utiliser le proxy Next.js (URL relative vide = utilise le proxy)
-// En production, utiliser l'URL de production (Render)
+ 'use client'
+
+import { createContext, useContext, useState, useEffect } from 'react'
+import logger from '@/lib/logger'
+import { getValidApiUrl } from '@/lib/config'
+
+/**
+ * Contexte d'authentification pour l'application
+ * Gère l'état de l'utilisateur et du token
+ * @module contexts/AuthContext
+ * @returns {React.Context} Le contexte d'authentification
+ */
+const AuthContext = createContext()
+
+/**
+ * URL de l'API - Utilise la configuration centralisée
+ * Si NEXT_PUBLIC_API_URL est défini, l'utiliser directement
+ * Sinon, en localhost, utiliser le proxy Next.js (URL relative vide = utilise le proxy)
+ * En production, utiliser l'URL de production (Render)
+ * @type {string}
+ */
 const API_URL = (() => {
   // Priorité 1: Variable d'environnement explicite (utilisée si définie)
   if (process.env.NEXT_PUBLIC_API_URL) {
@@ -26,26 +35,67 @@ const API_URL = (() => {
   
   // Priorité 3: Utiliser la configuration centralisée
   console.log('[AuthContext] Utilisation de la configuration centralisée')
-  return getApiUrl()
+  return getValidApiUrl()
 })()
- const isAbsoluteUrl = url => /^https?:\/\//i.test(url)
- 
- const buildAbsoluteApiUrl = (input = '') => {
-   if (!input) return API_URL || ''
-   if (isAbsoluteUrl(input)) return input
-   // Si API_URL est vide (proxy Next.js), utiliser l'URL relative directement
-   if (!API_URL && input.startsWith('/')) return input
-   if (input.startsWith('/')) return `${API_URL}${input}`
-   return `${API_URL}/${input}`
- }
- 
+
+/**
+ * Vérifie si une URL est absolue
+ * @param {string} url - L'URL à vérifier
+ * @returns {boolean} True si l'URL est absolue, false sinon
+ */
+const isAbsoluteUrl = url => /^https?:\/\//i.test(url)
+
+/**
+ * Construit une URL absolue pour l'API
+ * @param {string} input - L'URL à construire
+ * @returns {string} L'URL absolue
+ */
+const buildAbsoluteApiUrl = (input = '') => {
+  if (!input) return API_URL || ''
+  if (isAbsoluteUrl(input)) return input
+  // Si API_URL est vide (proxy Next.js), utiliser l'URL relative directement
+  if (!API_URL && input.startsWith('/')) return input
+  if (input.startsWith('/')) return `${API_URL}${input}`
+  return `${API_URL}/${input}`
+}
+
+/**
+ * Construit une URL absolue pour l'API côté client
+ * @param {string} input - L'URL à construire
+ * @returns {string} L'URL absolue
+ */
 const buildClientApiUrl = input => buildAbsoluteApiUrl(input)
 // Authentification toujours requise
 const REQUIRE_AUTH = true
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [token, setToken] = useState(null)
+/**
+ * Hook personnalisé pour accéder à l'état d'authentification
+ * @returns {{ user: object|null, token: string|null, loading: boolean }} Objet contenant l'utilisateur, le token et l'état de chargement
+ */
+export const useAuthState = () => {
+  const [user, setUser] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window?.localStorage) {
+        const storedUser = window.localStorage.getItem('ott_user')
+        if (storedUser) {
+          return JSON.parse(storedUser)
+        }
+      }
+    } catch (e) {
+      logger.error('[AuthContext] Erreur accès localStorage:', e)
+    }
+    return null
+  });
+  const [token, setToken] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window?.localStorage) {
+        return window.localStorage.getItem('ott_token')
+      }
+    } catch (e) {
+      logger.error('[AuthContext] Erreur accès localStorage:', e)
+    }
+    return null
+  });
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -56,8 +106,8 @@ export function AuthProvider({ children }) {
 
     try {
       // Vérifier si token existe dans localStorage
-      const storedToken = localStorage.getItem('ott_token')
-      const storedUser = localStorage.getItem('ott_user')
+      const storedToken = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('ott_token') : null
+      const storedUser = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('ott_user') : null
 
       if (typeof window !== 'undefined') {
         logger.debug('[AuthContext] localStorage:', { 
@@ -74,8 +124,10 @@ export function AuthProvider({ children }) {
           // Vérifier que l'utilisateur a les champs essentiels
           if (!parsedUser.id || !parsedUser.email || !parsedUser.role_name) {
             logger.warn('[AuthContext] Données utilisateur incomplètes, nettoyage...')
-            localStorage.removeItem('ott_token')
-            localStorage.removeItem('ott_user')
+            if (typeof window !== 'undefined' && window.localStorage) {
+              window.localStorage.removeItem('ott_token')
+              window.localStorage.removeItem('ott_user')
+            }
             setLoading(false)
             return
           }
@@ -86,8 +138,8 @@ export function AuthProvider({ children }) {
             parsedUser.permissions = []
           }
           
-          setToken(storedToken)
           setUser(parsedUser)
+          setToken(storedToken)
           if (typeof window !== 'undefined') {
             logger.debug('[AuthContext] Utilisateur restauré:', {
               email: parsedUser.email,
@@ -99,8 +151,10 @@ export function AuthProvider({ children }) {
         } catch (parseError) {
           logger.error('[AuthContext] Erreur parsing user:', parseError)
           // Nettoyer les données corrompues
-          localStorage.removeItem('ott_token')
-          localStorage.removeItem('ott_user')
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.removeItem('ott_token')
+            window.localStorage.removeItem('ott_user')
+          }
         }
       } else {
         if (typeof window !== 'undefined') {
@@ -117,7 +171,25 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  return { user, token, loading }
+};
+
+/**
+ * Hook personnalisé pour effectuer des actions d'authentification
+ * @returns {{ login: Function, logout: Function, fetchWithAuth: Function, authLoading: boolean }} Objet contenant les actions et l'état de chargement
+ */
+export const useAuthActions = () => {
+  const { user, token, loading } = useAuthState()
+  const [authLoading, setAuthLoading] = useState(false)
+
+  /**
+   * Effectue une connexion à l'API
+   * @param {string} email - L'email de l'utilisateur
+   * @param {string} password - Le mot de passe de l'utilisateur
+   * @returns {Promise<object>} La réponse de l'API
+   */
   const login = async (email, password) => {
+    setAuthLoading(true)
     try {
       const loginUrl = buildClientApiUrl('/api.php/auth/login')
       
@@ -174,7 +246,7 @@ export function AuthProvider({ children }) {
             `Content-Type: ${contentType}\n` +
             `Réponse: ${text.substring(0, 1000)}\n\n`
           try {
-            localStorage.setItem('api_error_log', logEntry)
+            window.localStorage.setItem('api_error_log', logEntry)
             logger.debug('[AuthContext] 💾 Log sauvegardé dans localStorage')
           } catch (e) {
             logger.error('[AuthContext] Erreur sauvegarde log:', e)
@@ -200,11 +272,15 @@ export function AuthProvider({ children }) {
         }
       }
       
-      setToken(data.token)
+      const setUser = useState()[1]
       setUser(userData)
+      const setToken = useState()[1]
+      setToken(data.token)
 
-      localStorage.setItem('ott_token', data.token)
-      localStorage.setItem('ott_user', JSON.stringify(userData))
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('ott_token', data.token)
+        window.localStorage.setItem('ott_user', JSON.stringify(userData))
+      }
       
       if (typeof window !== 'undefined') {
         logger.debug('[AuthContext] Utilisateur sauvegardé:', {
@@ -242,22 +318,38 @@ export function AuthProvider({ children }) {
       // Sinon, c'est probablement une erreur de parsing JSON ou autre
       logger.error('[AuthContext] ❌ Erreur lors de la connexion:', err)
       throw new Error(err.message || 'Erreur de connexion au serveur. Vérifiez votre connexion internet.')
+    } finally {
+      setAuthLoading(false)
     }
-  }
+  };
 
+  /**
+   * Effectue une déconnexion de l'API
+   */
   const logout = () => {
-    setToken(null)
+    const setUser = useState()[1]
     setUser(null)
-    localStorage.removeItem('ott_token')
-    localStorage.removeItem('ott_user')
+    const setToken = useState()[1]
+    setToken(null)
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem('ott_token')
+      window.localStorage.removeItem('ott_user')
+    }
     
     // Rediriger vers la page de connexion si on est dans le dashboard
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard')) {
       logger.debug('[AuthContext] Redirection vers / après logout')
       window.location.href = '/'
     }
-  }
+  };
 
+  /**
+   * Effectue une requête à l'API avec authentification
+   * @param {string} url - L'URL de la requête
+   * @param {object} options - Les options de la requête
+   * @param {object} config - La configuration de la requête
+   * @returns {Promise<object>} La réponse de l'API
+   */
   const fetchWithAuth = async (url, options = {}, config = {}) => {
     const { requiresAuth = false } = config
     const finalOptions = { ...options }
@@ -286,13 +378,30 @@ export function AuthProvider({ children }) {
     return response
   }
 
+  return { login, logout, fetchWithAuth, authLoading }
+};
+
+/**
+ * Fournisseur d'authentification pour l'application
+ * @param {object} props - Props du composant
+ * @param {React.ReactNode} props.children - Enfants du composant
+ * @returns {JSX.Element} Le composant AuthProvider
+ */
+export function AuthProvider({ children }) {
+  const authState = useAuthState()
+  const authActions = useAuthActions()
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, fetchWithAuth, API_URL }}>
+    <AuthContext.Provider value={{ ...authState, ...authActions, API_URL }}>
       {children}
     </AuthContext.Provider>
   )
 }
 
+/**
+ * Hook personnalisé pour accéder au contexte d'authentification
+ * @returns {object} Le contexte d'authentification
+ */
 export const useAuth = () => {
   const context = useContext(AuthContext)
   if (!context) {
@@ -300,4 +409,3 @@ export const useAuth = () => {
   }
   return context
 }
-

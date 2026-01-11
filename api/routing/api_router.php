@@ -1,6 +1,12 @@
 <?php
 /**
  * Routeur principal de l'API
+ * Gère le routage des requêtes HTTP vers les handlers appropriés
+ * @package api\routing
+ */
+
+/**
+ * Routeur principal de l'API
  * Extrait et refactorisé de api.php pour modularisation
  */
 
@@ -85,7 +91,9 @@ if ($path === '/health' && $method === 'GET') {
 
 // USERS
 } elseif($path === '/users' && $method === 'GET') {
-    handleGetUsers();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetUsers($limit, $offset);
 } elseif($path === '/users' && $method === 'POST') {
     handleCreateUser();
 } elseif(preg_match('#^/users/(\d+)$#', $path, $m) && $method === 'GET') {
@@ -101,7 +109,9 @@ if ($path === '/health' && $method === 'GET') {
 
 // PATIENTS
 } elseif($path === '/patients' && $method === 'GET') {
-    handleGetPatients();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetPatients($limit, $offset);
 } elseif($path === '/patients' && $method === 'POST') {
     handleCreatePatient();
 } elseif(preg_match('#^/patients/(\d+)$#', $path, $m) && $method === 'GET') {
@@ -117,7 +127,9 @@ if ($path === '/health' && $method === 'GET') {
 
 // DEVICES
 } elseif($path === '/devices' && $method === 'GET') {
-    handleGetDevices();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetDevices($limit, $offset);
 } elseif($path === '/devices' && $method === 'POST') {
     handleCreateDevice();
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)$#', $path, $m) && $method === 'GET') {
@@ -131,17 +143,25 @@ if ($path === '/health' && $method === 'GET') {
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/archive$#', $path, $m) && $method === 'PATCH') {
     handleArchiveDevice($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/measurements$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceMeasurements($m[1]);
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetDeviceMeasurements($m[1], $limit, $offset);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/measurements$#', $path, $m) && $method === 'POST') {
     handleCreateDeviceMeasurement($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceCommands($m[1]);
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetDeviceCommands($m[1], $limit, $offset);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/commands$#', $path, $m) && $method === 'POST') {
     handleCreateDeviceCommand($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/alerts$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceAlerts($m[1]);
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetDeviceAlerts($m[1], $limit, $offset);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/logs$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceLogs($m[1]);
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetDeviceLogs($m[1], $limit, $offset);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'GET') {
     handleGetDeviceConfig($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/config$#', $path, $m) && $method === 'PUT') {
@@ -149,7 +169,9 @@ if ($path === '/health' && $method === 'GET') {
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/ota$#', $path, $m) && $method === 'POST') {
     handleOTAUpdate($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/reports$#', $path, $m) && $method === 'GET') {
-    handleGetDeviceReports($m[1]);
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetDeviceReports($m[1], $limit, $offset);
 
 // FIRMWARES
 } elseif($method === 'POST' && preg_match('#^/firmwares/upload-ino/?$#', $path)) {
@@ -186,7 +208,9 @@ if ($path === '/health' && $method === 'GET') {
     handleCompileFirmwareOptimized($matches[1]);
     exit; // Important: arrêter l'exécution après SSE pour éviter tout output supplémentaire
 } elseif($path === '/firmwares' && $method === 'GET') {
-    handleGetFirmwares();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetFirmwares($limit, $offset);
 } elseif($path === '/firmwares' && $method === 'POST') {
     handleCreateFirmware();
 } elseif(preg_match('#^/firmwares/(\d+)$#', $path, $m) && $method === 'GET') {
@@ -198,7 +222,9 @@ if ($path === '/health' && $method === 'GET') {
 
 // NOTIFICATIONS
 } elseif($path === '/notifications' && $method === 'GET') {
-    handleGetNotifications();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetNotifications($limit, $offset);
 } elseif($path === '/notifications' && $method === 'POST') {
     handleCreateNotification();
 } elseif(preg_match('#^/notifications/(\d+)$#', $path, $m) && $method === 'GET') {
@@ -210,7 +236,9 @@ if ($path === '/health' && $method === 'GET') {
 
 // USB LOGS
 } elseif($path === '/usb/logs' && $method === 'GET') {
-    handleGetUSBLogs();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetUSBLogs($limit, $offset);
 } elseif($path === '/usb/logs' && $method === 'POST') {
     handleCreateUSBLog();
 } elseif(preg_match('#^/usb/logs/(\d+)$#', $path, $m) && $method === 'GET') {
@@ -220,7 +248,9 @@ if ($path === '/health' && $method === 'GET') {
 
 // MEASUREMENTS
 } elseif($path === '/measurements' && $method === 'GET') {
-    handleGetMeasurements();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetMeasurements($limit, $offset);
 } elseif($path === '/measurements' && $method === 'POST') {
     handleCreateMeasurement();
 } elseif(preg_match('#^/measurements/(\d+)$#', $path, $m) && $method === 'GET') {
@@ -232,7 +262,9 @@ if ($path === '/health' && $method === 'GET') {
 
 // COMMANDS
 } elseif($path === '/commands' && $method === 'GET') {
-    handleGetCommands();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetCommands($limit, $offset);
 } elseif($path === '/commands' && $method === 'POST') {
     handleCreateCommand();
 } elseif(preg_match('#^/commands/(\d+)$#', $path, $m) && $method === 'GET') {
@@ -246,7 +278,9 @@ if ($path === '/health' && $method === 'GET') {
 
 // ALERTS
 } elseif($path === '/alerts' && $method === 'GET') {
-    handleGetAlerts();
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    handleGetAlerts($limit, $offset);
 } elseif($path === '/alerts' && $method === 'POST') {
     handleCreateAlert();
 } elseif(preg_match('#^/alerts/(\d+)$#', $path, $m) && $method === 'GET') {

@@ -1,6 +1,8 @@
 /**
  * Tableau de bord unifié pour dispositifs USB
  * Version simplifiée et cohérente
+ * @module components/DeviceDashboard
+ * @returns {JSX.Element} Le composant DeviceDashboard
  */
 
 'use client'
@@ -15,6 +17,10 @@ import Modal from '@/components/Modal'
 import ConfirmModal from '@/components/ConfirmModal'
 import SuccessMessage from '@/components/SuccessMessage'
 
+/**
+ * Composant principal du tableau de bord des dispositifs
+ * @returns {JSX.Element} Le composant DeviceDashboard
+ */
 export default function DeviceDashboard() {
   const { fetchWithAuth, API_URL, user } = useAuth()
   
