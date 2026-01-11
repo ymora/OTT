@@ -62,14 +62,14 @@ services:
 
   # Dashboard Next.js
   - type: web
-    name: ott-1
+    name: ott-dashboard
     env: docker
     dockerfilePath: ./Dockerfile.dashboard
     dockerContext: .
     startCommand: node .next/standalone/server.js
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://ott-api-c387.onrender.com
+        value: https://ott-api.onrender.com
       - key: NEXT_PUBLIC_ENABLE_DEMO_RESET
         value: false
       - key: NODE_ENV
