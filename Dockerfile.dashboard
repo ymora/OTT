@@ -6,48 +6,48 @@
 # (Production = GitHub Pages statique)
 # ================================================================
 
-FROM node:20-alpine
+# OTT Dashboard - Dockerfile Simple
+FROM node:20-alpine AS base
 
-# Arguments configurables pour l'API (défaut = service docker "api")
-ARG NEXT_PUBLIC_API_URL=http://api
-ARG NEXT_PUBLIC_API_MODE=development
-
-# Métadonnées
-LABEL maintainer="HAPPLYZ MEDICAL <support@happlyz.com>"
-LABEL version="3.1.0"
-LABEL description="OTT Dashboard Next.js - Développement"
-
-# Variables d'environnement
-ENV NODE_ENV=production
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-ENV NEXT_PUBLIC_API_MODE=${NEXT_PUBLIC_API_MODE}
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-
-# Répertoire de travail
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copier les fichiers de dépendances
-COPY package.json ./
-COPY package-lock.json* ./
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Installer les dépendances (dev requis pour build)
-RUN NODE_ENV=development npm install --legacy-peer-deps
-
-# Copier le code source
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build (Render / production)
 RUN npm run build
 
-# Port exposé - supporte PORT environment variable pour Render
-EXPOSE ${PORT:-3000}
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://0.0.0.0:${PORT:-3000} || exit 1
+ENV NODE_ENV=production
 
-# Commande de démarrage (production) - utilise directement Next.js avec le port dynamique
-CMD ["sh", "-c", "PORT=${PORT:-3000} npx next start -p $PORT"]
-# Force update
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
+
+# Automatically leverage output traces to reduce image size
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./ 
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+
+CMD ["node", "server.js"]

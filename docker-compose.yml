@@ -1,16 +1,11 @@
 # ================================================================
-# OTT - Docker Compose
-# ================================================================
-# Environnement de développement local complet
-# API PHP + PostgreSQL + Redis (cache)
+# OTT - Docker Compose (Développement Local Simple)
 # ================================================================
 
 version: '3.8'
 
 services:
-  # =============================================================
   # API Backend PHP
-  # =============================================================
   api:
     build:
       context: .
@@ -22,53 +17,33 @@ services:
     environment:
       - DB_HOST=db
       - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-ott}
-      - DB_USER=${DB_USER:-ott_user}
-      - DB_PASSWORD=${DB_PASSWORD:-ott_password}
-      - DB_PASS=${DB_PASSWORD:-ott_password}
+      - DB_NAME=ott
+      - DB_USER=ott_user
+      - DB_PASSWORD=ott_password
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - JWT_SECRET=dev-secret
       - APP_ENV=development
-      - APP_DEBUG=${APP_DEBUG:-true}
-      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000
     volumes:
-      # Mode développement : montage du code source
       - ./api.php:/var/www/html/api.php:ro
       - ./api:/var/www/html/api:rw
-      - ./bootstrap:/var/www/html/bootstrap:ro
-      - ./router.php:/var/www/html/router.php:ro
-      - ./index.php:/var/www/html/index.php:ro
-      - ./.htaccess:/var/www/html/.htaccess:ro
       - ./hardware:/var/www/html/hardware
-      - ./.env.local:/var/www/html/.env.local:ro
-    # Pour Windows Docker Desktop, les devices USB sont gérés différemment
-    # Utiliser Docker Desktop avec partage USB activé si nécessaire
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - db
+      - redis
     networks:
       - ott-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/api.php/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
-  # =============================================================
   # Base de données PostgreSQL
-  # =============================================================
   db:
     image: postgres:15-alpine
     container_name: ott-db
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=${DB_NAME:-ott}
-      - POSTGRES_USER=${DB_USER:-ott_user}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-ott_password}
+      - POSTGRES_DB=ott
+      - POSTGRES_USER=ott_user
+      - POSTGRES_PASSWORD=ott_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
@@ -76,16 +51,8 @@ services:
       - "5432:5432"
     networks:
       - ott-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ott_user} -d ${DB_NAME:-ott}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
-  # =============================================================
   # Cache Redis
-  # =============================================================
   redis:
     image: redis:7-alpine
     container_name: ott-redis
@@ -96,11 +63,8 @@ services:
       - redis_data:/data
     networks:
       - ott-network
-    command: redis-server --appendonly yes
 
-  # =============================================================
-  # Dashboard Next.js (optionnel - développement local)
-  # =============================================================
+  # Dashboard Next.js
   dashboard:
     build:
       context: .
@@ -110,34 +74,22 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://ott-api:8080
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
       - NODE_ENV=development
     volumes:
       - ./app:/app/app:ro
       - ./components:/app/components:ro
-      - ./contexts:/app/contexts:ro
-      - ./hooks:/app/hooks:ro
       - ./lib:/app/lib:ro
       - ./public:/app/public:ro
     depends_on:
       - api
     networks:
       - ott-network
-    profiles:
-      - frontend
 
-# =============================================================
-# Volumes persistants
-# =============================================================
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
 
-# =============================================================
-# Réseau
-# =============================================================
 networks:
   ott-network:
     driver: bridge
