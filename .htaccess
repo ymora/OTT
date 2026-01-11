@@ -11,18 +11,23 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^$ index.php [L]
 
-# Forcer les routes api.php/... vers api.php avec PATH_INFO
+# Routes API - TOUT ce qui commence par api.php/ va vers api.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^api\.php/(.*)$ api.php/$1 [QSA,L]
 
-# Garder les routes api.php directes intactes
+# Routes API directes - api.php sans slash final
 RewriteCond %{REQUEST_URI} ^/api\.php$
 RewriteRule ^ - [L]
 
 # S'assurer que api.php est exécuté par PHP
 <FilesMatch "^api\.php$">
     SetHandler application/x-httpd-php
+</FilesMatch>
+
+# Forcer 200 pour les routes API (évite 404 Apache)
+<FilesMatch "^api\.php$">
+    ErrorDocument 404 /api.php
 </FilesMatch>
 
 # Pour les fichiers statiques (dashboard, doc)

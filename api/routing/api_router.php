@@ -34,9 +34,19 @@ require_once __DIR__ . '/../handlers/database_audit.php';
 require_once __DIR__ . '/../handlers/migrations/migration_handlers.php';
 require_once __DIR__ . '/../handlers/statistics.php';
 
-// ============================================================================
-// ROUTAGE PRINCIPAL
-// ============================================================================
+// ================================================================================
+// API ROUTER - Point d'entrée principal pour toutes les requêtes API
+// ================================================================================
+
+// Définir Content-Type JSON pour toutes les réponses API (sauf SSE et fichiers)
+if (!headers_sent() && !isset($GLOBALS['sse_mode']) && !str_contains($_SERVER['REQUEST_URI'], '/download') && !str_contains($_SERVER['REQUEST_URI'], '/flash')) {
+    header('Content-Type: application/json; charset=utf-8');
+}
+
+// Forcer le statut 200 pour les requêtes API (évite les 404 d'Apache)
+if (!str_contains($_SERVER['REQUEST_URI'], '/download') && !str_contains($_SERVER['REQUEST_URI'], '/flash')) {
+    http_response_code(200);
+}
 
 // Obtenir la méthode et le chemin
 $method = $_SERVER['REQUEST_METHOD'];
@@ -330,6 +340,5 @@ while (ob_get_level() > 0) {
 }
 
 // Envoyer la réponse JSON (header déjà défini dans handler)
-// header('Content-Type: application/json'); // Déjà défini dans handleLogin
 // Version: 2.0.1 - Buffer Fix
 ?>
