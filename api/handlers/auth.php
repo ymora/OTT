@@ -253,6 +253,16 @@ function handleGetUsers() {
     global $pdo;
     requirePermission('users.view');
     
+    // Forcer le Content-Type JSON et nettoyer les buffers
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        header_remove('Content-Type'); // Supprimer les Content-Type précédents
+        header('Content-Type: application/json; charset=utf-8'); // Redéfinir
+    }
+    
     // Paramètre pour inclure les utilisateurs archivés (soft-deleted)
     $includeDeleted = isset($_GET['include_deleted']) && $_GET['include_deleted'] === 'true';
     
@@ -361,6 +371,12 @@ function handleGetUsers() {
 
 function handleGetCurrentUser() {
     $user = requireAuth();
+    
+    // Définir le Content-Type JSON AVANT tout autre output
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
     unset($user['password_hash']);
     echo json_encode(['success' => true, 'user' => $user]);
 }

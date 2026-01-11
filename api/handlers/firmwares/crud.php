@@ -1,10 +1,14 @@
-<?php
 /**
  * Firmware CRUD Handlers
  * Provides Create, Read, Update, Delete operations for firmwares
  */
 
 function handleGetFirmwares() {
+    // Définir le Content-Type JSON AVANT tout autre output
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
     try {
         global $pdo;
         

@@ -47,6 +47,11 @@ function createAlert($pdo, $device_id, $type, $severity, $message) {
 function handleGetAlerts() {
     global $pdo;
     
+    // Définir le Content-Type JSON AVANT tout autre output
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    
     // Pagination et filtres
     $limit = isset($_GET['limit']) ? min(intval($_GET['limit']), 500) : 100;
     $offset = isset($_GET['offset']) ? max(0, intval($_GET['offset'])) : 0;
