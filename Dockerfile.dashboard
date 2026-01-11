@@ -23,6 +23,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Copier .env.local pour le développement local
+COPY .env.local .env.local
+
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -41,8 +44,11 @@ RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
 # Automatically leverage output traces to reduce image size
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./ 
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Copier .env.local pour le runtime
+COPY --from=builder --chown=nextjs:nodejs /app/.env.local ./.env.local
 
 USER nextjs
 

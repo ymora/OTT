@@ -93,13 +93,9 @@ FROM base AS production
 # Stage final avec application et scripts
 WORKDIR /var/www/html
 
-# Copier l'application et le script tout en conservant l'utilisateur www-data
+# Copier l'application tout en conservant l'utilisateur www-data
 COPY --chown=www-data:www-data . /var/www/html/
-COPY start-apache.sh /usr/local/bin/
-COPY scripts/compile-arduino.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/start-apache.sh \
-    && chmod +x /usr/local/bin/compile-arduino.sh \
-    && chown -R www-data:www-data /var/www/html \
+RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html
 
 # Health check

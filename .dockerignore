@@ -1,0 +1,45 @@
+# Node modules
+node_modules
+npm-debug.log*
+
+# Build outputs
+.next
+out
+dist
+
+# Environment files (sauf .env.local)
+.env
+.env.production
+.env.development
+
+# Logs
+logs
+*.log
+
+# Hardware/Arduino files
+hardware/arduino-data/
+hardware/firmware/*/build/
+hardware/firmware/*/dist/
+
+# Tests
+__tests__/
+tests/
+
+# Documentation
+docs/
+
+# Scripts
+scripts/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker files
+Dockerfile*
+docker-compose*
+render.yaml
