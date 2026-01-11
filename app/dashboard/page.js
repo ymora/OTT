@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState } from 'react'
 import dynamicImport from 'next/dynamic'
-import { useApiData, useAutoRefresh } from '@/hooks'
+import { useApiData } from '@/hooks'
 import { useUsb } from '@/contexts/UsbContext'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
