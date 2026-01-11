@@ -3,8 +3,8 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo} from 'react'
-import { useEntityPage } from '@/hooks'
+import { useMemo, useState, useEffect } from 'react'
+import { useApiData } from '@/hooks'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
 import SuccessMessage from '@/components/SuccessMessage'
@@ -13,53 +13,55 @@ import UserModal from '@/components/UserModal'
 import logger from '@/lib/logger'
 
 export default function UsersPage() {
-  // Utiliser le hook unifié pour toute la logique commune
-  const {
-    allItems: allUsers,
-    items: users,
-    filteredItems: filteredUsers,
-    searchTerm,
-    setSearchTerm,
-    loading,
-    error,
-    success,
-    actionError,
-    setSuccess,
-    setActionError,
-    resetMessages,
-    showArchived,
-    toggleShowArchived,
-    showModal,
-    editingItem,
-    openCreateModal,
-    openEditModal,
-    closeModal,
-    restore: handleRestoreUser,
-    restoring: restoringUser,
-    archive: handleArchive,
-    archiving,
-    permanentDelete: handlePermanentDelete,
-    deleting: deletingPermanent,
-    hasPermission,
-    isArchived,
-    currentUser,
-    fetchWithAuth,
-    API_URL,
-    refetch,
-    additionalData
-  } = useEntityPage({
-    entityType: 'users',
-    additionalEndpoints: ['/api.php/roles'],
-    searchFn: (items, term) => {
-      const needle = term.toLowerCase()
-      return items.filter(user => {
-        const haystack = `${user.first_name || ''} ${user.last_name || ''} ${user.email || ''} ${user.phone || ''} ${user.role_name || ''}`.toLowerCase()
-        return haystack.includes(needle)
-      })
-    }
-  })
+  // États simples
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [editingItem, setEditingItem] = useState(null)
+  const [success, setSuccess] = useState('')
+  const [actionError, setActionError] = useState('')
   
-  const roles = additionalData.roles || []
+  // Charger les données
+  const { data, loading, error, refetch } = useApiData([
+    '/api.php/users',
+    '/api.php/roles'
+  ], { requiresAuth: true })
+  
+  const allUsers = data?.users || []
+  const roles = data?.roles || []
+  
+  // Filtrage
+  const filteredUsers = useMemo(() => {
+    if (!searchTerm) return allUsers
+    
+    const needle = searchTerm.toLowerCase()
+    return allUsers.filter(user => {
+      const haystack = `${user.first_name || ''} ${user.last_name || ''} ${user.email || ''} ${user.phone || ''} ${user.role_name || ''}`.toLowerCase()
+      return haystack.includes(needle)
+    })
+  }, [allUsers, searchTerm])
+  
+  // Actions simples
+  const openCreateModal = () => {
+    setEditingItem(null)
+    setShowModal(true)
+  }
+  
+  const openEditModal = (user) => {
+    setEditingItem(user)
+    setShowModal(true)
+  }
+  
+  const closeModal = () => {
+    setShowModal(false)
+    setEditingItem(null)
+    setSuccess('')
+    setActionError('')
+  }
+  
+  const resetMessages = () => {
+    setSuccess('')
+    setActionError('')
+  }
 
   const roleColors = {
     admin: 'bg-purple-100 text-purple-700',
@@ -88,7 +90,7 @@ export default function UsersPage() {
         <h1 className="text-3xl font-bold">👥 Utilisateurs</h1>
       </div>
 
-      {/* Recherche, Toggle Archives et Nouvel Utilisateur sur la même ligne */}
+      {/* Recherche et Nouvel Utilisateur sur la même ligne */}
       <div className="flex flex-col md:flex-row gap-3">
         <div className="flex-1">
           <SearchBar
@@ -98,27 +100,14 @@ export default function UsersPage() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={toggleShowArchived}
-              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-            />
-            <span className="text-sm text-gray-700 dark:text-gray-300">
-              🗄️ Afficher les archives
-            </span>
-          </label>
+          <button 
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" 
+            onClick={openCreateModal}
+            title="Créer un nouvel utilisateur"
+          >
+            ➕ Nouvel Utilisateur
+          </button>
         </div>
-        <button 
-          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" 
-          onClick={openCreateModal}
-          disabled={currentUser?.role_name !== 'admin'}
-          title={currentUser?.role_name === 'admin' ? "Créer un nouvel utilisateur" : "Réservé aux administrateurs"}
-        >
-          ➕ Nouvel Utilisateur
-        </button>
-      </div>
 
       <div className="card">
         <ErrorMessage error={error} onRetry={refetch} />
@@ -146,29 +135,15 @@ export default function UsersPage() {
                     <td colSpan="7" className="py-8 text-center text-gray-500 dark:text-gray-400">
                       {searchTerm 
                         ? 'Aucun utilisateur ne correspond à la recherche' 
-                        : showArchived 
-                          ? 'Aucun utilisateur archivé' 
-                          : 'Aucun utilisateur'}
+                        : 'Aucun utilisateur'}
                     </td>
                   </tr>
                 ) : (
                   filteredUsers.map((user, i) => {
-                    // Vérifier de manière plus robuste si l'utilisateur est archivé (identique aux patients)
-                    const userIsArchived = isArchived(user)
-                    // DEBUG: Log pour diagnostiquer (toujours afficher en mode debug)
-                    if (showArchived) {
-                      logger.debug('[USERS PAGE]', {
-                        id: user.id,
-                        name: `${user.first_name} ${user.last_name}`,
-                        email: user.email,
-                        deleted_at: user.deleted_at,
-                        isArchived: userIsArchived
-                      })
-                    }
                     return (
                     <tr 
                       key={user.id} 
-                      className={`table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800 ${userIsArchived ? 'opacity-60' : ''}`}
+                      className="table-row animate-slide-up hover:bg-gray-50 dark:hover:bg-gray-800"
                       style={{animationDelay: `${i * 0.05}s`}}
                     >
                       <td className="table-cell py-3 px-4 font-medium">
@@ -286,7 +261,7 @@ export default function UsersPage() {
               </tbody>
             </table>
           </div>
-        )}
+        </div>
       </div>
 
       <UserModal
@@ -295,13 +270,8 @@ export default function UsersPage() {
         editingItem={editingItem}
         type="user"
         onSave={handleModalSave}
-        fetchWithAuth={fetchWithAuth}
-        API_URL={API_URL}
         roles={roles}
-        currentUser={currentUser}
       />
-
-      {/* Plus de modal - actions directes selon le rôle */}
 
     </div>
   )
