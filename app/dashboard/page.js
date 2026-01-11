@@ -3,7 +3,7 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import dynamicImport from 'next/dynamic'
 import { useApiData } from '@/hooks'
 import { useUsb } from '@/contexts/UsbContext'
@@ -54,8 +54,13 @@ export default function DashboardPage() {
     document.querySelector('#map-container')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
-  // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
-  useAutoRefresh(refetch, 30000)
+  // Auto-rafraîchissement simplifié
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [refetch])
 
   // Mémoriser les dispositifs depuis la base de données
   const devicesFromDb = useMemo(() => {

@@ -3,8 +3,8 @@
 // Désactiver le pré-rendu statique
 export const dynamic = 'force-dynamic'
 
-import { useMemo, useState } from 'react'
-import { useEntityPage, useAutoRefresh, useDevicesUpdateListener, useToggle } from '@/hooks'
+import { useMemo, useState, useEffect } from 'react'
+import { useEntityPage, useDevicesUpdateListener, useToggle } from '@/hooks'
 import { fetchJson } from '@/lib/api'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
@@ -72,8 +72,13 @@ export default function PatientsPage() {
   const [showUnassignModal, , setShowUnassignModalTrue, setShowUnassignModalFalse] = useToggle(false)
   const [selectedDeviceForUnassign, setSelectedDeviceForUnassign] = useState(null)
 
-  // Utiliser le hook useAutoRefresh pour le rafraîchissement automatique
-  useAutoRefresh(refetch, 30000)
+  // Auto-rafraîchissement simplifié
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [refetch])
 
   // Utiliser le hook useDevicesUpdateListener pour écouter les événements
   useDevicesUpdateListener(refetch)

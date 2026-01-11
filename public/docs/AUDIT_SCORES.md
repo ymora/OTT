@@ -1,6 +1,6 @@
 # Tableau Recapitulatif des Scores d'Audit - Projet OTT
 
-**Dernière mise à jour** : 2026-01-10 23:00  
+**Dernière mise à jour** : 2026-01-11 15:24  
 **Version de l'audit** : 2.0.0  
 **Durée totale** : 9.63 minutes  
 
