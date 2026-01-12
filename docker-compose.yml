@@ -2,8 +2,6 @@
 # OTT - Docker Compose (Développement Local Simple)
 # ================================================================
 
-version: '3.8'
-
 services:
   # API Backend PHP
   api:
@@ -13,13 +11,13 @@ services:
     container_name: ott-api
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8000:80"
     environment:
-      - DB_HOST=db
+      - DB_HOST=ott-db
       - DB_PORT=5432
-      - DB_NAME=ott
-      - DB_USER=ott_user
-      - DB_PASSWORD=ott_password
+      - DB_NAME=ott_data
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - JWT_SECRET=dev-secret
@@ -41,9 +39,9 @@ services:
     container_name: ott-db
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=ott
-      - POSTGRES_USER=ott_user
-      - POSTGRES_PASSWORD=ott_password
+      - POSTGRES_DB=ott_data
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro

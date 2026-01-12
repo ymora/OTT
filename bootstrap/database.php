@@ -10,18 +10,25 @@ if (!function_exists('ott_normalize_db_type')) {
         if (in_array($value, ['pgsql', 'postgres', 'postgresql', 'psql'], true)) {
             return 'pgsql';
         }
-        return 'pgsql';
+        if (in_array($value, ['sqlite'], true)) {
+            return 'sqlite';
+        }
+        return 'sqlite'; // Par défaut pour le mode local
     }
 
     function ott_default_port(string $type): string
     {
-        return $type === 'mysql' ? '3306' : '5432';
+        return $type === 'mysql' ? '3306' : ($type === 'sqlite' ? '' : '5432');
     }
 
     function ott_build_dsn(string $type, string $host, string $port, string $name): string
     {
         if ($type === 'mysql') {
             return sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $host, $port, $name);
+        }
+
+        if ($type === 'sqlite') {
+            return sprintf('sqlite:%s', $name);
         }
 
         $sslmode = getenv('DB_SSLMODE') ?: getenv('PGSSLMODE') ?: 'require';
@@ -35,10 +42,10 @@ if (!function_exists('ott_normalize_db_type')) {
         $defaults = $includeDefaults
             ? [
                 'host' => 'localhost',
-                'name' => 'ott_data',
-                'user' => 'postgres',
+                'name' => 'database.sqlite',
+                'user' => '',
                 'pass' => '',
-                'port' => ott_default_port($type),
+                'port' => '',
             ]
             : [
                 'host' => null,
@@ -132,7 +139,7 @@ if (!function_exists('ott_normalize_db_type')) {
             $config['port'] = ott_default_port($type);
         }
 
-        if (empty($config['host']) || empty($config['name']) || empty($config['user'])) {
+        if (empty($config['name'])) {
             return null;
         }
 

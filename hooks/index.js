@@ -18,4 +18,4 @@ export { useDebounce } from './useDebounce'
 export { useFormState } from './useFormState'
 export { useTimeout } from './useTimeout'
 export { useToggle } from './useToggle'
-export { useAutoRefresh } from './useAutoRefresh'
+// useAutoRefresh supprimé - remplacé par useEffect direct

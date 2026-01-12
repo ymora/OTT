@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OTT Connection Test</title>
+</head>
+<body>
+    <h1>OTT API Connection Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function testConnection() {
+            const results = document.getElementById('results');
+            
+            try {
+                // Test 1: Health check
+                console.log('Testing health check...');
+                const healthResponse = await fetch('http://localhost:8000/api.php/health');
+                const healthData = await healthResponse.json();
+                results.innerHTML += '<p>✅ Health: ' + healthData.status + '</p>';
+                
+                // Test 2: Login
+                console.log('Testing login...');
+                const loginResponse = await fetch('http://localhost:8000/api.php/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@example.com',
+                        password: 'Admin1234!'
+                    })
+                });
+                const loginData = await loginResponse.json();
+                
+                if (loginData.success) {
+                    results.innerHTML += '<p>✅ Login: ' + loginData.user.email + '</p>';
+                    results.innerHTML += '<p>✅ Token: ' + loginData.token.substring(0, 20) + '...</p>';
+                    
+                    // Test 3: Devices with token
+                    const devicesResponse = await fetch('http://localhost:8000/api.php/devices', {
+                        headers: {
+                            'Authorization': 'Bearer ' + loginData.token
+                        }
+                    });
+                    const devicesData = await devicesResponse.json();
+                    results.innerHTML += '<p>✅ Devices: ' + devicesData.devices.length + ' found</p>';
+                    
+                } else {
+                    results.innerHTML += '<p>❌ Login failed: ' + loginData.message + '</p>';
+                }
+                
+            } catch (error) {
+                results.innerHTML += '<p>❌ Error: ' + error.message + '</p>';
+            }
+        }
+        
+        // Auto-test on load
+        testConnection();
+    </script>
+</body>
+</html>

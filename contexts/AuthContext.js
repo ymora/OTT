@@ -68,8 +68,13 @@ export function AuthProvider({ children }) {
       setLoading(true)
       setError(null)
 
-      const response = await fetchWithAuth(`${API_URL}/api.php/auth/login`, {
+      // Utilisation de fetch simple sans fetchWithAuth
+      const response = await fetch(`${API_URL}/api.php/auth/login`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(credentials)
       })
 
@@ -79,7 +84,7 @@ export function AuthProvider({ children }) {
         throw new Error(data.error || 'Erreur de connexion')
       }
 
-      const { user: userData, token: userToken } = data.data
+      const { user: userData, token: userToken } = data
 
       setUser(userData)
       setToken(userToken)
