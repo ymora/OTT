@@ -1,9 +1,9 @@
-# Suivi du Temps - Projet OTT
+﻿# Suivi du Temps - Projet OTT
 ## Journal de travail pour facturation (Genere automatiquement)
 
-**Date de generation** : 2026-01-10 23:01
-**Periode analysee** : 365 derniers jours (depuis 2025-01-10)
-**Total commits** : 1288
+**Date de generation** : 2026-01-13 23:04
+**Periode analysee** : 365 derniers jours (depuis 2025-01-13)
+**Total commits** : 1315
 **Contributeurs** : 3
 
 ---
@@ -12,14 +12,17 @@
 
 | Date | Contributeur | Commits | Heures | Features | Fix | Refactor | Doc | Tests | UI |
 |------|--------------|---------|--------|----------|-----|----------|-----|-------|-----|
-| 2026-01-10 | **Yannick** | 14 | ~7h | 5 | 5 | 0 | 5 | 5 | 5 |
+| 2026-01-13 | **Yannick** | 3 | ~1.5h | 0 | 0 | 0 | 0 | 0 | 0 |
+| 2026-01-12 | **Yannick** | 1 | ~0.5h | 0 | 0 | 0 | 0 | 0 | 0 |
+| 2026-01-11 | **Yannick** | 21 | ~10.5h | 4 | 15 | 3 | 5 | 0 | 5 |
+| 2026-01-10 | **Yannick** | 20 | ~10h | 10 | 6 | 0 | 3 | 5 | 5 |
 | 2026-01-09 | **Yannick** | 8 | ~4h | 2 | 2 | 2 | 5 | 2 | 5 |
 | 2026-01-08 | **Yannick** | 36 | ~18h | 11 | 20 | 3 | 4 | 6 | 7 |
-| 2026-01-07 | **Yannick** | 66 | ~33h | 24 | 34 | 6 | 14 | 2 | 24 |
+| 2026-01-07 | **Yannick** | 64 | ~32h | 23 | 34 | 6 | 14 | 5 | 23 |
 | 2026-01-06 | **ymora** | 8 | ~4h | 3 | 4 | 0 | 2 | 0 | 5 |
 | 2026-01-06 | **Yannick** | 4 | ~2h | 0 | 4 | 0 | 0 | 0 | 2 |
 | 2026-01-06 | **Maxime** | 1 | ~0.5h | 0 | 0 | 0 | 0 | 5 | 5 |
-| 2026-01-05 | **ymora** | 16 | ~8h | 3 | 13 | 5 | 0 | 5 | 3 |
+| 2026-01-05 | **ymora** | 14 | ~7h | 2 | 13 | 5 | 0 | 5 | 3 |
 | 2026-01-04 | **ymora** | 6 | ~3h | 0 | 4 | 2 | 0 | 0 | 5 |
 | 2026-01-03 | **ymora** | 4 | ~2h | 0 | 3 | 2 | 0 | 0 | 0 |
 | 2025-12-31 | **ymora** | 1 | ~0.5h | 0 | 5 | 0 | 0 | 5 | 0 |
@@ -71,16 +74,16 @@
 ## Resume par Contributeur
 
 ### ymora
-- **Total commits** : 1159 (90%)
-- **Heures estimees** : ~579.5h
+- **Total commits** : 1157 (88%)
+- **Heures estimees** : ~578.5h
 - **Jours actifs** : 47
-- **Moyenne** : 24.66 commits/jour
+- **Moyenne** : 24.62 commits/jour
 
 ### Yannick
-- **Total commits** : 128 (9.9%)
-- **Heures estimees** : ~64h
-- **Jours actifs** : 5
-- **Moyenne** : 25.6 commits/jour
+- **Total commits** : 157 (11.9%)
+- **Heures estimees** : ~78.5h
+- **Jours actifs** : 8
+- **Moyenne** : 19.62 commits/jour
 
 ### Maxime
 - **Total commits** : 1 (0.1%)

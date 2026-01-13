@@ -1,332 +1,341 @@
-{
-  "DailyActivity": [
-    {
-      "TotalCommits": 14,
-      "Date": "2026-01-10",
-      "Authors": {
-        "Yannick": 14
-      }
-    },
-    {
-      "TotalCommits": 8,
-      "Date": "2026-01-09",
-      "Authors": {
-        "Yannick": 8
-      }
-    },
-    {
-      "TotalCommits": 36,
-      "Date": "2026-01-08",
-      "Authors": {
-        "Yannick": 36
-      }
-    },
-    {
-      "TotalCommits": 66,
-      "Date": "2026-01-07",
-      "Authors": {
-        "Yannick": 66
-      }
-    },
-    {
-      "TotalCommits": 13,
-      "Date": "2026-01-06",
-      "Authors": {
-        "ymora": 8,
-        "Yannick": 4,
-        "Maxime": 1
-      }
-    },
-    {
-      "TotalCommits": 16,
-      "Date": "2026-01-05",
-      "Authors": {
-        "ymora": 16
-      }
-    },
-    {
-      "TotalCommits": 6,
-      "Date": "2026-01-04",
-      "Authors": {
-        "ymora": 6
-      }
-    },
-    {
-      "TotalCommits": 4,
-      "Date": "2026-01-03",
-      "Authors": {
-        "ymora": 4
-      }
-    },
-    {
-      "TotalCommits": 1,
-      "Date": "2025-12-31",
-      "Authors": {
-        "ymora": 1
-      }
-    },
-    {
-      "TotalCommits": 2,
-      "Date": "2025-12-28",
-      "Authors": {
-        "ymora": 2
-      }
-    },
-    {
-      "TotalCommits": 6,
-      "Date": "2025-12-25",
-      "Authors": {
-        "ymora": 6
-      }
-    },
-    {
-      "TotalCommits": 3,
-      "Date": "2025-12-24",
-      "Authors": {
-        "ymora": 3
-      }
-    },
-    {
-      "TotalCommits": 1,
-      "Date": "2025-12-23",
-      "Authors": {
-        "ymora": 1
-      }
-    },
-    {
-      "TotalCommits": 1,
-      "Date": "2025-12-22",
-      "Authors": {
-        "ymora": 1
-      }
-    },
-    {
-      "TotalCommits": 1,
-      "Date": "2025-12-21",
-      "Authors": {
-        "ymora": 1
-      }
-    },
-    {
-      "TotalCommits": 6,
-      "Date": "2025-12-20",
-      "Authors": {
-        "ymora": 6
-      }
-    },
-    {
-      "TotalCommits": 18,
-      "Date": "2025-12-19",
-      "Authors": {
-        "ymora": 18
-      }
-    },
-    {
-      "TotalCommits": 67,
-      "Date": "2025-12-18",
-      "Authors": {
-        "ymora": 67
-      }
-    },
-    {
-      "TotalCommits": 19,
-      "Date": "2025-12-17",
-      "Authors": {
-        "ymora": 19
-      }
-    },
-    {
-      "TotalCommits": 2,
-      "Date": "2025-12-15",
-      "Authors": {
-        "ymora": 2
-      }
-    },
-    {
-      "TotalCommits": 15,
-      "Date": "2025-12-14",
-      "Authors": {
-        "ymora": 15
-      }
-    },
-    {
-      "TotalCommits": 14,
-      "Date": "2025-12-13",
-      "Authors": {
-        "ymora": 14
-      }
-    },
-    {
-      "TotalCommits": 22,
-      "Date": "2025-12-12",
-      "Authors": {
-        "ymora": 22
-      }
-    },
-    {
-      "TotalCommits": 57,
-      "Date": "2025-12-11",
-      "Authors": {
-        "ymora": 57
-      }
-    },
-    {
-      "TotalCommits": 61,
-      "Date": "2025-12-10",
-      "Authors": {
-        "ymora": 61
-      }
-    },
-    {
-      "TotalCommits": 12,
-      "Date": "2025-12-09",
-      "Authors": {
-        "ymora": 12
-      }
-    },
-    {
-      "TotalCommits": 49,
-      "Date": "2025-12-08",
-      "Authors": {
-        "ymora": 49
-      }
-    },
-    {
-      "TotalCommits": 21,
-      "Date": "2025-12-07",
-      "Authors": {
-        "ymora": 21
-      }
-    },
-    {
-      "TotalCommits": 29,
-      "Date": "2025-12-06",
-      "Authors": {
-        "ymora": 29
-      }
-    },
-    {
-      "TotalCommits": 18,
-      "Date": "2025-12-05",
-      "Authors": {
-        "ymora": 18
-      }
-    }
-  ],
-  "Branches": [
-    {
-      "Name": "main",
-      "TotalCommits": 1284,
-      "Authors": {
-        "ymora": 1157,
-        "Yannick": 126,
-        "Maxime": 1
-      }
-    },
-    {
-      "Name": "restore-b0a372de-with-latest-tracking",
-      "TotalCommits": 1164,
-      "Authors": {
-        "ymora": 1157,
-        "Yannick": 6,
-        "Maxime": 1
-      }
-    },
-    {
-      "Name": "maxime",
-      "TotalCommits": 1281,
-      "Authors": {
-        "ymora": 1157,
-        "Yannick": 123,
-        "Maxime": 1
-      }
-    },
-    {
-      "Name": "origin",
-      "TotalCommits": 1284,
-      "Authors": {
-        "ymora": 1157,
-        "Yannick": 126,
-        "Maxime": 1
-      }
-    }
-  ],
-  "Period": {
-    "Days": 365,
-    "Since": "2025-01-10"
-  },
-  "GeneratedAt": "2026-01-10 23:01:09",
-  "Authors": [
-    {
-      "DaysActive": 47,
-      "TotalCommits": 1159,
-      "Contribution": 90.0,
-      "FirstCommit": "2025-11-14",
-      "CommitsPerDay": 24.66,
-      "Categories": {
-        "Test": 7,
-        "Other": 109,
-        "Feature": 371,
-        "Fix": 471,
-        "Doc": 64,
-        "Refactor": 102,
-        "UI": 26,
-        "Deploy": 9
-      },
-      "Name": "ymora",
-      "Email": "ymora@free.fr",
-      "TotalDays": 54,
-      "LastCommit": "2026-01-06",
-      "EstimatedHours": 579.5
-    },
-    {
-      "DaysActive": 5,
-      "TotalCommits": 128,
-      "Contribution": 9.9,
-      "FirstCommit": "2026-01-06",
-      "CommitsPerDay": 25.6,
-      "Categories": {
-        "Test": 6,
-        "Other": 12,
-        "Feature": 42,
-        "Fix": 52,
-        "Doc": 4,
-        "Refactor": 5,
-        "UI": 4,
-        "Deploy": 3
-      },
-      "Name": "Yannick",
-      "Email": "yannick@votredomaine.com",
-      "TotalDays": 4,
-      "LastCommit": "2026-01-10",
-      "EstimatedHours": 64.0
-    },
-    {
-      "DaysActive": 1,
-      "TotalCommits": 1,
-      "Contribution": 0.1,
-      "FirstCommit": "2026-01-06",
-      "CommitsPerDay": 1.0,
-      "Categories": {
-        "Test": 1,
-        "Other": 0,
-        "Feature": 0,
-        "Fix": 0,
-        "Doc": 0,
-        "Refactor": 0,
-        "UI": 0,
-        "Deploy": 0
-      },
-      "Name": "Maxime",
-      "Email": "maxime@test.com",
-      "TotalDays": 1,
-      "LastCommit": "2026-01-06",
-      "EstimatedHours": 0.5
-    }
-  ],
-  "Summary": {
-    "TotalCommits": 1288,
-    "TotalAuthors": 3,
-    "TotalDaysWithActivity": 51
-  }
+﻿{
+    "Authors":  [
+                    {
+                        "TotalDays":  54,
+                        "TotalCommits":  1157,
+                        "DaysActive":  47,
+                        "CommitsPerDay":  24.62,
+                        "Contribution":  88,
+                        "LastCommit":  "2026-01-06",
+                        "Name":  "ymora",
+                        "FirstCommit":  "2025-11-14",
+                        "EstimatedHours":  578.5,
+                        "Categories":  {
+                                           "Refactor":  102,
+                                           "UI":  26,
+                                           "Feature":  370,
+                                           "Deploy":  9,
+                                           "Fix":  471,
+                                           "Doc":  64,
+                                           "Other":  108,
+                                           "Test":  7
+                                       },
+                        "Email":  "ymora@free.fr"
+                    },
+                    {
+                        "TotalDays":  7,
+                        "TotalCommits":  157,
+                        "DaysActive":  8,
+                        "CommitsPerDay":  19.62,
+                        "Contribution":  11.9,
+                        "LastCommit":  "2026-01-13",
+                        "Name":  "Yannick",
+                        "FirstCommit":  "2026-01-06",
+                        "EstimatedHours":  78.5,
+                        "Categories":  {
+                                           "Refactor":  6,
+                                           "UI":  4,
+                                           "Feature":  50,
+                                           "Deploy":  5,
+                                           "Fix":  68,
+                                           "Doc":  4,
+                                           "Other":  15,
+                                           "Test":  5
+                                       },
+                        "Email":  "yannick@votredomaine.com"
+                    },
+                    {
+                        "TotalDays":  1,
+                        "TotalCommits":  1,
+                        "DaysActive":  1,
+                        "CommitsPerDay":  1,
+                        "Contribution":  0.1,
+                        "LastCommit":  "2026-01-06",
+                        "Name":  "Maxime",
+                        "FirstCommit":  "2026-01-06",
+                        "EstimatedHours":  0.5,
+                        "Categories":  {
+                                           "Refactor":  0,
+                                           "UI":  0,
+                                           "Feature":  0,
+                                           "Deploy":  0,
+                                           "Fix":  0,
+                                           "Doc":  0,
+                                           "Other":  0,
+                                           "Test":  1
+                                       },
+                        "Email":  "maxime@test.com"
+                    }
+                ],
+    "Branches":  [
+                     {
+                         "TotalCommits":  1298,
+                         "Name":  "main",
+                         "Authors":  {
+                                         "Maxime":  1,
+                                         "ymora":  1157,
+                                         "Yannick":  140
+                                     }
+                     },
+                     {
+                         "TotalCommits":  1298,
+                         "Name":  "origin",
+                         "Authors":  {
+                                         "Maxime":  1,
+                                         "ymora":  1157,
+                                         "Yannick":  140
+                                     }
+                     },
+                     {
+                         "TotalCommits":  1295,
+                         "Name":  "maxime",
+                         "Authors":  {
+                                         "Maxime":  1,
+                                         "ymora":  1157,
+                                         "Yannick":  137
+                                     }
+                     },
+                     {
+                         "TotalCommits":  1307,
+                         "Name":  "stable-with-improvements",
+                         "Authors":  {
+                                         "Maxime":  1,
+                                         "ymora":  1157,
+                                         "Yannick":  149
+                                     }
+                     },
+                     {
+                         "TotalCommits":  1306,
+                         "Name":  "yannick",
+                         "Authors":  {
+                                         "Maxime":  1,
+                                         "ymora":  1157,
+                                         "Yannick":  148
+                                     }
+                     }
+                 ],
+    "GeneratedAt":  "2026-01-13 23:04:09",
+    "Summary":  {
+                    "TotalCommits":  1315,
+                    "TotalAuthors":  3,
+                    "TotalDaysWithActivity":  54
+                },
+    "Period":  {
+                   "Days":  365,
+                   "Since":  "2025-01-13"
+               },
+    "DailyActivity":  [
+                          {
+                              "Date":  "2025-12-01",
+                              "TotalCommits":  14,
+                              "Authors":  {
+                                              "ymora":  14
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-31",
+                              "TotalCommits":  1,
+                              "Authors":  {
+                                              "ymora":  1
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-19",
+                              "TotalCommits":  18,
+                              "Authors":  {
+                                              "ymora":  18
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-19",
+                              "TotalCommits":  7,
+                              "Authors":  {
+                                              "ymora":  7
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-18",
+                              "TotalCommits":  25,
+                              "Authors":  {
+                                              "ymora":  25
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-26",
+                              "TotalCommits":  59,
+                              "Authors":  {
+                                              "ymora":  59
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-22",
+                              "TotalCommits":  69,
+                              "Authors":  {
+                                              "ymora":  69
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-20",
+                              "TotalCommits":  3,
+                              "Authors":  {
+                                              "ymora":  3
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-03",
+                              "TotalCommits":  85,
+                              "Authors":  {
+                                              "ymora":  85
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-07",
+                              "TotalCommits":  21,
+                              "Authors":  {
+                                              "ymora":  21
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-10",
+                              "TotalCommits":  20,
+                              "Authors":  {
+                                              "Yannick":  20
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-27",
+                              "TotalCommits":  59,
+                              "Authors":  {
+                                              "ymora":  59
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-20",
+                              "TotalCommits":  6,
+                              "Authors":  {
+                                              "ymora":  6
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-06",
+                              "TotalCommits":  13,
+                              "Authors":  {
+                                              "Maxime":  1,
+                                              "ymora":  8,
+                                              "Yannick":  4
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-17",
+                              "TotalCommits":  19,
+                              "Authors":  {
+                                              "ymora":  19
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-14",
+                              "TotalCommits":  15,
+                              "Authors":  {
+                                              "ymora":  15
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-07",
+                              "TotalCommits":  64,
+                              "Authors":  {
+                                              "Yannick":  64
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-23",
+                              "TotalCommits":  1,
+                              "Authors":  {
+                                              "ymora":  1
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-12",
+                              "TotalCommits":  22,
+                              "Authors":  {
+                                              "ymora":  22
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-08",
+                              "TotalCommits":  49,
+                              "Authors":  {
+                                              "ymora":  49
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-03",
+                              "TotalCommits":  4,
+                              "Authors":  {
+                                              "ymora":  4
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-14",
+                              "TotalCommits":  9,
+                              "Authors":  {
+                                              "ymora":  9
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-08",
+                              "TotalCommits":  36,
+                              "Authors":  {
+                                              "Yannick":  36
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-29",
+                              "TotalCommits":  2,
+                              "Authors":  {
+                                              "ymora":  2
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-24",
+                              "TotalCommits":  24,
+                              "Authors":  {
+                                              "ymora":  24
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-05",
+                              "TotalCommits":  14,
+                              "Authors":  {
+                                              "ymora":  14
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-21",
+                              "TotalCommits":  1,
+                              "Authors":  {
+                                              "ymora":  1
+                                          }
+                          },
+                          {
+                              "Date":  "2026-01-09",
+                              "TotalCommits":  8,
+                              "Authors":  {
+                                              "Yannick":  8
+                                          }
+                          },
+                          {
+                              "Date":  "2025-12-22",
+                              "TotalCommits":  1,
+                              "Authors":  {
+                                              "ymora":  1
+                                          }
+                          },
+                          {
+                              "Date":  "2025-11-30",
+                              "TotalCommits":  77,
+                              "Authors":  {
+                                              "ymora":  77
+                                          }
+                          }
+                      ]
 }

@@ -24,7 +24,7 @@ if (!function_exists('ott_normalize_db_type')) {
             return sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $host, $port, $name);
         }
 
-        $sslmode = getenv('DB_SSLMODE') ?: getenv('PGSSLMODE') ?: 'require';
+        $sslmode = getenv('DB_SSLMODE') ?: getenv('PGSSLMODE') ?: 'disable';
         return sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=%s', $host, $port, $name, $sslmode);
     }
 
@@ -65,7 +65,7 @@ if (!function_exists('ott_normalize_db_type')) {
             $config['user'] = $envUser;
         }
 
-        $envPass = getenv('DB_PASS');
+        $envPass = getenv('DB_PASSWORD') ?: getenv('DB_PASS');
         if ($envPass !== false) {
             $config['pass'] = $envPass;
         }

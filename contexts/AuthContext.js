@@ -171,7 +171,7 @@ export const useAuthState = () => {
     }
   }, [])
 
-  return { user, token, loading }
+  return { user, token, setUser, setToken, loading }
 };
 
 /**
@@ -179,7 +179,7 @@ export const useAuthState = () => {
  * @returns {{ login: Function, logout: Function, fetchWithAuth: Function, authLoading: boolean }} Objet contenant les actions et l'état de chargement
  */
 export const useAuthActions = () => {
-  const { user, token, loading } = useAuthState()
+  const { user, token, setUser, setToken } = useAuthState()
   const [authLoading, setAuthLoading] = useState(false)
 
   /**
@@ -272,9 +272,7 @@ export const useAuthActions = () => {
         }
       }
       
-      const setUser = useState()[1]
       setUser(userData)
-      const setToken = useState()[1]
       setToken(data.token)
 
       if (typeof window !== 'undefined' && window.localStorage) {
@@ -354,6 +352,9 @@ export const useAuthActions = () => {
     const { requiresAuth = false } = config
     const finalOptions = { ...options }
     const headers = { ...(options.headers || {}) }
+
+    // Toujours accepter le JSON pour éviter les erreurs de content-type
+    headers['Accept'] = 'application/json'
 
     if (finalOptions.body && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json'

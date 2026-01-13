@@ -142,6 +142,19 @@ if ($path === '/health' && $method === 'GET') {
     handleRestoreDevice($m[1]);
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/archive$#', $path, $m) && $method === 'PATCH') {
     handleArchiveDevice($m[1]);
+} elseif(preg_match('#^/devices/([0-9A-Za-z]+)$#', $path, $m) && $method === 'DELETE') {
+    // Vérifier si c'est un archivage ou une suppression définitive
+    $permanent = isset($_GET['permanent']) && $_GET['permanent'] === 'true';
+    $archive = isset($_GET['archive']) && $_GET['archive'] === 'true';
+    
+    if ($permanent) {
+        handleDeleteDevice($m[1]);
+    } elseif ($archive) {
+        handleArchiveDevice($m[1]);
+    } else {
+        // DELETE normal = suppression définitive pour compatibilité
+        handleDeleteDevice($m[1]);
+    }
 } elseif(preg_match('#^/devices/([0-9A-Za-z]+)/measurements$#', $path, $m) && $method === 'GET') {
     $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
     $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
@@ -316,7 +329,19 @@ if ($path === '/health' && $method === 'GET') {
 } elseif($path === '/statistics/errors' && $method === 'GET') {
     handleGetErrorStatistics();
 } elseif($path === '/system/info' && $method === 'GET') {
-    handleGetSystemInfo();
+    handleSystemInfo();
+
+// DOCS - SUIVI DU TEMPS
+} elseif($path === '/docs/regenerate-time-tracking' && $method === 'POST') {
+    require_once __DIR__ . '/../handlers/docs.php';
+    $result = regenerateTimeTracking();
+    header('Content-Type: application/json');
+    echo json_encode($result);
+} elseif($path === '/docs/time-tracking-stats' && $method === 'GET') {
+    require_once __DIR__ . '/../handlers/docs.php';
+    $result = getTimeTrackingStats();
+    header('Content-Type: application/json');
+    echo json_encode($result);
 } elseif($path === '/system/health' && $method === 'GET') {
     handleSystemHealthCheck();
 } elseif($path === '/system/logs' && $method === 'GET') {

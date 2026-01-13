@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Frontend OTT</title>
+    <script>
+        // Test si le dashboard répond
+        async function testDashboard() {
+            try {
+                const response = await fetch('http://localhost:3000');
+                const text = await response.text();
+                console.log('Dashboard status:', response.status);
+                document.getElementById('status').innerHTML = `✅ Dashboard OK (Status: ${response.status})`;
+            } catch (error) {
+                console.error('Dashboard error:', error);
+                document.getElementById('status').innerHTML = `❌ Dashboard Error: ${error.message}`;
+            }
+        }
+        
+        // Test API
+        async function testAPI() {
+            try {
+                const response = await fetch('http://localhost:8000/api.php/patients');
+                const data = await response.json();
+                console.log('API data:', data);
+                document.getElementById('api-status').innerHTML = `✅ API OK (${data.patients?.length || 0} patients)`;
+            } catch (error) {
+                console.error('API error:', error);
+                document.getElementById('api-status').innerHTML = `❌ API Error: ${error.message}`;
+            }
+        }
+        
+        window.onload = function() {
+            testDashboard();
+            testAPI();
+        };
+    </script>
+</head>
+<body>
+    <h1>🔍 Test Frontend OTT</h1>
+    <div id="status">Testing dashboard...</div>
+    <div id="api-status">Testing API...</div>
+    <p><a href="http://localhost:3000" target="_blank">Ouvrir Dashboard</a></p>
+    <p><a href="http://localhost:8000/api.php/patients" target="_blank">Vérifier API</a></p>
+</body>
+</html>
