@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData, useApiCall } from '@/hooks'
+import { useApiData, useTimers, useApiCall, useActionState } from '@/hooks'
 import logger from '@/lib/logger'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import ErrorMessage from '@/components/ErrorMessage'
@@ -19,14 +19,8 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [currentStep, setCurrentStep] = useState(null)
-  // Gérer error/success de manière simple
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  
-  const resetMessages = () => {
-    setError('')
-    setSuccess('')
-  }
+  // Utiliser useActionState pour gérer error/success de manière unifiée
+  const { error, success, setError, setSuccess, reset: resetMessages } = useActionState({ resetOnNewAction: true })
   // Utiliser useApiCall pour les appels API simples
   const { loading: loadingIno, call: apiCall } = useApiCall({ requiresAuth: true })
   // État supplémentaire pour gérer le chargement lors de l'édition d'un .ino
@@ -39,16 +33,8 @@ export default function InoEditorTab({ onUploadSuccess }) {
   const [firmwareToDelete, setFirmwareToDelete] = useState(null)
   const [deletingFirmware, setDeletingFirmware] = useState(null)
   
-  // Timer simple avec cleanup
-  const timeoutRef = useRef(null)
-  
-  const createTimeoutWithCleanup = (callback, delay) => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    timeoutRef.current = setTimeout(callback, delay)
-    return timeoutRef.current
-  }
+  // Utiliser le hook useTimers pour gérer les timers avec cleanup automatique
+  const { createTimeout: createTimeoutWithCleanup } = useTimers()
   const [editorMinimized, setEditorMinimized] = useState(true)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)

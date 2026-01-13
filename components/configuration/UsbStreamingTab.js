@@ -1,16 +1,10 @@
-/**
- * Onglet de streaming USB pour le tableau de bord
- * Gère la connexion USB, le streaming de données et les logs
- * @module components/configuration/UsbStreamingTab
- * @returns {JSX.Element} Le composant UsbStreamingTab
- */
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useUsb } from '@/contexts/UsbContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchJson } from '@/lib/api'
-import { useApiData } from '@/hooks'
+import { useApiData, useEntityRestore, useEntityArchive, useEntityPermanentDelete, useSmartDeviceRefresh, useTimers } from '@/hooks'
 import { isArchived } from '@/lib/utils'
 import { getUsbDeviceLabel } from '@/lib/usbDevices'
 import logger from '@/lib/logger'
@@ -26,16 +20,8 @@ import { useUsbStreaming } from '@/components/usb/hooks/useUsbStreaming'
 export default function DebugTab() {
   const usbContext = useUsb()
   
-  // Timer simple avec cleanup
-  const timeoutRef = useRef(null)
-  
-  const createTimeoutWithCleanup = (callback, delay) => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    timeoutRef.current = setTimeout(callback, delay)
-    return timeoutRef.current
-  }
+  // Utiliser le hook useTimers pour gérer les timeouts avec cleanup automatique
+  const { createTimeout: createTimeoutWithCleanup } = useTimers()
   
   // Flag pour éviter le double démarrage du streaming
   const isStartingStreamRef = useRef(false)
@@ -122,71 +108,63 @@ export default function DebugTab() {
   
   // Rafraîchissement intelligent : polling adaptatif + événements + debounce
   // - Si USB connecté : polling toutes les 30 secondes (pour voir les updates USB en temps réel)
-  // Smart refresh simplifié
-  useEffect(() => {
-    if (!user) return
-    
-    const interval = setInterval(() => {
-      if (isConnected || !!usbDevice) {
-        refetchDevices()
-      }
-    }, isConnected ? 30000 : 60000)
-    
-    return () => clearInterval(interval)
-  }, [user, isConnected, usbDevice, refetchDevices])
+  // - Si web seulement : polling toutes les 60 secondes (1 minute - les dispositifs sont en deep sleep)
+  // - Événements déclenchent un refetch avec debounce de 2 secondes
+  // - Évite les refetch redondants si plusieurs événements arrivent rapidement
+  useSmartDeviceRefresh(refetchDevices, {
+    isUsbConnected: isConnected || !!usbDevice,
+    enabled: !!user,
+    pollingIntervalUsb: 30000, // 30 secondes si USB connecté (réduit pour éviter rafraîchissement excessif)
+    pollingIntervalWeb: 60000, // 60 secondes si web seulement (les dispositifs sont en deep sleep)
+    eventDebounceMs: 2000 // 2 secondes de debounce pour les événements
+  })
   
-  // Restauration simplifiée
-  const [restoringDevice, setRestoringDevice] = useState(null)
-  
-  const handleRestoreDeviceDirect = async (device) => {
-    try {
-      setRestoringDevice(device.id)
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${device.id}/restore`,
-        { method: 'POST' },
-        { requiresAuth: true }
-      )
+  // Utiliser le hook unifié pour la restauration
+  const { restore: handleRestoreDeviceDirect, restoring: restoringDevice } = useEntityRestore('devices', {
+    onSuccess: (device) => {
       logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré avec succès`)
       appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" restauré`, 'dashboard')
+      // Si on était en mode archivé, basculer vers la vue normale pour voir le dispositif restauré
       if (showArchived) {
         setShowArchived(false)
       }
+      // Debounce pour éviter les refetch multiples rapides qui causent des sauts visuels
       invalidateCache()
-      setTimeout(() => refetchDevices(), 500)
-    } catch (err) {
-      logger.error('Erreur restauration device:', err)
-      appendUsbStreamLog(`❌ Erreur restauration: ${err.message}`, 'dashboard')
-    } finally {
-      setRestoringDevice(null)
-    }
-  }
+      createTimeoutWithCleanup(async () => {
+        await refetchDevicesRef.current()
+      }, 500)
+    },
+    onError: (errorMessage) => {
+      logger.error('Erreur restauration device:', errorMessage)
+      appendUsbStreamLog(`❌ Erreur restauration: ${errorMessage}`, 'dashboard')
+    },
+    invalidateCache,
+    refetch: refetchDevices
+  })
   
-  // Archivage simplifié
-  const [archivingDevice, setArchivingDevice] = useState(null)
-  
-  const handleArchiveDevice = async (device) => {
-    try {
-      setArchivingDevice(device.id)
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${device.id}/archive`,
-        { method: 'POST' },
-        { requiresAuth: true }
-      )
+  // Utiliser le hook unifié pour l'archivage
+  const { archive: handleArchiveDevice, archiving: archivingDevice } = useEntityArchive({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'devices',
+    refetch: refetchDevices,
+    onSuccess: (device) => {
       logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`)
       appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" archivé`, 'dashboard')
+      setSuccessMessage('✅ Dispositif archivé')
       invalidateCache()
-      setTimeout(() => refetchDevices(), 500)
-    } catch (err) {
-      logger.error('Erreur archivage dispositif:', err)
-      appendUsbStreamLog(`❌ Erreur archivage: ${err.message}`, 'dashboard')
-    } finally {
-      setArchivingDevice(null)
-    }
-  }
+      createTimeoutWithCleanup(() => {
+        refetchDevicesRef.current()
+      }, 500)
+      createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
+    },
+    onError: (errorMessage) => {
+      logger.error('Erreur archivage dispositif:', errorMessage)
+      appendUsbStreamLog(`❌ Erreur archivage: ${errorMessage}`, 'dashboard')
+    },
+    invalidateCache,
+    currentUser: user
+  })
   
   // Utiliser le hook unifié pour la suppression définitive
   const { permanentDelete: handlePermanentDeleteDevice, deleting: deletingDevice } = useEntityPermanentDelete({
@@ -197,10 +175,12 @@ export default function DebugTab() {
     onSuccess: (device) => {
       logger.log(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`)
       appendUsbStreamLog(`✅ Dispositif "${device.device_name || device.sim_iccid}" supprimé définitivement`, 'dashboard')
+      setSuccessMessage('✅ Dispositif supprimé définitivement')
       invalidateCache()
       createTimeoutWithCleanup(() => {
         refetchDevicesRef.current()
       }, 300)
+      createTimeoutWithCleanup(() => setSuccessMessage(null), 5000)
     },
     onError: (errorMessage) => {
       logger.error('Erreur suppression dispositif:', errorMessage)
@@ -424,6 +404,12 @@ export default function DebugTab() {
     { requiresAuth: true, autoLoad: !!user }
   )
   const compiledFirmwares = (firmwaresData?.firmwares?.firmwares || []).filter(fw => fw.status === 'compiled')
+  
+  // États pour les messages de succès
+  const [successMessage, setSuccessMessage] = useState(null)
+  
+  
+  // États unifiés pour création et modification (comme pour patients et utilisateurs)
   
   // États pour l'assignation de patient
   const [showAssignPatientModal, setShowAssignPatientModal] = useState(false)
@@ -1053,10 +1039,12 @@ export default function DebugTab() {
   return (
     <div className="space-y-6">
       {/* Message de succès */}
-      <SuccessMessage 
-        message={successMessage} 
-        onDismiss={() => setSuccessMessage(null)} 
-      />
+      {successMessage && (
+        <SuccessMessage 
+          message={successMessage} 
+          onDismiss={() => setSuccessMessage(null)} 
+        />
+      )}
       
       {/* Modal d'assignation de patient */}
       <Modal
@@ -1226,8 +1214,6 @@ export default function DebugTab() {
         }}
         editingItem={editingDevice || (usbDeviceInfo && !editingDevice ? {
           // Pré-remplir depuis USB si création et données USB disponibles (sans id = pré-remplissage)
-          // Note: usbDeviceInfo est accessible depuis le scope du composant
-          // Fusionner valeurs : USB en priorité, puis DB
           sim_iccid: usbDeviceInfo.sim_iccid || '',
           device_serial: usbDeviceInfo.device_serial || '',
           device_name: usbDeviceInfo.device_name || '',
@@ -1741,3 +1727,5 @@ export default function DebugTab() {
     </div>
   )
 }
+
+

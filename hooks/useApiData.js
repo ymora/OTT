@@ -17,10 +17,10 @@ const CACHE_TTL = 30000 // 30 secondes par défaut
  * Hook pour charger des données depuis l'API avec gestion automatique du loading et des erreurs
  * @param {string|string[]} endpoints - Endpoint(s) API à charger
  * @param {Object} options - Options de configuration
- * @param {boolean} [options.autoLoad=true] - Charger automatiquement au mount
- * @param {boolean} [options.requiresAuth=false] - Requiert authentification
- * @param {Object} [options.fetchOptions] - Options supplémentaires pour fetch
- * @param {number} [options.cacheTTL=30000] - Durée de vie du cache en ms
+ * @param {boolean} options.autoLoad - Charger automatiquement au mount (défaut: true)
+ * @param {boolean} options.requiresAuth - Requiert authentification (défaut: false)
+ * @param {Object} options.fetchOptions - Options supplémentaires pour fetch
+ * @param {number} options.cacheTTL - Durée de vie du cache en ms (défaut: 30000, 0 pour désactiver)
  * @returns {Object} { data, loading, error, refetch, setData, invalidateCache }
  */
 export function useApiData(endpoints, options = {}) {

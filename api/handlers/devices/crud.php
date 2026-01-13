@@ -1,10 +1,11 @@
 <?php
 /**
  * API Handlers - Devices CRUD
- * Gestion CRUD de base des dispositifs
+ * Gestion des dispositifs avec cache Redis et logs USB
  */
 
 require_once __DIR__ . '/../../helpers.php';
+require_once __DIR__ . '/../../helpers/entity_responses.php';
 require_once __DIR__ . '/../device_serial_generator.php';
 
 /**
@@ -263,14 +264,11 @@ function handleGetDevice($device_id) {
         
         if (!$device) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Device not found']);
+            sendErrorResponse('devices', 'not_found', [], 404);
             return;
         }
         
-        echo json_encode([
-            'success' => true,
-            'device' => $device
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        sendSuccessResponse('devices', 'retrieved', ['device' => $device]);
     } catch(PDOException $e) {
         if (ob_get_level() > 0) {
             ob_clean();
@@ -281,7 +279,7 @@ function handleGetDevice($device_id) {
             header('Content-Type: application/json; charset=utf-8');
         }
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('devices', 'database_error', [], 500);
     } catch(Throwable $e) {
         if (ob_get_level() > 0) {
             ob_clean();
@@ -292,7 +290,7 @@ function handleGetDevice($device_id) {
             header('Content-Type: application/json; charset=utf-8');
         }
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Internal server error';
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('devices', 'database_error', [], 500);
     }
 }
 
@@ -408,13 +406,9 @@ function handleRestoreOrCreateDevice() {
         SimpleCache::clear();
         
         http_response_code($wasInsert ? 201 : 200);
-        echo json_encode([
-            'success' => true,
-            'message' => $wasInsert ? 'Dispositif créé avec succès' : 'Dispositif restauré avec succès',
+        sendSuccessResponse('devices', $wasInsert ? 'created' : 'restored', [
             'device' => $device,
-            'was_created' => $wasInsert,
-            'was_restored' => !$wasInsert,
-            'serial_updated' => $needsSerialUpdate
+            'was_insert' => $wasInsert
         ]);
         
     } catch (PDOException $e) {
@@ -439,7 +433,7 @@ function handleCreateDevice() {
     // Validation ICCID : soit vide/null (dispositif USB non flashé), soit valide (min 10 caractères)
     if ($sim_iccid !== '' && $sim_iccid !== null && strlen($sim_iccid) < 10) {
         http_response_code(422);
-        echo json_encode(['success' => false, 'error' => 'SIM ICCID invalide (minimum 10 caractères)']);
+        sendErrorResponse('devices', 'invalid_iccid', [], 422);
         return;
     }
     
@@ -457,7 +451,7 @@ function handleCreateDevice() {
         $stmt->execute(['id' => $patientParam]);
         if (!$stmt->fetch()) {
             http_response_code(422);
-            echo json_encode(['success' => false, 'error' => 'Patient inexistant']);
+            sendErrorResponse('devices', 'patient_not_found', [], 422);
             return;
         }
     }
@@ -488,19 +482,19 @@ function handleCreateDevice() {
         // Invalider le cache des devices après création
         SimpleCache::clear();
         
-        echo json_encode(['success' => true, 'device' => $device]);
+        sendSuccessResponse('devices', 'created', ['device' => $device]);
     } catch(PDOException $e) {
         if ($e->getCode() === '23505') {
             http_response_code(409);
             error_log('[handleCreateDevice] ⚠️ Conflit ICCID: ' . $e->getMessage());
-            echo json_encode(['success' => false, 'error' => 'SIM ICCID déjà utilisé']);
+            sendErrorResponse('devices', 'iccid_exists', [], 409);
         } else {
             http_response_code(500);
             $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
             error_log('[handleCreateDevice] ❌ Erreur DB: ' . $e->getMessage());
             error_log('[handleCreateDevice] Code erreur: ' . $e->getCode());
             error_log('[handleCreateDevice] Stack trace: ' . $e->getTraceAsString());
-            echo json_encode(['success' => false, 'error' => $errorMsg]);
+            sendErrorResponse('devices', 'database_error', [], 500);
         }
     }
 }
@@ -601,7 +595,7 @@ function handleCreateTestDevices() {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleCreateTestDevices] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('devices', 'database_error', [], 500);
     }
 }
 
@@ -622,7 +616,7 @@ function handleUpdateDevice($device_id) {
 
         if (!$device) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Device not found']);
+            sendErrorResponse('devices', 'not_found', [], 404);
             return;
         }
 
@@ -722,7 +716,7 @@ function handleUpdateDevice($device_id) {
         }
 
         if (empty($updates)) {
-            echo json_encode(['success' => true, 'device' => $device]);
+            sendSuccessResponse('devices', 'created', ['device' => $device]);
             return;
         }
 
@@ -743,20 +737,20 @@ function handleUpdateDevice($device_id) {
         auditLog('device.updated', 'device', $device_id, $device, $updated);
         SimpleCache::clear();
         
-        echo json_encode(['success' => true, 'device' => $updated]);
+        sendSuccessResponse('devices', 'updated', ['device' => $updated]);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleUpdateDevice] ❌ Erreur DB: ' . $e->getMessage());
         error_log('[handleUpdateDevice] Stack trace: ' . $e->getTraceAsString());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('devices', 'database_error', [], 500);
     } catch(Throwable $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur serveur interne';
         error_log('[handleUpdateDevice] ❌ Erreur: ' . $e->getMessage());
         error_log('[handleUpdateDevice] Type: ' . get_class($e));
         error_log('[handleUpdateDevice] Stack trace: ' . $e->getTraceAsString());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('devices', 'database_error', [], 500);
     }
 }
 
@@ -858,32 +852,92 @@ function handleDeleteDevice($device_id) {
             $deleteStmts['device']->execute(['id' => $device_id]);
             
             auditLog('device.permanently_deleted', 'device', $device_id, $device, null);
-            $message = $wasAssigned 
-                ? 'Dispositif supprimé définitivement (désassigné automatiquement du patient ' . ($patientInfo['first_name'] ?? '') . ' ' . ($patientInfo['last_name'] ?? '') . ' et config réinitialisée)'
-                : 'Dispositif supprimé définitivement';
-            $permanent = true;
         } else {
             $pdo->prepare("UPDATE devices SET deleted_at = NOW() WHERE id = :id")
                 ->execute(['id' => $device_id]);
             
             auditLog('device.deleted', 'device', $device_id, $device, null);
-            $message = $wasAssigned 
-                ? 'Dispositif archivé avec succès (désassigné automatiquement du patient ' . ($patientInfo['first_name'] ?? '') . ' ' . ($patientInfo['last_name'] ?? '') . ' et config réinitialisée)'
-                : 'Dispositif archivé avec succès';
-            $permanent = false;
         }
         
-        echo json_encode([
-            'success' => true, 
-            'message' => $message,
+        $action = $permanent ? 'permanent_deleted' : 'archived';
+        $context = ['was_assigned' => $wasAssigned];
+        
+        sendSuccessResponse('devices', $action, [
             'was_assigned' => $wasAssigned,
             'permanent' => $permanent
-        ]);
+        ], $context);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleDeleteDevice] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('devices', 'database_error', [], 500);
+    }
+}
+
+/**
+ * PATCH /api.php/devices/:id/archive
+ * Archiver un dispositif (soft delete)
+ */
+function handleArchiveDevice($device_id) {
+    global $pdo;
+    requirePermission('devices.edit');
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM devices WHERE id = :id AND deleted_at IS NULL");
+        $stmt->execute(['id' => $device_id]);
+        $device = $stmt->fetch();
+
+        if (!$device) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Dispositif introuvable ou déjà archivé']);
+            return;
+        }
+
+        // Désassigner le patient si le dispositif est assigné
+        if ($device['patient_id']) {
+            $pdo->prepare("UPDATE devices SET patient_id = NULL WHERE id = :id")
+                ->execute(['id' => $device_id]);
+            
+            // Réinitialiser la configuration du dispositif
+            $hasGpsColumn = columnExists('device_configurations', 'gps_enabled');
+            $resetFields = ['sleep_minutes = NULL', 'measurement_duration_ms = NULL', 'send_every_n_wakeups = NULL', 'calibration_coefficients = NULL'];
+            if ($hasGpsColumn) {
+                $resetFields[] = 'gps_enabled = false';
+            }
+            
+            try {
+                $pdo->prepare("
+                    UPDATE device_configurations 
+                    SET " . implode(', ', $resetFields) . "
+                    WHERE device_id = :device_id
+                ")->execute(['device_id' => $device_id]);
+                
+                error_log("[handleArchiveDevice] Configuration réinitialisée pour le dispositif $device_id après archivage");
+            } catch(PDOException $e) {
+                error_log("[handleArchiveDevice] ⚠️ Erreur réinitialisation config (non bloquant): " . $e->getMessage());
+            }
+            
+            auditLog('device.unassigned_before_archive', 'device', $device_id, ['old_patient_id' => $device['patient_id']], null);
+        }
+
+        // Archiver le dispositif
+        $stmt = $pdo->prepare("UPDATE devices SET deleted_at = NOW() WHERE id = :id");
+        $stmt->execute(['id' => $device_id]);
+
+        auditLog('device.archived', 'device', $device_id, $device, ['deleted_at' => 'NOW()']);
+
+        // Invalider le cache après archivage
+        SimpleCache::clear();
+
+        echo json_encode([
+            'success' => true,
+            'message' => getSuccessMessage('devices', 'archived', ['was_assigned' => $wasAssigned])
+        ]);
+    } catch(PDOException $e) {
+        http_response_code(500);
+        $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
+        error_log('[handleArchiveDevice] ' . $e->getMessage());
+        sendErrorResponse('devices', 'database_error', [], 500);
     }
 }
 
@@ -920,15 +974,12 @@ function handleRestoreDevice($device_id) {
         // Invalider le cache des devices après restauration (important pour que le dispositif apparaisse dans la bonne liste)
         SimpleCache::clear();
 
-        echo json_encode([
-            'success' => true,
-            'message' => 'Dispositif restauré avec succès'
-        ]);
+        sendSuccessResponse('devices', 'restored');
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleRestoreDevice] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('devices', 'database_error', [], 500);
     }
 }
 

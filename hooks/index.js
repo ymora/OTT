@@ -3,19 +3,33 @@
  * Facilite les imports et évite la duplication
  */
 
-// Vérification que useToggle est bien disponible
-try {
-  require.resolve('./useToggle')
-} catch (e) {
-  throw new Error('useToggle hook is missing. Please create hooks/useToggle.js')
-}
-
-// Hooks essentiels restants
+// Hooks existants
+export { useActionState } from './useActionState'
 export { useApiCall } from './useApiCall'
 export { useApiData } from './useApiData'
 export { useAsync } from './useAsync'
-export { useDebounce } from './useDebounce'
-export { useFormState } from './useFormState'
-export { useTimeout } from './useTimeout'
-export { useToggle } from './useToggle'
+export { useAsyncState } from './useAsyncState'
 export { useAutoRefresh } from './useAutoRefresh'
+export { useDebounce } from './useDebounce'
+export { useDevicesUpdateListener } from './useDevicesUpdateListener'
+export { useEntityArchive } from './useEntityArchive'
+export { useEntityDelete } from './useEntityDelete'
+export { useEntityModal } from './useEntityModal'
+export { useEntityPage } from './useEntityPage'
+export { useEntityPermanentDelete } from './useEntityPermanentDelete'
+export { useEntityRestore } from './useEntityRestore'
+export { useFilter } from './useFilter'
+export { useFormState } from './useFormState'
+export { useGeolocation } from './useGeolocation'
+export { useLocalStorage } from './useLocalStorage'
+export { useSmartDeviceRefresh } from './useSmartDeviceRefresh'
+export { useTimers } from './useTimers'
+export { useToggle } from './useToggle'
+export { useToggleState } from './useToggleState'
+export { useUsbAutoDetection } from './useUsbAutoDetection'
+
+// Nouveaux hooks (refactoring)
+export { useTimeout } from './useTimeout'
+export { useModalState } from './useModalState'
+export { useDeviceSelection } from './useDeviceSelection'
+export { usePaginatedData } from './usePaginatedData'

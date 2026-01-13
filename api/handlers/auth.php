@@ -1,8 +1,11 @@
 <?php
 /**
- * API Handlers - Authentication & Users
- * Extracted from api.php during refactoring
+ * API Handlers - Authentification et Utilisateurs
+ * Gestion complète de l'authentification JWT et des utilisateurs
  */
+
+require_once __DIR__ . '/../helpers.php';
+require_once __DIR__ . '/../helpers/entity_responses.php';
 
 // ============================================================================
 // HANDLERS - AUTHENTICATION
@@ -230,7 +233,7 @@ function handleLogin() {
 function handleGetMe() {
     $user = requireAuth();
     unset($user['password_hash']);
-    echo json_encode(['success' => true, 'user' => $user]);
+    sendSuccessResponse('users', 'retrieved', ['user' => $user]);
 }
 
 function handleRefreshToken() {
@@ -341,11 +344,10 @@ function handleGetUsers() {
         $stmt->execute();
         $users = $stmt->fetchAll();
         
-        echo json_encode([
-            'success' => true, 
+        sendSuccessResponse('users', 'retrieved', [
             'users' => $users,
             'pagination' => [
-                'total' => intval($total),
+                'total' => $total,
                 'limit' => $limit,
                 'offset' => $offset,
                 'has_more' => ($offset + $limit) < $total
@@ -355,14 +357,14 @@ function handleGetUsers() {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleGetUsers] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('users', 'database_error', [], 500);
     }
 }
 
 function handleGetCurrentUser() {
     $user = requireAuth();
     unset($user['password_hash']);
-    echo json_encode(['success' => true, 'user' => $user]);
+    sendSuccessResponse('users', 'retrieved', ['user' => $user]);
 }
 
 function handleGetUser($user_id) {
@@ -382,15 +384,15 @@ function handleGetUser($user_id) {
         
         if (!$user) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'User not found']);
+            sendErrorResponse('users', 'not_found', [], 404);
             return;
         }
         
-        echo json_encode(['success' => true, 'user' => $user]);
+        sendSuccessResponse('users', 'retrieved', ['user' => $user]);
     } catch(PDOException $e) {
         http_response_code(500);
         error_log('[handleGetUser] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        sendErrorResponse('users', 'database_error', [], 500);
     }
 }
 
@@ -402,7 +404,7 @@ function handleCreateUser() {
     
     if (empty($input['email']) || empty($input['password'])) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Missing required fields']);
+        sendErrorResponse('users', 'missing_fields', [], 400);
         return;
     }
     
@@ -417,10 +419,7 @@ function handleCreateUser() {
             if ($existingUser['deleted_at'] === null) {
                 // Utilisateur actif existe déjà
                 http_response_code(409);
-                echo json_encode([
-                    'success' => false, 
-                    'error' => 'Cet email est déjà utilisé par un autre utilisateur'
-                ]);
+                sendErrorResponse('users', 'email_exists', [], 409);
                 return;
             } else {
                 // Utilisateur archivé existe : supprimer définitivement pour permettre la création
@@ -525,21 +524,18 @@ function handleCreateUser() {
         }
         
         auditLog('user.created', 'user', $user_id, null, $input);
-        echo json_encode(['success' => true, 'user_id' => $user_id]);
+        sendSuccessResponse('users', 'created', ['user_id' => $user_id]);
         
     } catch(PDOException $e) {
         // Gérer les erreurs de contrainte unique (fallback si la vérification préalable a échoué)
         if ($e->getCode() == 23000 || strpos($e->getMessage(), '23505') !== false || strpos($e->getMessage(), 'duplicate key') !== false) {
             http_response_code(409);
-            echo json_encode([
-                'success' => false, 
-                'error' => 'Cet email est déjà utilisé par un autre utilisateur'
-            ]);
+            sendErrorResponse('users', 'email_exists', [], 409);
         } else {
             http_response_code(500);
             $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur lors de la création de l\'utilisateur';
             error_log('[handleCreateUser] Database error: ' . $e->getMessage());
-            echo json_encode(['success' => false, 'error' => $errorMsg]);
+            sendErrorResponse('users', 'database_error', [], 500);
         }
     }
 }
@@ -557,7 +553,7 @@ function handleUpdateUser($user_id) {
         
         if (!$old_user) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'User not found']);
+            sendErrorResponse('users', 'not_found', [], 404);
             return;
         }
         
@@ -614,7 +610,7 @@ function handleUpdateUser($user_id) {
         
         if (empty($updates)) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'No fields to update']);
+            sendErrorResponse('users', 'no_fields_to_update', [], 400);
             return;
         }
         
@@ -648,13 +644,13 @@ function handleUpdateUser($user_id) {
         $updated_user = $updatedStmt->fetch();
         
         auditLog('user.updated', 'user', $user_id, $old_user, $input);
-        echo json_encode(['success' => true, 'user' => $updated_user]);
+        sendSuccessResponse('users', 'updated', ['user' => $updated_user]);
         
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleUpdateUser] Database error: ' . $e->getMessage() . ' | User ID: ' . $user_id . ' | Input: ' . json_encode($input));
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('users', 'database_error', [], 500);
     }
 }
 
@@ -687,7 +683,7 @@ function handleDeleteUser($user_id) {
         
         if (!$userToDelete) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Utilisateur introuvable']);
+            sendErrorResponse('users', 'not_found', [], 404);
             return;
         }
         
@@ -695,7 +691,7 @@ function handleDeleteUser($user_id) {
         $currentUser = getCurrentUser();
         if ($currentUser && intval($currentUser['id']) === intval($user_id)) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Vous ne pouvez pas supprimer votre propre compte']);
+            sendErrorResponse('users', 'self_delete_forbidden', [], 400);
             return;
         }
         
@@ -720,8 +716,6 @@ function handleDeleteUser($user_id) {
             $pdo->prepare("DELETE FROM users WHERE id = :id")->execute(['id' => $user_id]);
             
             auditLog('user.permanently_deleted', 'user', $user_id, $userToDelete, null);
-            $message = 'Utilisateur supprimé définitivement';
-            $permanent = true;
         } else {
             // ARCHIVAGE (soft delete)
             // Supprimer les préférences de notifications
@@ -742,21 +736,16 @@ function handleDeleteUser($user_id) {
             $pdo->prepare("UPDATE users SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $user_id]);
             
             auditLog('user.deleted', 'user', $user_id, $userToDelete, null);
-            $message = 'Utilisateur archivé avec succès';
-            $permanent = false;
         }
         
-        echo json_encode([
-            'success' => true, 
-            'message' => $message,
-            'permanent' => $permanent
-        ]);
+        $action = $permanent ? 'permanent_deleted' : 'archived';
+        sendSuccessResponse('users', $action, ['permanent' => $permanent]);
         
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Erreur de base de données';
         error_log('[handleDeleteUser] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('users', 'database_error', [], 500);
     }
 }
 
@@ -769,16 +758,15 @@ function handleArchiveUser($user_id) {
         $stmt->execute([$user_id]);
         
         if ($stmt->rowCount() === 0) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'User not found or already archived']);
+            sendErrorResponse('users', 'not_found', [], 404);
             return;
         }
         
-        echo json_encode(['success' => true, 'message' => 'User archived']);
+        sendSuccessResponse('users', 'archived');
     } catch(PDOException $e) {
         http_response_code(500);
         error_log('[handleArchiveUser] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        sendErrorResponse('users', 'database_error', [], 500);
     }
 }
 
@@ -794,13 +782,13 @@ function handleRestoreUser($user_id) {
 
         if (!$user) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Utilisateur introuvable']);
+            sendErrorResponse('users', 'not_found', [], 404);
             return;
         }
 
         if (!$user['deleted_at']) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'L\'utilisateur n\'est pas archivé']);
+            sendErrorResponse('users', 'not_archived', [], 400);
             return;
         }
 
@@ -810,15 +798,12 @@ function handleRestoreUser($user_id) {
 
         auditLog('user.restored', 'user', $user_id, $user, ['deleted_at' => null]);
 
-        echo json_encode([
-            'success' => true,
-            'message' => 'Utilisateur restauré avec succès'
-        ]);
+        sendSuccessResponse('users', 'restored');
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleRestoreUser] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('users', 'database_error', [], 500);
     }
 }
 
@@ -872,7 +857,7 @@ function handleGetRoles() {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleGetRoles] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('users', 'database_error', [], 500);
     }
 }
 
@@ -903,8 +888,7 @@ function handleGetPermissions() {
         $stmt->execute();
         
         $permissions = $stmt->fetchAll();
-        echo json_encode([
-            'success' => true, 
+        sendSuccessResponse('users', 'retrieved', [
             'permissions' => $permissions,
             'total' => $total,
             'limit' => $limit,
@@ -912,7 +896,7 @@ function handleGetPermissions() {
         ]);
     } catch(PDOException $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        sendErrorResponse('users', 'database_error', [], 500);
     }
 }
 

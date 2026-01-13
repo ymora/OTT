@@ -5,6 +5,7 @@
  */
 
 require_once __DIR__ . '/../../helpers.php';
+require_once __DIR__ . '/../../helpers/entity_responses.php';
 
 /**
  * GET /api.php/patients
@@ -169,8 +170,7 @@ function handleGetPatients() {
         
         $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        echo json_encode([
-            'success' => true, 
+        sendSuccessResponse('patients', 'retrieved', [
             'patients' => $patients,
             'pagination' => [
                 'total' => $total,
@@ -178,12 +178,12 @@ function handleGetPatients() {
                 'offset' => $offset,
                 'has_more' => ($offset + $limit) < $total
             ]
-        ], JSON_UNESCAPED_UNICODE);
+        ]);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleGetPatients] Database error: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('patients', 'database_error', [], 500);
     }
 }
 
@@ -207,16 +207,15 @@ function handleGetPatient($patient_id) {
         $patient = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$patient) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Patient not found']);
+            sendErrorResponse('patients', 'not_found', [], 404);
             return;
         }
         
-        echo json_encode(['success' => true, 'patient' => $patient]);
+        sendSuccessResponse('patients', 'retrieved', ['patient' => $patient]);
     } catch(PDOException $e) {
         http_response_code(500);
         error_log('[handleGetPatient] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        sendErrorResponse('patients', 'database_error', [], 500);
     }
 }
 
@@ -233,16 +232,15 @@ function handleArchivePatient($patient_id) {
         $stmt->execute([$patient_id]);
         
         if ($stmt->rowCount() === 0) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Patient not found or already archived']);
+            sendErrorResponse('patients', 'not_found', [], 404);
             return;
         }
         
-        echo json_encode(['success' => true, 'message' => 'Patient archived']);
+        sendSuccessResponse('patients', 'archived');
     } catch(PDOException $e) {
         http_response_code(500);
         error_log('[handleArchivePatient] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => 'Database error']);
+        sendErrorResponse('patients', 'database_error', [], 500);
     }
 }
 
@@ -260,7 +258,7 @@ function handleCreatePatient() {
     $last_name = trim($input['last_name'] ?? '');
     if (empty($first_name) || empty($last_name)) {
         http_response_code(422);
-        echo json_encode(['success' => false, 'error' => 'Prénom et nom sont requis']);
+        sendErrorResponse('patients', 'validation_error', [], 422);
         return;
     }
 
@@ -304,12 +302,12 @@ function handleCreatePatient() {
         }
         
         auditLog('patient.created', 'patient', $patient['id'], null, $patient);
-        echo json_encode(['success' => true, 'patient' => $patient]);
+        sendSuccessResponse('patients', 'created', ['patient' => $patient]);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleCreatePatient] Database error: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('patients', 'database_error', [], 500);
     }
 }
 
@@ -329,8 +327,7 @@ function handleUpdatePatient($patient_id) {
         $patient = $stmt->fetch();
 
         if (!$patient) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Patient introuvable']);
+            sendErrorResponse('patients', 'not_found', [], 404);
             return;
         }
 
@@ -350,7 +347,7 @@ function handleUpdatePatient($patient_id) {
         }
 
         if (empty($updates)) {
-            echo json_encode(['success' => true, 'patient' => $patient]);
+            sendSuccessResponse('patients', 'updated', ['patient' => $patient]);
             return;
         }
 
@@ -363,12 +360,12 @@ function handleUpdatePatient($patient_id) {
         $stmt->execute(['id' => $patient_id]);
         $updated = $stmt->fetch();
         auditLog('patient.updated', 'patient', $patient_id, $patient, $updated);
-        echo json_encode(['success' => true, 'patient' => $updated]);
+        sendSuccessResponse('patients', 'updated', ['patient' => $updated]);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleUpdatePatient] Database error: ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('patients', 'database_error', [], 500);
     }
 }
 
@@ -400,7 +397,7 @@ function handleDeletePatient($patient_id) {
 
         if (!$patient) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Patient introuvable']);
+            sendErrorResponse('patients', 'not_found', [], 404);
             return;
         }
 
@@ -457,8 +454,6 @@ function handleDeletePatient($patient_id) {
             $pdo->prepare("DELETE FROM patients WHERE id = :id")->execute(['id' => $patient_id]);
 
             auditLog('patient.permanently_deleted', 'patient', $patient_id, $patient, null);
-            $message = 'Patient supprimé définitivement' . ($wasAssigned ? ' (dispositifs désassignés automatiquement)' : '');
-            $permanent = true;
         } else {
             try {
                 $pdo->prepare("DELETE FROM patient_notifications_preferences WHERE patient_id = :patient_id")->execute(['patient_id' => $patient_id]);
@@ -469,21 +464,20 @@ function handleDeletePatient($patient_id) {
             $pdo->prepare("UPDATE patients SET deleted_at = NOW() WHERE id = :id")->execute(['id' => $patient_id]);
 
             auditLog('patient.deleted', 'patient', $patient_id, $patient, null);
-            $message = 'Patient archivé avec succès' . ($wasAssigned ? ' (dispositifs désassignés automatiquement)' : '');
-            $permanent = false;
         }
 
-        echo json_encode([
-            'success' => true, 
-            'message' => $message,
+        $action = $permanent ? 'permanent_deleted' : 'archived';
+        $context = ['devices_unassigned' => $wasAssigned ? count($assignedDevices) : 0];
+        
+        sendSuccessResponse('patients', $action, [
             'devices_unassigned' => $wasAssigned ? count($assignedDevices) : 0,
             'permanent' => $permanent
-        ]);
+        ], $context);
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleDeletePatient] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('patients', 'database_error', [], 500);
     }
 }
 
@@ -502,13 +496,13 @@ function handleRestorePatient($patient_id) {
 
         if (!$patient) {
             http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Patient introuvable']);
+            sendErrorResponse('patients', 'not_found', [], 404);
             return;
         }
 
         if (!$patient['deleted_at']) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Le patient n\'est pas archivé']);
+            sendErrorResponse('patients', 'not_archived', [], 400);
             return;
         }
 
@@ -517,14 +511,11 @@ function handleRestorePatient($patient_id) {
 
         auditLog('patient.restored', 'patient', $patient_id, $patient, ['deleted_at' => null]);
 
-        echo json_encode([
-            'success' => true,
-            'message' => 'Patient restauré avec succès'
-        ]);
+        sendSuccessResponse('patients', 'restored');
     } catch(PDOException $e) {
         http_response_code(500);
         $errorMsg = getenv('DEBUG_ERRORS') === 'true' ? $e->getMessage() : 'Database error';
         error_log('[handleRestorePatient] ' . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        sendErrorResponse('patients', 'database_error', [], 500);
     }
 }

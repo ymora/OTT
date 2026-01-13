@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useMemo} from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUsb } from '@/contexts/UsbContext'
-import { useApiData } from '@/hooks'
+import { useUsbAutoDetection, useApiData, useEntityArchive } from '@/hooks'
 import { fetchJson } from '@/lib/api'
 import logger from '@/lib/logger'
 import InoEditorTab from '@/components/configuration/InoEditorTab'
@@ -32,16 +32,8 @@ export default function OutilsPage() {
     setUpdateDeviceFirmwareCallback
   } = useUsb()
   
-  // Auto-détection USB simplifiée
-  useEffect(() => {
-    if (isSupported && !autoDetecting) {
-      setAutoDetecting(true)
-      // Simuler l'auto-détection
-      setTimeout(() => {
-        setAutoDetecting(false)
-      }, 2000)
-    }
-  }, [isSupported, autoDetecting, setAutoDetecting])
+  // Activer la détection automatique USB
+  useUsbAutoDetection(isSupported, autoDetecting, setAutoDetecting, usbDevice)
 
   // Cleanup au démontage
   useEffect(() => {
@@ -161,8 +153,8 @@ export default function OutilsPage() {
     { requiresAuth: true, skip: !canAccess, autoLoad: canAccess } // Skip si pas d'accès
   )
   
-  const allPatients = patientsData?.patients || []
-  const allDevices = devicesData?.devices || []
+  const allPatients = patientsData?.patients?.patients || []
+  const allDevices = devicesData?.devices?.devices || []
   
   // États pour les modals (toujours déclarer, même si canAccess est false)
   const [showDeviceModal, setShowDeviceModal] = useState(false)
@@ -176,26 +168,24 @@ export default function OutilsPage() {
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [deleting, setDeleting] = useState(null)
   
-  // Archive simplifié
-  const [archiving, setArchiving] = useState(null)
-  
-  const handleArchive = async (device) => {
-    try {
-      setArchiving(device.id)
-      await fetchJson(
-        fetchWithAuth,
-        API_URL,
-        `/api.php/devices/${device.id}/archive`,
-        { method: 'POST' },
-        { requiresAuth: true }
-      )
-      await refetch()
-    } catch (err) {
-      logger.error('Erreur archivage dispositif:', err)
-    } finally {
-      setArchiving(null)
-    }
-  }
+  // Utiliser le hook unifié pour l'archivage (toujours appeler, même si canAccess est false)
+  const { archive: handleArchive, archiving } = useEntityArchive({
+    fetchWithAuth,
+    API_URL,
+    entityType: 'devices',
+    refetch: refetchDevices,
+    onSuccess: (device) => {
+      logger.log(`✅ Dispositif "${device.device_name}" archivé`)
+      setShowArchiveModal(false)
+      setSelectedDevice(null)
+    },
+    onError: (error) => {
+      logger.error('Erreur archivage dispositif:', error)
+    },
+    onCloseModal: () => setShowArchiveModal(false),
+    editingItem: selectedDevice,
+    currentUser: user
+  })
   
   const openDeviceModal = (device) => {
     setSelectedDevice(device)
@@ -205,7 +195,7 @@ export default function OutilsPage() {
   const closeDeviceModal = () => {
     setSelectedDevice(null)
     setShowDeviceModal(false)
-    refetch()
+    refetchDevices()
   }
   
   const handleDelete = async (device) => {
